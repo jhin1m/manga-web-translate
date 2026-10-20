@@ -1,0 +1,1808 @@
+{
+  "version": 1,
+  "note": "Sinh bởi scripts/typeset-parity.ts — không sửa tay. expected = số đo của worker/mtl_pipeline/render.py.",
+  "pages": [
+    {
+      "id": "golden-00",
+      "state": {
+        "schema_version": 1,
+        "size": {
+          "w": 420,
+          "h": 660
+        },
+        "view": {
+          "show_original": false
+        },
+        "regions": [],
+        "text_boxes": [
+          {
+            "id": "b00",
+            "region_id": null,
+            "x": 16,
+            "y": 20,
+            "w": 380,
+            "h": 85.9,
+            "rotation": 0,
+            "text": "Xin chào!",
+            "lines": ["Xin chào!"],
+            "font_family": "Anton-Regular",
+            "font_size": 18.5,
+            "line_height": 1,
+            "pad": 4,
+            "letter_spacing": 0,
+            "align": "center",
+            "fill": "#111111",
+            "stroke": null,
+            "auto_fit": false,
+            "hidden": false
+          },
+          {
+            "id": "b01",
+            "region_id": null,
+            "x": 23.25,
+            "y": 153.5,
+            "w": 380,
+            "h": 130,
+            "rotation": 0,
+            "text": "Sao giờ này cậu mới tới hả?",
+            "lines": ["Sao giờ này cậu", "mới tới hả?"],
+            "font_family": "Baloo2-Variable",
+            "font_size": 25,
+            "line_height": 1.15,
+            "pad": 5,
+            "letter_spacing": 0,
+            "align": "left",
+            "fill": "#fafafa",
+            "stroke": {
+              "color": "#ffffff",
+              "width": 1.5
+            },
+            "auto_fit": false,
+            "hidden": false
+          },
+          {
+            "id": "b02",
+            "region_id": null,
+            "x": 30.5,
+            "y": 287,
+            "w": 380,
+            "h": 149.6,
+            "rotation": 0,
+            "text": "ếệỗửữẫ ẤẬỖỬỮẪ",
+            "lines": ["ếệỗửữẫ", "ẤẬỖỬỮẪ"],
+            "font_family": "BeVietnamPro-Bold",
+            "font_size": 32,
+            "line_height": 1.3,
+            "pad": 6,
+            "letter_spacing": 0,
+            "align": "right",
+            "fill": "#111111",
+            "stroke": {
+              "color": "#1a1a1a",
+              "width": 2
+            },
+            "auto_fit": false,
+            "hidden": false
+          },
+          {
+            "id": "b03",
+            "region_id": null,
+            "x": 16,
+            "y": 420.5,
+            "w": 380,
+            "h": 170.6,
+            "rotation": 0,
+            "text": "Đường đời ngoằn ngoèo",
+            "lines": ["Đường đời", "ngoằn ngoèo"],
+            "font_family": "BeVietnamPro-Regular",
+            "font_size": 39.5,
+            "line_height": 1,
+            "pad": 4,
+            "letter_spacing": 0,
+            "align": "center",
+            "fill": "#fafafa",
+            "stroke": {
+              "color": "#ffffff",
+              "width": 3.5
+            },
+            "auto_fit": false,
+            "hidden": false
+          }
+        ],
+        "meta": null
+      },
+      "expected": [
+        {
+          "id": "b00",
+          "lines": [
+            {
+              "x": 172.09375,
+              "baseline": 45.760986328125,
+              "advance": 67.8125
+            }
+          ],
+          "ink": [[172, 28, 239, 46]]
+        },
+        {
+          "id": "b01",
+          "lines": [
+            {
+              "x": 28.25,
+              "baseline": 185.45,
+              "advance": 164.828125
+            },
+            {
+              "x": 28.25,
+              "baseline": 231.5075,
+              "advance": 117.546875
+            }
+          ],
+          "ink": [[28, 167, 193, 192], [28, 213, 146, 233]]
+        },
+        {
+          "id": "b02",
+          "lines": [
+            {
+              "x": 282.09375,
+              "baseline": 325,
+              "advance": 122.40625
+            },
+            {
+              "x": 255.984375,
+              "baseline": 377.624,
+              "advance": 148.515625
+            }
+          ],
+          "ink": [[282, 293, 405, 335], [255, 338, 406, 387]]
+        },
+        {
+          "id": "b03",
+          "lines": [
+            {
+              "x": 105.765625,
+              "baseline": 464,
+              "advance": 200.46875
+            },
+            {
+              "x": 80.2265625,
+              "baseline": 513.9675,
+              "advance": 251.546875
+            }
+          ],
+          "ink": [[104, 429, 307, 476], [80, 473, 333, 526]]
+        }
+      ]
+    },
+    {
+      "id": "golden-01",
+      "state": {
+        "schema_version": 1,
+        "size": {
+          "w": 420,
+          "h": 660
+        },
+        "view": {
+          "show_original": false
+        },
+        "regions": [],
+        "text_boxes": [
+          {
+            "id": "b04",
+            "region_id": null,
+            "x": 30.5,
+            "y": 20,
+            "w": 298,
+            "h": 120,
+            "rotation": 0,
+            "text": "Đường đời ngoằn ngoèo lắm, cẩn thận kẻo vấp ngã nhé.",
+            "lines": [],
+            "font_family": "Mali-Regular",
+            "font_size": 23,
+            "line_height": 1.3,
+            "pad": 6,
+            "letter_spacing": 0,
+            "align": "right",
+            "fill": "#fafafa",
+            "stroke": {
+              "color": "#ffffff",
+              "width": 1.5
+            },
+            "auto_fit": true,
+            "hidden": false
+          },
+          {
+            "id": "b05",
+            "region_id": null,
+            "x": 30.5,
+            "y": 150,
+            "w": 380,
+            "h": 156.6,
+            "rotation": 0,
+            "text": "Ừ… để tớ nghĩ thêm chút đã",
+            "lines": ["Ừ… để tớ", "nghĩ thêm", "chút đã"],
+            "font_family": "Mali-Regular",
+            "font_size": 23,
+            "line_height": 1.3,
+            "pad": 6,
+            "letter_spacing": 0,
+            "align": "right",
+            "fill": "#fafafa",
+            "stroke": {
+              "color": "#ffffff",
+              "width": 1.5
+            },
+            "auto_fit": false,
+            "hidden": false
+          },
+          {
+            "id": "b06",
+            "region_id": null,
+            "x": 16,
+            "y": 283.5,
+            "w": 380,
+            "h": 102.69999999999999,
+            "rotation": 0,
+            "text": "Quỷ thật, ổn chứ?",
+            "lines": ["Quỷ thật, ổn chứ?"],
+            "font_family": "PatrickHand-Regular",
+            "font_size": 30.5,
+            "line_height": 1,
+            "pad": 4,
+            "letter_spacing": 0,
+            "align": "center",
+            "fill": "#111111",
+            "stroke": {
+              "color": "#1a1a1a",
+              "width": 2
+            },
+            "auto_fit": false,
+            "hidden": false
+          },
+          {
+            "id": "b07",
+            "region_id": null,
+            "x": 23.25,
+            "y": 417,
+            "w": 380,
+            "h": 111.8,
+            "rotation": 0,
+            "text": "Rầm!",
+            "lines": ["Rầm!"],
+            "font_family": "Anton-Regular",
+            "font_size": 37,
+            "line_height": 1.15,
+            "pad": 5,
+            "letter_spacing": 0,
+            "align": "left",
+            "fill": "#fafafa",
+            "stroke": {
+              "color": "#ffffff",
+              "width": 3.5
+            },
+            "auto_fit": false,
+            "hidden": false
+          }
+        ],
+        "meta": null
+      },
+      "expected": [
+        {
+          "id": "b04",
+          "wrapped": {
+            "lines": ["Đường đời ngoằn ngoèo", "lắm, cẩn thận kẻo vấp", "ngã nhé."],
+            "font_size": 23
+          },
+          "lines": [
+            {
+              "x": 59.921875,
+              "baseline": 50.15,
+              "advance": 262.578125
+            },
+            {
+              "x": 77.125,
+              "baseline": 89.02,
+              "advance": 245.375
+            },
+            {
+              "x": 227.984375,
+              "baseline": 127.88999999999999,
+              "advance": 94.515625
+            }
+          ],
+          "ink": [[60, 29, 323, 57], [77, 68, 323, 96], [228, 109, 322, 135]]
+        },
+        {
+          "id": "b05",
+          "lines": [
+            {
+              "x": 297.34375,
+              "baseline": 180.15,
+              "advance": 107.15625
+            },
+            {
+              "x": 295.21875,
+              "baseline": 219.02,
+              "advance": 109.28125
+            },
+            {
+              "x": 317.03125,
+              "baseline": 257.89,
+              "advance": 87.46875
+            }
+          ],
+          "ink": [[297, 158, 407, 182], [295, 200, 405, 226], [317, 236, 405, 260]]
+        },
+        {
+          "id": "b06",
+          "lines": [
+            {
+              "x": 109.9140625,
+              "baseline": 319.281,
+              "advance": 192.171875
+            }
+          ],
+          "ink": [[109, 293, 304, 331]]
+        },
+        {
+          "id": "b07",
+          "lines": [
+            {
+              "x": 28.25,
+              "baseline": 465.52197265625,
+              "advance": 72.0625
+            }
+          ],
+          "ink": [[26, 423, 103, 469]]
+        }
+      ]
+    },
+    {
+      "id": "golden-02",
+      "state": {
+        "schema_version": 1,
+        "size": {
+          "w": 420,
+          "h": 660
+        },
+        "view": {
+          "show_original": false
+        },
+        "regions": [],
+        "text_boxes": [
+          {
+            "id": "b08",
+            "region_id": null,
+            "x": 30.5,
+            "y": 30.5,
+            "w": 380,
+            "h": 244.79999999999998,
+            "rotation": 0,
+            "text": "Thằng nhóc đó đang ở đâu vậy? Mau nói cho tôi!",
+            "lines": ["Thằng nhóc đó", "đang ở đâu vậy?", "Mau nói cho tôi!"],
+            "font_family": "BeVietnamPro-Bold",
+            "font_size": 44,
+            "line_height": 1.3,
+            "pad": 6,
+            "letter_spacing": 0,
+            "align": "right",
+            "fill": "#111111",
+            "stroke": null,
+            "auto_fit": false,
+            "hidden": false
+          },
+          {
+            "id": "b09",
+            "region_id": null,
+            "x": 23.25,
+            "y": 150,
+            "w": 283,
+            "h": 120,
+            "rotation": 0,
+            "text": "Đường đời ngoằn ngoèo lắm, cẩn thận kẻo vấp ngã nhé.",
+            "lines": [],
+            "font_family": "Itim-Regular",
+            "font_size": 18.5,
+            "line_height": 1.15,
+            "pad": 5,
+            "letter_spacing": 0,
+            "align": "left",
+            "fill": "#111111",
+            "stroke": {
+              "color": "#1a1a1a",
+              "width": 2
+            },
+            "auto_fit": false,
+            "hidden": false
+          },
+          {
+            "id": "b10",
+            "region_id": null,
+            "x": 23.25,
+            "y": 280,
+            "w": 380,
+            "h": 138.39999999999998,
+            "rotation": 0,
+            "text": "Sao giờ này cậu mới tới hả?",
+            "lines": ["Sao giờ này cậu", "mới tới hả?"],
+            "font_family": "Itim-Regular",
+            "font_size": 28,
+            "line_height": 1.15,
+            "pad": 5,
+            "letter_spacing": 0,
+            "align": "left",
+            "fill": "#111111",
+            "stroke": {
+              "color": "#1a1a1a",
+              "width": 2
+            },
+            "auto_fit": false,
+            "hidden": false
+          },
+          {
+            "id": "b11",
+            "region_id": null,
+            "x": 30.5,
+            "y": 413.5,
+            "w": 380,
+            "h": 158,
+            "rotation": 0,
+            "text": "ếệỗửữẫ ẤẬỖỬỮẪ",
+            "lines": ["ếệỗửữẫ", "ẤẬỖỬỮẪ"],
+            "font_family": "Lexend-Variable",
+            "font_size": 35,
+            "line_height": 1.3,
+            "pad": 6,
+            "letter_spacing": 0,
+            "align": "right",
+            "fill": "#fafafa",
+            "stroke": {
+              "color": "#ffffff",
+              "width": 3.5
+            },
+            "auto_fit": false,
+            "hidden": false
+          }
+        ],
+        "meta": null
+      },
+      "expected": [
+        {
+          "id": "b08",
+          "lines": [
+            {
+              "x": 74.625,
+              "baseline": 80.5,
+              "advance": 329.875
+            },
+            {
+              "x": 37.59375,
+              "baseline": 152.858,
+              "advance": 366.90625
+            },
+            {
+              "x": 53.1875,
+              "baseline": 225.216,
+              "advance": 351.3125
+            }
+          ],
+          "ink": [[76, 38, 402, 89], [40, 116, 402, 163], [56, 190, 401, 225]]
+        },
+        {
+          "id": "b09",
+          "wrapped": {
+            "lines": ["Đường đời ngoằn ngoèo lắm, cẩn", "thận kẻo vấp ngã nhé."],
+            "font_size": 18.5
+          },
+          "lines": [
+            {
+              "x": 28.25,
+              "baseline": 172.575,
+              "advance": 257.796875
+            },
+            {
+              "x": 28.25,
+              "baseline": 198.105,
+              "advance": 171.109375
+            }
+          ],
+          "ink": [[27, 157, 288, 178], [27, 183, 200, 204]]
+        },
+        {
+          "id": "b10",
+          "lines": [
+            {
+              "x": 28.25,
+              "baseline": 311.6,
+              "advance": 186.03125
+            },
+            {
+              "x": 28.25,
+              "baseline": 350.24,
+              "advance": 131.796875
+            }
+          ],
+          "ink": [[27, 290, 216, 320], [27, 328, 161, 352]]
+        },
+        {
+          "id": "b11",
+          "lines": [
+            {
+              "x": 277.4375,
+              "baseline": 454.5,
+              "advance": 127.0625
+            },
+            {
+              "x": 253.21875,
+              "baseline": 511.375,
+              "advance": 151.28125
+            }
+          ],
+          "ink": [[276, 419, 405, 465], [251, 471, 407, 522]]
+        }
+      ]
+    },
+    {
+      "id": "golden-03",
+      "state": {
+        "schema_version": 1,
+        "size": {
+          "w": 420,
+          "h": 660
+        },
+        "view": {
+          "show_original": false
+        },
+        "regions": [],
+        "text_boxes": [
+          {
+            "id": "b12",
+            "region_id": null,
+            "x": 16,
+            "y": 27,
+            "w": 380,
+            "h": 179,
+            "rotation": 0,
+            "text": "Đường đời ngoằn ngoèo",
+            "lines": ["Đường đời", "ngoằn ngoèo"],
+            "font_family": "PatrickHand-Regular",
+            "font_size": 42.5,
+            "line_height": 1,
+            "pad": 4,
+            "letter_spacing": 0,
+            "align": "center",
+            "fill": "#111111",
+            "stroke": null,
+            "auto_fit": false,
+            "hidden": false
+          },
+          {
+            "id": "b13",
+            "region_id": null,
+            "x": 23.25,
+            "y": 160.5,
+            "w": 380,
+            "h": 86.6,
+            "rotation": 0,
+            "text": "KHÔNG ĐƯỢC!!",
+            "lines": ["KHÔNG ĐƯỢC!!"],
+            "font_family": "Anton-Regular",
+            "font_size": 19,
+            "line_height": 1.15,
+            "pad": 5,
+            "letter_spacing": 0,
+            "align": "left",
+            "fill": "#fafafa",
+            "stroke": {
+              "color": "#ffffff",
+              "width": 1.5
+            },
+            "auto_fit": false,
+            "hidden": false
+          },
+          {
+            "id": "b14",
+            "region_id": null,
+            "x": 16,
+            "y": 280,
+            "w": 268,
+            "h": 120,
+            "rotation": 0,
+            "text": "Đường đời ngoằn ngoèo lắm, cẩn thận kẻo vấp ngã nhé.",
+            "lines": [],
+            "font_family": "BeVietnamPro-Bold",
+            "font_size": 33.5,
+            "line_height": 1,
+            "pad": 4,
+            "letter_spacing": 0,
+            "align": "center",
+            "fill": "#fafafa",
+            "stroke": {
+              "color": "#ffffff",
+              "width": 3.5
+            },
+            "auto_fit": true,
+            "hidden": false
+          },
+          {
+            "id": "b15",
+            "region_id": null,
+            "x": 16,
+            "y": 410,
+            "w": 380,
+            "h": 106.9,
+            "rotation": 0,
+            "text": "Quỷ thật, ổn chứ?",
+            "lines": ["Quỷ thật, ổn chứ?"],
+            "font_family": "BeVietnamPro-Bold",
+            "font_size": 33.5,
+            "line_height": 1,
+            "pad": 4,
+            "letter_spacing": 0,
+            "align": "center",
+            "fill": "#fafafa",
+            "stroke": {
+              "color": "#ffffff",
+              "width": 3.5
+            },
+            "auto_fit": false,
+            "hidden": false
+          }
+        ],
+        "meta": null
+      },
+      "expected": [
+        {
+          "id": "b12",
+          "lines": [
+            {
+              "x": 130.421875,
+              "baseline": 75.285,
+              "advance": 151.15625
+            },
+            {
+              "x": 110.921875,
+              "baseline": 132.82999999999998,
+              "advance": 190.15625
+            }
+          ],
+          "ink": [[131, 45, 279, 88], [114, 98, 300, 146]]
+        },
+        {
+          "id": "b13",
+          "lines": [
+            {
+              "x": 28.25,
+              "baseline": 187.84912109375,
+              "advance": 97.21875
+            }
+          ],
+          "ink": [[27, 165, 126, 193]]
+        },
+        {
+          "id": "b14",
+          "wrapped": {
+            "lines": ["Đường đời ngoằn", "ngoèo lắm, cẩn thận", "kẻo vấp ngã nhé."],
+            "font_size": 25
+          },
+          "lines": [
+            {
+              "x": 42.7421875,
+              "baseline": 309,
+              "advance": 214.515625
+            },
+            {
+              "x": 22.015625,
+              "baseline": 340.625,
+              "advance": 255.96875
+            },
+            {
+              "x": 43.9765625,
+              "baseline": 372.25,
+              "advance": 212.046875
+            }
+          ],
+          "ink": [[40, 281, 259, 317], [20, 313, 280, 350], [42, 346, 258, 381]]
+        },
+        {
+          "id": "b15",
+          "lines": [
+            {
+              "x": 55.4296875,
+              "baseline": 447.5,
+              "advance": 301.140625
+            }
+          ],
+          "ink": [[53, 412, 358, 459]]
+        }
+      ]
+    },
+    {
+      "id": "golden-04",
+      "state": {
+        "schema_version": 1,
+        "size": {
+          "w": 420,
+          "h": 660
+        },
+        "view": {
+          "show_original": false
+        },
+        "regions": [],
+        "text_boxes": [
+          {
+            "id": "b16",
+            "region_id": null,
+            "x": 23.25,
+            "y": 23.5,
+            "w": 380,
+            "h": 116,
+            "rotation": 0,
+            "text": "Rầm!",
+            "lines": ["Rầm!"],
+            "font_family": "Itim-Regular",
+            "font_size": 40,
+            "line_height": 1.15,
+            "pad": 5,
+            "letter_spacing": 0,
+            "align": "left",
+            "fill": "#111111",
+            "stroke": null,
+            "auto_fit": false,
+            "hidden": false
+          },
+          {
+            "id": "b17",
+            "region_id": null,
+            "x": 30.5,
+            "y": 157,
+            "w": 380,
+            "h": 257.4,
+            "rotation": 0,
+            "text": "Thằng nhóc đó đang ở đâu vậy? Mau nói cho tôi!",
+            "lines": ["Thằng nhóc đó", "đang ở đâu vậy?", "Mau nói cho tôi!"],
+            "font_family": "Lexend-Variable",
+            "font_size": 47,
+            "line_height": 1.3,
+            "pad": 6,
+            "letter_spacing": 0,
+            "align": "right",
+            "fill": "#fafafa",
+            "stroke": {
+              "color": "#ffffff",
+              "width": 1.5
+            },
+            "auto_fit": false,
+            "hidden": false
+          },
+          {
+            "id": "b18",
+            "region_id": null,
+            "x": 16,
+            "y": 290.5,
+            "w": 380,
+            "h": 94.3,
+            "rotation": 0,
+            "text": "Xin chào!",
+            "lines": ["Xin chào!"],
+            "font_family": "Mali-Regular",
+            "font_size": 24.5,
+            "line_height": 1,
+            "pad": 4,
+            "letter_spacing": 0,
+            "align": "center",
+            "fill": "#111111",
+            "stroke": {
+              "color": "#1a1a1a",
+              "width": 2
+            },
+            "auto_fit": false,
+            "hidden": false
+          },
+          {
+            "id": "b19",
+            "region_id": null,
+            "x": 30.5,
+            "y": 410,
+            "w": 253,
+            "h": 120,
+            "rotation": 0,
+            "text": "Đường đời ngoằn ngoèo lắm, cẩn thận kẻo vấp ngã nhé.",
+            "lines": [],
+            "font_family": "Anton-Regular",
+            "font_size": 23.5,
+            "line_height": 1.3,
+            "pad": 6,
+            "letter_spacing": 0,
+            "align": "right",
+            "fill": "#111111",
+            "stroke": null,
+            "auto_fit": false,
+            "hidden": false
+          }
+        ],
+        "meta": null
+      },
+      "expected": [
+        {
+          "id": "b16",
+          "lines": [
+            {
+              "x": 28.25,
+              "baseline": 66.5,
+              "advance": 88.71875
+            }
+          ],
+          "ink": [[31, 39, 115, 67]]
+        },
+        {
+          "id": "b17",
+          "lines": [
+            {
+              "x": 66.234375,
+              "baseline": 210,
+              "advance": 338.265625
+            },
+            {
+              "x": 23.84375,
+              "baseline": 286.375,
+              "advance": 380.65625
+            },
+            {
+              "x": 43.875,
+              "baseline": 362.75,
+              "advance": 360.625
+            }
+          ],
+          "ink": [[66, 165, 404, 222], [24, 248, 404, 299], [47, 325, 403, 365]]
+        },
+        {
+          "id": "b18",
+          "lines": [
+            {
+              "x": 151.1484375,
+              "baseline": 320.225,
+              "advance": 109.703125
+            }
+          ],
+          "ink": [[151, 299, 261, 322]]
+        },
+        {
+          "id": "b19",
+          "wrapped": {
+            "lines": ["Đường đời ngoằn ngoèo", "lắm, cẩn thận kẻo vấp", "ngã nhé."],
+            "font_size": 23.5
+          },
+          "lines": [
+            {
+              "x": 54.9375,
+              "baseline": 443.642333984375,
+              "advance": 222.5625
+            },
+            {
+              "x": 69.5,
+              "baseline": 489.6314208984375,
+              "advance": 208
+            },
+            {
+              "x": 196.625,
+              "baseline": 535.6205078125,
+              "advance": 80.875
+            }
+          ],
+          "ink": [[55, 417, 277, 447], [70, 463, 277, 495], [198, 513, 277, 538]]
+        }
+      ]
+    },
+    {
+      "id": "golden-05",
+      "state": {
+        "schema_version": 1,
+        "size": {
+          "w": 420,
+          "h": 660
+        },
+        "view": {
+          "show_original": false
+        },
+        "regions": [],
+        "text_boxes": [
+          {
+            "id": "b20",
+            "region_id": null,
+            "x": 30.5,
+            "y": 20,
+            "w": 380,
+            "h": 166.39999999999998,
+            "rotation": 0,
+            "text": "ếệỗửữẫ ẤẬỖỬỮẪ",
+            "lines": ["ếệỗửữẫ", "ẤẬỖỬỮẪ"],
+            "font_family": "Baloo2-Variable",
+            "font_size": 38,
+            "line_height": 1.3,
+            "pad": 6,
+            "letter_spacing": 0,
+            "align": "right",
+            "fill": "#111111",
+            "stroke": null,
+            "auto_fit": false,
+            "hidden": false
+          },
+          {
+            "id": "b21",
+            "region_id": null,
+            "x": 16,
+            "y": 153.5,
+            "w": 380,
+            "h": 187.39999999999998,
+            "rotation": 0,
+            "text": "Đường đời ngoằn ngoèo",
+            "lines": ["Đường đời", "ngoằn ngoèo"],
+            "font_family": "BeVietnamPro-Bold",
+            "font_size": 45.5,
+            "line_height": 1,
+            "pad": 4,
+            "letter_spacing": 0,
+            "align": "center",
+            "fill": "#fafafa",
+            "stroke": {
+              "color": "#ffffff",
+              "width": 1.5
+            },
+            "auto_fit": false,
+            "hidden": false
+          },
+          {
+            "id": "b22",
+            "region_id": null,
+            "x": 23.25,
+            "y": 287,
+            "w": 380,
+            "h": 90.8,
+            "rotation": 0,
+            "text": "KHÔNG ĐƯỢC!!",
+            "lines": ["KHÔNG ĐƯỢC!!"],
+            "font_family": "BeVietnamPro-Regular",
+            "font_size": 22,
+            "line_height": 1.15,
+            "pad": 5,
+            "letter_spacing": 0,
+            "align": "left",
+            "fill": "#111111",
+            "stroke": {
+              "color": "#1a1a1a",
+              "width": 2
+            },
+            "auto_fit": false,
+            "hidden": false
+          },
+          {
+            "id": "b23",
+            "region_id": null,
+            "x": 30.5,
+            "y": 420.5,
+            "w": 380,
+            "h": 181.8,
+            "rotation": 0,
+            "text": "Ừ… để tớ nghĩ thêm chút đã",
+            "lines": ["Ừ… để tớ", "nghĩ thêm", "chút đã"],
+            "font_family": "Itim-Regular",
+            "font_size": 29,
+            "line_height": 1.3,
+            "pad": 6,
+            "letter_spacing": 0,
+            "align": "right",
+            "fill": "#fafafa",
+            "stroke": {
+              "color": "#ffffff",
+              "width": 3.5
+            },
+            "auto_fit": false,
+            "hidden": false
+          }
+        ],
+        "meta": null
+      },
+      "expected": [
+        {
+          "id": "b20",
+          "lines": [
+            {
+              "x": 279.6875,
+              "baseline": 66.964,
+              "advance": 124.8125
+            },
+            {
+              "x": 260.09375,
+              "baseline": 146.1028,
+              "advance": 144.40625
+            }
+          ],
+          "ink": [[282, 36, 402, 74], [261, 111, 403, 153]]
+        },
+        {
+          "id": "b21",
+          "lines": [
+            {
+              "x": 87.90625,
+              "baseline": 203,
+              "advance": 236.1875
+            },
+            {
+              "x": 56.828125,
+              "baseline": 260.5575,
+              "advance": 298.34375
+            }
+          ],
+          "ink": [[87, 166, 323, 213], [58, 215, 354, 271]]
+        },
+        {
+          "id": "b22",
+          "lines": [
+            {
+              "x": 28.25,
+              "baseline": 314,
+              "advance": 168.359375
+            }
+          ],
+          "ink": [[28, 290, 197, 321]]
+        },
+        {
+          "id": "b23",
+          "lines": [
+            {
+              "x": 294.03125,
+              "baseline": 454.05,
+              "advance": 110.46875
+            },
+            {
+              "x": 280.03125,
+              "baseline": 499.29,
+              "advance": 124.46875
+            },
+            {
+              "x": 311.484375,
+              "baseline": 544.53,
+              "advance": 93.015625
+            }
+          ],
+          "ink": [[292, 426, 408, 457], [277, 476, 407, 509], [309, 521, 408, 548]]
+        }
+      ]
+    },
+    {
+      "id": "golden-06",
+      "state": {
+        "schema_version": 1,
+        "size": {
+          "w": 420,
+          "h": 660
+        },
+        "view": {
+          "show_original": false
+        },
+        "regions": [],
+        "text_boxes": [
+          {
+            "id": "b24",
+            "region_id": null,
+            "x": 23.25,
+            "y": 20,
+            "w": 238,
+            "h": 120,
+            "rotation": 0,
+            "text": "Đường đời ngoằn ngoèo lắm, cẩn thận kẻo vấp ngã nhé.",
+            "lines": [],
+            "font_family": "PatrickHand-Regular",
+            "font_size": 43,
+            "line_height": 1.15,
+            "pad": 5,
+            "letter_spacing": 0,
+            "align": "left",
+            "fill": "#fafafa",
+            "stroke": {
+              "color": "#ffffff",
+              "width": 1.5
+            },
+            "auto_fit": true,
+            "hidden": false
+          },
+          {
+            "id": "b25",
+            "region_id": null,
+            "x": 23.25,
+            "y": 150,
+            "w": 380,
+            "h": 120.19999999999999,
+            "rotation": 0,
+            "text": "Rầm!",
+            "lines": ["Rầm!"],
+            "font_family": "PatrickHand-Regular",
+            "font_size": 43,
+            "line_height": 1.15,
+            "pad": 5,
+            "letter_spacing": 0,
+            "align": "left",
+            "fill": "#fafafa",
+            "stroke": {
+              "color": "#ffffff",
+              "width": 1.5
+            },
+            "auto_fit": false,
+            "hidden": false
+          },
+          {
+            "id": "b26",
+            "region_id": null,
+            "x": 30.5,
+            "y": 283.5,
+            "w": 380,
+            "h": 144,
+            "rotation": 0,
+            "text": "Thằng nhóc đó đang ở đâu vậy? Mau nói cho tôi!",
+            "lines": ["Thằng nhóc đó", "đang ở đâu vậy?", "Mau nói cho tôi!"],
+            "font_family": "Anton-Regular",
+            "font_size": 20,
+            "line_height": 1.3,
+            "pad": 6,
+            "letter_spacing": 0,
+            "align": "right",
+            "fill": "#111111",
+            "stroke": {
+              "color": "#1a1a1a",
+              "width": 2
+            },
+            "auto_fit": false,
+            "hidden": false
+          },
+          {
+            "id": "b27",
+            "region_id": null,
+            "x": 16,
+            "y": 417,
+            "w": 380,
+            "h": 98.5,
+            "rotation": 0,
+            "text": "Xin chào!",
+            "lines": ["Xin chào!"],
+            "font_family": "Baloo2-Variable",
+            "font_size": 27.5,
+            "line_height": 1,
+            "pad": 4,
+            "letter_spacing": 0,
+            "align": "center",
+            "fill": "#fafafa",
+            "stroke": {
+              "color": "#ffffff",
+              "width": 3.5
+            },
+            "auto_fit": false,
+            "hidden": false
+          }
+        ],
+        "meta": null
+      },
+      "expected": [
+        {
+          "id": "b24",
+          "wrapped": {
+            "lines": ["Đường đời ngoằn ngoèo", "lắm, cẩn thận kẻo vấp ngã", "nhé."],
+            "font_size": 24
+          },
+          "lines": [
+            {
+              "x": 28.25,
+              "baseline": 50.007999999999996,
+              "advance": 198.265625
+            },
+            {
+              "x": 28.25,
+              "baseline": 87.3784,
+              "advance": 222.046875
+            },
+            {
+              "x": 28.25,
+              "baseline": 124.74879999999999,
+              "advance": 35.609375
+            }
+          ],
+          "ink": [[27, 29, 227, 59], [28, 66, 251, 96], [28, 106, 64, 126]]
+        },
+        {
+          "id": "b25",
+          "lines": [
+            {
+              "x": 28.25,
+              "baseline": 199.80599999999998,
+              "advance": 76.234375
+            }
+          ],
+          "ink": [[28, 166, 103, 202]]
+        },
+        {
+          "id": "b26",
+          "lines": [
+            {
+              "x": 287.640625,
+              "baseline": 313.025390625,
+              "advance": 116.859375
+            },
+            {
+              "x": 273.234375,
+              "baseline": 352.1650390625,
+              "advance": 131.265625
+            },
+            {
+              "x": 275.734375,
+              "baseline": 391.3046875,
+              "advance": 128.765625
+            }
+          ],
+          "ink": [[286, 289, 406, 317], [272, 329, 406, 358], [275, 369, 406, 393]]
+        },
+        {
+          "id": "b27",
+          "lines": [
+            {
+              "x": 152.203125,
+              "baseline": 450.645,
+              "advance": 107.59375
+            }
+          ],
+          "ink": [[150, 429, 261, 455]]
+        }
+      ]
+    },
+    {
+      "id": "golden-07",
+      "state": {
+        "schema_version": 1,
+        "size": {
+          "w": 420,
+          "h": 660
+        },
+        "view": {
+          "show_original": false
+        },
+        "regions": [],
+        "text_boxes": [
+          {
+            "id": "b28",
+            "region_id": null,
+            "x": 23.25,
+            "y": 30.5,
+            "w": 380,
+            "h": 155.2,
+            "rotation": 0,
+            "text": "Sao giờ này cậu mới tới hả?",
+            "lines": ["Sao giờ này cậu", "mới tới hả?"],
+            "font_family": "BeVietnamPro-Regular",
+            "font_size": 34,
+            "line_height": 1.15,
+            "pad": 5,
+            "letter_spacing": 0,
+            "align": "left",
+            "fill": "#111111",
+            "stroke": null,
+            "auto_fit": false,
+            "hidden": false
+          },
+          {
+            "id": "b29",
+            "region_id": null,
+            "x": 16,
+            "y": 150,
+            "w": 223,
+            "h": 120,
+            "rotation": 0,
+            "text": "Đường đời ngoằn ngoèo lắm, cẩn thận kẻo vấp ngã nhé.",
+            "lines": [],
+            "font_family": "Lexend-Variable",
+            "font_size": 18.5,
+            "line_height": 1,
+            "pad": 4,
+            "letter_spacing": 0,
+            "align": "center",
+            "fill": "#111111",
+            "stroke": {
+              "color": "#1a1a1a",
+              "width": 2
+            },
+            "auto_fit": false,
+            "hidden": false
+          },
+          {
+            "id": "b30",
+            "region_id": null,
+            "x": 16,
+            "y": 280,
+            "w": 380,
+            "h": 111.8,
+            "rotation": 0,
+            "text": "Đường đời ngoằn ngoèo",
+            "lines": ["Đường đời", "ngoằn ngoèo"],
+            "font_family": "Lexend-Variable",
+            "font_size": 18.5,
+            "line_height": 1,
+            "pad": 4,
+            "letter_spacing": 0,
+            "align": "center",
+            "fill": "#111111",
+            "stroke": {
+              "color": "#1a1a1a",
+              "width": 2
+            },
+            "auto_fit": false,
+            "hidden": false
+          },
+          {
+            "id": "b31",
+            "region_id": null,
+            "x": 23.25,
+            "y": 413.5,
+            "w": 380,
+            "h": 95,
+            "rotation": 0,
+            "text": "KHÔNG ĐƯỢC!!",
+            "lines": ["KHÔNG ĐƯỢC!!"],
+            "font_family": "Mali-Regular",
+            "font_size": 25,
+            "line_height": 1.15,
+            "pad": 5,
+            "letter_spacing": 0,
+            "align": "left",
+            "fill": "#fafafa",
+            "stroke": {
+              "color": "#ffffff",
+              "width": 3.5
+            },
+            "auto_fit": false,
+            "hidden": false
+          }
+        ],
+        "meta": null
+      },
+      "expected": [
+        {
+          "id": "b28",
+          "lines": [
+            {
+              "x": 28.25,
+              "baseline": 69.5,
+              "advance": 264.984375
+            },
+            {
+              "x": 28.25,
+              "baseline": 118.9615,
+              "advance": 183.640625
+            }
+          ],
+          "ink": [[30, 42, 291, 77], [31, 91, 210, 119]]
+        },
+        {
+          "id": "b29",
+          "wrapped": {
+            "lines": ["Đường đời ngoằn", "ngoèo lắm, cẩn thận", "kẻo vấp ngã nhé."],
+            "font_size": 18.5
+          },
+          "lines": [
+            {
+              "x": 49.9453125,
+              "baseline": 172.5,
+              "advance": 155.109375
+            },
+            {
+              "x": 35.65625,
+              "baseline": 195.625,
+              "advance": 183.6875
+            },
+            {
+              "x": 50.828125,
+              "baseline": 218.75,
+              "advance": 153.34375
+            }
+          ],
+          "ink": [[49, 153, 206, 179], [35, 176, 220, 202], [50, 200, 205, 225]]
+        },
+        {
+          "id": "b30",
+          "lines": [
+            {
+              "x": 159.578125,
+              "baseline": 302.5,
+              "advance": 92.84375
+            },
+            {
+              "x": 146.5703125,
+              "baseline": 325.625,
+              "advance": 118.859375
+            }
+          ],
+          "ink": [[158, 286, 253, 309], [146, 306, 267, 332]]
+        },
+        {
+          "id": "b31",
+          "lines": [
+            {
+              "x": 28.25,
+              "baseline": 444.75,
+              "advance": 185.5
+            }
+          ],
+          "ink": [[27, 418, 215, 453]]
+        }
+      ]
+    },
+    {
+      "id": "golden-08",
+      "state": {
+        "schema_version": 1,
+        "size": {
+          "w": 420,
+          "h": 660
+        },
+        "view": {
+          "show_original": false
+        },
+        "regions": [],
+        "text_boxes": [
+          {
+            "id": "b32",
+            "region_id": null,
+            "x": 30.5,
+            "y": 27,
+            "w": 380,
+            "h": 194.39999999999998,
+            "rotation": 0,
+            "text": "Ừ… để tớ nghĩ thêm chút đã",
+            "lines": ["Ừ… để tớ", "nghĩ thêm", "chút đã"],
+            "font_family": "Anton-Regular",
+            "font_size": 32,
+            "line_height": 1.3,
+            "pad": 6,
+            "letter_spacing": 0,
+            "align": "right",
+            "fill": "#111111",
+            "stroke": null,
+            "auto_fit": false,
+            "hidden": false
+          },
+          {
+            "id": "b33",
+            "region_id": null,
+            "x": 16,
+            "y": 160.5,
+            "w": 380,
+            "h": 115.3,
+            "rotation": 0,
+            "text": "Quỷ thật, ổn chứ?",
+            "lines": ["Quỷ thật, ổn chứ?"],
+            "font_family": "Baloo2-Variable",
+            "font_size": 39.5,
+            "line_height": 1,
+            "pad": 4,
+            "letter_spacing": 0,
+            "align": "center",
+            "fill": "#fafafa",
+            "stroke": {
+              "color": "#ffffff",
+              "width": 1.5
+            },
+            "auto_fit": false,
+            "hidden": false
+          },
+          {
+            "id": "b34",
+            "region_id": null,
+            "x": 30.5,
+            "y": 280,
+            "w": 208,
+            "h": 120,
+            "rotation": 0,
+            "text": "Đường đời ngoằn ngoèo lắm, cẩn thận kẻo vấp ngã nhé.",
+            "lines": [],
+            "font_family": "BeVietnamPro-Regular",
+            "font_size": 23,
+            "line_height": 1.3,
+            "pad": 6,
+            "letter_spacing": 0,
+            "align": "right",
+            "fill": "#fafafa",
+            "stroke": {
+              "color": "#ffffff",
+              "width": 3.5
+            },
+            "auto_fit": true,
+            "hidden": false
+          },
+          {
+            "id": "b35",
+            "region_id": null,
+            "x": 30.5,
+            "y": 410,
+            "w": 380,
+            "h": 156.6,
+            "rotation": 0,
+            "text": "Thằng nhóc đó đang ở đâu vậy? Mau nói cho tôi!",
+            "lines": ["Thằng nhóc đó", "đang ở đâu vậy?", "Mau nói cho tôi!"],
+            "font_family": "BeVietnamPro-Regular",
+            "font_size": 23,
+            "line_height": 1.3,
+            "pad": 6,
+            "letter_spacing": 0,
+            "align": "right",
+            "fill": "#fafafa",
+            "stroke": {
+              "color": "#ffffff",
+              "width": 3.5
+            },
+            "auto_fit": false,
+            "hidden": false
+          }
+        ],
+        "meta": null
+      },
+      "expected": [
+        {
+          "id": "b32",
+          "lines": [
+            {
+              "x": 292.703125,
+              "baseline": 70.640625,
+              "advance": 111.796875
+            },
+            {
+              "x": 275.390625,
+              "baseline": 133.2640625,
+              "advance": 129.109375
+            },
+            {
+              "x": 307.96875,
+              "baseline": 195.8875,
+              "advance": 96.53125
+            }
+          ],
+          "ink": [[294, 34, 404, 71], [277, 102, 403, 137], [309, 165, 403, 196]]
+        },
+        {
+          "id": "b33",
+          "lines": [
+            {
+              "x": 58.65625,
+              "baseline": 207.08100000000002,
+              "advance": 294.6875
+            }
+          ],
+          "ink": [[60, 174, 353, 216]]
+        },
+        {
+          "id": "b34",
+          "wrapped": {
+            "lines": ["Đường đời ngoằn", "ngoèo lắm, cẩn thận", "kẻo vấp ngã nhé."],
+            "font_size": 19
+          },
+          "lines": [
+            {
+              "x": 73.5625,
+              "baseline": 305,
+              "advance": 158.9375
+            },
+            {
+              "x": 43.4375,
+              "baseline": 336.2455,
+              "advance": 189.0625
+            },
+            {
+              "x": 76.515625,
+              "baseline": 367.491,
+              "advance": 155.984375
+            }
+          ],
+          "ink": [[71, 283, 235, 312], [41, 315, 235, 344], [75, 347, 234, 375]]
+        },
+        {
+          "id": "b35",
+          "lines": [
+            {
+              "x": 236.34375,
+              "baseline": 439,
+              "advance": 168.15625
+            },
+            {
+              "x": 217.46875,
+              "baseline": 476.8235,
+              "advance": 187.03125
+            },
+            {
+              "x": 227.78125,
+              "baseline": 514.647,
+              "advance": 176.71875
+            }
+          ],
+          "ink": [[234, 413, 406, 447], [215, 454, 407, 485], [226, 493, 406, 518]]
+        }
+      ]
+    },
+    {
+      "id": "golden-09",
+      "state": {
+        "schema_version": 1,
+        "size": {
+          "w": 420,
+          "h": 660
+        },
+        "view": {
+          "show_original": false
+        },
+        "regions": [],
+        "text_boxes": [
+          {
+            "id": "b36",
+            "region_id": null,
+            "x": 16,
+            "y": 23.5,
+            "w": 380,
+            "h": 102.69999999999999,
+            "rotation": 0,
+            "text": "Xin chào!",
+            "lines": ["Xin chào!"],
+            "font_family": "Lexend-Variable",
+            "font_size": 30.5,
+            "line_height": 1,
+            "pad": 4,
+            "letter_spacing": 0,
+            "align": "center",
+            "fill": "#111111",
+            "stroke": null,
+            "auto_fit": false,
+            "hidden": false
+          },
+          {
+            "id": "b37",
+            "region_id": null,
+            "x": 23.25,
+            "y": 157,
+            "w": 380,
+            "h": 163.6,
+            "rotation": 0,
+            "text": "Sao giờ này cậu mới tới hả?",
+            "lines": ["Sao giờ này cậu", "mới tới hả?"],
+            "font_family": "Mali-Regular",
+            "font_size": 37,
+            "line_height": 1.15,
+            "pad": 5,
+            "letter_spacing": 0,
+            "align": "left",
+            "fill": "#fafafa",
+            "stroke": {
+              "color": "#ffffff",
+              "width": 1.5
+            },
+            "auto_fit": false,
+            "hidden": false
+          },
+          {
+            "id": "b38",
+            "region_id": null,
+            "x": 30.5,
+            "y": 290.5,
+            "w": 380,
+            "h": 183.2,
+            "rotation": 0,
+            "text": "ếệỗửữẫ ẤẬỖỬỮẪ",
+            "lines": ["ếệỗửữẫ", "ẤẬỖỬỮẪ"],
+            "font_family": "PatrickHand-Regular",
+            "font_size": 44,
+            "line_height": 1.3,
+            "pad": 6,
+            "letter_spacing": 0,
+            "align": "right",
+            "fill": "#111111",
+            "stroke": {
+              "color": "#1a1a1a",
+              "width": 2
+            },
+            "auto_fit": false,
+            "hidden": false
+          },
+          {
+            "id": "b39",
+            "region_id": null,
+            "x": 23.25,
+            "y": 410,
+            "w": 193,
+            "h": 120,
+            "rotation": 0,
+            "text": "Đường đời ngoằn ngoèo lắm, cẩn thận kẻo vấp ngã nhé.",
+            "lines": [],
+            "font_family": "Baloo2-Variable",
+            "font_size": 23.5,
+            "line_height": 1.15,
+            "pad": 5,
+            "letter_spacing": 0,
+            "align": "left",
+            "fill": "#111111",
+            "stroke": null,
+            "auto_fit": false,
+            "hidden": false
+          }
+        ],
+        "meta": null
+      },
+      "expected": [
+        {
+          "id": "b36",
+          "lines": [
+            {
+              "x": 138.109375,
+              "baseline": 58,
+              "advance": 135.78125
+            }
+          ],
+          "ink": [[139, 34, 272, 58]]
+        },
+        {
+          "id": "b37",
+          "lines": [
+            {
+              "x": 28.25,
+              "baseline": 200.85,
+              "advance": 283.953125
+            },
+            {
+              "x": 28.25,
+              "baseline": 256.16499999999996,
+              "advance": 199.40625
+            }
+          ],
+          "ink": [[29, 172, 311, 212], [29, 225, 227, 258]]
+        },
+        {
+          "id": "b38",
+          "lines": [
+            {
+              "x": 299.296875,
+              "baseline": 342.348,
+              "advance": 105.203125
+            },
+            {
+              "x": 267.21875,
+              "baseline": 419.7968,
+              "advance": 137.28125
+            }
+          ],
+          "ink": [[298, 305, 406, 350], [266, 374, 406, 427]]
+        },
+        {
+          "id": "b39",
+          "wrapped": {
+            "lines": ["Đường đời ngoằn", "ngoèo lắm, cẩn", "thận kẻo vấp ngã", "nhé."],
+            "font_size": 23.5
+          },
+          "lines": [
+            {
+              "x": 28.25,
+              "baseline": 440.33299999999997,
+              "advance": 172.984375
+            },
+            {
+              "x": 28.25,
+              "baseline": 483.62704999999994,
+              "advance": 149.203125
+            },
+            {
+              "x": 28.25,
+              "baseline": 526.9210999999999,
+              "advance": 170.09375
+            },
+            {
+              "x": 28.25,
+              "baseline": 570.21515,
+              "advance": 41.390625
+            }
+          ],
+          "ink": [[29, 421, 199, 445], [30, 465, 176, 488], [30, 508, 197, 532], [30, 554, 69, 570]]
+        }
+      ]
+    }
+  ]
+}

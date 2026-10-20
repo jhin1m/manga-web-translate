@@ -7,8 +7,8 @@
  */
 import { QueryClient } from "@tanstack/react-query";
 import { createRootRouteWithContext, createRoute, createRouter, Link, Outlet, redirect } from "@tanstack/react-router";
+import { lazy, Suspense } from "react";
 import { ChapterPage } from "../features/chapter/chapter-page.tsx";
-import { EditorPage } from "../features/editor/EditorPage.tsx";
 import { WorkspaceGlossaryPage } from "../features/glossary/glossary-editor.tsx";
 import { SeriesDetailPage, SeriesListPage } from "../features/series/series-list-page.tsx";
 import { SeriesSettingsPage } from "../features/series/series-settings-page.tsx";
@@ -17,6 +17,9 @@ import { AcceptInvitePage } from "../routes/accept-invite.tsx";
 import { LoginPage } from "../routes/login.tsx";
 import { MembersPage, WorkspacePickerPage } from "../routes/workspaces.tsx";
 import { AuthGate, WorkspaceLayout } from "./layout.tsx";
+
+// Chunk riêng (konva + immer + zustand…): chỉ tải khi mở editor.
+const EditorPage = lazy(() => import("../features/editor/EditorPage.tsx").then((m) => ({ default: m.EditorPage })));
 
 export const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: true, staleTime: 5_000 } },
@@ -125,7 +128,17 @@ export const editorRoute = createRoute({
   path: "w/$ws/series/$seriesId/chapters/$chapterId/edit/$pageId",
   component: function EditorRoute() {
     const p = editorRoute.useParams();
-    return <EditorPage ws={p.ws} seriesId={p.seriesId} chapterId={p.chapterId} pageId={p.pageId} />;
+    return (
+      <Suspense
+        fallback={
+          <p className="muted" style={{ padding: 16 }}>
+            Đang tải editor…
+          </p>
+        }
+      >
+        <EditorPage ws={p.ws} seriesId={p.seriesId} chapterId={p.chapterId} pageId={p.pageId} />
+      </Suspense>
+    );
   },
 });
 

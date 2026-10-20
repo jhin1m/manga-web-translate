@@ -79,9 +79,13 @@ trả `queued` (giữ attempts) hoặc `failed` khi hết lượt.
 Không overlap; `source_map` ghi slice gốc ↔ đoạn y của page. `mode: "pages"` (manga): 1 file = 1 page. Ingest lại khi
 đã có `state_origin='user'` → 409 `chapter_has_user_edits` (tạo chương mới).
 
+## Xuất chương
+
+`chapter.export` (`worker/mtl_worker/export.py`) không cần model ONNX hay LLM (chạy được với `--no-llm`). Output
+`export` mang `headers` đã ký (content-type + tag lifecycle) — xem [export-and-batch-edit.md](./export-and-batch-edit.md).
+
 ## Còn hoãn
 
-- `chapter.export` chưa có handler worker (Phase 6) — không nằm trong capability mặc định.
 - Kiểm ngân sách ở claim, `dispatches`/Modal, `/healthz` đọc `runner_heartbeat`: Phase 7.
 - Key ảnh ingest theo `ingest_rev` (không theo attempt): hai attempt cùng rev ghi đè nhau với nội dung tất định
   (cùng input + pipeline); DB chỉ nhận kết quả của attempt có lease hợp lệ.

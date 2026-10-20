@@ -38,3 +38,17 @@ export function pageOpKey(payload: Extract<JobPayload, { type: "page.reinpaint" 
   const inputRev = sha(JSON.stringify([opts, env.PIPELINE_VERSION]));
   return { inputRev, idempotencyKey: idempotencyKey(type, page_id, inputRev, opts) };
 }
+
+/**
+ * chapter.export: input = trạng thái từng page lúc enqueue (version state + clean_rev + status) → bấm xuất lại khi
+ * job cũ còn chạy và chương chưa đổi thì trả job cũ.
+ */
+export function exportKey(
+  payload: Extract<JobPayload, { type: "chapter.export" }>,
+  pages: ReadonlyArray<{ id: string; version: number; cleanRev: number | null; status: string }>,
+): JobKey {
+  const { type, chapter_id, ...opts } = payload;
+  const items = pages.map((p) => `${p.id}:${p.version}:${p.cleanRev ?? "-"}:${p.status}`).sort();
+  const inputRev = sha([items.join(","), env.PIPELINE_VERSION].join("|"));
+  return { inputRev, idempotencyKey: idempotencyKey(type, chapter_id, inputRev, opts) };
+}

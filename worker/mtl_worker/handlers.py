@@ -26,6 +26,7 @@ from mtl_pipeline.translate import SeriesSettings, qualified_id, translate_chapt
 from mtl_pipeline.typeset import typeset_region
 
 from . import PIPELINE_VERSION
+from .export import handle_export
 from .ingest import handle_ingest
 from .runner import (
     Deps,
@@ -329,6 +330,7 @@ HANDLERS: dict[str, Handler] = {
     "chapter.translate": handle_translate,
     "page.reinpaint": handle_reinpaint,
     "page.ocr_region": handle_ocr_region,
+    "chapter.export": handle_export,
 }
 # Loại cần LLM: worker không có provider (--no-llm) thì không khai các loại này.
 LLM_TYPES = {"page.prepare", "chapter.translate", "page.ocr_region"}

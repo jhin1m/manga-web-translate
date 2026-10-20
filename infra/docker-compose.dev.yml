@@ -57,7 +57,11 @@ services:
         mc alias set local http://minio:9000 "$$S3_ACCESS_KEY" "$$S3_SECRET_KEY"
         mc mb --ignore-existing "local/$$S3_BUCKET"
         mc anonymous set none "local/$$S3_BUCKET"
-        echo "bucket $$S3_BUCKET ready (private)"
+        # File export (tag mtl-kind=export, packages/shared EXPORT_OBJECT_TAG) tự xoá sau 7 ngày. import = thay cả
+        # cấu hình lifecycle → chạy lại nhiều lần vẫn ra đúng 1 rule.
+        echo '{"Rules":[{"ID":"expire-exports","Status":"Enabled","Filter":{"Tag":{"Key":"mtl-kind","Value":"export"}},"Expiration":{"Days":7}}]}' \
+          | mc ilm import "local/$$S3_BUCKET"
+        echo "bucket $$S3_BUCKET ready (private, exports expire after 7 days)"
 
   files-proxy:
     image: caddy:2

@@ -2,11 +2,19 @@
  * Dựng `inputs` (presigned GET) và `outputs` (presigned PUT, TTL ≤ lease còn lại) cho job vừa claim.
  * Hình dạng theo packages/shared/src/worker-protocol.ts (*Inputs).
  */
-import { type DbLike, type jobs, pageStates, pages, sourceFiles } from "@mtl/db";
-import { type JobPayload, keyBelongsToWorkspace, type OcrResult, type PageState, storageKeys } from "@mtl/shared";
+import { chapters, type DbLike, type jobs, pageStates, pages, series, sourceFiles } from "@mtl/db";
+import {
+  EXPORT_FILE,
+  EXPORT_OBJECT_TAG,
+  type JobPayload,
+  keyBelongsToWorkspace,
+  type OcrResult,
+  type PageState,
+  storageKeys,
+} from "@mtl/shared";
 import { and, asc, eq, inArray } from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
-import { MAX_PUT_TTL_S, presignGet, presignPut } from "../storage.ts";
+import { MAX_GET_TTL_S, MAX_PUT_TTL_S, presignGet, presignPut } from "../storage.ts";
 
 type Job = typeof jobs.$inferSelect;
 type Page = typeof pages.$inferSelect;
@@ -16,7 +24,13 @@ const INPUT_GET_TTL_S = 10 * 60;
 const MAX_CONTEXT_LINES = 24;
 export const PNG = "image/png";
 
-export type PresignedOutput = { key: string; rev: number | null; put: string; expires_at: string };
+export type PresignedOutput = {
+  key: string;
+  rev: number | null;
+  put: string;
+  expires_at: string;
+  headers: Record<string, string>;
+};
 
 export function putTtl(leaseExpiresAt: Date): number {
   return Math.max(1, Math.min(MAX_PUT_TTL_S, Math.floor((leaseExpiresAt.getTime() - Date.now()) / 1000)));
@@ -28,6 +42,9 @@ export function outputKey(job: Job, name: string): { key: string; rev: number | 
   if ((name === "clean" || name === "mask") && job.outputRev !== null && job.pageId) {
     if (name === "mask" && p.type !== "page.prepare") return null;
     return { key: storageKeys[name](job.workspaceId, job.pageId, job.outputRev), rev: job.outputRev };
+  }
+  if (name === "export" && p.type === "chapter.export") {
+    return { key: storageKeys.export(job.workspaceId, p.chapter_id, job.id, EXPORT_FILE[p.format].ext), rev: null };
   }
   const m = /^page:(\d+)$/.exec(name);
   if (m && p.type === "chapter.ingest") {
@@ -44,7 +61,12 @@ export async function presignOutputs(job: Job, names: string[]): Promise<Record<
   for (const name of names) {
     const k = outputKey(job, name);
     if (!k) throw new HTTPException(400, { message: `output "${name}" not valid for ${job.type}` });
-    out[name] = { ...k, put: await presignPut(k.key, PNG, ttl), expires_at: expires };
+    // File export: MIME theo format + tag cho lifecycle xoá sau 7 ngày; còn lại là PNG.
+    const exp = name === "export" && job.payload.type === "chapter.export" ? EXPORT_FILE[job.payload.format] : null;
+    const headers: Record<string, string> = { "content-type": exp?.mime ?? PNG };
+    if (exp) headers["x-amz-tagging"] = EXPORT_OBJECT_TAG;
+    const put = await presignPut(k.key, headers["content-type"] as string, ttl, { tagging: headers["x-amz-tagging"] });
+    out[name] = { ...k, put, expires_at: expires, headers };
   }
   return out;
 }
@@ -53,6 +75,7 @@ export async function presignOutputs(job: Job, names: string[]): Promise<Record<
 export function claimOutputNames(payload: JobPayload): string[] {
   if (payload.type === "page.prepare") return ["clean", "mask"];
   if (payload.type === "page.reinpaint") return ["clean"];
+  if (payload.type === "chapter.export") return ["export"];
   return [];
 }
 
@@ -164,6 +187,53 @@ export async function buildInputs(tx: DbLike, job: Job): Promise<Record<string, 
       };
     }
     case "chapter.export":
-      return {};
+      return exportInputs(tx, job, p);
   }
+}
+
+/**
+ * State chốt lúc claim (đọc trong transaction claim). Export chạy lâu hơn input khác (render cả chương) → URL nền
+ * ký trần 15'. `translated` = đã qua giai đoạn 2 và có ảnh sạch; page khác xuất ảnh gốc không chữ.
+ */
+async function exportInputs(tx: DbLike, job: Job, p: Extract<JobPayload, { type: "chapter.export" }>) {
+  const [ch] = await tx
+    .select({ number: chapters.number, title: chapters.title, seriesTitle: series.title })
+    .from(chapters)
+    .innerJoin(series, eq(series.id, chapters.seriesId))
+    .where(and(eq(chapters.id, p.chapter_id), eq(chapters.workspaceId, job.workspaceId)));
+  if (!ch) throw new Error("chapter missing");
+  const rows = await tx
+    .select({ page: pages, state: pageStates.state })
+    .from(pages)
+    .leftJoin(pageStates, eq(pageStates.pageId, pages.id))
+    .where(and(eq(pages.chapterId, p.chapter_id), eq(pages.workspaceId, job.workspaceId)))
+    .orderBy(asc(pages.ord));
+  if (rows.length === 0) throw new Error("chapter has no pages");
+  const sources = await tx
+    .select({ id: sourceFiles.id, ord: sourceFiles.ord })
+    .from(sourceFiles)
+    .where(and(eq(sourceFiles.chapterId, p.chapter_id), eq(sourceFiles.workspaceId, job.workspaceId)))
+    .orderBy(asc(sourceFiles.ord));
+  const sign = (key: string) => presignGet(key, MAX_GET_TTL_S);
+  return {
+    chapter: { series_title: ch.seriesTitle, number: ch.number, title: ch.title },
+    pages: await Promise.all(
+      rows.map(async ({ page: pg, state }) => {
+        const translated = pg.status === "ready" && pg.cleanRev !== null && state !== null;
+        return {
+          page_id: pg.id,
+          ord: pg.ord,
+          width: pg.width,
+          height: pg.height,
+          translated,
+          background: await sign(
+            translated ? storageKeys.clean(job.workspaceId, pg.id, pg.cleanRev as number) : pg.originalKey,
+          ),
+          state: translated ? state : null,
+          source_map: pg.sourceMap,
+        };
+      }),
+    ),
+    sources: sources.map((s) => ({ source_file_id: s.id, ord: s.ord })),
+  };
 }

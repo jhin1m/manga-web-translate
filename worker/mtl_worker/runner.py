@@ -27,7 +27,7 @@ log = logging.getLogger("mtl_worker")
 HEARTBEAT_S = 20.0
 
 # Loại job chưa có handler ở worker (phase sau) — không khai trong capabilities.
-DEFERRED_TYPES: dict[str, str] = {"chapter.export": "render + đóng gói ZIP/CBZ ở Phase 6"}
+DEFERRED_TYPES: dict[str, str] = {}
 
 
 class JobAborted(RuntimeError):

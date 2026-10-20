@@ -23,6 +23,10 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm lint
       - run: pnpm test
+      - name: Parity Konva ↔ render.py (bbox mực từng dòng ≤ 1px so fixture render.py đã commit)
+        run: |
+          pnpm --filter @mtl/web exec playwright install --with-deps chromium
+          pnpm --filter @mtl/web e2e typeset-parity
       - name: Infra logs on failure
         if: failure()
         run: docker compose -f infra/docker-compose.dev.yml logs --tail 100

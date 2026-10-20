@@ -53,7 +53,7 @@ function ifMatchVersion(header: string | undefined): number {
 }
 
 /** Giữ HISTORY_KEEP bản mới nhất của page (cùng luật với page-state-writer, qua scoped). */
-async function pruneHistory(tx: Scoped, pageId: string) {
+export async function pruneHistory(tx: Scoped, pageId: string) {
   const rows = await tx.select(pageStateHistory, eq(pageStateHistory.pageId, pageId));
   if (rows.length <= HISTORY_KEEP) return;
   const edge = rows.map((r) => r.version).sort((a, b) => b - a)[HISTORY_KEEP - 1];

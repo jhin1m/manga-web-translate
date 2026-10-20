@@ -226,6 +226,8 @@ export const glossaryEntries = pgTable(
       "cascade",
     ),
     index("glossary_ws_series_idx").on(t.workspaceId, t.seriesId),
+    // Một term mỗi phạm vi (series hoặc workspace khi series_id null) — chặn tạo trùng khi request đua nhau.
+    unique("glossary_entries_scope_term_uq").on(t.workspaceId, t.seriesId, t.sourceTerm).nullsNotDistinct(),
   ],
 );
 

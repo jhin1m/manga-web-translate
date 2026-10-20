@@ -104,6 +104,15 @@ const BODIES: Record<string, unknown> = {
     base_clean_rev: 1,
   },
   "POST /api/w/:ws/pages/:pageId/ocr-region": { bbox: [0, 0, 10, 10] },
+  "POST /api/w/:ws/chapters/:chapterId/export": { format: "cbz", layout: "pages" },
+  "POST /api/w/:ws/chapters/:chapterId/find-replace/preview": { find: "chào", replace: "xin chào" },
+  "POST /api/w/:ws/chapters/:chapterId/find-replace/apply": { find: "chào", replace: "xin chào", versions: {} },
+  "POST /api/w/:ws/chapters/:chapterId/find-replace/undo": { batch_id: "00000000-0000-7000-8000-000000000000" },
+  "POST /api/w/:ws/chapters/:chapterId/glossary-apply/preview": { rules: [{ source_term: "검", from: "kiếm" }] },
+  "POST /api/w/:ws/chapters/:chapterId/glossary-apply/apply": {
+    rules: [{ source_term: "검", from: "kiếm" }],
+    versions: {},
+  },
 };
 
 /** Route có id tài nguyên ngoài :ws → tham số trỏ vào tài nguyên của B. */
@@ -138,6 +147,15 @@ const RESOURCE_CASES: Record<string, (b: Seed) => Record<string, string>> = {
   "POST /api/w/:ws/pages/:pageId/mask-upload": (b) => ({ pageId: pageOf[b.workspaceId] ?? "" }),
   "POST /api/w/:ws/pages/:pageId/reinpaint": (b) => ({ pageId: pageOf[b.workspaceId] ?? "" }),
   "POST /api/w/:ws/pages/:pageId/ocr-region": (b) => ({ pageId: pageOf[b.workspaceId] ?? "" }),
+  "POST /api/w/:ws/chapters/:chapterId/export": (b) => ({ chapterId: b.chapterId }),
+  "GET /api/w/:ws/chapters/:chapterId/exports": (b) => ({ chapterId: b.chapterId }),
+  "GET /api/w/:ws/exports/:jobId": (b) => ({ jobId: jobOf[b.workspaceId] ?? "" }),
+  "GET /api/w/:ws/exports/:jobId/download": (b) => ({ jobId: jobOf[b.workspaceId] ?? "" }),
+  "POST /api/w/:ws/chapters/:chapterId/find-replace/preview": (b) => ({ chapterId: b.chapterId }),
+  "POST /api/w/:ws/chapters/:chapterId/find-replace/apply": (b) => ({ chapterId: b.chapterId }),
+  "POST /api/w/:ws/chapters/:chapterId/find-replace/undo": (b) => ({ chapterId: b.chapterId }),
+  "POST /api/w/:ws/chapters/:chapterId/glossary-apply/preview": (b) => ({ chapterId: b.chapterId }),
+  "POST /api/w/:ws/chapters/:chapterId/glossary-apply/apply": (b) => ({ chapterId: b.chapterId }),
 };
 
 /** Mọi (method, path) người dùng dưới /api/w/:ws — lấy từ router thật, không liệt kê tay. */

@@ -1,7 +1,7 @@
 ---
 phase: 6
 title: "Export PNG/ZIP/CBZ + ghép strip + glossary/find-replace"
-status: pending
+status: completed
 priority: P1
 effort: "3d"
 dependencies: [3, 5]

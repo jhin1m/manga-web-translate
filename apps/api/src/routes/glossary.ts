@@ -54,6 +54,24 @@ async function bumpGlossaryRev(tx: Scoped, seriesId: string | null): Promise<voi
   });
 }
 
+/** Vi phạm ràng buộc unique term (2 request đua nhau cùng qua assertUniqueTerm) → 409 như kiểm tra trước. */
+function isTermConflict(err: unknown): boolean {
+  for (let e: unknown = err; e && typeof e === "object"; e = (e as { cause?: unknown }).cause) {
+    const pg = e as { code?: string; constraint_name?: string };
+    if (pg.code === "23505" && pg.constraint_name === "glossary_entries_scope_term_uq") return true;
+  }
+  return false;
+}
+
+async function writeOrConflict<R>(fn: () => Promise<R>): Promise<R> {
+  try {
+    return await fn();
+  } catch (err) {
+    if (isTermConflict(err)) throw conflict("duplicate_term", "term đã có trong glossary này");
+    throw err;
+  }
+}
+
 async function assertUniqueTerm(tx: Scoped, seriesId: string | null, term: string, exceptId?: string) {
   const dup = await tx.find(glossaryEntries, and(scopeWhere(seriesId), eq(glossaryEntries.sourceTerm, term)) as SQL);
   if (dup && dup.id !== exceptId) throw conflict("duplicate_term", `"${term}" đã có trong glossary này`);
@@ -169,18 +187,20 @@ async function list(sdb: Scoped, seriesId: string | null) {
 }
 
 async function create(sdb: Scoped, seriesId: string | null, body: EntryIn) {
-  return sdb.transaction(async (tx) => {
-    await assertUniqueTerm(tx, seriesId, body.source_term);
-    const row = await tx.insert(glossaryEntries, {
-      seriesId,
-      sourceTerm: body.source_term,
-      targetTerm: body.target_term,
-      note: body.note,
-      caseSensitive: body.case_sensitive,
-    });
-    await bumpGlossaryRev(tx, seriesId);
-    return row;
-  });
+  return writeOrConflict(() =>
+    sdb.transaction(async (tx) => {
+      await assertUniqueTerm(tx, seriesId, body.source_term);
+      const row = await tx.insert(glossaryEntries, {
+        seriesId,
+        sourceTerm: body.source_term,
+        targetTerm: body.target_term,
+        note: body.note,
+        caseSensitive: body.case_sensitive,
+      });
+      await bumpGlossaryRev(tx, seriesId);
+      return row;
+    }),
+  );
 }
 
 async function exportCsv(sdb: Scoped, seriesId: string | null, filename: string) {
@@ -200,25 +220,27 @@ async function importCsv(sdb: Scoped, seriesId: string | null, body: z.infer<typ
   }
   if (entries.length === 0) throw new HTTPException(400, { message: "CSV không có dòng nào" });
   if (entries.length > MAX_IMPORT_ROWS) throw new HTTPException(400, { message: `tối đa ${MAX_IMPORT_ROWS} dòng` });
-  return sdb.transaction(async (tx) => {
-    if (body.mode === "replace") await tx.delete(glossaryEntries, scopeWhere(seriesId));
-    const existing = new Map((await tx.select(glossaryEntries, scopeWhere(seriesId))).map((e) => [e.sourceTerm, e]));
-    let created = 0;
-    let updated = 0;
-    for (const e of entries) {
-      const set = { targetTerm: e.target_term, note: e.note, caseSensitive: e.case_sensitive };
-      const cur = existing.get(e.source_term);
-      if (cur) {
-        await tx.update(glossaryEntries, eq(glossaryEntries.id, cur.id), set);
-        updated++;
-      } else {
-        await tx.insert(glossaryEntries, { seriesId, sourceTerm: e.source_term, ...set });
-        created++;
+  return writeOrConflict(() =>
+    sdb.transaction(async (tx) => {
+      if (body.mode === "replace") await tx.delete(glossaryEntries, scopeWhere(seriesId));
+      const existing = new Map((await tx.select(glossaryEntries, scopeWhere(seriesId))).map((e) => [e.sourceTerm, e]));
+      let created = 0;
+      let updated = 0;
+      for (const e of entries) {
+        const set = { targetTerm: e.target_term, note: e.note, caseSensitive: e.case_sensitive };
+        const cur = existing.get(e.source_term);
+        if (cur) {
+          await tx.update(glossaryEntries, eq(glossaryEntries.id, cur.id), set);
+          updated++;
+        } else {
+          await tx.insert(glossaryEntries, { seriesId, sourceTerm: e.source_term, ...set });
+          created++;
+        }
       }
-    }
-    await bumpGlossaryRev(tx, seriesId);
-    return { created, updated, mode: body.mode };
-  });
+      await bumpGlossaryRev(tx, seriesId);
+      return { created, updated, mode: body.mode };
+    }),
+  );
 }
 
 glossaryRoutes.get("/w/:ws/glossary", requireWorkspace(), async (c) => c.json(await list(c.get("sdb"), null)));
@@ -263,18 +285,20 @@ glossaryRoutes.post("/w/:ws/series/:seriesId/glossary/csv", requireWorkspace(), 
 /** Sửa/xoá theo id entry (cả 2 cấp) — rev tăng theo cấp của entry. */
 glossaryRoutes.patch("/w/:ws/glossary/:entryId", requireWorkspace(), async (c) => {
   const body = await parseJson(c, EntryPatch);
-  const row = await c.get("sdb").transaction(async (tx) => {
-    const cur = await tx.byId(glossaryEntries, c.req.param("entryId"), "glossary entry");
-    if (body.source_term !== undefined) await assertUniqueTerm(tx, cur.seriesId, body.source_term, cur.id);
-    const [row] = await tx.update(glossaryEntries, eq(glossaryEntries.id, cur.id), {
-      sourceTerm: body.source_term,
-      targetTerm: body.target_term,
-      note: body.note,
-      caseSensitive: body.case_sensitive,
-    });
-    await bumpGlossaryRev(tx, cur.seriesId);
-    return row ?? cur;
-  });
+  const row = await writeOrConflict(() =>
+    c.get("sdb").transaction(async (tx) => {
+      const cur = await tx.byId(glossaryEntries, c.req.param("entryId"), "glossary entry");
+      if (body.source_term !== undefined) await assertUniqueTerm(tx, cur.seriesId, body.source_term, cur.id);
+      const [row] = await tx.update(glossaryEntries, eq(glossaryEntries.id, cur.id), {
+        sourceTerm: body.source_term,
+        targetTerm: body.target_term,
+        note: body.note,
+        caseSensitive: body.case_sensitive,
+      });
+      await bumpGlossaryRev(tx, cur.seriesId);
+      return row ?? cur;
+    }),
+  );
   return c.json(entryView(row));
 });
 

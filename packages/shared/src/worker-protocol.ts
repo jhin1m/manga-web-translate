@@ -3,8 +3,8 @@
  * Mọi lệnh sau claim mang `{lease_token, attempt}` (fencing): sai/hết lease → 409, worker bỏ job.
  */
 import { z } from "zod";
-import { ErrorClass, JobPayload, JobResult, JobType, PreparePartial } from "./job.ts";
-import { OcrRegion, OcrResult } from "./page-state.ts";
+import { ErrorClass, JobPayload, JobResult, JobType, PreparePartial, SourceMapEntry } from "./job.ts";
+import { OcrRegion, OcrResult, PageState } from "./page-state.ts";
 
 const Uuid = z.uuid();
 const Rev = z.number().int().nonnegative();
@@ -44,10 +44,20 @@ export const HeartbeatResponse = z.object({
   stop: z.enum(["cancel", "paused_budget"]).nullable(),
 });
 
-/** Tên output: `clean`, `mask` (rev cấp lúc claim) hoặc `page:<ord>` (ảnh page của chapter.ingest). */
-export const OutputName = z.string().regex(/^(clean|mask|page:\d{1,4})$/);
+/**
+ * Tên output: `clean`, `mask` (rev cấp lúc claim), `page:<ord>` (ảnh page của chapter.ingest) hoặc `export`
+ * (file ZIP/CBZ của chapter.export).
+ */
+export const OutputName = z.string().regex(/^(clean|mask|page:\d{1,4}|export)$/);
 export const PresignOutputsRequest = z.object({ ...Fence, names: z.array(OutputName).min(1).max(512) });
-export const PresignedOutput = z.object({ key: z.string(), rev: Rev.nullable(), put: Url, expires_at: z.string() });
+export const PresignedOutput = z.object({
+  key: z.string(),
+  rev: Rev.nullable(),
+  put: Url,
+  expires_at: z.string(),
+  /** Header nằm trong chữ ký PUT — worker phải gửi đúng (thiếu = `content-type: image/png`). */
+  headers: z.record(z.string(), z.string()).optional(),
+});
 export const PresignOutputsResponse = z.object({ outputs: z.record(z.string(), PresignedOutput) });
 
 export const CompleteRequest = z.object({
@@ -100,6 +110,27 @@ export const TranslateInputs = z.object({
 });
 export const ReinpaintInputs = z.object({ base_clean: Url, user_mask: Url });
 export const OcrRegionInputs = z.object({ original: Url, context_lines: z.array(ContextLine) });
+/**
+ * chapter.export: state chốt lúc claim (đổi sau đó không ảnh hưởng file đang xuất). `translated` = page đã qua
+ * giai đoạn 2 và có ảnh sạch → nền = clean/{clean_rev}; ngược lại nền = ảnh gốc, không vẽ chữ.
+ */
+export const ExportInputs = z.object({
+  chapter: z.object({ series_title: z.string(), number: z.string(), title: z.string() }),
+  pages: z.array(
+    z.object({
+      page_id: Uuid,
+      ord: z.number().int().nonnegative(),
+      width: z.number().int().positive(),
+      height: z.number().int().positive(),
+      translated: z.boolean(),
+      background: Url,
+      state: PageState.nullable(),
+      source_map: z.array(SourceMapEntry),
+    }),
+  ),
+  /** Slice gốc theo thứ tự upload — tên file khi xuất layout `original_slices`. */
+  sources: z.array(z.object({ source_file_id: Uuid, ord: z.number().int().nonnegative() })),
+});
 
 export const ClaimedJob = z.object({
   id: Uuid,
