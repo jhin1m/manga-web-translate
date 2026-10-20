@@ -5,3 +5,7 @@ golden/
 worker/models/*.onnx
 *.safetensors
 .venv/
+dist/
+coverage/
+*.tsbuildinfo
+.DS_Store

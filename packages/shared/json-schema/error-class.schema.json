@@ -1,0 +1,12 @@
+{
+  "$id": "https://mtl.local/schema/error-class.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "string",
+  "enum": [
+    "provider",
+    "rate_limited",
+    "schema",
+    "invalid_input",
+    "internal"
+  ]
+}

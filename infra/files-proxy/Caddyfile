@@ -1,0 +1,11 @@
+# Mô phỏng domain file riêng (files.<domain>) ở dev. Giữ nguyên Host để chữ ký presigned khớp.
+{
+	auto_https off
+	admin off
+}
+
+:9100 {
+	# ">" = đặt sau khi có response upstream (thay, không nhân đôi header MinIO tự thêm).
+	header >X-Content-Type-Options nosniff
+	reverse_proxy minio:9000
+}

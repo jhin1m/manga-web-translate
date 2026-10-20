@@ -1,0 +1,49 @@
+{
+  "$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
+  "vcs": { "enabled": true, "clientKind": "git", "useIgnoreFile": true },
+  "files": {
+    "includes": [
+      "**",
+      "!**/migrations/meta",
+      "!packages/shared/json-schema",
+      "!packages/db/src/schema/auth.ts",
+      "!plans",
+      "!worker"
+    ]
+  },
+  "formatter": { "indentStyle": "space", "indentWidth": 2, "lineWidth": 120 },
+  "linter": {
+    "rules": {
+      "preset": "recommended"
+    }
+  },
+  "assist": { "actions": { "source": { "organizeImports": "on" } } },
+  "overrides": [
+    {
+      "includes": ["apps/api/src/routes/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "paths": {
+                  "../db.ts": "Route không dùng db thô — dùng c.get(\"sdb\") (scoped theo workspace).",
+                  "../db": "Route không dùng db thô — dùng c.get(\"sdb\") (scoped theo workspace).",
+                  "../../db.ts": "Route không dùng db thô — dùng c.get(\"sdb\") (scoped theo workspace).",
+                  "../../db": "Route không dùng db thô — dùng c.get(\"sdb\") (scoped theo workspace).",
+                  "postgres": "Route không mở kết nối DB.",
+                  "drizzle-orm/postgres-js": "Route không mở kết nối DB.",
+                  "@mtl/db": {
+                    "importNames": ["createDb"],
+                    "message": "Route không tạo kết nối DB — dùng c.get(\"sdb\")."
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

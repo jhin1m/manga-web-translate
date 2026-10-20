@@ -1,0 +1,127 @@
+{
+  "$id": "https://mtl.local/schema/text-box.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "region_id": {
+      "anyOf": [
+        {
+          "type": "string",
+          "minLength": 1
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "x": {
+      "type": "number"
+    },
+    "y": {
+      "type": "number"
+    },
+    "w": {
+      "type": "number",
+      "exclusiveMinimum": 0
+    },
+    "h": {
+      "type": "number",
+      "exclusiveMinimum": 0
+    },
+    "rotation": {
+      "type": "number"
+    },
+    "text": {
+      "type": "string"
+    },
+    "lines": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "font": {
+      "type": "string",
+      "minLength": 1
+    },
+    "size": {
+      "type": "number",
+      "exclusiveMinimum": 0
+    },
+    "line_height": {
+      "type": "number",
+      "exclusiveMinimum": 0
+    },
+    "letter_spacing": {
+      "type": "number"
+    },
+    "align": {
+      "type": "string",
+      "enum": [
+        "left",
+        "center",
+        "right"
+      ]
+    },
+    "fill": {
+      "type": "string",
+      "pattern": "^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$"
+    },
+    "stroke": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "color": {
+              "type": "string",
+              "pattern": "^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$"
+            },
+            "width": {
+              "type": "number",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "color",
+            "width"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "auto_fit": {
+      "type": "boolean"
+    },
+    "hidden": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "id",
+    "region_id",
+    "x",
+    "y",
+    "w",
+    "h",
+    "rotation",
+    "text",
+    "lines",
+    "font",
+    "size",
+    "line_height",
+    "letter_spacing",
+    "align",
+    "fill",
+    "stroke",
+    "auto_fit",
+    "hidden"
+  ],
+  "additionalProperties": false
+}

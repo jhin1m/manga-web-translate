@@ -1,0 +1,78 @@
+/**
+ * Storage private (MinIO/S3). Hai client:
+ * - `internal`: API gọi thẳng S3_ENDPOINT (HEAD, đọc magic bytes) — không lộ ra trình duyệt.
+ * - `publicSigner`: chỉ để KÝ URL theo FILES_DOMAIN (domain file riêng, proxy thêm nosniff);
+ *   chữ ký SigV4 gắn với host nên URL phải ký đúng host trình duyệt sẽ gọi.
+ */
+import { GetObjectCommand, HeadObjectCommand, NoSuchKey, NotFound, S3Client } from "@aws-sdk/client-s3";
+import { createPresignedPost } from "@aws-sdk/s3-presigned-post";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import { env } from "./env.ts";
+
+/** Trần TTL (red team #12): xem ảnh ≤ 15', tải export ≤ 5' (caller tự chọn ttl thấp hơn). */
+export const MAX_GET_TTL_S = 15 * 60;
+export const EXPORT_GET_TTL_S = 5 * 60;
+export const MAX_POST_TTL_S = 15 * 60;
+
+const credentials = { accessKeyId: env.S3_ACCESS_KEY, secretAccessKey: env.S3_SECRET_KEY };
+const common = { region: env.S3_REGION, credentials, forcePathStyle: true } as const;
+
+const internal = new S3Client({ ...common, endpoint: env.S3_ENDPOINT });
+const publicSigner = new S3Client({ ...common, endpoint: `${env.FILES_SCHEME}://${env.FILES_DOMAIN}` });
+const Bucket = env.S3_BUCKET;
+
+export type PresignedPost = { url: string; fields: Record<string, string>; expiresAt: string };
+
+/**
+ * Presigned POST cho upload người dùng: dung lượng trong [1, maxBytes] và Content-Type cố định —
+ * MinIO kiểm policy, sai thì từ chối (không tin kiểm tra ở browser).
+ */
+export async function presignPost(
+  key: string,
+  contentType: string,
+  maxBytes: number,
+  ttlSeconds: number,
+): Promise<PresignedPost> {
+  if (ttlSeconds <= 0 || ttlSeconds > MAX_POST_TTL_S) throw new RangeError(`POST ttl must be 1..${MAX_POST_TTL_S}s`);
+  if (maxBytes < 1) throw new RangeError("maxBytes must be ≥ 1");
+  const { url, fields } = await createPresignedPost(publicSigner, {
+    Bucket,
+    Key: key,
+    Expires: ttlSeconds,
+    Fields: { "Content-Type": contentType },
+    Conditions: [
+      ["content-length-range", 1, maxBytes],
+      ["eq", "$Content-Type", contentType],
+    ],
+  });
+  return { url, fields, expiresAt: new Date(Date.now() + ttlSeconds * 1000).toISOString() };
+}
+
+/** Presigned GET TTL ngắn; `disposition` (VD `attachment; filename="x.zip"`) ép header tải về. */
+export function presignGet(key: string, ttlSeconds: number, disposition?: string): Promise<string> {
+  if (ttlSeconds <= 0 || ttlSeconds > MAX_GET_TTL_S) throw new RangeError(`GET ttl must be 1..${MAX_GET_TTL_S}s`);
+  const cmd = new GetObjectCommand({ Bucket, Key: key, ResponseContentDisposition: disposition });
+  return getSignedUrl(publicSigner, cmd, { expiresIn: ttlSeconds });
+}
+
+export type HeadResult = { bytes: number; contentType: string | undefined; etag: string | undefined };
+
+/** Metadata object; null nếu không tồn tại. */
+export async function head(key: string): Promise<HeadResult | null> {
+  try {
+    const r = await internal.send(new HeadObjectCommand({ Bucket, Key: key }));
+    return { bytes: r.ContentLength ?? 0, contentType: r.ContentType, etag: r.ETag };
+  } catch (err) {
+    if (err instanceof NotFound || err instanceof NoSuchKey) return null;
+    if ((err as { $metadata?: { httpStatusCode?: number } }).$metadata?.httpStatusCode === 404) return null;
+    throw err;
+  }
+}
+
+/** Đọc n byte đầu (magic bytes) bằng Range — không tải cả file. */
+export async function readPrefix(key: string, n: number): Promise<Uint8Array> {
+  if (n < 1) throw new RangeError("n must be ≥ 1");
+  const r = await internal.send(new GetObjectCommand({ Bucket, Key: key, Range: `bytes=0-${n - 1}` }));
+  const bytes = await r.Body?.transformToByteArray();
+  return bytes ?? new Uint8Array();
+}
