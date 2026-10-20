@@ -24,3 +24,4 @@ Thứ tự: P1 → P2 → P3 → P4 → P5 → P6 (tuần tự, 1 pane).
 | 2026-10-20 22:05 | R4 | done | cook-r4 báo DONE (web 102, e2e 14). "Áp kiểu cùng loại" ghi thẳng trang khác (không undo được ở trang khác) → có bước xác nhận; bỏ ô "Chữ" trùng với "Bản dịch". Còn Low: vùng nhiều khung chỉ lấy khung đầu; dòng bảng cao cố định. Docs Tìm&Thay → R6 |
 | 2026-10-20 22:07 | R4 | quyết định | Cờ "trống" (= crop gần như không mực, OCR bỏ qua) không tính "cần xem" khi đã có bản dịch; áp kiểu không áp khung ẩn; chương 0 trang hiện "Chạy lại cắt trang"/"Tải ảnh" (đã làm) |
 | 2026-10-20 22:09 | R4 | merge | Kiểm lại worktree (test + e2e 14/14) → merge --no-ff không conflict. Main xanh, worker 132+2 skip |
+| 2026-10-20 22:09 | R5 | start | worktree ../mtl-wt/r5, branch feat/redesign-p5-drawers-view-modes, pane w1H:pG, agent cook-r5; giao thêm 'Xuất lại' mở thẳng drawer Xuất |
