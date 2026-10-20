@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import os
 import time
+from collections.abc import Iterator
 from typing import Any, Protocol
 
 import httpx
@@ -25,6 +27,13 @@ class AuthError(RuntimeError):
 
 
 RETRY_STATUSES = {502, 503, 504}
+UPLOAD_CHUNK = 1 << 20
+
+
+def _file_chunks(path: str) -> Iterator[bytes]:
+    with open(path, "rb") as f:
+        while chunk := f.read(UPLOAD_CHUNK):
+            yield chunk
 
 
 class WorkerApi(Protocol):
@@ -51,6 +60,8 @@ class WorkerApi(Protocol):
     def download(self, url: str) -> bytes: ...
 
     def upload_png(self, url: str, data: bytes) -> bool: ...
+
+    def upload_file(self, url: str, path: str, headers: dict[str, str]) -> bool: ...
 
 
 class WorkerClient:
@@ -159,6 +170,17 @@ class WorkerClient:
     def upload_png(self, url: str, data: bytes) -> bool:
         """PUT presigned; False khi URL đã hết hạn (403) → caller xin URL mới qua presign_outputs."""
         r = self.files.put(url, content=data, headers={"content-type": "image/png"})
+        if r.status_code == 403:
+            return False
+        r.raise_for_status()
+        return True
+
+    def upload_file(self, url: str, path: str, headers: dict[str, str]) -> bool:
+        """PUT presigned streaming từ file (không đọc cả file vào RAM). `headers` nằm trong chữ ký URL nên gửi
+        đúng nguyên văn; 403 → False (URL hết hạn)."""
+        sent = {k: v for k, v in headers.items() if k.lower() not in ("content-length", "transfer-encoding")}
+        sent["content-length"] = str(os.path.getsize(path))
+        r = self.files.put(url, content=_file_chunks(path), headers=sent)
         if r.status_code == 403:
             return False
         r.raise_for_status()

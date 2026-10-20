@@ -81,6 +81,11 @@ class FakeClient:
         self.uploads[url] = data
         return True
 
+    def upload_file(self, url: str, path: str, headers: dict[str, str]) -> bool:
+        with open(path, "rb") as f:
+            self.uploads[url] = f.read()
+        return True
+
     def names(self):
         return [c[0] for c in self.calls]
 

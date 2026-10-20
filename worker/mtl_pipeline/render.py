@@ -15,15 +15,17 @@ from __future__ import annotations
 
 import math
 import unicodedata
+from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from functools import lru_cache
+from typing import Any
 
 import cv2
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont, features
 
 from .fonts import font_path, metrics_for
-from .schema import TextBox
+from .schema import Stroke, TextBox
 
 # Hệ số siêu lấy mẫu khi dựng mask dòng (glyph + viền).
 STROKE_SS = 4
@@ -164,3 +166,133 @@ def line_ink_bboxes(box: TextBox, alpha_thresh: int = 128) -> list[tuple[int, in
             else (int(xs.min()) + ox, int(ys.min()) + oy, int(xs.max()) + 1 + ox, int(ys.max()) + 1 + oy)
         )
     return out
+
+
+# ---- Export: dựng lines[] còn thiếu, vẽ PageState, ghép slice gốc theo cửa sổ trượt ----
+
+
+def _wrap_paragraphs(text: str, font_id: str, size: float, max_w: float) -> list[str] | None:
+    """Wrap greedy theo từ, mỗi đoạn (`\\n`) riêng; null khi có từ không vừa — như wrapWords của measure.ts."""
+    from .typeset import wrap_words  # nạp lười: typeset import ngược render
+
+    out: list[str] = []
+    for para in nfc(text).split("\n"):
+        lines = wrap_words(para, font_id, size, max_w)
+        if lines is None:
+            return None
+        out.extend(lines)
+    return out
+
+
+def _hard_wrap_paragraphs(text: str, font_id: str, size: float, max_w: float) -> list[str]:
+    from .typeset import hard_wrap
+
+    return [ln for para in nfc(text).split("\n") for ln in hard_wrap(para, font_id, size, max_w)]
+
+
+def ensure_lines(box: TextBox, auto_fit: bool = True) -> TextBox:
+    """Box đã có lines (hoặc text rỗng) → giữ nguyên. Thiếu lines mà có text → ngắt dòng GIỐNG HỆT layoutBox của
+    apps/web/src/features/editor/measure.ts: `\\n` = đoạn mới; auto_fit → binary search cỡ nguyên MIN..MAX như
+    fit_text; không auto_fit → giữ cỡ, wrap theo bề rộng, từ quá dài → cắt cứng theo ký tự."""
+    from .typeset import MAX_SIZE, MIN_SIZE, block_height
+
+    text = nfc(box.text)
+    if box.lines or not text.strip():
+        return box
+    inner_w, inner_h = box.w - 2 * box.pad, box.h - 2 * box.pad
+    if not auto_fit:
+        lines = _wrap_paragraphs(text, box.font_family, box.font_size, inner_w)
+        if lines is None:
+            lines = _hard_wrap_paragraphs(text, box.font_family, box.font_size, inner_w)
+        return box.model_copy(update={"lines": lines})
+    lo, hi, best = MIN_SIZE, MAX_SIZE, None
+    while lo <= hi:
+        mid = (lo + hi) // 2
+        lines = _wrap_paragraphs(text, box.font_family, mid, inner_w)
+        if lines is not None and block_height(box.font_family, mid, len(lines), box.line_height) <= inner_h:
+            best = (float(mid), lines)
+            lo = mid + 1
+        else:
+            hi = mid - 1
+    if best is None:
+        best = (float(MIN_SIZE), _hard_wrap_paragraphs(text, box.font_family, MIN_SIZE, inner_w))
+    return box.model_copy(update={"font_size": best[0], "lines": best[1]})
+
+
+def text_box_from_shared(d: Mapping[str, Any]) -> TextBox:
+    """TextBox dùng chung (packages/shared page-state) → TextBox pipeline, lines đã chốt. letter_spacing bỏ qua."""
+    stroke = d.get("stroke")
+    box = TextBox(
+        id=d["id"],
+        region_id=d.get("region_id") or "",
+        x=d["x"],
+        y=d["y"],
+        w=d["w"],
+        h=d["h"],
+        rotation=d.get("rotation", 0.0),
+        font_family=d["font_family"],
+        font_size=d["font_size"],
+        line_height=d["line_height"],
+        pad=d["pad"],
+        align=d["align"],
+        fill=d["fill"],
+        stroke=Stroke(color=stroke["color"], width=stroke["width"]) if stroke else None,
+        text=d.get("text", ""),
+        lines=list(d.get("lines") or []),
+    )
+    return ensure_lines(box, bool(d.get("auto_fit", True)))
+
+
+def render_page_state(base: np.ndarray, state: Mapping[str, Any] | None) -> np.ndarray:
+    """Nền (RGB) + text_boxes không hidden của PageState → ảnh page cuối. state null → ảnh nền nguyên."""
+    boxes = [text_box_from_shared(b) for b in (state or {}).get("text_boxes", []) if not b.get("hidden")]
+    return render_page(base, boxes) if boxes else base
+
+
+class SliceMapError(ValueError):
+    """source_map không khớp page (ngoài biên, lệch bề rộng...)."""
+
+
+class SliceAssembler:
+    """Ghép lại slice gốc từ các page đã render theo source_map, kiểu cửa sổ trượt: buffer của slice chỉ sống từ
+    đoạn đầu tới đoạn cuối của nó → RAM ~ vài slice chứ không cả strip. `pages`: dict có width, translated,
+    source_map [{source_file_id, src_y, page_y, h}]."""
+
+    def __init__(self, pages: Sequence[Mapping[str, Any]], include_untranslated: bool):
+        width: dict[str, int] = {}
+        height: dict[str, int] = {}
+        left: dict[str, int] = {}
+        untranslated: set[str] = set()
+        for pg in pages:
+            for seg in pg["source_map"]:
+                sid = seg["source_file_id"]
+                if width.setdefault(sid, pg["width"]) != pg["width"]:
+                    raise SliceMapError(f"slice {sid} nằm trên các page khác bề rộng")
+                height[sid] = max(height.get(sid, 0), seg["src_y"] + seg["h"])
+                left[sid] = left.get(sid, 0) + 1
+                if not pg["translated"]:
+                    untranslated.add(sid)
+        # Slice có đoạn thuộc page chưa dịch → bỏ cả slice khi không xuất bản chưa dịch.
+        self.kept: list[str] = [s for s in width if include_untranslated or s not in untranslated]
+        self._w, self._h = width, height
+        self._left = {s: left[s] for s in self.kept}
+        self._bufs: dict[str, np.ndarray] = {}
+
+    def needs_page(self, page: Mapping[str, Any]) -> bool:
+        return any(seg["source_file_id"] in self._left for seg in page["source_map"])
+
+    def add_page(self, page: Mapping[str, Any], image: np.ndarray) -> Iterator[tuple[str, np.ndarray]]:
+        """Dán các đoạn của page vào buffer; slice đủ đoạn → trả (source_file_id, ảnh) và giải phóng buffer."""
+        for seg in page["source_map"]:
+            sid, h, py = seg["source_file_id"], seg["h"], seg["page_y"]
+            if sid not in self._left:
+                continue
+            if py + h > image.shape[0] or image.shape[1] != self._w[sid]:
+                raise SliceMapError(f"đoạn source_map vượt ảnh page {page.get('ord')}")
+            buf = self._bufs.get(sid)
+            if buf is None:
+                buf = self._bufs[sid] = np.zeros((self._h[sid], self._w[sid], 3), np.uint8)
+            buf[seg["src_y"] : seg["src_y"] + h] = image[py : py + h]
+            self._left[sid] -= 1
+            if self._left[sid] == 0:
+                yield sid, self._bufs.pop(sid)
