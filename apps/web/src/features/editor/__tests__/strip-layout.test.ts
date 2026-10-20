@@ -3,6 +3,7 @@ import {
   clampView,
   contentBox,
   EDGE,
+  FIT_HEIGHT_MIN,
   fitScale,
   MAX_MOUNTED,
   pageAt,
@@ -71,7 +72,7 @@ describe("strip layout", () => {
   });
 
   describe("fitScale", () => {
-    const box = { w: 1170, h: 580 };
+    const box = { w: 1170, h: 900 };
     const portrait = { w: 954, h: 1500 };
 
     it("fits a whole portrait page in the view height", () => {
@@ -83,6 +84,12 @@ describe("strip layout", () => {
     it("fits a landscape spread by width", () => {
       const spread = { w: 3000, h: 1500 };
       expect(fitScale(spread, spread, { w: 1170, h: 900 })).toBeCloseTo((1170 - 2 * EDGE) / spread.w);
+    });
+
+    it("stops shrinking for height at the readable minimum when the view is short", () => {
+      expect(fitScale(portrait, portrait, { w: 1170, h: 400 })).toBe(FIT_HEIGHT_MIN);
+      // Bề ngang vẫn thắng: khung hẹp thu dưới mức đọc được theo chiều cao.
+      expect(fitScale(portrait, portrait, { w: 300, h: 400 })).toBeCloseTo((300 - 2 * EDGE) / portrait.w);
     });
 
     it("never zooms past 100%", () => {
@@ -100,7 +107,7 @@ describe("strip layout", () => {
       const s = fitScale(both, portrait, { w: 1170, h: 1200 });
       expect(both.w * s).toBeLessThanOrEqual(1170 - 2 * EDGE + 1e-9);
       expect(s).toBeCloseTo((1170 - 2 * EDGE) / both.w);
-      expect(fitScale(both, portrait, { w: 3000, h: 580 })).toBeCloseTo((580 - 2 * EDGE) / portrait.h);
+      expect(fitScale(both, portrait, { w: 3000, h: 1000 })).toBeCloseTo((1000 - 2 * EDGE) / portrait.h);
     });
 
     it("falls back to width fit without a page and respects the minimum", () => {
