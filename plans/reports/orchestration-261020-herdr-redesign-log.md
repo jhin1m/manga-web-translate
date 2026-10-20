@@ -27,3 +27,4 @@ Thứ tự: P1 → P2 → P3 → P4 → P5 → P6 (tuần tự, 1 pane).
 | 2026-10-20 22:09 | R5 | start | worktree ../mtl-wt/r5, branch feat/redesign-p5-drawers-view-modes, pane w1H:pG, agent cook-r5; giao thêm 'Xuất lại' mở thẳng drawer Xuất |
 | 2026-10-20 22:27 | R5 | done | cook-r5 báo DONE (web 109, e2e 14). Lệch design: drawer Xuất không có "Phạm vi: trang chọn" và "PNG từng trang" vì API export chỉ hỗ trợ cả chương png_zip/cbz (giữ backend); chế độ xem reset về Dịch khi đổi chương; "Xuất lại" mở thẳng drawer qua ?drawer=export |
 | 2026-10-20 22:29 | R5 | merge | Kiểm lại worktree (test + e2e 14/14) → merge --no-ff không conflict. Main xanh, worker 132+2 skip |
+| 2026-10-20 22:29 | R6 | start | worktree ../mtl-wt/r6, branch feat/redesign-p6-e2e-cleanup, pane w1H:pH, agent cook-r6; giao thêm docs, CSS chết, test chập chờn worker-protocol, back/forward giữa chương |
