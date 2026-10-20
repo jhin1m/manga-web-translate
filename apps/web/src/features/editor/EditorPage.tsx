@@ -43,9 +43,12 @@ async function finalSave(saver: Saver, ws: string, chapterId: string) {
   await saver.flush();
   const s = editorStore.getState();
   if (s.readOnly !== "lock_lost" || !s.pageId || s.doc === s.base) return;
+  const pageId = s.pageId;
   try {
     await lockChapter(ws, chapterId);
-    s.setReadOnly(null);
+    // Editor mới đã mở (store reset/đổi page) trong lúc chờ khoá → không đụng trạng thái của phiên đó.
+    if (editorStore.getState().pageId !== pageId) return;
+    editorStore.getState().setReadOnly(null);
     await saver.flush();
   } catch {
     // Không lấy lại được khoá: bản nháp IndexedDB sẽ được đề nghị khôi phục lần mở sau.

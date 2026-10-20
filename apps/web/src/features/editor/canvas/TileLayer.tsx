@@ -99,7 +99,8 @@ export function TileLayer(props: {
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: `wanted` là chữ ký của tập tile hiển thị.
   useEffect(() => {
-    if (!bitmap || !scale) return;
+    // Layer ẩn (ảnh gốc khi đang xem bản dịch) giữ tile đã có, không cắt thêm khi cuộn/zoom.
+    if (!bitmap || !scale || props.visible === false) return;
     const map = cache.current.map;
     const keep = new Set(wanted.split(","));
     for (const [k, v] of map) {
@@ -126,7 +127,7 @@ export function TileLayer(props: {
         })
         .catch(() => map.delete(t.key));
     }
-  }, [bitmap, scale, wanted]);
+  }, [bitmap, scale, wanted, props.visible]);
 
   return (
     <Group visible={props.visible ?? true}>
