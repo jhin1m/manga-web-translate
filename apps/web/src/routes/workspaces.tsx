@@ -1,67 +1,68 @@
-import { type FormEvent, useEffect, useState } from "react";
-import { api, authClient, errorMessage, navigate, type WorkspaceDetail, type WorkspaceSummary } from "../lib/api.ts";
+import { useQuery } from "@tanstack/react-query";
+import { Link, Navigate } from "@tanstack/react-router";
+import { type FormEvent, useState } from "react";
+import { useWorkspace } from "../app/layout.tsx";
+import { api, authClient, errorMessage, type WorkspaceSummary } from "../lib/api.ts";
 
 /** Chọn workspace; chỉ 1 workspace thì vào thẳng. */
 export function WorkspacePickerPage() {
-  const [list, setList] = useState<WorkspaceSummary[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    api<{ workspaces: WorkspaceSummary[] }>("/api/me/workspaces")
-      .then(({ workspaces }) => {
-        const only = workspaces.length === 1 ? workspaces[0] : undefined;
-        if (only) navigate(`/w/${only.id}`);
-        else setList(workspaces);
-      })
-      .catch((e) => setError(errorMessage(e)));
-  }, []);
+  const q = useQuery({
+    queryKey: ["me", "workspaces"],
+    queryFn: () => api<{ workspaces: WorkspaceSummary[] }>("/api/me/workspaces"),
+  });
+  const list = q.data?.workspaces;
+  const only = list?.length === 1 ? list[0] : undefined;
+  if (only) return <Navigate to="/w/$ws/series" params={{ ws: only.id }} replace />;
 
   return (
-    <main>
-      <Bar title="Chọn workspace" />
-      {error && <p className="error">{error}</p>}
+    <main className="auth">
+      <h1>Chọn workspace</h1>
+      {q.error && <p className="error">{errorMessage(q.error)}</p>}
       {list?.length === 0 && <p className="muted">Bạn chưa thuộc workspace nào. Hãy xin link mời.</p>}
-      <ul className="plain">
-        {list?.map((w) => (
-          <li key={w.id}>
-            <a
-              href={`/w/${w.id}`}
-              onClick={(e) => {
-                e.preventDefault();
-                navigate(`/w/${w.id}`);
-              }}
-            >
-              {w.name}
-            </a>
-          </li>
-        ))}
-      </ul>
+      <table className="data" style={{ marginTop: 16 }}>
+        <tbody>
+          {list?.map((w) => (
+            <tr key={w.id}>
+              <td>
+                <Link to="/w/$ws/series" params={{ ws: w.id }}>
+                  {w.name}
+                </Link>
+              </td>
+              <td className="muted mono">{w.slug}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <p>
+        <button
+          type="button"
+          className="link"
+          onClick={() => authClient.signOut().then(() => location.assign("/login"))}
+        >
+          Đăng xuất
+        </button>
+      </p>
     </main>
   );
 }
 
-/** Trang workspace (khung tạm cho Phase 4): thông tin + mời thành viên (owner/admin). */
-export function WorkspaceHomePage({ ws }: { ws: string }) {
-  const [detail, setDetail] = useState<WorkspaceDetail | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    api<WorkspaceDetail>(`/api/w/${ws}`)
-      .then(setDetail)
-      .catch((e) => setError(errorMessage(e)));
-  }, [ws]);
-
+/** Thành viên: thông tin workspace + mời thành viên (owner/admin). */
+export function MembersPage() {
+  const detail = useWorkspace();
   return (
-    <main>
-      <Bar title={detail?.name ?? "Workspace"} />
-      {error && <p className="error">{error}</p>}
-      {detail && (
-        <p className="muted">
-          Vai trò: {detail.role} · Worker: {detail.settings.worker_mode}
-        </p>
+    <div className="page page-narrow">
+      <div className="page-head">
+        <h1>Thành viên</h1>
+      </div>
+      <p className="muted small">
+        Vai trò của bạn: {detail.role} · Worker: {detail.settings.worker_mode}
+      </p>
+      {detail.role !== "member" ? (
+        <InviteForm ws={detail.id} />
+      ) : (
+        <p className="muted">Chỉ owner/admin mời được thành viên.</p>
       )}
-      {detail && detail.role !== "member" && <InviteForm ws={ws} />}
-    </main>
+    </div>
   );
 }
 
@@ -88,29 +89,32 @@ function InviteForm({ ws }: { ws: string }) {
   }
 
   return (
-    <form onSubmit={submit}>
-      <h1 style={{ marginTop: 32 }}>Mời thành viên</h1>
-      <label htmlFor="invite-email">Email</label>
-      <input id="invite-email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
-      <label htmlFor="invite-role">Vai trò</label>
-      <select id="invite-role" value={role} onChange={(e) => setRole(e.target.value as "member" | "admin")}>
-        <option value="member">member</option>
-        <option value="admin">admin</option>
-      </select>
-      <button type="submit">Tạo lời mời</button>
-      {message && <p style={{ wordBreak: "break-all" }}>{message}</p>}
+    <form onSubmit={submit} className="section">
+      <h2>Mời thành viên</h2>
+      <div className="grid-2">
+        <div>
+          <label htmlFor="invite-email">Email</label>
+          <input id="invite-email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
+        </div>
+        <div>
+          <label htmlFor="invite-role">Vai trò</label>
+          <select id="invite-role" value={role} onChange={(e) => setRole(e.target.value as "member" | "admin")}>
+            <option value="member">member</option>
+            <option value="admin">admin</option>
+          </select>
+        </div>
+      </div>
+      <p>
+        <button type="submit" className="btn-primary">
+          Tạo lời mời
+        </button>
+      </p>
+      {message && (
+        <p className="notice info mono" style={{ wordBreak: "break-all" }}>
+          {message}
+        </p>
+      )}
       {error && <p className="error">{error}</p>}
     </form>
-  );
-}
-
-function Bar({ title }: { title: string }) {
-  return (
-    <header className="bar">
-      <h1>{title}</h1>
-      <button type="button" className="link" onClick={() => authClient.signOut().then(() => navigate("/login"))}>
-        Đăng xuất
-      </button>
-    </header>
   );
 }

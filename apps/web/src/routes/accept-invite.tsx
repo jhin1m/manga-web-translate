@@ -1,11 +1,13 @@
+import { useRouter } from "@tanstack/react-router";
 import { type FormEvent, useState } from "react";
-import { authClient, errorMessage, INVITATION_HEADER, INVITATION_TOKEN_HEADER, navigate } from "../lib/api.ts";
+import { authClient, errorMessage, INVITATION_HEADER, INVITATION_TOKEN_HEADER } from "../lib/api.ts";
 
 /** /accept-invite?id=<invitationId>&token=<t>: đăng ký (hoặc đăng nhập nếu đã có tài khoản) rồi nhận lời mời. */
 export function AcceptInvitePage() {
   const params = new URLSearchParams(location.search);
   const invitationId = params.get("id") ?? "";
   const token = params.get("token") ?? "";
+  const router = useRouter();
   const { data: session } = authClient.useSession();
   const [mode, setMode] = useState<"signup" | "signin">("signup");
   const [name, setName] = useState("");
@@ -17,7 +19,7 @@ export function AcceptInvitePage() {
   async function accept() {
     const { data, error: err } = await authClient.organization.acceptInvitation({ invitationId });
     if (err) throw err;
-    navigate(`/w/${data?.invitation.organizationId ?? ""}`);
+    router.history.push(`/w/${data?.invitation.organizationId ?? ""}`);
   }
 
   async function submit(e: FormEvent) {
@@ -47,7 +49,7 @@ export function AcceptInvitePage() {
 
   if (!invitationId || !token) {
     return (
-      <main>
+      <main className="auth">
         <h1>Lời mời không hợp lệ</h1>
         <p className="muted">Link thiếu mã lời mời hoặc token. Hãy xin lại link từ quản trị workspace.</p>
       </main>
@@ -55,7 +57,7 @@ export function AcceptInvitePage() {
   }
 
   return (
-    <main>
+    <main className="auth">
       <h1>Nhận lời mời vào workspace</h1>
       <form onSubmit={submit}>
         {session ? (
@@ -84,7 +86,7 @@ export function AcceptInvitePage() {
             />
           </>
         )}
-        <button type="submit" disabled={busy}>
+        <button type="submit" className="btn-primary" disabled={busy}>
           {session ? "Nhận lời mời" : mode === "signup" ? "Tạo tài khoản và tham gia" : "Đăng nhập và tham gia"}
         </button>
         {error && <p className="error">{error}</p>}

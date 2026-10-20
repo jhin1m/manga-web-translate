@@ -1,7 +1,9 @@
+import { useRouter } from "@tanstack/react-router";
 import { type FormEvent, useState } from "react";
-import { authClient, navigate } from "../lib/api.ts";
+import { authClient } from "../lib/api.ts";
 
 export function LoginPage({ next = "/" }: { next?: string }) {
+  const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -14,11 +16,11 @@ export function LoginPage({ next = "/" }: { next?: string }) {
     const { error: err } = await authClient.signIn.email({ email, password });
     setBusy(false);
     if (err) return setError(err.message ?? "Sai email hoặc mật khẩu");
-    navigate(next);
+    router.history.push(next);
   }
 
   return (
-    <main>
+    <main className="auth">
       <h1>Đăng nhập</h1>
       <form onSubmit={submit}>
         <label htmlFor="email">Email</label>
@@ -39,7 +41,7 @@ export function LoginPage({ next = "/" }: { next?: string }) {
           value={password}
           onChange={(e) => setPassword(e.target.value)}
         />
-        <button type="submit" disabled={busy}>
+        <button type="submit" className="btn-primary" disabled={busy}>
           Đăng nhập
         </button>
         {error && <p className="error">{error}</p>}
