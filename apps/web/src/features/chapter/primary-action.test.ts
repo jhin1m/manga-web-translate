@@ -47,6 +47,13 @@ describe("primary action", () => {
     expect(p.menu.map((m) => m.command)).toEqual(["export", "retranslate"]);
   });
 
+  it("partial_failed without pages (ingest failed) → Chạy lại cắt trang (commit lại), not the no-op retry", () => {
+    const p = primaryAction({ ...base, status: "partial_failed", pages: 0, ready: 0, sourceFiles: 3 });
+    expect(p).toMatchObject({ command: "commit", label: "Chạy lại cắt trang", disabled: false, menu: [] });
+    const none = primaryAction({ ...base, status: "partial_failed", pages: 0, ready: 0, sourceFiles: 0 });
+    expect(none).toMatchObject({ command: "upload", label: "Tải ảnh" });
+  });
+
   it("review / done → Xuất; menu Dịch lại cả chương", () => {
     for (const status of ["review", "done"] as const) {
       const p = primaryAction({ ...base, status });

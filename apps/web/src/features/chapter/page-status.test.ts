@@ -12,5 +12,6 @@ describe("page level", () => {
     expect(needsReview({ status: "ready", ai_update_available: false })).toBe(false);
     expect(needsReview({ status: "ready", ai_update_available: true })).toBe(true);
     expect(needsReview({ status: "failed", ai_update_available: false })).toBe(true);
+    expect(needsReview({ status: "ready", ai_update_available: false }, true)).toBe(true);
   });
 });

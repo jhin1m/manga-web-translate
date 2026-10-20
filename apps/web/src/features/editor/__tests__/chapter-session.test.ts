@@ -148,4 +148,20 @@ describe("ChapterSession", () => {
     expect(srv.B?.state.text_boxes[0]).toMatchObject({ x: 99 });
     expect(await queue.get("B")).toBeUndefined();
   });
+
+  it("updateOther writes a non-active page (retrying once on 409) and refreshes its cache", async () => {
+    const { srv, chapter, editor, session } = setup();
+    await session.activate("A");
+    // Cache của B cũ hơn server → PUT đầu 409, lấy lại rồi áp lại.
+    srv.B = { state: srv.B?.state ?? doc(3), version: 2 };
+    const ok = await session.updateOther("B", (d) => {
+      for (const b of d.text_boxes) b.align = "left";
+    });
+    expect(ok).toBe(true);
+    expect(srv.B?.version).toBe(3);
+    expect(srv.B?.state.text_boxes.every((b) => b.align === "left")).toBe(true);
+    expect(chapter.getState().cache.B?.version).toBe(3);
+    expect(await session.updateOther("B", (d) => void d)).toBe(false);
+    await expect(session.updateOther(editor.getState().pageId ?? "", () => {})).rejects.toThrow();
+  });
 });

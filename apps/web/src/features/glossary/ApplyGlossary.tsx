@@ -1,13 +1,14 @@
 /**
- * Áp lại glossary vào bản dịch có sẵn (không gọi LLM): mỗi entry của glossary series (series đè workspace) có
+ * Tab "Áp glossary" ở bảng dưới màn chương — áp lại glossary vào bản dịch có sẵn (không gọi LLM): mỗi entry của glossary series (series đè workspace) có
  * ô "cụm cũ trong bản dịch" (mặc định = từ gốc để bắt chữ chưa dịch). Chọn entry → xem trước → áp dụng → hoàn tác.
  */
 import { useQuery } from "@tanstack/react-query";
+import { Link } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { errorMessage } from "../../lib/api.ts";
 import { applyGlossaryRules, type GlossaryRule, previewGlossaryApply } from "../chapter/api.ts";
-import { FlowPanel, type SessionLock, useBatchFlow } from "../chapter/FindReplace.tsx";
-import { LockBanner, Modal } from "../chapter/Modal.tsx";
+import { FlowPanel, type ToolPanelProps, useBatchFlow } from "../chapter/FindReplace.tsx";
+import { LockBanner } from "../chapter/Modal.tsx";
 import { fetchGlossary, type GlossaryEntry, glossaryKey } from "./api.ts";
 
 /** Gộp glossary: entry series đè entry workspace trùng từ gốc (không phân biệt hoa thường). */
@@ -16,15 +17,8 @@ export function mergeGlossary(entries: GlossaryEntry[], inherited: GlossaryEntry
   return [...entries, ...inherited.filter((e) => !own.has(e.source_term.toLowerCase()))];
 }
 
-export function ApplyGlossaryDialog(props: {
-  ws: string;
-  seriesId: string;
-  chapterId: string;
-  /** Khoá của phiên màn chương (không tự lấy khoá — xem FindReplaceDialog). */
-  lock: SessionLock;
-  onClose(): void;
-}) {
-  const { ws, seriesId, chapterId, lock, onClose } = props;
+export function ApplyGlossaryPanel(props: ToolPanelProps) {
+  const { ws, seriesId, chapterId, lock, beforeWrite, onJump } = props;
   const q = useQuery({ queryKey: glossaryKey(ws, seriesId), queryFn: () => fetchGlossary(ws, seriesId) });
   const entries = useMemo(() => (q.data ? mergeGlossary(q.data.entries, q.data.inherited) : []), [q.data]);
   const [picked, setPicked] = useState<Set<string>>(new Set());
@@ -40,6 +34,7 @@ export function ApplyGlossaryDialog(props: {
     { ws, chapterId },
     {
       input: rules,
+      beforeWrite,
       preview: (r) => previewGlossaryApply(ws, chapterId, r),
       apply: (r, versions) => applyGlossaryRules(ws, chapterId, r, versions),
     },
@@ -48,17 +43,20 @@ export function ApplyGlossaryDialog(props: {
   const touch = () => flow.invalidate();
 
   return (
-    <Modal title="Áp glossary vào bản dịch" onClose={onClose}>
+    <div className="cw-tool">
       <LockBanner state={lock.state} onRetry={() => void lock.retry()} />
       <p className="muted small" style={{ marginTop: 0 }}>
         Thay “cụm cũ” bằng bản dịch trong glossary, chỉ ở vùng có chữ gốc chứa từ gốc. Không gọi AI. Muốn dịch lại theo
-        glossary mới: dùng “Dịch lại cả chương”.
+        glossary mới: dùng “Dịch lại cả chương”.{" "}
+        <Link to="/w/$ws/s/$seriesId" params={{ ws, seriesId }} search={{ tab: "glossary" }}>
+          Sửa glossary series
+        </Link>
       </p>
       {q.isError && <p className="notice danger">{errorMessage(q.error)}</p>}
       {q.isLoading && <p className="muted small">Đang tải glossary…</p>}
       {q.data && entries.length === 0 && <p className="muted">Series chưa có thuật ngữ nào.</p>}
       {entries.length > 0 && (
-        <div style={{ overflow: "auto", maxHeight: "30vh" }}>
+        <div className="cw-tool-list">
           <table className="data">
             <thead>
               <tr>
@@ -107,7 +105,7 @@ export function ApplyGlossaryDialog(props: {
         </div>
       )}
       <FlowPanel
-        ids={{ ws, seriesId, chapterId }}
+        onJump={onJump}
         showRule
         flow={{
           ...flow,
@@ -123,6 +121,6 @@ export function ApplyGlossaryDialog(props: {
           return { before: r?.from ?? "", after: r?.to ?? "", caseSensitive: false };
         }}
       />
-    </Modal>
+    </div>
   );
 }

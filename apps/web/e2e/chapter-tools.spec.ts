@@ -1,6 +1,7 @@
 /**
  * Công cụ màn chương: Tìm & thay (xem trước → áp dụng → hoàn tác), áp glossary (chọn entry → xem trước → áp dụng →
- * hoàn tác), xuất chương (job chapter.export qua worker giả → nút tải → 302 tới presigned GET). Mỗi test dựng một
+ * hoàn tác) — cả hai là tab ở bảng dưới, không hộp thoại; sau áp dụng bảng văn bản hiện chữ mới không cần tải lại,
+ * không PUT nào bị 423. Xuất chương (job chapter.export qua worker giả → nút tải → 302 tới presigned GET). Mỗi test dựng một
  * chương 1 trang đã dịch riêng (worker giả) để không phụ thuộc thứ tự test.
  */
 import { type APIRequestContext, expect, type Page, test } from "@playwright/test";
@@ -64,8 +65,30 @@ async function readyChapter(page: Page) {
 async function openChapter(page: Page, chapterId: string) {
   await page.goto(`/w/${ws}/s/${state.seriesId}/c/${chapterId}`);
   await expect(page.getByRole("heading", { name: /^Chương / })).toBeVisible();
-  // Nút công cụ chỉ bật khi chương ở trạng thái review/done và có trang.
-  await expect(page.getByRole("button", { name: "Tìm & thay", exact: true })).toBeEnabled({ timeout: 15_000 });
+  // Tab công cụ chỉ bật khi chương ở trạng thái review/done và có trang.
+  await expect(page.getByRole("tab", { name: "Tìm / Thay", exact: true })).toBeEnabled({ timeout: 15_000 });
+  await expect(page.getByRole("status", { name: "Khoá chương" })).toContainText("Bạn đang giữ khoá chương");
+}
+
+/** Mở tab của bảng dưới → panel của tab. */
+async function openTab(page: Page, name: string) {
+  await page.getByRole("tab", { name, exact: true }).click();
+  return page.getByRole("tabpanel", { name, exact: true });
+}
+
+/** Ô Dịch trang 1 vùng 1 của bảng văn bản (tab Bản dịch). */
+async function tableCell(page: Page) {
+  await page.getByRole("tab", { name: /^Bản dịch/ }).click();
+  return page.getByLabel("Bản dịch trang 1 vùng 1", { exact: true });
+}
+
+/** Ghi lại PUT state bị 423 (mất khoá) trong suốt test. */
+function watchLocked(page: Page) {
+  const locked: string[] = [];
+  page.on("response", (r) => {
+    if (r.request().method() === "PUT" && r.url().endsWith("/state") && r.status() === 423) locked.push(r.url());
+  });
+  return locked;
 }
 
 /** Bản dịch vùng đầu tiên của page, đọc thẳng từ API (không qua UI). */
@@ -82,10 +105,12 @@ test.describe("công cụ chương", () => {
   test("tìm & thay: xem trước không ghi, áp dụng ghi, hoàn tác khôi phục", async ({ page }) => {
     await login(page);
     const { chapterId, pageId } = await readyChapter(page);
+    const locked = watchLocked(page);
     await openChapter(page, chapterId);
+    await expect(await tableCell(page)).toHaveValue(FAKE_TRANSLATION);
 
-    await page.getByRole("button", { name: "Tìm & thay", exact: true }).click();
-    const dlg = page.getByRole("dialog", { name: "Tìm & thay trong chương" });
+    const dlg = await openTab(page, "Tìm / Thay");
+    await expect(page.getByRole("dialog")).toHaveCount(0);
     await dlg.getByLabel("Tìm", { exact: true }).fill("chào");
     await dlg.getByLabel("Thay bằng", { exact: true }).fill("Hello");
 
@@ -99,10 +124,23 @@ test.describe("công cụ chương", () => {
     await dlg.getByRole("button", { name: "Áp dụng", exact: true }).click();
     await expect(dlg.getByText("Đã thay 1 chỗ trên 1 trang.")).toBeVisible();
     await expect.poll(() => regionTranslation(page.request, pageId)).toBe("Xin Hello");
+    // Bảng văn bản cập nhật không cần tải lại (page đang sửa nạp lại bản server mới).
+    await expect(await tableCell(page)).toHaveValue("Xin Hello");
 
+    // Bấm kết quả → nhảy tới khối (inspector + dòng hiện tại của bảng), vẫn ở tab Tìm / Thay.
+    await openTab(page, "Tìm / Thay");
+    await dlg.getByRole("button", { name: "Tới khối", exact: true }).click();
+    await expect(page.getByRole("complementary", { name: "Bảng thuộc tính" })).toContainText("Khối 1 · Thoại");
+    await expect(page.getByRole("tab", { name: "Tìm / Thay", exact: true })).toHaveAttribute("aria-selected", "true");
+    await tableCell(page);
+    await expect(page.locator(`[data-row="${pageId}:t0"]`)).toHaveClass(/\bon\b/);
+
+    await openTab(page, "Tìm / Thay");
     await dlg.getByRole("button", { name: "Hoàn tác", exact: true }).click();
     await expect(dlg.getByText("Đã hoàn tác trên 1 trang.")).toBeVisible();
     await expect.poll(() => regionTranslation(page.request, pageId)).toBe(FAKE_TRANSLATION);
+    await expect(await tableCell(page)).toHaveValue(FAKE_TRANSLATION);
+    expect(locked).toEqual([]);
   });
 
   test("áp glossary: entry không khớp vùng nào thì không áp; entry khớp → áp dụng → hoàn tác", async ({ page }) => {
@@ -116,10 +154,11 @@ test.describe("công cụ chương", () => {
       expect(r.status()).toBe(201);
     }
     const { chapterId, pageId } = await readyChapter(page);
+    const locked = watchLocked(page);
     await openChapter(page, chapterId);
 
-    await page.getByRole("button", { name: "Áp glossary", exact: true }).click();
-    const dlg = page.getByRole("dialog", { name: "Áp glossary vào bản dịch" });
+    const dlg = await openTab(page, "Áp glossary");
+    await expect(page.getByRole("dialog")).toHaveCount(0);
     await expect(dlg.getByLabel("Chọn 안녕하세요", { exact: true })).toBeVisible();
 
     // (1) Thuật ngữ không có trong chữ gốc vùng nào → không khớp, không cho áp dụng.
@@ -141,10 +180,13 @@ test.describe("công cụ chương", () => {
     await dlg.getByRole("button", { name: "Áp dụng", exact: true }).click();
     await expect(dlg.getByText("Đã thay 1 chỗ trên 1 trang.")).toBeVisible();
     await expect.poll(() => regionTranslation(page.request, pageId)).toBe("Chào bạn");
+    await expect(await tableCell(page)).toHaveValue("Chào bạn");
 
+    await openTab(page, "Áp glossary");
     await dlg.getByRole("button", { name: "Hoàn tác", exact: true }).click();
     await expect(dlg.getByText("Đã hoàn tác trên 1 trang.")).toBeVisible();
     await expect.poll(() => regionTranslation(page.request, pageId)).toBe(FAKE_TRANSLATION);
+    expect(locked).toEqual([]);
   });
 
   test("xuất chương: job qua worker giả → nút tải → 302 tới presigned GET có tên file", async ({ page }) => {

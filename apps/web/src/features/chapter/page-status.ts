@@ -24,6 +24,9 @@ const LEVEL: Record<PageStatus, PageLevel> = {
 
 export const pageLevel = (s: PageStatus): PageLevel => LEVEL[s];
 
-/** Page cần người xem lại: lỗi, hoặc AI có bản mới cho page đã sửa tay. (Tràn box: tính ở client, P4.) */
-export const needsReview = (p: { status: PageStatus; ai_update_available: boolean }) =>
-  p.status === "failed" || p.ai_update_available;
+/**
+ * Page cần người xem lại: lỗi, AI có bản mới cho page đã sửa tay, hoặc có box chữ tràn khung (`overflow`, đo ở
+ * client từ bảng văn bản).
+ */
+export const needsReview = (p: { status: PageStatus; ai_update_available: boolean }, overflow = false) =>
+  p.status === "failed" || p.ai_update_available || overflow;

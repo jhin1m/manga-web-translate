@@ -9,10 +9,12 @@ import {
   insertOcrRegion,
   moveBox,
   newTextBox,
+  refreshRegionFromOcr,
   resetToAI,
   resizeBox,
   setRegionTranslation,
   setStyle,
+  setStyleMany,
 } from "../actions.ts";
 import { change } from "../history.ts";
 import { box, doc, layout, region } from "./fixtures.ts";
@@ -98,5 +100,19 @@ describe("editor actions", () => {
     expect(s.text_boxes[0]).toMatchObject({ id: "t-new", region_id: "r-new", text: "Chữ ngoài bóng", fill: "#ffffff" });
     expect(s.text_boxes[0]?.lines.length).toBeGreaterThan(0);
     expect(newTextBox("x", { x: 0, y: 0, w: 1, h: 1 }, "F", null).w).toBe(8);
+  });
+
+  it("setStyleMany styles several boxes in one change; refreshRegionFromOcr keeps ids and box geometry", () => {
+    const s0 = doc(2);
+    const s1 = run(s0, setStyleMany(["t0", "t1"], { align: "left", fill: "#ff0000" }, layout));
+    expect(s1.text_boxes.map((b) => [b.align, b.fill])).toEqual([
+      ["left", "#ff0000"],
+      ["left", "#ff0000"],
+    ]);
+    const ocr = { ...region("r-user", "Mới"), source_text: "새", flags: ["low_conf" as const] };
+    const s2 = run(s0, refreshRegionFromOcr("r0", ocr, layout));
+    expect(s2.regions[0]).toMatchObject({ id: "r0", source_text: "새", translation: "Mới", flags: ["low_conf"] });
+    expect(s2.text_boxes[0]).toMatchObject({ id: "t0", x: 10, text: "Mới", lines: ["Mới"] });
+    expect(s2.regions[1]).toEqual(s0.regions[1]);
   });
 });
