@@ -1,7 +1,7 @@
 ---
 phase: 3
 title: "Job queue + worker protocol (fencing, 2 giai đoạn) + worker local Mac"
-status: pending
+status: completed
 priority: P1
 effort: "7d"
 dependencies: [1, 2]

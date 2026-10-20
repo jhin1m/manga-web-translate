@@ -4,7 +4,7 @@
  *  (b) `:ws` của A nhưng id tài nguyên thuộc B → 404
  * Phase sau thêm route → thêm case vào RESOURCE_CASES (chỉ append).
  */
-import { chapters, NotFoundError, scoped, series } from "@mtl/db";
+import { chapters, jobs, NotFoundError, scoped, series } from "@mtl/db";
 import { eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { app, call, db, seedWorkspace } from "./helpers.ts";
@@ -13,8 +13,28 @@ type Seed = Awaited<ReturnType<typeof seedWorkspace>>;
 let A: Seed;
 let B: Seed;
 
+/** Job mẫu của mỗi workspace (route /jobs/:jobId). */
+const jobOf: Record<string, string> = {};
+
 beforeAll(async () => {
   [A, B] = await Promise.all([seedWorkspace("a"), seedWorkspace("b")]);
+  for (const s of [A, B]) {
+    const j = await scoped(db, s.workspaceId).insert(jobs, {
+      type: "chapter.export",
+      payload: {
+        type: "chapter.export",
+        chapter_id: s.chapterId,
+        format: "cbz",
+        layout: "pages",
+        quality: 90,
+        include_untranslated: true,
+      },
+      inputRev: "r",
+      idempotencyKey: `tenant-${s.workspaceId}`,
+      chapterId: s.chapterId,
+    });
+    jobOf[s.workspaceId] = j.id;
+  }
 });
 
 /** Body hợp lệ tối thiểu cho từng route (để 404 đến từ tra cứu id chứ không phải validate body). */
@@ -27,6 +47,9 @@ const BODIES: Record<string, unknown> = {
 const RESOURCE_CASES: Record<string, (b: Seed) => Record<string, string>> = {
   "POST /api/w/:ws/chapters/:chapterId/uploads": (b) => ({ chapterId: b.chapterId }),
   "GET /api/w/:ws/invitations/:invitationId/link": (b) => ({ invitationId: b.invitationId }),
+  "GET /api/w/:ws/chapters/:chapterId/progress": (b) => ({ chapterId: b.chapterId }),
+  "GET /api/w/:ws/jobs/:jobId": (b) => ({ jobId: jobOf[b.workspaceId] ?? "" }),
+  "POST /api/w/:ws/jobs/:jobId/cancel": (b) => ({ jobId: jobOf[b.workspaceId] ?? "" }),
 };
 
 /** Mọi (method, path) người dùng dưới /api/w/:ws — lấy từ router thật, không liệt kê tay. */

@@ -18,6 +18,16 @@ const Env = z.object({
   /** Domain file riêng trình duyệt thấy (dev: localhost:9100, prod: files.<domain>). */
   FILES_DOMAIN: z.string().min(1),
   FILES_SCHEME: z.enum(["http", "https"]).default("https"),
+  /** Phiên bản pipeline dùng tính input_rev lúc enqueue (khớp worker/mtl_worker PIPELINE_VERSION). */
+  PIPELINE_VERSION: z
+    .string()
+    .regex(/^\d+\.\d+\.\d+$/)
+    .default("0.3.0"),
+  /** Worker có pipeline_version thấp hơn → claim trả 426. */
+  MIN_PIPELINE_VERSION: z
+    .string()
+    .regex(/^\d+\.\d+\.\d+$/)
+    .default("0.3.0"),
 });
 export type Env = z.infer<typeof Env>;
 

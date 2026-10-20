@@ -7,7 +7,8 @@
     "start": "tsx src/index.ts",
     "auth:generate": "auth generate --config src/auth.ts --output ../../packages/db/src/schema/auth.ts --yes",
     "typecheck": "tsc -p tsconfig.json",
-    "test": "vitest run"
+    "test": "vitest run",
+    "jobs": "tsx src/jobs/runner.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1153.0",

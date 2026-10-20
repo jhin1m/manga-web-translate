@@ -2,7 +2,7 @@ import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex, utf8ToBytes } from "@noble/hashes/utils.js";
 import { v5 as uuidv5 } from "uuid";
 import { z } from "zod";
-import { BBox, OcrResult, PageState, Region } from "./page-state.ts";
+import { BBox, OcrRegion, OcrResult, PageState, Region } from "./page-state.ts";
 
 export const JOB_TYPES = [
   "chapter.ingest",
@@ -46,8 +46,23 @@ const Rev = z.number().int().nonnegative();
 export const ExportFormat = z.enum(["png_zip", "cbz"]);
 export const ExportLayout = z.enum(["original_slices", "pages"]);
 
+/** strip = ghép slice cùng width thành strip ảo rồi cắt theo detector (manhwa); pages = 1 file = 1 page (manga). */
+export const IngestMode = z.enum(["strip", "pages"]);
+
+/** Snapshot cài đặt dịch lúc enqueue (job tái lập được dù series đổi sau đó). */
+export const TranslateSettings = z.object({
+  /** source_term → target_term (đã gộp entry workspace + series). */
+  glossary: z.record(z.string(), z.string()),
+  pronoun_rules: z.string(),
+  honorific_policy: z.string(),
+  style_prompt: z.string(),
+  /** font_id mặc định cho thoại. */
+  font: z.string().min(1),
+});
+export type TranslateSettings = z.infer<typeof TranslateSettings>;
+
 export const JobPayload = z.discriminatedUnion("type", [
-  z.object({ type: z.literal("chapter.ingest"), chapter_id: Uuid, ingest_rev: Rev }),
+  z.object({ type: z.literal("chapter.ingest"), chapter_id: Uuid, ingest_rev: Rev, mode: IngestMode }),
   z.object({ type: z.literal("page.prepare"), page_id: Uuid, source_lang: z.string().min(2) }),
   z.object({
     type: z.literal("chapter.translate"),
@@ -56,6 +71,7 @@ export const JobPayload = z.discriminatedUnion("type", [
     context: z.enum(["rolling", "neighbors"]),
     glossary_rev: Rev,
     settings_rev: Rev,
+    settings: TranslateSettings,
   }),
   z.object({
     type: z.literal("page.reinpaint"),
@@ -108,6 +124,10 @@ export const JobResult = z.discriminatedUnion("type", [
   z.object({ type: z.literal("chapter.export"), key: z.string().min(1), bytes: z.number().int().nonnegative() }),
 ]);
 export type JobResult = z.infer<typeof JobResult>;
+
+/** Artifact giai đoạn 1 trước LLM, gửi kèm `fail` khi lỗi provider → lần chạy sau bỏ qua detect/inpaint. */
+export const PreparePartial = z.object({ clean_rev: Rev, mask_rev: Rev, regions: z.array(OcrRegion) });
+export type PreparePartial = z.infer<typeof PreparePartial>;
 
 const hex = (s: string) => bytesToHex(sha256(utf8ToBytes(s)));
 

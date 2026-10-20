@@ -1,6 +1,16 @@
 import { z } from "zod";
-import { ErrorClass, JobPayload, JobResult, JobType } from "./job.ts";
+import { ErrorClass, JobPayload, JobResult, JobType, PreparePartial } from "./job.ts";
 import { OcrResult, PageState, Region, TextBox } from "./page-state.ts";
+import {
+  ClaimResponse,
+  IngestInputs,
+  OcrRegionInputs,
+  PrepareInputs,
+  PresignOutputsResponse,
+  ReinpaintInputs,
+  TranslateInputs,
+  WorkerUsage,
+} from "./worker-protocol.ts";
 
 /** Các schema xuất cho worker; tên = tên file `<name>.schema.json`. */
 export const exportedSchemas = {
@@ -12,6 +22,15 @@ export const exportedSchemas = {
   "job-payload": JobPayload,
   "job-result": JobResult,
   "error-class": ErrorClass,
+  "prepare-partial": PreparePartial,
+  "worker-usage": WorkerUsage,
+  "claim-response": ClaimResponse,
+  "presign-outputs-response": PresignOutputsResponse,
+  "inputs-chapter-ingest": IngestInputs,
+  "inputs-page-prepare": PrepareInputs,
+  "inputs-chapter-translate": TranslateInputs,
+  "inputs-page-reinpaint": ReinpaintInputs,
+  "inputs-page-ocr-region": OcrRegionInputs,
 } as const;
 
 export function buildJsonSchemas(): Record<string, unknown> {

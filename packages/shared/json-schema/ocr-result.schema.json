@@ -48,13 +48,25 @@
               "dark_on_light",
               "light_on_dark"
             ]
+          },
+          "bubble_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
           "id",
           "kind",
           "bbox",
-          "polarity"
+          "polarity",
+          "bubble_id"
         ],
         "additionalProperties": false
       }
@@ -81,6 +93,9 @@
             "type": "number",
             "minimum": 0,
             "maximum": 1
+          },
+          "low_conf": {
+            "type": "boolean"
           }
         },
         "required": [
@@ -88,7 +103,8 @@
           "source",
           "is_sfx",
           "empty",
-          "confidence"
+          "confidence",
+          "low_conf"
         ],
         "additionalProperties": false
       }

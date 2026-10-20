@@ -1,0 +1,110 @@
+{
+  "$id": "https://mtl.local/schema/inputs-page-prepare.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "original": {
+      "type": "string",
+      "format": "uri"
+    },
+    "partial": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "clean": {
+              "type": "string",
+              "format": "uri"
+            },
+            "mask": {
+              "type": "string",
+              "format": "uri"
+            },
+            "regions": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "bubble",
+                      "text_bubble",
+                      "text_free"
+                    ]
+                  },
+                  "bbox": {
+                    "type": "array",
+                    "prefixItems": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "number",
+                        "minimum": 0
+                      },
+                      {
+                        "type": "number",
+                        "minimum": 0
+                      }
+                    ],
+                    "items": false,
+                    "minItems": 4,
+                    "maxItems": 4
+                  },
+                  "polarity": {
+                    "type": "string",
+                    "enum": [
+                      "dark_on_light",
+                      "light_on_dark"
+                    ]
+                  },
+                  "bubble_id": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "id",
+                  "kind",
+                  "bbox",
+                  "polarity",
+                  "bubble_id"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": [
+            "clean",
+            "mask",
+            "regions"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "required": [
+    "original",
+    "partial"
+  ],
+  "additionalProperties": false
+}

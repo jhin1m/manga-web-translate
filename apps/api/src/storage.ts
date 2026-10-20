@@ -4,7 +4,14 @@
  * - `publicSigner`: chỉ để KÝ URL theo FILES_DOMAIN (domain file riêng, proxy thêm nosniff);
  *   chữ ký SigV4 gắn với host nên URL phải ký đúng host trình duyệt sẽ gọi.
  */
-import { GetObjectCommand, HeadObjectCommand, NoSuchKey, NotFound, S3Client } from "@aws-sdk/client-s3";
+import {
+  GetObjectCommand,
+  HeadObjectCommand,
+  NoSuchKey,
+  NotFound,
+  PutObjectCommand,
+  S3Client,
+} from "@aws-sdk/client-s3";
 import { createPresignedPost } from "@aws-sdk/s3-presigned-post";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { env } from "./env.ts";
@@ -52,6 +59,16 @@ export async function presignPost(
 export function presignGet(key: string, ttlSeconds: number, disposition?: string): Promise<string> {
   if (ttlSeconds <= 0 || ttlSeconds > MAX_GET_TTL_S) throw new RangeError(`GET ttl must be 1..${MAX_GET_TTL_S}s`);
   const cmd = new GetObjectCommand({ Bucket, Key: key, ResponseContentDisposition: disposition });
+  return getSignedUrl(publicSigner, cmd, { expiresIn: ttlSeconds });
+}
+
+/** Trần TTL presigned PUT cho output worker; caller còn phải giới hạn ≤ thời gian lease còn lại. */
+export const MAX_PUT_TTL_S = 120;
+
+/** Presigned PUT (worker ghi output vào key bất biến); Content-Type cố định nằm trong chữ ký. */
+export function presignPut(key: string, contentType: string, ttlSeconds: number): Promise<string> {
+  if (ttlSeconds <= 0 || ttlSeconds > MAX_PUT_TTL_S) throw new RangeError(`PUT ttl must be 1..${MAX_PUT_TTL_S}s`);
+  const cmd = new PutObjectCommand({ Bucket, Key: key, ContentType: contentType });
   return getSignedUrl(publicSigner, cmd, { expiresIn: ttlSeconds });
 }
 

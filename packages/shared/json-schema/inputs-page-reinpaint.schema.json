@@ -1,0 +1,20 @@
+{
+  "$id": "https://mtl.local/schema/inputs-page-reinpaint.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "base_clean": {
+      "type": "string",
+      "format": "uri"
+    },
+    "user_mask": {
+      "type": "string",
+      "format": "uri"
+    }
+  },
+  "required": [
+    "base_clean",
+    "user_mask"
+  ],
+  "additionalProperties": false
+}
