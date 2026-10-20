@@ -26,4 +26,5 @@ Thứ tự: Wave 1 = P1 ‖ P2 → P3 → P4 → P5 → P6 → P7 (tối đa 2 p
 | 2026-10-20 17:44 | P5 | start | worktree ../mtl-wt/p5, branch feat/p5-editor-konva, pane w1H:p9, agent cook-p5; nhắc hợp đồng layout (Konva.Shape) |
 | 2026-10-20 18:15 | P5 | done | cook-p5 báo DONE_WITH_CONCERNS. Chưa đo: mở 12k/20k px <2s, ≥50fps M1, Safari 18, reinpaint ≤15s worker thật, owner sửa chương 40 slice; conflict chưa xử lý chỉ trong bộ nhớ; 2 tab cùng trang ghi đè draft; undo bị xoá khi 409/AI cập nhật |
 | 2026-10-20 18:17 | P5 | quyết định | Tiêu chí hiệu năng/Safari → chờ owner kiểm thủ công, đo lại ở P7; cho export serial từ use-chapter-lock.ts (file P4) để lượt lưu cuối đi chung chuỗi khoá → đã làm; đóng tab vẫn dựa IndexedDB khôi phục; tách chunk editor → P6 |
-| 2026-10-20 18:45 | P5 | merge | Kiểm lại worktree xanh (web 46, API 89, e2e 2/2) → merge --no-ff không conflict. Main: typecheck/lint/test xanh, worker pytest 97+2 skip, mypy sạch |
+| 2026-10-20 18:19 | P5 | merge | Kiểm lại worktree xanh (web 46, API 89, e2e 2/2) → merge --no-ff không conflict. Main: typecheck/lint/test xanh, worker pytest 97+2 skip, mypy sạch |
+| 2026-10-20 18:20 | P6 | start | worktree ../mtl-wt/p6, branch feat/p6-export-glossary-polish, pane w1H:pA, agent cook-p6; giao thêm unique index glossary, tách chunk editor, chapter.export |
