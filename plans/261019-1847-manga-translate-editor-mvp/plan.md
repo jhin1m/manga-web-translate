@@ -54,7 +54,7 @@ upload (presigned POST) ─> commit (HEAD + magic bytes) ─> chapter.ingest (c�
 |---|---|---|---|---|---|
 | 1 | [Spike & benchmark pipeline (KO, 2 giai đoạn)](./phase-01-pipeline-spike-benchmark.md) | P1 | 5d | — | Completed (gate: GO tạm — chờ golden set, API key, owner chấm) |
 | 2 | [Scaffold monorepo, DB, auth, storage](./phase-02-monorepo-db-auth-storage.md) | P1 | 4d | — (song song P1) | Completed |
-| 3 | [Hàng đợi job + worker protocol + worker local](./phase-03-job-queue-worker.md) | P1 | 7d | 1 (gate), 2 | Pending |
+| 3 | [Hàng đợi job + worker protocol + worker local](./phase-03-job-queue-worker.md) | P1 | 7d | 1 (gate), 2 | Completed |
 | 4 | [Web: upload, cài đặt series, tiến độ, danh sách trang](./phase-04-web-upload-series-progress.md) | P1 | 4d | 2, 3 | Pending |
 | 5 | [Editor react-konva](./phase-05-editor-konva.md) | P1 | 12d | 3, 4 (router/layout) | Pending |
 | 6 | [Export + glossary/find-replace](./phase-06-export-glossary-polish.md) | P1 | 3d | 3, 5 | Pending |
