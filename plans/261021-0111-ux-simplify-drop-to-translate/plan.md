@@ -1,7 +1,7 @@
 ---
 title: "UX gọn như Torii: thả là dịch, tín hiệu đúng, canvas dễ nhìn, chữ ra chất manga"
 description: "Sửa nhiễu 'cần xem', canvas vừa trang + chỉ báo trang, gom trạng thái, thả file → tự tạo + tự dịch, font comic tiếng Việt có viền trắng."
-status: in-progress
+status: completed
 priority: P1
 effort: 5d
 branch: main (mỗi phase 1 branch feat/ux-pN-*, merge --no-ff)
@@ -56,10 +56,10 @@ Tuần tự (e2e dùng DB `mtl_test_e2e` + cổng cố định chung → không 
 ## Tiêu chí chấp nhận chung
 - [x] Chương mẫu 5 trang: không trang nào bị "cần xem" chỉ vì tràn ≤ dung sai; khối tiêu đề tràn thật vẫn bị cờ.
 - [x] Bảng văn bản chương mẫu không còn dòng region `bubble`; số "khối chưa có bản dịch" ở drawer Xuất chỉ đếm vùng chữ.
-- [ ] Mở chương: 1 trang nằm trọn khung nhìn; góc dưới hiện "Trang i/5" đúng khi cuộn. _(P6: chỉ báo trang đạt; trọn trang chưa đạt ở cửa sổ cao ~945px vì sàn zoom 50% — xem report P6)_
+- [x] Mở chương: 1 trang nằm trọn khung nhìn; góc dưới hiện "Trang i/5" đúng khi cuộn. _(sau P6: lề vừa khung `FIT_EDGE` 16px → trang 1500px trọn khung ở 52% trên cửa sổ 2048×945, giữ sàn 50%)_
 - [x] Đang dịch: page chưa `ready` hiện ảnh gốc + lớp "Đang dịch…", không hiện bóng thoại trống.
 - [x] Trạng thái chương chỉ ở topbar (+ rail theo trang); không banner tồn đọng.
 - [x] Từ home: thả 5 ảnh (series đoán được) → ≤ 1 thao tác (chính lần thả) tới khi chương tự dịch; e2e click-budget cập nhật.
 - [x] Đổi series/số chương trên header hoạt động, có test API + tenant isolation.
 - [x] Bản dịch mặc định: font comic tiếng Việt, viền trắng; `typeset-parity` xanh.
-- [ ] `pnpm typecheck && pnpm lint && pnpm test` + toàn bộ e2e xanh trên main sau P6.
+- [x] `pnpm typecheck && pnpm lint && pnpm test` + toàn bộ e2e xanh trên main sau P6 (21/10 02:4x: web 148, api 147, shared 8, db 3, pytest 136, e2e 18/18).
