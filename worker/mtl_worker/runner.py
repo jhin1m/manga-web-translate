@@ -20,7 +20,7 @@ from mtl_pipeline.images import ImageRejected, check_header, encode_png
 from mtl_pipeline.providers.base import LLMProvider, ProviderError
 from mtl_pipeline.schema import BBox, ContractError, Region, TokenUsage, validate_contract
 
-from .client import LeaseLost, WorkerClient
+from .client import LeaseLost, WorkerApi
 
 log = logging.getLogger("mtl_worker")
 
@@ -69,7 +69,7 @@ class Deps(Protocol):
 
 
 class JobContext:
-    def __init__(self, client: WorkerClient, job: dict[str, Any], deadline: Callable[[], bool] | None = None):
+    def __init__(self, client: WorkerApi, job: dict[str, Any], deadline: Callable[[], bool] | None = None):
         self.client = client
         self.job = job
         self.payload: dict[str, Any] = job["payload"]
@@ -233,7 +233,7 @@ Handler = Callable[[JobContext, Deps], dict[str, Any]]
 
 
 def run_job(
-    client: WorkerClient,
+    client: WorkerApi,
     job: dict[str, Any],
     handlers: dict[str, Handler],
     deps: Deps,
@@ -271,7 +271,7 @@ def run_job(
         return _report_failure(client, job, ctx, JobFailure("internal", f"{type(e).__name__}: {e}"))
 
 
-def _report_failure(client: WorkerClient, job: dict[str, Any], ctx: JobContext, f: JobFailure) -> str:
+def _report_failure(client: WorkerApi, job: dict[str, Any], ctx: JobContext, f: JobFailure) -> str:
     log.warning("job %s %s fail: %s", job["type"], job["id"], f)
     try:
         client.fail(job, f.error_class, f.message, f.retry_after_s, ctx.take_usage(), f.partial)

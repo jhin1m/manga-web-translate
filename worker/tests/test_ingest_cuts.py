@@ -70,7 +70,8 @@ def _strip_case(seed: int, n_slices: int = 40, slice_h: int = 1600, width: int =
     rng = random.Random(seed)
     slices = [SourceSlice(f"s{i}", np.full((slice_h, width, 3), 255, np.uint8)) for i in range(n_slices)]
     total = n_slices * slice_h
-    regions, y = [], 200
+    regions: list[Region] = []
+    y = 200
     while y < total - 400:
         h = rng.randint(120, 700)
         regions.append(
@@ -84,7 +85,11 @@ def test_golden_like_40_slice_strip_never_cuts_through_a_box():
     for seed in range(5):
         slices, regions, total = _strip_case(seed)
         spans = [(r.bbox.y, r.bbox.y2) for r in regions]
-        pages = build_pages(slices, "strip", lambda strip, rs=regions: rs)
+
+        def detect(strip: np.ndarray, rs: list[Region] = regions) -> list[Region]:
+            return rs
+
+        pages = build_pages(slices, "strip", detect)
         assert sum(p.image.shape[0] for p in pages) == total
         y = 0
         for p in pages[:-1]:

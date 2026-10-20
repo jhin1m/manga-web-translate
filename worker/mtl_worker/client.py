@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import time
-from typing import Any
+from typing import Any, Protocol
 
 import httpx
 
@@ -25,6 +25,32 @@ class AuthError(RuntimeError):
 
 
 RETRY_STATUSES = {502, 503, 504}
+
+
+class WorkerApi(Protocol):
+    """Phần client mà runner/handler dùng sau khi claim — WorkerClient là bản HTTP; test dùng bản giả."""
+
+    def heartbeat(
+        self, job: dict[str, Any], progress: float, stage: str | None, usage: dict | None
+    ) -> dict[str, Any]: ...
+
+    def presign_outputs(self, job: dict[str, Any], names: list[str]) -> dict[str, dict[str, Any]]: ...
+
+    def complete(self, job: dict[str, Any], result: dict[str, Any], usage: dict | None) -> dict[str, Any]: ...
+
+    def fail(
+        self,
+        job: dict[str, Any],
+        error_class: str,
+        message: str,
+        retry_after_s: float | None = None,
+        usage: dict | None = None,
+        partial: dict | None = None,
+    ) -> dict[str, Any]: ...
+
+    def download(self, url: str) -> bytes: ...
+
+    def upload_png(self, url: str, data: bytes) -> bool: ...
 
 
 class WorkerClient:

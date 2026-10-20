@@ -15,12 +15,15 @@ Ngày 20/10/2026 · branch `feat/p3-job-queue-worker` (chưa merge) · plan: `26
 - Code review (7/10): đã sửa H1 (3 nhánh huỷ làm kẹt chương), H2 (job input hỏng chặn claim → fail job tại claim; kiểm `user_mask_key`), H3 (ingest lại khi còn job → 409 `chapter_busy`), M1 (dịch lại lỗi giữ page `ready`), M5 (progress chỉ tải job active/24h), M6 (claim không retry). Có test hồi quy.
 
 ## Còn lại / rủi ro
-- M2: breaker toàn cục tin `error_class` worker gửi — chấp nhận ở MVP invite-only (worker Mac do owner chạy); xem lại ở Phase 8.
+- M2 (**rủi ro cho Phase 8**): breaker toàn cục tin `error_class` worker gửi, usage chỉ được server clamp. Controller chốt 20/10: MVP invite-only, worker Mac do team owner chạy (không phải tenant) → giữ thiết kế. Trước khi mở đăng ký/cho tenant tự chạy worker: breaker theo workspace hoặc chỉ tính lỗi từ token nền tảng, không tin số đếm của worker tenant.
 - M4: 2 job translate chồng page → job xong sau thắng (có thể ghi bản AI cũ hơn vào `ai_state`; không đụng bản sửa tay).
 - M3/M7: ingest complete HEAD tuần tự tới 1000 key trong transaction; ingest chưa có trần bộ nhớ tổng (≈2GB/200 slice).
 - Key ảnh ingest theo `ingest_rev` (không theo attempt) — nội dung tất định, DB chỉ nhận attempt hợp lệ.
 - Tiêu chí chưa đo thật: golden KO 40 slice với detector thật (chưa có golden), kill -9 đo thời gian thật ≤150s (đã chứng minh bằng lease+reaper trong test), 20000×20000 end-to-end (chặn ở header — test `images.py`), bench LLM thật (chưa có key).
 
-## Câu hỏi mở
-- Worker Mac có bao giờ do tenant tự chạy? (quyết định mức tin usage/error_class — M2)
-- Huỷ ingest: đã chọn đưa chương về `draft` (commit lại được) — xác nhận.
+## Quyết định (controller 20/10)
+- Worker Mac do team owner chạy ở MVP → giữ server clamp + tin lớp lỗi; rủi ro ghi cho P8 (M2).
+- Huỷ ingest → chương về `draft`: đồng ý (đã cài, có test).
+
+## Bổ sung sau review
+- `uv run mypy .` sạch toàn bộ `worker/` (gồm tests): runner/handler phụ thuộc `WorkerApi` (Protocol ở `mtl_worker/client.py`) thay vì `WorkerClient` cụ thể; fake client trong test có chữ ký đầy đủ.

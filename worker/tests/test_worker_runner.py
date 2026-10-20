@@ -37,20 +37,30 @@ class FakeClient:
         self.complete_error = complete_error
         self.stop = stop
 
-    def heartbeat(self, job, progress, stage, usage):
+    def heartbeat(
+        self, job: dict[str, Any], progress: float, stage: str | None, usage: dict | None
+    ) -> dict[str, Any]:
         self.calls.append(("heartbeat", usage))
         return {"lease_expires_at": "x", "stop": self.stop}
 
-    def presign_outputs(self, job, names):
+    def presign_outputs(self, job: dict[str, Any], names: list[str]) -> dict[str, dict[str, Any]]:
         return {n: {"key": n, "rev": 7, "put": f"put://{n}", "expires_at": "x"} for n in names}
 
-    def complete(self, job, result, usage):
+    def complete(self, job: dict[str, Any], result: dict[str, Any], usage: dict | None) -> dict[str, Any]:
         self.calls.append(("complete", (result, usage)))
         if self.complete_error:
             raise self.complete_error
         return {"ok": True}
 
-    def fail(self, job, error_class, message, retry_after_s=None, usage=None, partial=None):
+    def fail(
+        self,
+        job: dict[str, Any],
+        error_class: str,
+        message: str,
+        retry_after_s: float | None = None,
+        usage: dict | None = None,
+        partial: dict | None = None,
+    ) -> dict[str, Any]:
         self.calls.append(
             (
                 "fail",
@@ -64,10 +74,10 @@ class FakeClient:
         )
         return {"ok": True}
 
-    def download(self, url):
+    def download(self, url: str) -> bytes:
         return PNG
 
-    def upload_png(self, url, data):
+    def upload_png(self, url: str, data: bytes) -> bool:
         self.uploads[url] = data
         return True
 
@@ -168,13 +178,13 @@ def test_lease_lost_on_complete_drops_job_without_fail():
 
 def test_cancel_from_heartbeat_stops_cleanly():
     c = FakeClient(stop="cancel")
-    ctx = JobContext(c, prepare_job())  # type: ignore[arg-type]
+    ctx = JobContext(c, prepare_job())
     ctx.heartbeat_once()
     assert ctx.cancelled.is_set()
 
 
 def test_usage_delta_has_increasing_seq_and_is_restored_on_failure():
-    ctx = JobContext(FakeClient(), prepare_job())  # type: ignore[arg-type]
+    ctx = JobContext(FakeClient(), prepare_job())
     ctx.add_usage([TokenUsage(provider="f", model="m", input_tokens=5, output_tokens=1)])
     u1 = ctx.take_usage()
     assert u1 and u1["seq"] == 1 and u1["llm_in"] == 5
