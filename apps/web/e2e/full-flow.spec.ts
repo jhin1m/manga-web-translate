@@ -1,7 +1,8 @@
 /**
- * Luồng chính trọn vẹn: thả 1 strip ở home → màn chương mở ngay (trước khi upload xong) → "Dịch chương" → (đang
- * dịch, nút khoá) → worker giả cắt 3 trang + dịch → sửa bản dịch trang 2 trong bảng → lưu lên server → nút chính
- * "Xuất" → drawer Xuất không cảnh báo → tải xuống 302. Không lỗi JS nào trong cả luồng.
+ * Luồng chính trọn vẹn: thả 1 strip ở home → màn chương mở ngay (trước khi upload xong, không qua dòng xác nhận)
+ * → upload xong tự dịch (không bấm gì) → (đang dịch, nút khoá) → worker giả cắt 3 trang + dịch → sửa bản dịch
+ * trang 2 trong bảng → lưu lên server → nút chính "Xuất" → drawer Xuất không cảnh báo → tải xuống 302. Không lỗi JS
+ * nào trong cả luồng.
  */
 import { expect, type Route, test } from "@playwright/test";
 import { WEB_URL } from "./env.ts";
@@ -32,25 +33,22 @@ test("drop a strip on home → translate → edit → export", async ({ page }) 
   await page
     .getByRole("region", { name: "Tạo chương mới" })
     .locator('input[type="file"]')
-    .setInputFiles({ name: "strip.png", mimeType: "image/png", buffer: PNG_1PX });
-  const confirm = page.getByRole("form", { name: "Sau khi thả file" });
-  await confirm.getByLabel("Series (đoán từ tên file)").selectOption({ label: "Series e2e" });
-  await confirm.getByLabel("Chương số").fill("7001");
-  await confirm.getByRole("button", { name: "Tạo và mở chương" }).click();
+    .setInputFiles({ name: "Series e2e chapter 7001.png", mimeType: "image/png", buffer: PNG_1PX });
 
+  // Series + số chương đoán từ tên file → tạo chương ngay, không hỏi.
   await expect(page).toHaveURL(/\/w\/.+\/s\/.+\/c\/[0-9a-f-]{36}$/, { timeout: 30_000 });
+  expect(page.url()).toContain(`/s/${state.seriesId}/`);
   const chapterId = page.url().split("/").pop() ?? "";
   await expect(page.getByRole("heading", { name: /^Chương 7001/ })).toBeVisible();
   await expect.poll(() => held.length).toBeGreaterThan(0);
   await expect(page.getByRole("button", { name: "Dịch chương" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Dịch chương" })).toHaveAttribute("title", /^Tự dịch khi tải xong/);
   hold = false;
   for (const r of held.splice(0)) await r.continue();
 
-  // Nút chính: Dịch chương → (Xuất bị khoá, chip "Đang cắt trang/Đang dịch") → Xuất. Thành công không thêm banner.
-  await expect(page.getByText("Đã tải xong 1 ảnh")).toBeVisible({ timeout: 30_000 });
-  await page.getByRole("button", { name: "Dịch chương" }).click();
+  // Upload xong → tự dịch: (Xuất bị khoá, chip "Đang cắt trang/Đang dịch") → Xuất. Thành công không thêm banner.
   const chip = page.getByRole("status", { name: "Trạng thái chương" });
-  await expect(chip).toHaveText(/^Đang (cắt trang|dịch)/);
+  await expect(chip).toHaveText(/^Đang (cắt trang|dịch)/, { timeout: 30_000 });
   await expect(page.getByRole("button", { name: "Xuất", exact: true })).toBeDisabled();
   await expect(page.getByText(/Bắt đầu dịch|Đang dịch \d+ ảnh/)).toHaveCount(0);
 
