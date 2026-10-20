@@ -102,6 +102,32 @@ describe("text table rows", () => {
     expect(rows.map(needsAttention)).toEqual([true, false, true]);
   });
 
+  it("skips speech-bubble outline regions: no row, no 'empty' flag, indices count text regions only", () => {
+    const s: PageState = {
+      ...doc(0),
+      regions: [
+        { ...region("bub", ""), kind: "bubble", source_text: "" },
+        region("a", "Một"),
+        { ...region("bub2", ""), kind: "bubble", source_text: "" },
+        region("b", "Hai"),
+      ],
+      text_boxes: [box("ta", "a", "Một"), box("tb", "b", "Hai")],
+    };
+    const rows = buildRows(
+      [{ id: "p", ord: 0, ai_update_available: false }],
+      { p: { state: s } },
+      { pageId: null, doc: null },
+      () => false,
+    );
+    expect(rows.map((r) => [r.key, r.index])).toEqual([
+      ["p:a", 1],
+      ["p:b", 2],
+    ]);
+    expect(rows.some(needsAttention)).toBe(false);
+    // Box gắn vào khung bóng thoại (không có dòng region) vẫn có dòng riêng.
+    expect(rowKeyOfBox("p", { id: "x", region_id: "bub" }, s)).toBe("p:x");
+  });
+
   it("same-kind boxes for 'apply style' skip the source box and hidden boxes", () => {
     const s = page2();
     s.text_boxes.push({ ...box("ta2", "a", "Hai"), hidden: true }, box("ta3", "a", "Ba"));
