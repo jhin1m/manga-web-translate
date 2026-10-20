@@ -1,11 +1,10 @@
 /**
- * Thuộc tính box đang chọn: chữ, font, cỡ (tắt khi auto-fit), giãn dòng, lề, căn lề, màu, viền ngoài, ẩn.
+ * Thuộc tính box đang chọn (chữ sửa ở ô "Bản dịch" của inspector): font, cỡ (tắt khi auto-fit), giãn dòng, lề, căn lề, màu, viền ngoài, ẩn.
  * Thay đổi liên tục cùng trường (gõ số, kéo màu) gộp 1 bước undo qua key `style:<field>:<id>`.
  */
 import type { TextBox } from "@mtl/shared";
-import { type BoxStyle, deleteBox, editText, setStyle } from "../actions.ts";
+import { type BoxStyle, deleteBox, setStyle } from "../actions.ts";
 import { editorStore, useEditor } from "../store.ts";
-import { TextField } from "./TextField.tsx";
 
 const ALIGN: { id: TextBox["align"]; label: string }[] = [
   { id: "left", label: "Trái" },
@@ -30,14 +29,6 @@ export function Properties({ fonts }: { fonts: string[] }) {
 
   return (
     <fieldset className="ed-props" disabled={readOnly}>
-      <label htmlFor="ed-text">Chữ</label>
-      <TextField
-        id="ed-text"
-        key={box.id}
-        value={box.text}
-        rows={3}
-        onValue={(v) => st.layout && st.apply(editText(box.id, v, st.layout), `text:${box.id}`)}
-      />
       <label htmlFor="ed-font">Font</label>
       <select
         id="ed-font"

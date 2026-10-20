@@ -1,12 +1,13 @@
 /**
  * OCR vùng chọn: kéo khung (công cụ O) → POST /ocr-region → poll job → chèn region + text box vào state như
- * một thao tác editor (có undo, đi qua save). Khung đang chờ hiện viền đứt; lỗi báo trên panel.
+ * một thao tác editor (có undo, đi qua save). "OCR lại" 1 vùng có sẵn (inspector): cùng job trên bbox của vùng,
+ * kết quả thay chữ gốc + bản dịch của vùng đó. Khung đang chờ hiện viền đứt; lỗi báo trên panel.
  */
 import type { Region } from "@mtl/shared";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Group, Layer, Rect } from "react-konva";
 import { errorMessage } from "../../../lib/api.ts";
-import { insertOcrRegion } from "../actions.ts";
+import { insertOcrRegion, refreshRegionFromOcr } from "../actions.ts";
 import { type OcrRegionResult, startOcrRegion, waitJob } from "../api.ts";
 import { editorStore } from "../store.ts";
 
@@ -28,7 +29,8 @@ export function useOcrRegion(ws: string, pageId: string, defaultFont: string, pa
   }, [pageId]);
 
   const start = useCallback(
-    async (r: PageRect) => {
+    /** `regionId`: OCR lại vùng đó thay vì chèn vùng mới. */
+    async (r: PageRect, regionId?: string) => {
       const id = crypto.randomUUID();
       const signal = abort.current.signal;
       setPending((p) => [...p, { ...r, id }]);
@@ -47,6 +49,10 @@ export function useOcrRegion(ws: string, pageId: string, defaultFont: string, pa
         if (!region) throw new Error("OCR không trả về vùng");
         const s = editorStore.getState();
         if (s.pageId !== pageId || !s.layout) return;
+        if (regionId) {
+          s.apply(refreshRegionFromOcr(regionId, region, s.layout));
+          return;
+        }
         const rid = `r-${crypto.randomUUID().slice(0, 8)}`;
         s.apply(insertOcrRegion(region, { region: rid, box: `tb-${rid}` }, defaultFont, s.layout));
         s.select(`tb-${rid}`);

@@ -8,7 +8,7 @@
  */
 import type { TextBox } from "@mtl/shared";
 import type Konva from "konva";
-import { useEffect, useRef, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import { Stage as KStage, Layer } from "react-konva";
 import { addBox, editText, newTextBox } from "../actions.ts";
 import { activeOffset, chapterStore, useChapterStore } from "../chapter-store.ts";
@@ -48,7 +48,8 @@ const clipRect = (r: PageRect, page: { w: number; h: number }): PageRect => {
   return { x, y, w: Math.min(page.w, r.x + r.w) - x, h: Math.min(page.h, r.y + r.h) - y };
 };
 
-export function ChapterCanvas(props: {
+/** memo: tự đọc store bên trong; props ổn định → màn chương render lại (gõ ở bảng) không vẽ lại canvas. */
+export const ChapterCanvas = memo(function ChapterCanvas(props: {
   kit: FontKit;
   images: Map<string, SlotImages>;
   defaultFont: string;
@@ -306,7 +307,7 @@ export function ChapterCanvas(props: {
       <TextEditOverlay kit={kit} />
     </div>
   );
-}
+});
 
 /** Textarea phủ đúng vị trí/xoay/cỡ chữ của box; blur hoặc Ctrl/Cmd+Enter = lưu, Esc = huỷ. */
 function TextEditOverlay({ kit }: { kit: FontKit }) {

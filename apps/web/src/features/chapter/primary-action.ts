@@ -51,11 +51,24 @@ export function primaryAction(input: {
     };
   }
   if (status === "partial_failed") {
+    // Lỗi ở bước cắt trang (chưa có page): "Chạy lại trang lỗi" không có gì để chạy — commit lại = ingest lại từ
+    // ảnh đã tải (API chỉ cho commit lại chương ingest lỗi).
+    if (input.pages === 0) {
+      return input.sourceFiles > 0
+        ? {
+            command: "commit",
+            label: "Chạy lại cắt trang",
+            disabled: false,
+            title: "Cắt trang lỗi — cắt lại từ ảnh đã tải",
+            menu: [],
+          }
+        : { command: "upload", label: "Tải ảnh", disabled: false, menu: [] };
+    }
     return {
       command: "retry",
       label: "Chạy lại trang lỗi",
       disabled: false,
-      menu: input.pages > 0 ? [{ command: "export", label: "Xuất" }, retranslate] : [],
+      menu: [{ command: "export", label: "Xuất" }, retranslate],
     };
   }
   // review / done

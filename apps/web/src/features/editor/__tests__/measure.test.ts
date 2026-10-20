@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   blockHeight,
+  boxOverflow,
+  boxOverflows,
   fitText,
   hardWrap,
   layoutBox,
@@ -68,5 +70,16 @@ describe("measure (layout contract)", () => {
     expect(center[1]?.baseline).toBeCloseTo(4 + 16 + 20 * 1.5);
     expect(linePlacements({ ...b, align: "left" }, METRICS, measure)[1]?.x).toBe(4);
     expect(linePlacements({ ...b, align: "right" }, METRICS, measure)[1]?.x).toBe(4 + 92 - 40);
+  });
+
+  it("flags a box whose lines no longer fit (height or width)", () => {
+    // 3 dòng cỡ 20: cao 20 + 2·20·1.15 = 66 + 2·pad 4 = 74.
+    const b = { ...box("t"), lines: ["ab", "ab", "ab"], w: 100, h: 74, pad: 4, font_size: 20, line_height: 1.15 };
+    expect(boxOverflows(b, METRICS, measure)).toBe(false);
+    expect(boxOverflows({ ...b, h: 73 }, METRICS, measure)).toBe(true);
+    expect(boxOverflow({ ...b, h: 70 }, METRICS, measure)).toBeCloseTo(4);
+    // Dòng rộng 10 ký tự = 100px > 100 − 8.
+    expect(boxOverflows({ ...b, lines: ["abcdefghij"] }, METRICS, measure)).toBe(true);
+    expect(boxOverflows({ ...b, lines: [] }, METRICS, measure)).toBe(false);
   });
 });

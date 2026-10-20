@@ -147,3 +147,16 @@ export function focusPage(pageId: string, y = 0, margin = 0) {
   const strip = stripSize(s.pages.map((p) => ({ w: p.width, h: p.height })));
   e.setView(clampView({ ...v, y: v.y + margin }, strip, s.box));
 }
+
+/** Cuộn canvas tới khối (toạ độ page) chỉ khi khối đang nằm ngoài khung nhìn theo chiều dọc. */
+export function revealRect(pageId: string, rect: { y: number; h: number }, margin = 80) {
+  const s = chapterStore.getState();
+  const i = s.pages.findIndex((p) => p.id === pageId);
+  if (i < 0) return;
+  const { view } = editorStore.getState();
+  const top = (s.offsets[i] ?? 0) + rect.y;
+  const vTop = -view.y / view.scale;
+  const vBottom = vTop + s.box.h / view.scale;
+  if (s.box.h > 0 && top >= vTop && top + rect.h <= vBottom) return;
+  focusPage(pageId, rect.y, margin);
+}

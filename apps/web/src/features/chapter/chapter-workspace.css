@@ -304,12 +304,215 @@
   padding: 0 var(--sp-3);
   border-bottom: 1px solid var(--c-line);
 }
-.cw-bottom-title {
-  font-weight: 600;
-  margin-right: var(--sp-2);
-}
 .cw-bottom-body {
   flex: 1;
+  min-height: 0;
   overflow: auto;
   padding: var(--sp-3);
+}
+.cw-bottom-body.flush {
+  padding: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.cw-bottom-body[hidden] {
+  display: none;
+}
+
+/* Tab (bảng dưới + inspector): gạch chân màu nhấn ở tab đang chọn. */
+.cw-tabs {
+  display: flex;
+  gap: var(--sp-1);
+  align-self: stretch;
+}
+.cw-tabs > [role="tab"] {
+  height: 100%;
+  min-height: 0;
+  padding: 0 var(--sp-3);
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  background: none;
+  color: var(--c-fg-muted);
+}
+.cw-tabs > [aria-selected="true"] {
+  border-bottom-color: var(--c-accent);
+  color: var(--c-fg);
+  font-weight: 600;
+}
+.cw-side-tabs {
+  height: 40px;
+  border-bottom: 1px solid var(--c-line);
+}
+.cw-side-tabs > [role="tab"] {
+  flex: 1;
+  justify-content: center;
+}
+.cw-check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-size: var(--fs-sm);
+  color: var(--c-fg);
+  white-space: nowrap;
+}
+
+/* Bảng văn bản (div + virtualize): # · Tr. · Gốc · Dịch · Loại · Tình trạng. */
+.cw-table {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  font-size: var(--fs-sm);
+}
+.cw-tr {
+  display: grid;
+  grid-template-columns: 44px 44px minmax(0, 3fr) minmax(0, 5fr) 72px 150px;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: 0 var(--sp-3);
+  border-bottom: 1px solid var(--c-line);
+}
+.cw-tbody .cw-tr {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  cursor: default;
+}
+.cw-th {
+  height: 32px;
+  background: var(--c-surface);
+  color: var(--c-fg-muted);
+  font-weight: 500;
+}
+.cw-tbody {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+.cw-tr .num {
+  color: var(--c-fg-muted);
+  font-variant-numeric: tabular-nums;
+}
+.cw-tr.active:not(.on) {
+  background: color-mix(in srgb, var(--c-surface) 60%, transparent);
+}
+.cw-tr.on {
+  background: var(--c-accent-weak);
+  box-shadow: inset 3px 0 0 var(--c-accent);
+}
+.cw-src {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cw-tr textarea {
+  width: 100%;
+  height: 30px;
+  min-height: 0;
+  padding: 4px 6px;
+  resize: none;
+  font: inherit;
+  line-height: 20px;
+}
+.cw-tr textarea[readonly] {
+  background: var(--c-surface);
+}
+.cw-tr .status {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Tab Tìm/Thay, Áp glossary. */
+.cw-tool {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+.cw-tool p {
+  margin: 0;
+}
+.cw-tool-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  align-items: end;
+  gap: var(--sp-3);
+}
+.cw-tool-check {
+  margin: 0 0 8px;
+  gap: 6px;
+}
+.cw-tool-list {
+  overflow: auto;
+  max-height: 40vh;
+}
+
+/* Inspector: khối đang chọn. */
+.cw-block {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  padding: var(--sp-3);
+}
+.cw-block .notice,
+.cw-block p {
+  margin: 0;
+}
+.cw-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.cw-field-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: var(--fs-xs);
+  color: var(--c-fg-muted);
+}
+.cw-field-head label {
+  margin: 0;
+}
+.cw-field textarea {
+  font-size: var(--fs-md);
+}
+.cw-src-box {
+  padding: var(--sp-2) 10px;
+  background: var(--c-surface);
+  border: 1px solid var(--c-line);
+  border-radius: var(--radius);
+  font-size: var(--fs-md);
+  white-space: pre-wrap;
+}
+.btn-link {
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--c-accent);
+  font-size: var(--fs-xs);
+}
+.cw-wide {
+  width: 100%;
+  justify-content: center;
+}
+.cw-page-info {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--sp-1) var(--sp-3);
+  margin: 0;
+  font-size: var(--fs-sm);
+}
+.cw-page-info dt {
+  color: var(--c-fg-muted);
+}
+.cw-page-info dd {
+  margin: 0;
+}
+.cw-page-info .danger {
+  color: var(--c-danger);
 }

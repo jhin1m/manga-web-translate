@@ -16,6 +16,7 @@
     "@mtl/shared": "workspace:*",
     "@tanstack/react-query": "^5.104.4",
     "@tanstack/react-router": "^1.170.45",
+    "@tanstack/react-virtual": "^3.14.21",
     "better-auth": "1.7.11",
     "fflate": "^0.8.3",
     "immer": "^11.1.21",

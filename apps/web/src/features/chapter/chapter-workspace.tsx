@@ -1,41 +1,43 @@
 /**
  * Màn chương = editor gộp (`/w/:ws/s/:s/c/:c?page=`): thanh trên + băng khoá | rail trang · canvas cuộn liên tục
- * cả chương · inspector | bảng dưới (P4). Chương nháp: canvas là tiến độ upload + vùng thả để tải tiếp.
+ * cả chương · inspector | bảng dưới (Bản dịch cả chương / Tìm–Thay / Áp glossary). Chương nháp: canvas là tiến
+ * độ upload + vùng thả để tải tiếp.
  *
- * Page đang sửa (active) đổi khi bấm vào page trên canvas, chọn ở rail, phím ←/→ hoặc `?page=` đổi từ ngoài;
- * cuộn chỉ cập nhật `?page=` (page ở giữa khung, replace, gộp 400ms).
+ * Page đang sửa (active) đổi khi bấm vào page trên canvas, chọn ở rail, phím ←/→, focus 1 dòng của bảng hoặc
+ * `?page=` đổi từ ngoài; cuộn chỉ cập nhật `?page=` (page ở giữa khung, replace, gộp 400ms). Khối đang chọn
+ * (`current`, khoá dòng bảng) đồng bộ 2 chiều giữa bảng, canvas và inspector.
  */
 import "../editor/editor.css";
 import "./chapter-workspace.css";
+import type { PageState } from "@mtl/shared";
 import { useMutation } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { errorMessage } from "../../lib/api.ts";
-import { deleteBox } from "../editor/actions.ts";
+import { deleteBox, setStyleMany } from "../editor/actions.ts";
 import { ChapterCanvas } from "../editor/canvas/ChapterCanvas.tsx";
-import { useOcrRegion } from "../editor/canvas/OcrSelect.tsx";
+import { type PageRect, useOcrRegion } from "../editor/canvas/OcrSelect.tsx";
 import type { SlotImages } from "../editor/canvas/PageSlot.tsx";
-import { chapterStore, focusPage, useChapterStore } from "../editor/chapter-store.ts";
-import { AiUpdatePanel } from "../editor/panels/AiUpdatePanel.tsx";
+import { chapterStore, focusPage, revealRect, useChapterStore } from "../editor/chapter-store.ts";
 import { CanvasStatus, CanvasToolbar } from "../editor/panels/CanvasToolbar.tsx";
-import { ConflictList } from "../editor/panels/ConflictList.tsx";
-import { MaskPanel } from "../editor/panels/MaskPanel.tsx";
-import { Properties } from "../editor/panels/Properties.tsx";
-import { RegionTable } from "../editor/panels/RegionTable.tsx";
 import { editorStore, type Tool, useEditor } from "../editor/store.ts";
 import { type RecoveryItem, useChapterSession } from "../editor/use-chapter-session.ts";
-import { ApplyGlossaryDialog } from "../glossary/ApplyGlossary.tsx";
+import { ApplyGlossaryPanel } from "../glossary/ApplyGlossary.tsx";
 import { ChapterUploadStatus, resumeFromFiles } from "../upload/chapter-upload-status.tsx";
 import { DropZone } from "../upload/drop-zone.tsx";
 import { uploadManager, useChapterUpload } from "../upload/upload-manager.ts";
-import { cancelChapter, commitChapter, REJECT_REASON, retranslate, retryFailed } from "./api.ts";
+import { cancelChapter, commitChapter, type FindMatch, REJECT_REASON, retranslate, retryFailed } from "./api.ts";
+import { BottomPanel } from "./bottom-panel.tsx";
 import { ChapterTopbar, LockBand } from "./chapter-topbar.tsx";
 import { ExportDialog } from "./ExportDialog.tsx";
-import { FindReplaceDialog } from "./FindReplace.tsx";
+import { FindReplacePanel } from "./FindReplace.tsx";
+import { Inspector } from "./inspector.tsx";
 import { PageRail } from "./page-rail.tsx";
 import { needsReview } from "./page-status.ts";
 import { type ChapterCommand, primaryAction } from "./primary-action.ts";
 import { isChapterSettled } from "./status.ts";
+import { filterRows, KIND_LABEL, type Row, rowKeyOfBox, sameKindBoxIds, type TableFilter } from "./text-table/rows.ts";
+import { TableFilters, TextTable, useChapterRows } from "./text-table/text-table.tsx";
 import { useChapterData } from "./use-chapter-data.ts";
 
 const TOOL_KEYS: Record<string, Tool> = { v: "select", t: "text", b: "brush", e: "eraser", o: "ocr" };
@@ -62,7 +64,7 @@ export function ChapterWorkspace({ ws, seriesId, chapterId, page: searchPage }: 
   const activeId = useEditor((s) => s.pageId);
   const [notice, setNotice] = useState<{ tone: "info" | "danger"; text: string } | null>(null);
   const [imageError, setImageError] = useState<string | null>(null);
-  const [dialog, setDialog] = useState<"export" | "find" | "glossary" | null>(null);
+  const [exporting, setExporting] = useState(false);
 
   // Cache page active có version mới (AI dịch xong, tìm & thay…) → nạp lại nếu chưa sửa gì.
   useEffect(
@@ -101,8 +103,6 @@ export function ChapterWorkspace({ ws, seriesId, chapterId, page: searchPage }: 
     if (!searchPage || searchPage === lastUrlPage.current) return;
     lastUrlPage.current = searchPage;
     if (!pageIds.includes(searchPage)) return;
-    // Link "Mở trang" trong hộp thoại tìm & thay → đóng hộp thoại để thấy trang.
-    setDialog(null);
     go(searchPage);
   }, [searchPage, pageIds, go]);
   // Cuộn → `?page=` = page ở giữa khung (replace, gộp).
@@ -120,6 +120,55 @@ export function ChapterWorkspace({ ws, seriesId, chapterId, page: searchPage }: 
     }, URL_SYNC_MS);
     return () => clearTimeout(t);
   }, [centerId, navigate, ws, seriesId, chapterId]);
+
+  // ---- Bảng văn bản ↔ canvas ↔ inspector ----
+  const allRows = useChapterRows(kit);
+  const [current, setCurrent] = useState<string | null>(null);
+  const [filter, setFilter] = useState<TableFilter>({ review: false, page: false });
+  const rows = useMemo(() => filterRows(allRows, filter, activeId, current), [allRows, filter, activeId, current]);
+  const rowsRef = useRef(allRows);
+  rowsRef.current = allRows;
+  /** Chọn 1 khối: kích hoạt page của nó (lưu page cũ trước), chọn box, cuộn canvas nếu khối ngoài khung. */
+  const pick = useCallback(
+    async (row: Pick<Row, "key" | "pageId" | "boxId" | "rect">) => {
+      setCurrent(row.key);
+      if (editorStore.getState().pageId !== row.pageId) {
+        setError(null);
+        await session.session.activate(row.pageId);
+      }
+      const s = editorStore.getState();
+      if (s.pageId !== row.pageId) return;
+      if (s.selection !== row.boxId) s.select(row.boxId);
+      revealRect(row.pageId, row.rect);
+    },
+    [session.session, setError],
+  );
+  // Chọn box trên canvas → dòng tương ứng thành dòng hiện tại (bảng cuộn tới). Bỏ chọn box (bấm nền, Esc) → bỏ
+  // dòng hiện tại để inspector về thông tin trang; trừ dòng không có box (vùng chưa có khung: chọn từ bảng).
+  useEffect(
+    () =>
+      editorStore.subscribe((s, prev) => {
+        if (s.selection === prev.selection || !s.pageId || !s.doc) return;
+        if (!s.selection) {
+          setCurrent((c) => (rowsRef.current.find((r) => r.key === c)?.boxId ? null : c));
+          return;
+        }
+        const box = s.doc.text_boxes.find((b) => b.id === s.selection);
+        if (box) setCurrent(rowKeyOfBox(s.pageId, box, s.doc));
+      }),
+    [],
+  );
+  /** Bấm 1 kết quả Tìm/Thay hoặc Áp glossary → nhảy tới khối đó (mở tab Bản dịch giữ nguyên tab hiện tại). */
+  const jump = (m: FindMatch) => {
+    const row = allRows.find((r) => r.pageId === m.page_id && (r.regionId === m.id || r.boxId === m.id));
+    if (row) void pick(row);
+    else go(m.page_id);
+  };
+  const currentRow = allRows.find((r) => r.key === current && r.pageId === activeId) ?? null;
+  // Giữ nguyên object Set khi tập page tràn không đổi (rail memo không render lại mỗi lần gõ).
+  const overflowKey = [...new Set(allRows.filter((r) => r.flags.includes("overflow")).map((r) => r.pageId))].join(",");
+  const overflowPages = useMemo(() => new Set(overflowKey ? overflowKey.split(",") : []), [overflowKey]);
+  const activeOverflow = allRows.filter((r) => r.pageId === activeId && r.flags.includes("overflow")).length;
 
   // ---- Phím tắt ----
   const idx = pages.findIndex((p) => p.id === activeId);
@@ -165,16 +214,23 @@ export function ChapterWorkspace({ ws, seriesId, chapterId, page: searchPage }: 
         ready,
       })
     : null;
-  const review = pages.filter(needsReview).length;
+  const review = pages.filter((p) => needsReview(p, overflowPages.has(p.id))).length;
   const summary = pages.length ? `AI xong ${ready}/${pages.length}${review ? ` · ${review} cần xem` : ""}` : null;
 
   const { runAi } = session;
   const action = useMutation({
-    mutationFn: async (kind: "retry" | "retranslate" | "cancel" | "commit") => {
+    mutationFn: async (kind: "retry" | "retranslate" | "retranslate-page" | "cancel" | "commit") => {
       if (kind === "cancel") return `Đã huỷ ${(await cancelChapter(ws, chapterId)).cancelled} job.`;
       if (kind === "retry") {
         const r = await runAi(() => retryFailed(ws, chapterId));
         return r.jobs.length ? `Đã xếp lại ${r.jobs.length} job cho trang lỗi.` : "Không có trang lỗi.";
+      }
+      if (kind === "retranslate-page") {
+        const id = editorStore.getState().pageId;
+        const ord = pages.find((p) => p.id === id)?.ord ?? 0;
+        if (!id) return "Chưa chọn trang.";
+        await runAi(() => retranslate(ws, chapterId, [id]));
+        return `Đã xếp dịch lại trang ${ord + 1} (chỉnh sửa tay được giữ nguyên).`;
       }
       if (kind === "retranslate") {
         await runAi(() => retranslate(ws, chapterId));
@@ -191,8 +247,62 @@ export function ChapterWorkspace({ ws, seriesId, chapterId, page: searchPage }: 
     onError: (e) => setNotice({ tone: "danger", text: errorMessage(e) }),
     onSettled: data.refresh,
   });
+  // "Áp kiểu này cho khối cùng loại trong chương" (inspector hỏi xác nhận trước): page active = 1 bước undo; page
+  // khác ghi thẳng (cần khoá, không hoàn tác được). Lỗi giữa chừng → báo rõ trang nào đã áp.
+  const applyKind = useMutation({
+    mutationFn: async (row: Row) => {
+      const s = editorStore.getState();
+      const src = s.doc?.text_boxes.find((b) => b.id === row.boxId);
+      if (!s.doc || !s.layout || !src) return "Chưa chọn khung chữ.";
+      const { font_family, font_size, line_height, pad, align, fill, stroke, auto_fit } = src;
+      // Box tự khớp: cỡ chữ là kết quả khớp của riêng box đó — không chép sang box khác.
+      const style = {
+        font_family,
+        line_height,
+        pad,
+        align,
+        fill,
+        stroke,
+        auto_fit,
+        ...(auto_fit ? {} : { font_size }),
+      };
+      const layout = s.layout;
+      const idsOf = (st: PageState) => sameKindBoxIds(st, row.kind, src.id);
+      let boxes = 0;
+      let touched = 0;
+      const own = idsOf(s.doc);
+      if (own.length) {
+        s.apply(setStyleMany(own, style, layout));
+        boxes += own.length;
+        touched++;
+      }
+      await session.saver.flush();
+      const done: number[] = [];
+      for (const p of chapterStore.getState().pages) {
+        const st = chapterStore.getState().cache[p.id]?.state;
+        // Page có thể vừa thành active (người dùng đổi trang giữa chừng) → bỏ qua, không ghi đè bản đang sửa.
+        if (p.id === editorStore.getState().pageId || !st) continue;
+        const ids = idsOf(st);
+        if (!ids.length) continue;
+        try {
+          if (await session.session.updateOther(p.id, setStyleMany(ids, style, layout))) {
+            boxes += ids.length;
+            touched++;
+            done.push(p.ord + 1);
+          }
+        } catch (e) {
+          const ok = done.length ? `Đã áp ở trang ${done.join(", ")}; ` : "";
+          throw new Error(`${ok}lỗi ở trang ${p.ord + 1}: ${errorMessage(e)}`);
+        }
+      }
+      return `Đã áp kiểu cho ${boxes} khối ${KIND_LABEL[row.kind].toLowerCase()} trên ${touched} trang.`;
+    },
+    onSuccess: (text) => setNotice({ tone: "info", text }),
+    onError: (e) => setNotice({ tone: "danger", text: errorMessage(e) }),
+  });
+
   const onCommand = (cmd: ChapterCommand) => {
-    if (cmd === "export") return openDialog("export");
+    if (cmd === "export") return void session.withFlush(() => setExporting(true));
     if (cmd === "upload") return;
     action.mutate(cmd);
   };
@@ -201,14 +311,7 @@ export function ChapterWorkspace({ ws, seriesId, chapterId, page: searchPage }: 
     setResumeError(null);
     resumeFromFiles(ws, chapterId, files).catch((e: unknown) => setResumeError(errorMessage(e)));
   };
-  const openDialog = (d: "export" | "find" | "glossary") => {
-    // Xuất / tìm & thay / áp glossary đọc-ghi ở server: lưu phần đang sửa trước.
-    void session.saver.flush().then(() => setDialog(d));
-  };
-  const closeDialog = () => {
-    setDialog(null);
-    data.refresh();
-  };
+  const flush = useCallback(() => session.saver.flush(), [session.saver]);
 
   const back = async () => {
     await session.saver.flush();
@@ -225,10 +328,8 @@ export function ChapterWorkspace({ ws, seriesId, chapterId, page: searchPage }: 
   const activeMeta = pages[idx];
   const defaultFont = kit?.manifest.defaults[0] ?? "PatrickHand-Regular";
   const ocr = useOcrRegion(ws, activeId ?? "", defaultFont, { w: activeMeta?.width ?? 0, h: activeMeta?.height ?? 0 });
-  const tool = useEditor((s) => s.tool);
-  const hasStrokes = useEditor((s) => s.mask.strokes.length > 0);
-  const selection = useEditor((s) => s.selection);
-  const showMask = tool === "brush" || tool === "eraser" || hasStrokes;
+  const ocrStart = ocr.start;
+  const onOcr = useCallback((r: PageRect) => void ocrStart(r), [ocrStart]);
 
   const errors = [
     session.fontError,
@@ -238,6 +339,7 @@ export function ChapterWorkspace({ ws, seriesId, chapterId, page: searchPage }: 
     data.error ? errorMessage(data.error) : null,
   ];
   const isDraft = status === "draft";
+  const ingestError = data.progress?.jobs.find((j) => j.type === "chapter.ingest" && j.error)?.error ?? null;
   const canTools = settled && pages.length > 0;
 
   return (
@@ -261,7 +363,7 @@ export function ChapterWorkspace({ ws, seriesId, chapterId, page: searchPage }: 
         lockEnabled={session.lockEnabled}
         onRetryLock={() => void session.lock.retry()}
       />
-      <PageRail pages={pages} images={data.images} activeId={activeId} onPick={go} />
+      <PageRail pages={pages} images={data.images} activeId={activeId} overflow={overflowPages} onPick={go} />
       <main className="cw-main">
         <Notices
           errors={errors}
@@ -294,7 +396,11 @@ export function ChapterWorkspace({ ws, seriesId, chapterId, page: searchPage }: 
               </>
             ) : (
               <p className="muted">
-                {status === "ingesting" ? "Đang ghép và cắt trang theo bóng thoại…" : "Chưa có trang."}
+                {status === "ingesting"
+                  ? "Đang ghép và cắt trang theo bóng thoại…"
+                  : status === "partial_failed"
+                    ? `Cắt trang lỗi${ingestError ? `: ${ingestError}` : ""} — bấm "Chạy lại cắt trang" để cắt lại từ ảnh đã tải.`
+                    : "Chưa có trang."}
               </p>
             )}
           </div>
@@ -307,7 +413,7 @@ export function ChapterWorkspace({ ws, seriesId, chapterId, page: searchPage }: 
                 defaultFont={defaultFont}
                 initialPageId={initialPage.current}
                 ocrPending={ocr.pending}
-                onOcr={(r) => void ocr.start(r)}
+                onOcr={onOcr}
                 onActivate={activate}
                 onImageError={setImageError}
               />
@@ -322,54 +428,79 @@ export function ChapterWorkspace({ ws, seriesId, chapterId, page: searchPage }: 
         )}
       </main>
       <aside className="ed-side cw-side" aria-label="Bảng thuộc tính">
-        {activeMeta ? (
-          <>
-            <div className="cw-side-head">
-              <h2>Trang {activeMeta.ord + 1}</h2>
-              <span className="muted small">{selection ? "Khung chữ đang chọn" : "Chưa chọn khung chữ"}</span>
-            </div>
-            <AiUpdatePanel ws={ws} />
-            <ConflictList />
-            {showMask && activeId && (
-              <MaskPanel
-                ws={ws}
-                pageId={activeId}
-                cleanRev={activeMeta.clean_rev}
-                page={{ w: activeMeta.width, h: activeMeta.height }}
-                onDone={data.refresh}
-              />
-            )}
-            <section>
-              <h3 className="ed-h">{selection ? "Khung chữ" : "Thuộc tính"}</h3>
-              <Properties fonts={kit?.ids ?? []} />
-            </section>
-            <section>
-              <h3 className="ed-h">Vùng chữ</h3>
-              <RegionTable />
-            </section>
-          </>
-        ) : (
-          <p className="muted small ed-pad cw-pad">Chưa có trang để sửa.</p>
-        )}
-      </aside>
-      <BottomPanel canTools={canTools} onTool={openDialog} />
-      {dialog === "export" && <ExportDialog ws={ws} chapterId={chapterId} onClose={closeDialog} />}
-      {dialog === "find" && (
-        <FindReplaceDialog
+        <Inspector
           ws={ws}
-          seriesId={seriesId}
-          chapterId={chapterId}
-          lock={session.lock}
-          onClose={closeDialog}
+          page={activeMeta}
+          row={currentRow}
+          overflowCount={activeOverflow}
+          kit={kit}
+          busy={{
+            retranslate: action.isPending,
+            ocr: ocr.pending.length > 0,
+            applyKind: applyKind.isPending,
+          }}
+          onRetranslatePage={() => action.mutate("retranslate-page")}
+          onReocr={(row) => {
+            const [x, y, w, h] = editorStore.getState().doc?.regions.find((r) => r.id === row.regionId)?.bbox ?? [];
+            if (row.regionId && w && h) void ocr.start({ x: x ?? 0, y: y ?? 0, w, h }, row.regionId);
+          }}
+          onApplyKind={(row) => applyKind.mutate(row)}
+          onMaskDone={data.refresh}
         />
-      )}
-      {dialog === "glossary" && (
-        <ApplyGlossaryDialog
+      </aside>
+      <BottomPanel
+        tabs={[
+          {
+            id: "text",
+            label: `Bản dịch · ${allRows.length} khối`,
+            flush: true,
+            tools: <TableFilters value={filter} onChange={setFilter} />,
+            render: () => (
+              <TextTable rows={rows} total={allRows.length} current={current} activeId={activeId} onPick={pick} />
+            ),
+          },
+          {
+            id: "find",
+            label: "Tìm / Thay",
+            disabled: !canTools,
+            title: canTools ? undefined : "Dùng được khi chương dịch xong",
+            render: () => (
+              <FindReplacePanel
+                ws={ws}
+                seriesId={seriesId}
+                chapterId={chapterId}
+                lock={session.lock}
+                beforeWrite={flush}
+                onJump={jump}
+              />
+            ),
+          },
+          {
+            id: "glossary",
+            label: "Áp glossary",
+            disabled: !canTools,
+            title: canTools ? undefined : "Dùng được khi chương dịch xong",
+            render: () => (
+              <ApplyGlossaryPanel
+                ws={ws}
+                seriesId={seriesId}
+                chapterId={chapterId}
+                lock={session.lock}
+                beforeWrite={flush}
+                onJump={jump}
+              />
+            ),
+          },
+        ]}
+      />
+      {exporting && (
+        <ExportDialog
           ws={ws}
-          seriesId={seriesId}
           chapterId={chapterId}
-          lock={session.lock}
-          onClose={closeDialog}
+          onClose={() => {
+            setExporting(false);
+            data.refresh();
+          }}
         />
       )}
     </div>
@@ -420,88 +551,5 @@ function Notices(props: {
         </div>
       ))}
     </div>
-  );
-}
-
-type LayoutPrefs = { bottomOpen: boolean; bottomH: number };
-const LAYOUT_KEY = "mtl.layout";
-const MIN_H = 120;
-
-function readLayout(): LayoutPrefs {
-  // Màn hẹp (< 1600px): bảng dưới mặc định thu gọn.
-  const fallback = { bottomOpen: typeof innerWidth === "number" && innerWidth >= 1600, bottomH: 280 };
-  try {
-    const raw = localStorage.getItem(LAYOUT_KEY);
-    if (!raw) return fallback;
-    const v = JSON.parse(raw) as Partial<LayoutPrefs>;
-    return {
-      bottomOpen: typeof v.bottomOpen === "boolean" ? v.bottomOpen : fallback.bottomOpen,
-      bottomH: typeof v.bottomH === "number" && v.bottomH >= MIN_H ? v.bottomH : fallback.bottomH,
-    };
-  } catch {
-    return fallback;
-  }
-}
-
-/** Bảng văn bản toàn chương (P4 lấp nội dung): kéo cao, thu gọn; nhớ trong localStorage `mtl.layout`. */
-function BottomPanel(props: { canTools: boolean; onTool(t: "find" | "glossary"): void }) {
-  const [prefs, setPrefs] = useState(readLayout);
-  useEffect(() => {
-    try {
-      localStorage.setItem(LAYOUT_KEY, JSON.stringify(prefs));
-    } catch {
-      // Không lưu được (chế độ riêng tư) → chỉ mất ghi nhớ bố cục.
-    }
-  }, [prefs]);
-  const drag = useRef<{ y: number; h: number } | null>(null);
-
-  return (
-    <section
-      className="cw-bottom"
-      aria-label="Bảng văn bản chương"
-      style={{ height: prefs.bottomOpen ? prefs.bottomH : undefined }}
-    >
-      {prefs.bottomOpen && (
-        <button
-          type="button"
-          className="cw-resize"
-          aria-label="Kéo để đổi chiều cao bảng"
-          onPointerDown={(e) => {
-            e.currentTarget.setPointerCapture(e.pointerId);
-            drag.current = { y: e.clientY, h: prefs.bottomH };
-          }}
-          onPointerMove={(e) => {
-            const d = drag.current;
-            if (!d) return;
-            const max = Math.max(MIN_H, innerHeight - 260);
-            setPrefs((p) => ({ ...p, bottomH: Math.min(max, Math.max(MIN_H, d.h + d.y - e.clientY)) }));
-          }}
-          onPointerUp={() => {
-            drag.current = null;
-          }}
-        />
-      )}
-      <div className="cw-bottom-head">
-        <span className="cw-bottom-title">Bản dịch</span>
-        <button type="button" disabled={!props.canTools} onClick={() => props.onTool("find")}>
-          Tìm &amp; thay
-        </button>
-        <button type="button" disabled={!props.canTools} onClick={() => props.onTool("glossary")}>
-          Áp glossary
-        </button>
-        <span className="spacer" />
-        <button
-          type="button"
-          className="btn-ghost"
-          aria-expanded={prefs.bottomOpen}
-          onClick={() => setPrefs((p) => ({ ...p, bottomOpen: !p.bottomOpen }))}
-        >
-          {prefs.bottomOpen ? "Thu gọn" : "Mở bảng"}
-        </button>
-      </div>
-      {prefs.bottomOpen && (
-        <div className="cw-bottom-body muted small">Bảng văn bản toàn chương sẽ hiện ở đây (đang làm).</div>
-      )}
-    </section>
   );
 }

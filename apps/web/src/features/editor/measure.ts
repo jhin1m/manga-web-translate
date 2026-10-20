@@ -148,3 +148,26 @@ export function linePlacements(
     return { text, x, baseline: box.pad + asc + i * step, advance };
   });
 }
+
+/**
+ * Số px chữ tràn khỏi box (0 = vừa): chiều cao khối dòng + 2·pad vượt `h`, hoặc dòng rộng hơn `w − 2·pad`.
+ * Đo trên `lines` đã chốt (như khi vẽ), cùng công thức chiều cao với `fitText` — box auto_fit chỉ tràn khi
+ * đã xuống cỡ nhỏ nhất mà vẫn không vừa.
+ */
+export function boxOverflow(
+  box: Pick<TextBox, "lines" | "font_family" | "font_size" | "line_height" | "pad" | "w" | "h">,
+  m: FontMetrics,
+  measure: MeasureFn,
+): number {
+  if (box.lines.length === 0) return 0;
+  const tall = blockHeight(m, box.font_size, box.lines.length, box.line_height) + 2 * box.pad - box.h;
+  const innerW = box.w - 2 * box.pad;
+  let wide = 0;
+  for (const l of box.lines) wide = Math.max(wide, measure(nfc(l), box.font_family, box.font_size) - innerW);
+  const over = Math.max(tall, wide);
+  // Sai số dấu phẩy động khi box vừa khít.
+  return over > 1e-6 ? over : 0;
+}
+
+export const boxOverflows = (box: Parameters<typeof boxOverflow>[0], m: FontMetrics, measure: MeasureFn) =>
+  boxOverflow(box, m, measure) > 0;

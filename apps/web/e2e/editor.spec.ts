@@ -2,7 +2,8 @@
  * Màn chương (editor gộp): sửa bản dịch → autosave → reload còn nguyên; rời màn trước debounce vẫn lưu; mất kết
  * nối lưu rồi đóng tab giữa chừng → mở lại đề nghị khôi phục từ IndexedDB → khôi phục → lưu lên server. Thêm:
  * route editor 1 trang cũ redirect, strip nhiều trang (cuộn → `?page=`, rail → inspector) và chính sách khoá
- * (đang dịch không giữ khoá → AI ghi được bản dịch). Chương tạo qua API + worker giả.
+ * (đang dịch không giữ khoá → AI ghi được bản dịch), bảng văn bản cả chương (click dòng ↔ trang active, sửa tại
+ * chỗ, Enter sang dòng sau xuyên trang, cờ tràn khung + lọc "Chỉ khối cần xem"). Chương tạo qua API + worker giả.
  */
 import { expect, type Page, test } from "@playwright/test";
 import { WEB_URL } from "./env.ts";
@@ -76,6 +77,19 @@ async function readyChapter(page: Page, opts: FakeWorkerOptions = {}) {
 
 const chapterUrl = (chapterId: string) => `/w/${ws}/s/${state.seriesId}/c/${chapterId}`;
 
+/** Ô Dịch của bảng văn bản: trang `ord` (1-based), vùng `i` trong trang. */
+const cell = (page: Page, ord = 1, i = 1) => page.getByLabel(`Bản dịch trang ${ord} vùng ${i}`, { exact: true });
+
+/** Mở bảng dưới ở tab Bản dịch (màn hẹp mặc định thu gọn). */
+async function openTable(page: Page) {
+  await page.getByRole("tab", { name: /^Bản dịch/ }).click();
+  await expect(page.getByRole("tab", { name: /^Bản dịch/ })).toHaveAttribute("aria-selected", "true");
+}
+
+type PageBody = { version: number; state: { regions: { translation: string }[] } };
+const translationOf = async (page: Page, pageId: string) =>
+  ((await (await page.request.get(`/api/w/${ws}/pages/${pageId}`)).json()) as PageBody).state.regions[0]?.translation;
+
 test("edit translation → autosave → reload keeps it; crash mid-edit → restore unsaved changes", async ({
   page,
   context,
@@ -87,14 +101,14 @@ test("edit translation → autosave → reload keeps it; crash mid-edit → rest
 
   await page.goto(chapterUrl(chapterId));
   await expect(page.locator(".ed-canvas canvas").first()).toBeVisible();
-  const cell = page.getByLabel("Bản dịch vùng 1");
-  await expect(cell).toHaveValue("Xin chào");
+  await openTable(page);
+  await expect(cell(page)).toHaveValue("Xin chào");
   await expect(page.getByRole("button", { name: /Chữ/ })).toBeEnabled();
 
-  await cell.fill("Chào cậu, ệ ẫ ữ");
+  await cell(page).fill("Chào cậu, ệ ẫ ữ");
   await expect(page.locator(".status", { hasText: "Đã lưu" })).toBeVisible({ timeout: 10_000 });
   await page.reload();
-  await expect(page.getByLabel("Bản dịch vùng 1")).toHaveValue("Chào cậu, ệ ẫ ữ");
+  await expect(cell(page)).toHaveValue("Chào cậu, ệ ẫ ữ");
   const saved = (await (await page.request.get(`/api/w/${ws}/pages/${pageId}`)).json()) as {
     version: number;
     state_origin: string;
@@ -114,10 +128,10 @@ test("edit translation → autosave → reload keeps it; crash mid-edit → rest
   expect(pageErrors).toEqual([]);
 
   // Undo/redo bằng phím tắt.
-  await page.getByLabel("Bản dịch vùng 1").fill("Tạm");
+  await cell(page).fill("Tạm");
   await page.locator(".ed-canvas").click({ position: { x: 5, y: 5 } });
   await page.keyboard.press("ControlOrMeta+z");
-  await expect(page.getByLabel("Bản dịch vùng 1")).toHaveValue("Chào cậu, ệ ẫ ữ");
+  await expect(cell(page)).toHaveValue("Chào cậu, ệ ẫ ữ");
   await expect(page.locator(".status", { hasText: "Đã lưu" })).toBeVisible({ timeout: 10_000 });
 
   // Rời màn chương ngay sau khi sửa (trước debounce 2s) → vẫn lưu trước khi nhả khoá.
@@ -125,7 +139,7 @@ test("edit translation → autosave → reload keeps it; crash mid-edit → rest
   page.on("response", (r) => {
     if (r.request().method() === "PUT" && r.url().endsWith("/state") && r.status() === 423) lockedPuts.push(1);
   });
-  await page.getByLabel("Bản dịch vùng 1").fill("Rời ngay");
+  await cell(page).fill("Rời ngay");
   await page.getByRole("link", { name: "Series e2e" }).click();
   await expect(page).toHaveURL(new RegExp(`/w/${ws}/s/${state.seriesId}$`));
   await expect
@@ -137,22 +151,23 @@ test("edit translation → autosave → reload keeps it; crash mid-edit → rest
   // Lượt lưu cuối tới server trước lệnh nhả khoá (không có PUT nào bị 423).
   expect(lockedPuts).toEqual([]);
   await page.goto(chapterUrl(chapterId));
-  await page.getByLabel("Bản dịch vùng 1").fill("Chào cậu, ệ ẫ ữ");
+  await cell(page).fill("Chào cậu, ệ ẫ ữ");
   await expect(page.locator(".status", { hasText: "Đã lưu" })).toBeVisible({ timeout: 10_000 });
   const beforeCrash = (await (await page.request.get(`/api/w/${ws}/pages/${pageId}`)).json()) as typeof saved;
 
   // "Crash": PUT không tới server, đóng tab khi đang có thay đổi chưa lưu.
   await page.route("**/state", (route) => route.abort());
-  await page.getByLabel("Bản dịch vùng 1").fill("Chưa kịp lưu");
+  await cell(page).fill("Chưa kịp lưu");
   await page.waitForTimeout(800);
   await page.close();
 
   const again = await context.newPage();
   await again.goto(chapterUrl(chapterId));
+  await openTable(again);
   await expect(again.getByText(/thay đổi chưa lưu từ phiên trước ở trang 1/)).toBeVisible();
-  await expect(again.getByLabel("Bản dịch vùng 1")).toHaveValue("Chào cậu, ệ ẫ ữ");
+  await expect(cell(again)).toHaveValue("Chào cậu, ệ ẫ ữ");
   await again.getByRole("button", { name: "Khôi phục" }).click();
-  await expect(again.getByLabel("Bản dịch vùng 1")).toHaveValue("Chưa kịp lưu");
+  await expect(cell(again)).toHaveValue("Chưa kịp lưu");
   await expect(again.locator(".status", { hasText: "Đã lưu" })).toBeVisible({ timeout: 10_000 });
   const after = (await (await again.request.get(`/api/w/${ws}/pages/${pageId}`)).json()) as typeof saved;
   expect(after.state.regions[0]?.translation).toBe("Chưa kịp lưu");
@@ -180,7 +195,8 @@ test("3-page strip: scroll to the end updates ?page=; rail click shows that page
   await page.goto(chapterUrl(chapterId));
   const canvas = page.locator(".ed-canvas");
   await expect(canvas.locator("canvas").first()).toBeVisible();
-  await expect(page.getByLabel("Bản dịch vùng 1")).toHaveValue("Xin chào");
+  await openTable(page);
+  await expect(cell(page)).toHaveValue("Xin chào");
   await expect(page.getByRole("heading", { name: "Trang 1", exact: true })).toBeVisible();
 
   const box = await canvas.boundingBox();
@@ -197,10 +213,10 @@ test("3-page strip: scroll to the end updates ?page=; rail click shows that page
   await rail.getByRole("button", { name: /Trang 2/ }).click();
   await expect(page.getByRole("heading", { name: "Trang 2", exact: true })).toBeVisible();
   await expect(rail.getByRole("button", { name: /Trang 2/ })).toHaveAttribute("aria-current", "page");
-  await expect(page.getByLabel("Bản dịch vùng 1")).toHaveValue("Xin chào");
+  await expect(cell(page, 2)).toHaveValue("Xin chào");
 
   // Sửa trang 2 rồi bấm trang 1 trên rail → trang 2 lưu trước khi đổi.
-  await page.getByLabel("Bản dịch vùng 1").fill("Trang hai");
+  await cell(page, 2).fill("Trang hai");
   await rail.getByRole("button", { name: /Trang 1/ }).click();
   await expect(page.getByRole("heading", { name: "Trang 1", exact: true })).toBeVisible();
   await expect
@@ -223,6 +239,7 @@ test("opening a chapter while it translates does not hold the lock; the AI trans
   });
 
   await page.goto(chapterUrl(chapterId));
+  await openTable(page);
   await expect(page.getByRole("status", { name: "Khoá chương" })).toContainText("Đang dịch — sửa được khi xong");
   await expect(page.locator(".ed-canvas canvas").first()).toBeVisible();
   await page.waitForTimeout(1500);
@@ -231,11 +248,118 @@ test("opening a chapter while it translates does not hold the lock; the AI trans
   expect(await detail()).toMatchObject({ status: "processing", lock: null });
 
   const pages = await runUntil(page, chapterId, allReady);
-  await expect(page.getByLabel("Bản dịch vùng 1")).toHaveValue("Xin chào", { timeout: 15_000 });
+  await expect(cell(page)).toHaveValue("Xin chào", { timeout: 15_000 });
   await expect(page.getByRole("status", { name: "Khoá chương" })).toContainText("Bạn đang giữ khoá chương");
   const st = (await (await page.request.get(`/api/w/${ws}/pages/${pages[0]?.id}`)).json()) as {
     state_origin: string;
     ai_update_available: boolean;
   };
   expect(st).toMatchObject({ state_origin: "ai", ai_update_available: false });
+});
+
+test("text table: row click activates its page; edit in place autosaves; Enter moves to the next page's row", async ({
+  page,
+}) => {
+  const pageErrors: string[] = [];
+  page.on("pageerror", (e) => pageErrors.push(e.message));
+  await login(page);
+  const { chapterId, pageIds } = await readyChapter(page, { pagesPerSource: 2 });
+  const [p1, p2] = pageIds as [string, string];
+  await page.goto(chapterUrl(chapterId));
+  await expect(page.locator(".ed-canvas canvas").first()).toBeVisible();
+  await openTable(page);
+  await expect(page.getByRole("status", { name: "Khoá chương" })).toContainText("Bạn đang giữ khoá chương");
+
+  // Click dòng trang 2 → rail đánh dấu trang 2, inspector "Trang 2", khối 1.
+  const rail = page.getByRole("complementary", { name: "Danh sách trang" });
+  await page.locator(`[data-row="${p2}:t0"] .cw-src`).click();
+  await expect(rail.getByRole("button", { name: /Trang 2/ })).toHaveAttribute("aria-current", "page");
+  await expect(page.getByRole("heading", { name: "Trang 2", exact: true })).toBeVisible();
+  await expect(page.getByRole("complementary", { name: "Bảng thuộc tính" })).toContainText("Khối 1 · Thoại");
+
+  // Sửa ô Dịch dòng 1 (trang 1) → lưu. Ô của trang chưa active chỉ đọc tới khi focus kích hoạt xong trang đó.
+  await expect(cell(page, 1)).toHaveAttribute("readonly");
+  await cell(page, 1).click();
+  await cell(page, 1).fill("Trang một mới");
+  await expect(page.getByRole("heading", { name: "Trang 1", exact: true })).toBeVisible();
+  await expect(page.locator(".status", { hasText: "Đã lưu" })).toBeVisible({ timeout: 10_000 });
+  await expect.poll(() => translationOf(page, p1)).toBe("Trang một mới");
+
+  // Enter ở dòng cuối trang 1 → ô Dịch dòng đầu trang 2; gõ → lưu vào trang 2, không PUT lại trang 1.
+  const puts: string[] = [];
+  page.on("request", (r) => {
+    if (r.method() === "PUT" && r.url().endsWith("/state")) puts.push(r.url());
+  });
+  await cell(page, 1).press("Enter");
+  await expect(cell(page, 2)).toBeFocused();
+  await expect(cell(page, 2)).not.toHaveAttribute("readonly");
+  await page.keyboard.type(" nhé");
+  await expect(cell(page, 2)).toHaveValue("Xin chào nhé");
+  await expect.poll(() => translationOf(page, p2), { timeout: 10_000 }).toBe("Xin chào nhé");
+  expect(puts.some((u) => u.includes(p1))).toBe(false);
+  expect(await translationOf(page, p1)).toBe("Trang một mới");
+
+  // Shift+Enter → về dòng trước; Esc bỏ focus.
+  await cell(page, 2).press("Shift+Enter");
+  await expect(cell(page, 1)).toBeFocused();
+  await cell(page, 1).press("Escape");
+  await expect(cell(page, 1)).not.toBeFocused();
+  expect(pageErrors).toEqual([]);
+});
+
+test("overflowing box is flagged in the table and rail; 'Chỉ khối cần xem' keeps only that row", async ({ page }) => {
+  await login(page);
+  const { chapterId, pageIds } = await readyChapter(page, { pagesPerSource: 2 });
+  const [p1, p2] = pageIds as [string, string];
+  // Box chữ dài trong khung nhỏ gắn vùng t0 của trang 1 (ghi qua API, cần khoá chương).
+  const detail = (await (await page.request.get(`/api/w/${ws}/pages/${p1}`)).json()) as {
+    version: number;
+    state: { regions: unknown[]; text_boxes: unknown[] } & Record<string, unknown>;
+  };
+  const text = "Một câu rất dài không thể vừa khung nhỏ";
+  const tiny = {
+    id: "tb-tiny",
+    region_id: "t0",
+    x: 40,
+    y: 40,
+    w: 40,
+    h: 20,
+    rotation: 0,
+    text,
+    lines: [text],
+    font_family: "PatrickHand-Regular",
+    font_size: 22,
+    line_height: 1.15,
+    pad: 4,
+    letter_spacing: 0,
+    align: "center",
+    fill: "#000000",
+    stroke: null,
+    auto_fit: false,
+    hidden: false,
+  };
+  expect((await page.request.post(`/api/w/${ws}/chapters/${chapterId}/lock`, { headers })).ok()).toBe(true);
+  const put = await page.request.put(`/api/w/${ws}/pages/${p1}/state`, {
+    headers: { ...headers, "if-match": `"${detail.version}"` },
+    data: { state: { ...detail.state, text_boxes: [tiny] } },
+  });
+  expect(put.ok()).toBe(true);
+  expect((await page.request.delete(`/api/w/${ws}/chapters/${chapterId}/lock`, { headers })).ok()).toBe(true);
+
+  await page.goto(chapterUrl(chapterId));
+  await openTable(page);
+  const rows = page.locator(".cw-tbody [data-row]");
+  await expect(rows).toHaveCount(2);
+  await expect(page.locator(`[data-row="${p1}:t0"]`)).toContainText("Tràn khung");
+  await expect(page.locator(`[data-row="${p2}:t0"]`)).toContainText("Xong");
+  const rail = page.getByRole("complementary", { name: "Danh sách trang" });
+  await expect(rail.getByRole("button", { name: /Trang 1/ })).toContainText("tràn khung");
+
+  await page.getByLabel("Chỉ khối cần xem").check();
+  await expect(rows).toHaveCount(1);
+  await expect(rows.first()).toHaveAttribute("data-row", `${p1}:t0`);
+
+  // Chọn dòng → inspector cảnh báo tràn khung.
+  await rows.first().locator(".cw-src").click();
+  await expect(page.getByRole("complementary", { name: "Bảng thuộc tính" })).toContainText(/Tràn khung \d+px/);
 });

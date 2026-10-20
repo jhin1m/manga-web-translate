@@ -8,6 +8,7 @@
  * (apps/api/src/jobs/page-state-writer.ts) — giữ khoá thì lần dịch đầu chỉ hiện cờ "AI có bản mới".
  */
 import { emptyPageState, type PageState } from "@mtl/shared";
+import { type Draft, produce } from "immer";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { errorMessage } from "../../lib/api.ts";
 import { lockChapter, unlockChapter } from "../chapter/api.ts";
@@ -199,6 +200,30 @@ export class ChapterSession {
       } catch (e) {
         if (statusOf(e) !== 409 || round > 0) throw e;
         server = await this.deps.fetchPage(rec.pageId);
+      }
+    }
+  }
+
+  /**
+   * Ghi 1 thay đổi thẳng lên page KHÔNG active (VD áp kiểu cho khối cùng loại cả chương): áp `recipe` lên state
+   * cache (chưa có thì lấy server) → PUT If-Match → cập nhật cache; 409 → lấy bản mới, áp lại 1 lần.
+   * Trả false khi không có gì đổi. Không có undo (ngoài page active).
+   */
+  async updateOther(pageId: string, recipe: (draft: Draft<PageState>) => void): Promise<boolean> {
+    const { chapter, editor } = this.deps;
+    if (editor.getState().pageId === pageId) throw new Error("page đang sửa — dùng editor.apply");
+    const c = chapter.getState().cache[pageId];
+    let server = c?.state ? { state: c.state, version: c.version } : await this.deps.fetchPage(pageId);
+    for (let round = 0; ; round++) {
+      const next = produce(server.state, recipe);
+      if (next === server.state) return false;
+      try {
+        const { version } = await this.deps.putState(pageId, next, server.version);
+        chapter.getState().setCached(pageId, { state: next, version });
+        return true;
+      } catch (e) {
+        if (statusOf(e) !== 409 || round > 0) throw e;
+        server = await this.deps.fetchPage(pageId);
       }
     }
   }
@@ -443,7 +468,30 @@ export function useChapterSession(opts: {
     [session, refetchProgress],
   );
 
-  return { kit, fontError, error, setError, saver, session, lock, lockEnabled, paused, recovery, restore, runAi };
+  /** Lưu phần đang sửa rồi mới chạy `fn` (thao tác đọc/ghi ở server: tìm & thay, áp glossary, xuất). */
+  const withFlush = useCallback(
+    async <T>(fn: () => Promise<T> | T): Promise<T> => {
+      await saver.flush();
+      return fn();
+    },
+    [saver],
+  );
+
+  return {
+    kit,
+    fontError,
+    error,
+    setError,
+    saver,
+    session,
+    lock,
+    lockEnabled,
+    paused,
+    recovery,
+    restore,
+    runAi,
+    withFlush,
+  };
 }
 
 export type ChapterSessionApi = ReturnType<typeof useChapterSession>;

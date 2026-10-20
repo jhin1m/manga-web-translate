@@ -1,7 +1,7 @@
 ---
 phase: 4
 title: "Bảng văn bản toàn chương + inspector + đồng bộ"
-status: pending
+status: completed
 priority: P1
 effort: 3d
 dependencies: [3]

@@ -65,6 +65,11 @@ export const setStyle = (id: string, style: BoxStyle, layout: Layout) => (s: S) 
   if ((Object.keys(style) as (keyof BoxStyle)[]).some((k) => LAYOUT_FIELDS.has(k))) relayout(b, layout);
 };
 
+/** Áp cùng kiểu chữ cho nhiều box (1 bước undo) — "Áp kiểu cho khối cùng loại". */
+export const setStyleMany = (ids: string[], style: BoxStyle, layout: Layout) => (s: S) => {
+  for (const id of ids) setStyle(id, style, layout)(s);
+};
+
 export const addBox = (box: TextBox) => (s: S) => {
   if (boxOf(s, box.id)) return;
   s.text_boxes.push({ ...box, text: nfc(box.text), lines: box.lines.map(nfc) });
@@ -144,6 +149,24 @@ export function diffRegions(cur: PageState, ai: PageState): RegionDiff[] {
 
 /** Thay toàn bộ state bằng kết quả AI (1 bước undo). */
 export const resetToAI = (ai: PageState) => (_s: S) => structuredClone(ai) as S;
+
+/**
+ * "OCR lại" 1 vùng: lấy chữ gốc + bản dịch mới từ OCR vùng chọn (cùng bbox), giữ id/bbox/kiểu chữ box; box gắn
+ * vùng lấy bản dịch mới, ngắt dòng lại.
+ */
+export const refreshRegionFromOcr = (regionId: string, ocr: Region, layout: Layout) => (s: S) => {
+  const r = regionOf(s, regionId);
+  if (!r) return;
+  r.source_text = nfc(ocr.source_text);
+  r.translation = nfc(ocr.translation);
+  r.confidence = ocr.confidence;
+  r.flags = [...ocr.flags];
+  for (const b of s.text_boxes) {
+    if (b.region_id !== regionId) continue;
+    b.text = r.translation;
+    relayout(b, layout);
+  }
+};
 
 /** Box mặc định cho vùng/khung mới. */
 export function newTextBox(id: string, g: Pick<TextBox, "x" | "y" | "w" | "h">, font: string, regionId: string | null) {

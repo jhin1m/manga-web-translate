@@ -1,10 +1,11 @@
 /**
- * Tìm & thay trong chương: bắt buộc "Xem trước" (danh sách khớp) rồi mới "Áp dụng" (gửi versions của lần xem
- * trước để server từ chối nếu page đã đổi); sau áp có "Hoàn tác" theo batch_id. Ghi nội dung cần khoá chương.
- * Cũng export `useBatchFlow` + `MatchList` + `FlowPanel` để màn "Áp glossary" dùng lại cùng luồng.
+ * Tìm & thay trong chương (tab ở bảng dưới màn chương): bắt buộc "Xem trước" (danh sách khớp) rồi mới "Áp dụng"
+ * (gửi versions của lần xem trước để server từ chối nếu page đã đổi); sau áp có "Hoàn tác" theo batch_id. Ghi nội
+ * dung cần khoá chương — dùng khoá của phiên. Trước mỗi lượt gọi server: lưu phần đang sửa (`beforeWrite`); sau ghi:
+ * tải lại state chương (page đang sửa nạp lại nếu chưa sửa gì). Bấm 1 kết quả → nhảy tới khối đó.
+ * Cũng export `useBatchFlow` + `MatchList` + `FlowPanel` để tab "Áp glossary" dùng lại cùng luồng.
  */
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Link } from "@tanstack/react-router";
 import { Fragment, useRef, useState } from "react";
 import { ApiError, errorMessage } from "../../lib/api.ts";
 import {
@@ -15,7 +16,7 @@ import {
   previewFindReplace,
   undoBatch,
 } from "./api.ts";
-import { LockBanner, Modal } from "./Modal.tsx";
+import { LockBanner } from "./Modal.tsx";
 import { describeWriteError, splitHighlight } from "./text-utils.ts";
 import type { LockState } from "./use-chapter-lock.ts";
 
@@ -37,6 +38,8 @@ export function useBatchFlow<I>(
   ids: Pick<Ids, "ws" | "chapterId">,
   fns: {
     input: I;
+    /** Chạy trước mỗi lượt gọi server (lưu phần đang sửa để server thấy bản mới nhất). */
+    beforeWrite?(): Promise<unknown>;
     preview(input: I): Promise<PreviewResult>;
     apply(input: I, versions: Record<string, number>): Promise<ApplyResult>;
   },
@@ -51,7 +54,10 @@ export function useBatchFlow<I>(
   const refresh = () => void qc.invalidateQueries({ queryKey: ["chapter", ws, chapterId] });
 
   const previewM = useMutation({
-    mutationFn: async (v: { input: I; gen: number }) => ({ ...v, result: await fns.preview(v.input) }),
+    mutationFn: async (v: { input: I; gen: number }) => {
+      await fns.beforeWrite?.();
+      return { ...v, result: await fns.preview(v.input) };
+    },
     onSuccess: ({ input, gen: g, result }) => {
       if (g !== gen.current) return;
       setPreview({ result, input });
@@ -63,7 +69,10 @@ export function useBatchFlow<I>(
     },
   });
   const applyM = useMutation({
-    mutationFn: (v: { input: I; versions: Record<string, number> }) => fns.apply(v.input, v.versions),
+    mutationFn: async (v: { input: I; versions: Record<string, number> }) => {
+      await fns.beforeWrite?.();
+      return fns.apply(v.input, v.versions);
+    },
     onSuccess: (r) => {
       setApplied(r);
       setMessage({ tone: "info", text: `Đã thay ${r.replaced} chỗ trên ${r.pages} trang.` });
@@ -76,7 +85,10 @@ export function useBatchFlow<I>(
     },
   });
   const undoM = useMutation({
-    mutationFn: (batchId: string) => undoBatch(ws, chapterId, batchId),
+    mutationFn: async (batchId: string) => {
+      await fns.beforeWrite?.();
+      return undoBatch(ws, chapterId, batchId);
+    },
     onSuccess: (r) => {
       setApplied(null);
       setPreview(null);
@@ -109,14 +121,14 @@ export type BatchFlow = ReturnType<typeof useBatchFlow<unknown>>;
 
 /** Nút Xem trước/Áp dụng/Hoàn tác + thông báo + danh sách khớp. */
 export function FlowPanel({
-  ids,
+  onJump,
   flow,
   lock,
   canPreview,
   highlight,
   showRule,
 }: {
-  ids: Ids;
+  onJump(m: FindMatch): void;
   flow: BatchFlow;
   lock: LockState;
   canPreview: boolean;
@@ -158,7 +170,7 @@ export function FlowPanel({
             {preview.truncated ? ` (chỉ hiện ${preview.matches.length} đầu tiên — vẫn áp dụng cho tất cả)` : ""}
             {applied ? " · đã áp dụng" : ""}
           </p>
-          <MatchList ids={ids} matches={preview.matches} highlight={highlight} showRule={showRule} />
+          <MatchList onJump={onJump} matches={preview.matches} highlight={highlight} showRule={showRule} />
         </>
       )}
     </>
@@ -185,18 +197,18 @@ function Marked({ text, needle, cs, cls }: { text: string; needle: string; cs: b
 }
 
 export function MatchList({
-  ids,
+  onJump,
   matches,
   highlight,
   showRule,
 }: {
-  ids: Ids;
+  onJump(m: FindMatch): void;
   matches: FindMatch[];
   highlight(m: FindMatch): { before: string; after: string; caseSensitive: boolean };
   showRule?: boolean;
 }) {
   return (
-    <div style={{ overflow: "auto", maxHeight: "45vh" }}>
+    <div className="cw-tool-list">
       <table className="data">
         <thead>
           <tr>
@@ -228,9 +240,9 @@ export function MatchList({
                 </td>
                 <td className="num">{m.count}</td>
                 <td>
-                  <Link to="/w/$ws/s/$seriesId/c/$chapterId" params={ids} search={{ page: m.page_id }}>
-                    Mở trang
-                  </Link>
+                  <button type="button" className="btn-ghost" onClick={() => onJump(m)}>
+                    Tới khối
+                  </button>
                 </td>
               </tr>
             );
@@ -241,16 +253,18 @@ export function MatchList({
   );
 }
 
-/** Khoá của phiên màn chương (hộp thoại KHÔNG tự lấy khoá: cleanup của hook khoá sẽ nhả khoá của phiên). */
+/** Khoá của phiên màn chương (panel KHÔNG tự lấy khoá: cleanup của hook khoá sẽ nhả khoá của phiên). */
 export type SessionLock = { state: LockState; retry(): Promise<void> };
 
-export function FindReplaceDialog({
-  ws,
-  seriesId,
-  chapterId,
-  lock,
-  onClose,
-}: Ids & { lock: SessionLock; onClose(): void }) {
+/** Props chung của tab Tìm/Thay và Áp glossary. */
+export type ToolPanelProps = Ids & {
+  lock: SessionLock;
+  /** Lưu phần đang sửa trước khi gọi server. */
+  beforeWrite(): Promise<unknown>;
+  onJump(m: FindMatch): void;
+};
+
+export function FindReplacePanel({ ws, chapterId, lock, beforeWrite, onJump }: ToolPanelProps) {
   const [find, setFind] = useState("");
   const [replace, setReplace] = useState("");
   const [cs, setCs] = useState(false);
@@ -259,6 +273,7 @@ export function FindReplaceDialog({
     { ws, chapterId },
     {
       input,
+      beforeWrite,
       preview: (i) => previewFindReplace(ws, chapterId, i),
       apply: (i, versions) => applyFindReplace(ws, chapterId, i, versions),
     },
@@ -271,9 +286,9 @@ export function FindReplaceDialog({
   };
 
   return (
-    <Modal title="Tìm & thay trong chương" onClose={onClose}>
+    <div className="cw-tool">
       <LockBanner state={lock.state} onRetry={() => void lock.retry()} />
-      <div className="grid-2">
+      <div className="cw-tool-form">
         <div>
           <label htmlFor="fr-find">Tìm</label>
           <input id="fr-find" value={find} maxLength={200} onChange={(e) => edit(() => setFind(e.target.value))} />
@@ -287,21 +302,21 @@ export function FindReplaceDialog({
             onChange={(e) => edit(() => setReplace(e.target.value))}
           />
         </div>
+        <label className="row cw-tool-check">
+          <input type="checkbox" checked={cs} onChange={(e) => edit(() => setCs(e.target.checked))} />
+          Phân biệt hoa thường
+        </label>
       </div>
-      <label className="row" style={{ margin: "8px 0 0", gap: 6 }}>
-        <input type="checkbox" checked={cs} onChange={(e) => edit(() => setCs(e.target.checked))} />
-        Phân biệt hoa thường
-      </label>
       <p className="muted small" style={{ margin: "4px 0 0" }}>
         Khớp chữ thường (không regex), trong cả chương: bản dịch ở box chữ và vùng.
       </p>
       <FlowPanel
-        ids={{ ws, seriesId, chapterId }}
+        onJump={onJump}
         flow={flow}
         lock={lock.state}
         canPreview={find.length > 0}
         highlight={() => ({ before: used.find, after: used.replace, caseSensitive: used.case_sensitive })}
       />
-    </Modal>
+    </div>
   );
 }

@@ -1,19 +1,22 @@
 /**
  * Rail trang bên trái màn chương: thumbnail (ảnh sạch/ảnh gốc, tải lười) + "Trang n" + chấm 4 mức + cờ cần xem.
- * Lọc Tất cả / Cần xem (lỗi, AI có bản mới). Bấm = kích hoạt page và cuộn canvas tới.
+ * Lọc Tất cả / Cần xem (lỗi, AI có bản mới, tràn khung). Bấm = kích hoạt page và cuộn canvas tới.
  */
-import { useEffect, useRef, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import type { PageImage, ProgressPage } from "./api.ts";
 import { needsReview, PAGE_LEVEL, pageLevel } from "./page-status.ts";
 
-export function PageRail(props: {
+/** memo: màn chương render lại mỗi lần gõ (bảng văn bản) — rail chỉ đổi khi page/ảnh/active/cờ đổi. */
+export const PageRail = memo(function PageRail(props: {
   pages: ProgressPage[];
   images: Map<string, PageImage>;
   activeId: string | null;
+  /** Page có box chữ tràn khung (đo ở client). */
+  overflow: Set<string>;
   onPick(pageId: string): void;
 }) {
   const [filter, setFilter] = useState<"all" | "review">("all");
-  const review = props.pages.filter(needsReview);
+  const review = props.pages.filter((p) => needsReview(p, props.overflow.has(p.id)));
   const list = filter === "all" ? props.pages : review;
   const listRef = useRef<HTMLDivElement>(null);
 
@@ -39,9 +42,11 @@ export function PageRail(props: {
           const lv = PAGE_LEVEL[pageLevel(p.status)];
           const img = props.images.get(p.id);
           const on = p.id === props.activeId;
-          const flags = [p.ai_update_available && "AI có bản mới", p.cut_flag && "cắt ở trần chiều cao"].filter(
-            Boolean,
-          );
+          const flags = [
+            p.ai_update_available && "AI có bản mới",
+            props.overflow.has(p.id) && "tràn khung",
+            p.cut_flag && "cắt ở trần chiều cao",
+          ].filter(Boolean);
           return (
             <button
               key={p.id}
@@ -69,4 +74,4 @@ export function PageRail(props: {
       </div>
     </aside>
   );
-}
+});
