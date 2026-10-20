@@ -1,6 +1,7 @@
 /**
- * Home của workspace (design Main 20/10/2026), từ trên xuống: vùng thả lớn (thả bất kỳ đâu trên trang cũng được)
- * → dòng xác nhận inline → "Việc cần làm" → danh sách series dạng hàng gọn (tìm, "+ Series mới", "+ Ch.{next}").
+ * Home của workspace (design Main 20/10/2026), từ trên xuống: vùng thả lớn (thả bất kỳ đâu trên trang cũng được;
+ * đoán được series → tạo chương + tự dịch + mở màn chương, không thì dòng xác nhận inline) → "Việc cần làm" → danh
+ * sách series dạng hàng gọn (tìm, "+ Series mới", "+ Ch.{next}").
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
@@ -10,17 +11,23 @@ import { needsWork, nextAction } from "../chapter/next-action.ts";
 import { createSeries, fetchSeriesList, type SeriesListItem, seriesKeys } from "../series/api.ts";
 import { DropZone, FilePickButton, usePageDrop } from "../upload/drop-zone.tsx";
 import { normalizeName } from "../upload/parse-chapter-filename.ts";
+import { useDropToTranslate } from "./drop-to-translate.ts";
 import { NewChapterConfirmRow } from "./new-chapter-confirm-row.tsx";
 import { TodoList } from "./todo-list.tsx";
 import "./home.css";
 
-type Pending = { files: File[]; seriesId?: string; number?: string; seq: number };
+type Pending = { files: File[]; seriesId?: string; seq: number };
 
 export function HomePage({ ws }: { ws: string }) {
   const seriesQ = useQuery({ queryKey: seriesKeys.list(ws), queryFn: () => fetchSeriesList(ws) });
   const [pending, setPending] = useState<Pending | null>(null);
-  const drop = (files: File[], seriesId?: string, number?: string) =>
-    setPending((p) => ({ files, seriesId, number, seq: (p?.seq ?? 0) + 1 }));
+  const auto = useDropToTranslate(ws, (files, seriesId) =>
+    setPending((p) => ({ files, seriesId, seq: (p?.seq ?? 0) + 1 })),
+  );
+  const drop = (files: File[], seriesId?: string) => {
+    setPending(null);
+    auto.mutate({ files, seriesId });
+  };
   usePageDrop((files) => drop(files));
   const series = seriesQ.data?.series;
 
@@ -29,9 +36,15 @@ export function HomePage({ ws }: { ws: string }) {
       <DropZone
         label="Tạo chương mới"
         title="Thả strip hoặc ZIP của chương mới vào đây"
-        hint="App tự nhận series và số chương từ tên file, cắt strip thành trang rồi mở thẳng màn chương."
+        hint="Thả ảnh/ZIP — tự tạo chương và dịch ngay (series, số chương đoán từ tên file; sửa được trên màn chương)."
         onFiles={(f) => drop(f)}
       />
+      {auto.isPending && (
+        <p className="small muted" role="status">
+          Đang tạo chương…
+        </p>
+      )}
+      {auto.error && <p className="notice danger">{errorMessage(auto.error)}</p>}
       {pending && series && (
         <NewChapterConfirmRow
           key={pending.seq}
@@ -39,18 +52,12 @@ export function HomePage({ ws }: { ws: string }) {
           files={pending.files}
           series={series}
           fixedSeriesId={pending.seriesId}
-          defaultNumber={pending.number}
           onCancel={() => setPending(null)}
           onCreated={() => setPending(null)}
         />
       )}
       <TodoList ws={ws} />
-      <SeriesRows
-        ws={ws}
-        series={series}
-        error={seriesQ.error}
-        onAddChapter={(s, files) => drop(files, s.id, s.next_number)}
-      />
+      <SeriesRows ws={ws} series={series} error={seriesQ.error} onAddChapter={(s, files) => drop(files, s.id)} />
     </main>
   );
 }

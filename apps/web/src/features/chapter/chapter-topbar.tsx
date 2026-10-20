@@ -1,5 +1,5 @@
 /**
- * Thanh trên màn chương: ← series, tên chương, chip trạng thái chương (chỗ duy nhất nói chương đang ở đâu), chỉ
+ * Thanh trên màn chương: ← series, tên chương (bấm → đổi series / số chương), chip trạng thái chương (chỗ duy nhất nói chương đang ở đâu), chỉ
  * báo sửa/lưu thu nhỏ (giữ khoá · Đã lưu / Chỉ xem), chế độ xem Gốc/Dịch/Chia đôi, Dịch lại ▾, Huỷ xử lý, icon
  * Hoạt động (+ số việc đang chạy) + Phím tắt, và nút chính theo trạng thái (primary-action.ts; "Xuất" mở drawer).
  * Dưới nó là băng cảnh báo — chỉ hiện khi người dùng phải biết/làm gì (khoá bị giữ/mất/lỗi, khôi phục, lỗi lưu).
@@ -12,6 +12,7 @@ import type { RecoveryItem } from "../editor/use-chapter-session.ts";
 import { FilePickButton } from "../upload/drop-zone.tsx";
 import { ActivityButton } from "./activity-drawer.tsx";
 import type { ChapterDetail } from "./api.ts";
+import { ChapterMetaPopover } from "./chapter-meta-popover.tsx";
 import type { ChapterCommand, PrimaryAction } from "./primary-action.ts";
 import type { Tone } from "./status.ts";
 import { ViewModeSwitch } from "./view-mode-switch.tsx";
@@ -40,6 +41,8 @@ export function ChapterTopbar(props: {
   onUploadFiles(files: File[]): void;
   /** Lưu xong rồi mới rời (giữ href cho mở tab mới). */
   onBack(): void;
+  /** Đã chuyển chương sang series khác → điều hướng URL mới. */
+  onMoved(seriesId: string): void;
   /** Số việc đang chạy (upload, job chương, xuất). */
   activityCount: number;
   onActivity(): void;
@@ -74,10 +77,7 @@ export function ChapterTopbar(props: {
         </svg>
         {detail?.series.title ?? "Series"}
       </Link>
-      <h1 className="cw-title">
-        Chương {detail?.number ?? "…"}
-        {detail?.title ? ` · ${detail.title}` : ""}
-      </h1>
+      <ChapterMetaPopover ws={props.ws} detail={detail} onMoved={props.onMoved} />
       {/* Luôn render vùng live (rỗng khi chưa tải) để trình đọc màn hình báo được lần đổi đầu tiên. */}
       <span className="cw-chip" role="status" aria-live="polite" aria-label="Trạng thái chương">
         {chip && (

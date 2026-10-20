@@ -23,8 +23,11 @@ const target = (id: string, ord: number) => ({
 });
 
 /** Server + storage giả: ghi lại body createChapter, số lần presign, và mỗi lần POST file. */
-function fakeServer(post: (fileId: string, attempt: number) => Promise<void> = async () => {}) {
-  const calls = { create: [] as string[][], presign: [] as string[][], post: [] as string[] };
+function fakeServer(
+  post: (fileId: string, attempt: number) => Promise<void> = async () => {},
+  commit: () => Promise<void> = async () => {},
+) {
+  const calls = { create: [] as string[][], presign: [] as string[][], post: [] as string[], commit: [] as string[] };
   const attempts = new Map<string, number>();
   const deps: UploadDeps = {
     createChapter: async (_ws, body) => {
@@ -53,17 +56,25 @@ function fakeServer(post: (fileId: string, attempt: number) => Promise<void> = a
       calls.post.push(t.id);
       await post(t.id, n);
     },
+    commit: async (_ws, chapterId) => {
+      calls.commit.push(chapterId);
+      await commit();
+      return { accepted: 1, rejected: [] };
+    },
     storage: memoryStorage(),
     backoff: () => 0,
   };
   return { deps, calls };
 }
 
-const settled = (m: ReturnType<typeof createUploadManager>, id: string) =>
+type Manager = ReturnType<typeof createUploadManager>;
+type Upload = NonNullable<ReturnType<Manager["store"]["getState"]>["chapters"][string]>;
+
+const until = (m: Manager, id: string, ok: (u: Upload) => boolean) =>
   new Promise<void>((resolve) => {
     const check = () => {
-      const p = m.store.getState().chapters[id]?.phase;
-      if (p === "uploaded" || p === "failed") {
+      const u = m.store.getState().chapters[id];
+      if (u && ok(u)) {
         unsub();
         resolve();
       }
@@ -71,6 +82,10 @@ const settled = (m: ReturnType<typeof createUploadManager>, id: string) =>
     const unsub = m.store.subscribe(check);
     check();
   });
+const settled = (m: Manager, id: string) => until(m, id, (u) => u.phase === "uploaded" || u.phase === "failed");
+/** Lượt upload xong và (nếu bật) tự commit đã kết thúc. */
+const committed = (m: Manager, id: string) =>
+  until(m, id, (u) => u.autoCommit?.status === "done" || u.autoCommit?.status === "failed");
 
 describe("upload manager", () => {
   it("sends files to createChapter in natural order, without ZIP junk", async () => {
@@ -144,5 +159,85 @@ describe("upload manager", () => {
     await settled(m, "ch-9");
     expect(calls.post.sort()).toEqual(["f1", "f2"]);
     expect(m.store.getState().chapters["ch-9"]).toMatchObject({ phase: "uploaded", done: 3, total: 3 });
+  });
+});
+
+describe("auto commit", () => {
+  it("commits once every file is up, then reports done", async () => {
+    const { deps, calls } = fakeServer();
+    const m = createUploadManager(deps);
+    const seen: string[] = [];
+    m.onCommitted((_ws, id) => seen.push(id));
+    await m.startNewChapter({
+      ws: "w",
+      seriesId: "s",
+      number: "1",
+      pages: [png("1.png"), png("2.png")],
+      autoCommit: true,
+    });
+    await committed(m, "ch-1");
+    expect(calls.commit).toEqual(["ch-1"]);
+    expect(m.store.getState().chapters["ch-1"]?.autoCommit).toEqual({ status: "done", accepted: 1, rejected: [] });
+    expect(m.view("ch-1")).toMatchObject({ phase: "uploaded", autoCommit: "done" });
+    expect(seen).toEqual(["ch-1"]);
+  });
+
+  it("does not commit without the flag", async () => {
+    const { deps, calls } = fakeServer();
+    const m = createUploadManager(deps);
+    await m.startNewChapter({ ws: "w", seriesId: "s", number: "1", pages: [png("1.png")] });
+    await settled(m, "ch-1");
+    expect(calls.commit).toEqual([]);
+    expect(m.store.getState().chapters["ch-1"]?.autoCommit).toBeNull();
+  });
+
+  it("a failed commit leaves the chapter for the manual button, with the error", async () => {
+    const { deps, calls } = fakeServer(undefined, async () => {
+      throw new Error("không có ảnh hợp lệ");
+    });
+    const m = createUploadManager(deps);
+    await m.startNewChapter({ ws: "w", seriesId: "s", number: "1", pages: [png("1.png")], autoCommit: true });
+    await committed(m, "ch-1");
+    expect(calls.commit).toEqual(["ch-1"]);
+    expect(m.store.getState().chapters["ch-1"]?.autoCommit).toEqual({
+      status: "failed",
+      error: "không có ảnh hợp lệ",
+    });
+    expect(m.view("ch-1")?.autoCommit).toBe("failed");
+  });
+
+  it("an upload stopped half-way never commits; finishing it later (retry) does", async () => {
+    let broken = true;
+    const { deps, calls } = fakeServer(async (id) => {
+      if (id === "f1" && broken) throw new Error("mất kết nối");
+    });
+    const m = createUploadManager(deps);
+    await m.startNewChapter({
+      ws: "w",
+      seriesId: "s",
+      number: "1",
+      pages: [png("1.png"), png("2.png")],
+      autoCommit: true,
+    });
+    await settled(m, "ch-1");
+    expect(m.store.getState().chapters["ch-1"]).toMatchObject({ phase: "failed", autoCommit: { status: "waiting" } });
+    expect(calls.commit).toEqual([]);
+    broken = false;
+    m.retryFailed("ch-1");
+    await committed(m, "ch-1");
+    expect(calls.commit).toEqual(["ch-1"]);
+  });
+
+  it("keeps the flag across a closed tab: resuming the dropped set still auto-commits", async () => {
+    const { deps, calls } = fakeServer();
+    deps.storage?.setItem("mtl.upload.ch-9", JSON.stringify({ total: 1, done: [], auto: true }));
+    const m = createUploadManager(deps);
+    m.resumeChapter({
+      ws: "w",
+      chapter: { id: "ch-9", source_files: [{ id: "f0", ord: 0, bytes: 10 }] },
+      pages: [png("1.png")],
+    });
+    await committed(m, "ch-9");
+    expect(calls.commit).toEqual(["ch-9"]);
   });
 });

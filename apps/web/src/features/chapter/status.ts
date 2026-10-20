@@ -1,6 +1,6 @@
 /** Nhãn + tông màu trạng thái chương/page (CSS .status[data-tone]). */
 import type { ChapterStatus } from "../series/api.ts";
-import type { UploadView } from "./next-action.ts";
+import { autoCommitStarting, type UploadView } from "./next-action.ts";
 
 export type Tone = "ok" | "busy" | "warn" | "danger" | "idle";
 
@@ -36,6 +36,7 @@ export function chapterChip(input: {
   const review = input.review ? ` · ${input.review} cần xem` : "";
   switch (status) {
     case "draft":
+      if (autoCommitStarting(upload)) return { label: "Đang bắt đầu dịch", tone: "busy" };
       if (upload?.phase === "uploading") return { label: `Đang tải ảnh ${upload.done}/${upload.total}`, tone: "busy" };
       if (upload?.phase === "failed" || upload?.phase === "incomplete")
         return { label: `Tải dở ${upload.done}/${upload.total} ảnh`, tone: "warn" };

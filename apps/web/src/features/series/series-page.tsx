@@ -11,6 +11,7 @@ import { timeAgo } from "../../lib/format.ts";
 import { ChapterActionButton } from "../chapter/chapter-action-button.tsx";
 import { needsWork, nextAction } from "../chapter/next-action.ts";
 import { GlossaryEditor } from "../glossary/glossary-editor.tsx";
+import { useDropToTranslate } from "../home/drop-to-translate.ts";
 import { NewChapterConfirmRow } from "../home/new-chapter-confirm-row.tsx";
 import { resumeFromFiles } from "../upload/chapter-upload-status.tsx";
 import { DropZone, useDropTarget, usePageDrop } from "../upload/drop-zone.tsx";
@@ -96,7 +97,11 @@ function ChapterList({ ws, series }: { ws: string; series: SeriesDetail }) {
   const uploads = useUploads();
   const [filter, setFilter] = useState<Filter>("todo");
   const [pending, setPending] = useState<{ files: File[]; seq: number } | null>(null);
-  const drop = (files: File[]) => setPending((p) => ({ files, seq: (p?.seq ?? 0) + 1 }));
+  const auto = useDropToTranslate(ws, (files) => setPending((p) => ({ files, seq: (p?.seq ?? 0) + 1 })));
+  const drop = (files: File[]) => {
+    setPending(null);
+    auto.mutate({ files, seriesId: series.id });
+  };
   usePageDrop(drop);
 
   const chapters = series.chapters;
@@ -121,9 +126,15 @@ function ChapterList({ ws, series }: { ws: string; series: SeriesDetail }) {
         size="md"
         label="Thêm chương tiếp theo"
         title={`Thả strip của Chương ${next} vào đây`}
-        hint="Số chương tự tăng; thả nhiều file = nhiều chương liên tiếp."
+        hint="Thả ảnh/ZIP — tự tạo chương và dịch ngay; mỗi ZIP 1 chương, số chương tự tăng."
         onFiles={drop}
       />
+      {auto.isPending && (
+        <p className="small muted" role="status">
+          Đang tạo chương…
+        </p>
+      )}
+      {auto.error && <p className="notice danger">{errorMessage(auto.error)}</p>}
       {pending && listQ.data && (
         <NewChapterConfirmRow
           key={pending.seq}

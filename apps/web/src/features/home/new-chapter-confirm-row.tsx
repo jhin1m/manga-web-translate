@@ -1,7 +1,9 @@
 /**
- * Dòng xác nhận inline ngay dưới vùng thả (Home + Series): tên file + kích thước, series (đoán từ tên file, có
- * "+ Series mới…"), số chương (đoán từ tên file / số tiếp theo), [Bỏ] [Tạo và mở chương]. Enter = tạo, Esc = bỏ.
- * Nhiều file: mỗi ZIP = 1 chương; nhiều ảnh lẻ → hỏi "1 chương gồm N ảnh" (mặc định) hay "N chương".
+ * Dòng xác nhận inline ngay dưới vùng thả (Home + Series) — chỉ hiện khi thả file không tự tạo chương được
+ * (drop-to-translate.ts: chưa đoán được series, hoặc file có vấn đề): tên file + kích thước, series (có "+ Series
+ * mới…"), số chương (đoán từ tên file / số tiếp theo), [Bỏ] [Tạo và mở chương]. Enter = tạo, Esc = bỏ. Tạo xong tự
+ * dịch khi upload xong như đường tự động. Nhiều file: mỗi ZIP = 1 chương; nhiều ảnh lẻ → hỏi "1 chương gồm N ảnh"
+ * (mặc định) hay "N chương".
  */
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
@@ -9,26 +11,14 @@ import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { errorMessage } from "../../lib/api.ts";
 import { fmtBytes } from "../../lib/format.ts";
 import { createSeries, type SeriesListItem } from "../series/api.ts";
-import { collectPages, isZip, listProblems, type PageFile } from "../upload/files.ts";
+import { isZip, listProblems, type PageFile } from "../upload/files.ts";
 import { naturalSortBy } from "../upload/natural-sort.ts";
 import { parseChapterFilename } from "../upload/parse-chapter-filename.ts";
 import { uploadManager } from "../upload/upload-manager.ts";
+import { type Dropped, readDropped } from "./drop-to-translate.ts";
 
 const NEW_SERIES = "__new";
 const NUMBER_RE = /^\d+(\.\d+)?$/;
-
-type Dropped = { zips: { name: string; pages: PageFile[] }[]; loose: PageFile[] };
-
-/** ZIP giải nén riêng từng cái (mỗi ZIP = 1 chương); ảnh lẻ gom chung. */
-async function readDropped(files: File[]): Promise<Dropped> {
-  // Thứ tự ZIP = tên tự nhiên (ch9 trước ch10) → đánh số chương liên tiếp đúng thứ tự.
-  const zips = naturalSortBy(files.filter(isZip), (f) => f.name);
-  const [loose, ...zipPages] = await Promise.all([
-    collectPages(files.filter((f) => !isZip(f))),
-    ...zips.map((z) => collectPages([z])),
-  ]);
-  return { loose: loose ?? [], zips: zips.map((z, i) => ({ name: z.name, pages: zipPages[i] ?? [] })) };
-}
 
 /** "800×38.400px" của ảnh duy nhất (đọc header qua createImageBitmap); lỗi → null. */
 function useImageSize(page: PageFile | undefined) {
@@ -129,7 +119,13 @@ export function NewChapterConfirmRow(props: {
       for (const [i, g] of groups.entries()) {
         if (made.current.chapters.has(i)) continue;
         const num = groups.length > 1 ? String(base + i) : chapterNumber;
-        const { chapterId } = await uploadManager.startNewChapter({ ws, seriesId: sid, number: num, pages: g });
+        const { chapterId } = await uploadManager.startNewChapter({
+          ws,
+          seriesId: sid,
+          number: num,
+          pages: g,
+          autoCommit: true,
+        });
         made.current.chapters.set(i, chapterId);
       }
       return { seriesId: sid, created: [...made.current.chapters.values()] };

@@ -4,7 +4,8 @@
  * độ upload + vùng thả để tải tiếp + ảnh gốc xem trước (cả lúc đang cắt trang).
  *
  * Trạng thái chương chỉ ở chip thanh trên (+ rail theo trang). Kết quả thao tác (dịch lại, áp kiểu…) là thông báo nổi
- * trên canvas, tự ẩn; Dịch chương thành công không báo gì thêm (chip đã đổi), chỉ báo khi có ảnh bị loại.
+ * trên canvas, tự ẩn; Dịch chương (bấm tay hoặc tự dịch khi upload xong) thành công không báo gì thêm (chip đã đổi),
+ * chỉ báo khi có ảnh bị loại; tự dịch lỗi → báo lỗi, chương ở lại nháp với nút "Dịch chương".
  *
  * Drawer phải: Xuất (nút "Xuất" hoặc `?drawer=export` từ "Xuất lại" ở home), Hoạt động, Phím tắt (`?`). Chế độ xem
  * Gốc / Dịch / Chia đôi + giữ `O` (chapterStore.viewMode). Phím tắt: `editor/shortcuts.ts` (1 listener).
@@ -35,7 +36,15 @@ import { ChapterUploadStatus, resumeFromFiles } from "../upload/chapter-upload-s
 import { DropZone } from "../upload/drop-zone.tsx";
 import { uploadManager, useChapterUpload } from "../upload/upload-manager.ts";
 import { ActivityDrawer, chapterActivityCount, useUploadCount } from "./activity-drawer.tsx";
-import { cancelChapter, commitChapter, type FindMatch, REJECT_REASON, retranslate, retryFailed } from "./api.ts";
+import {
+  cancelChapter,
+  commitChapter,
+  type FindMatch,
+  REJECT_REASON,
+  type Rejected,
+  retranslate,
+  retryFailed,
+} from "./api.ts";
 import { BottomPanel, type TabRequest } from "./bottom-panel.tsx";
 import { ChapterTopbar, type EditAccess, LockBand } from "./chapter-topbar.tsx";
 import { ExportDrawer } from "./export-drawer.tsx";
@@ -61,6 +70,15 @@ type DrawerKind = "export" | "activity" | "help";
 type Props = { ws: string; seriesId: string; chapterId: string; page?: string; drawer?: "export" };
 /** `untilStable`: giữ tới khi chương chạy xong lượt xử lý vừa bắt đầu (ảnh bị loại khi Dịch chương). */
 type Notice = { tone: "info" | "warn" | "danger"; text: string; untilStable?: boolean };
+
+/** Dịch chương mà có ảnh bị loại: giữ tới khi chương chạy xong lượt xử lý vừa bắt đầu. */
+const rejectedNotice = (accepted: number, rejected: Rejected[]): Notice => ({
+  tone: "warn",
+  untilStable: true,
+  text: `Đang dịch ${accepted} ảnh; loại ${rejected.length}: ${rejected
+    .map((x) => `#${x.ord + 1} ${REJECT_REASON[x.reason]}`)
+    .join(", ")}.`,
+});
 
 /**
  * Store editor/chương dùng chung cả tab: phiên mới bắt đầu sạch. Reset ở layout effect (sau khi cây của chương cũ đã
@@ -281,14 +299,7 @@ function Workspace({ ws, seriesId, chapterId, page: searchPage, drawer: searchDr
       }
       // Thành công: chip trạng thái đã nói "Đang cắt trang/Đang dịch" — chỉ báo khi có ảnh bị loại.
       const r = await commitChapter(ws, chapterId);
-      if (!r.rejected.length) return null;
-      return {
-        tone: "warn",
-        untilStable: true,
-        text: `Đang dịch ${r.accepted} ảnh; loại ${r.rejected.length}: ${r.rejected
-          .map((x) => `#${x.ord + 1} ${REJECT_REASON[x.reason]}`)
-          .join(", ")}.`,
-      };
+      return r.rejected.length ? rejectedNotice(r.accepted, r.rejected) : null;
     },
     onMutate: () => notify(null),
     onSuccess: notify,
@@ -348,6 +359,19 @@ function Workspace({ ws, seriesId, chapterId, page: searchPage, drawer: searchDr
     onSuccess: (text) => notify({ tone: "info", text }),
     onError: (e) => notify({ tone: "danger", text: errorMessage(e) }),
   });
+
+  // Tự dịch khi upload xong (upload-manager): chỉ báo lúc kết quả vừa đổi, không báo lại khi mở lại chương.
+  const autoCommit = useChapterUpload(chapterId)?.autoCommit ?? null;
+  const seenAuto = useRef(autoCommit);
+  useEffect(() => {
+    if (autoCommit === seenAuto.current) return;
+    seenAuto.current = autoCommit;
+    if (autoCommit?.status === "failed") {
+      notify({ tone: "danger", text: `Không tự dịch được: ${autoCommit.error}. Bấm "Dịch chương" để thử lại.` });
+    } else if (autoCommit?.status === "done" && autoCommit.rejected.length) {
+      notify(rejectedNotice(autoCommit.accepted, autoCommit.rejected));
+    }
+  }, [autoCommit, notify]);
 
   const onCommand = (cmd: ChapterCommand) => {
     if (cmd === "export") return setDrawer("export");
@@ -482,6 +506,14 @@ function Workspace({ ws, seriesId, chapterId, page: searchPage, drawer: searchDr
         onCommand={onCommand}
         onUploadFiles={resume}
         onBack={() => void back()}
+        onMoved={(to) =>
+          void navigate({
+            to: "/w/$ws/s/$seriesId/c/$chapterId",
+            params: { ws, seriesId: to, chapterId },
+            search: searchPage ? { page: searchPage } : {},
+            replace: true,
+          })
+        }
         activityCount={activityCount}
         onActivity={() => setDrawer("activity")}
         onHelp={() => setDrawer("help")}

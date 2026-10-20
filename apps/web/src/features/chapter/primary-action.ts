@@ -4,7 +4,7 @@
  * Thuần: nhận trạng thái chương, upload phía client và số trang; không gọi API.
  */
 import type { ChapterStatus } from "../series/api.ts";
-import type { UploadView } from "./next-action.ts";
+import { autoCommitStarting, type UploadView } from "./next-action.ts";
 
 export type ChapterCommand = "upload" | "commit" | "retry" | "retranslate" | "cancel" | "export";
 
@@ -28,12 +28,19 @@ export function primaryAction(input: {
   const { status, upload } = input;
   const retranslate = { command: "retranslate" as const, label: "Dịch lại cả chương" };
   if (status === "draft") {
+    // Đang tự commit: khoá nút để không commit lần 2 (API trả 409 chapter_not_draft).
+    if (autoCommitStarting(upload)) {
+      return { command: "commit", label: "Dịch chương", disabled: true, title: "Đang bắt đầu dịch…", menu: [] };
+    }
     if (upload?.phase === "uploading") {
       return {
         command: "commit",
         label: "Dịch chương",
         disabled: true,
-        title: `Chờ tải xong ảnh (${upload.done}/${upload.total})`,
+        title:
+          upload.autoCommit === "waiting"
+            ? `Tự dịch khi tải xong ảnh (${upload.done}/${upload.total})`
+            : `Chờ tải xong ảnh (${upload.done}/${upload.total})`,
         menu: [],
       };
     }
