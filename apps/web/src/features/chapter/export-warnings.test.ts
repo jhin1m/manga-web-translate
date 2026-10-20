@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
+import { box, doc, region } from "../editor/__tests__/fixtures.ts";
 import { exportWarnings, warningLines } from "./export-warnings.ts";
-import type { Row } from "./text-table/rows.ts";
+import { pageRows, type Row } from "./text-table/rows.ts";
 
 const row = (kind: Row["kind"], flags: Row["flags"]) => ({ kind, flags });
 
@@ -33,5 +34,19 @@ describe("exportWarnings", () => {
     );
     expect(w).toMatchObject({ failed: 0, notReady: 1, aiPending: 1 });
     expect(warningLines(exportWarnings([{ status: "ready", ai_update_available: false }], []))).toEqual([]);
+  });
+
+  it("counts untranslated text regions only, never speech-bubble outlines", () => {
+    const state = {
+      ...doc(0),
+      regions: [
+        { ...region("bub", ""), kind: "bubble" as const, source_text: "" },
+        region("a", ""),
+        region("b", "Hai"),
+      ],
+      text_boxes: [box("tb", "b", "Hai")],
+    };
+    const rows = pageRows({ id: "p", ord: 0, ai_update_available: false }, state, () => false);
+    expect(exportWarnings([{ status: "ready", ai_update_available: false }], rows)).toMatchObject({ empty: 1 });
   });
 });

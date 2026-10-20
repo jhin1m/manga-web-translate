@@ -62,6 +62,11 @@ người gõ = xuống dòng. Box có `text` mà `lines` rỗng (find/replace, �
 `layoutBox` lúc hiển thị, không ghi state; export phía server làm y hệt (`render.ensure_lines`). Font: `apps/web/public/fonts/` là bản sao `worker/fonts/` —
 `pnpm --filter @mtl/web fonts:sync` sau khi đổi font; `pnpm test` của web fail nếu lệch.
 
+Cờ "tràn khung" (bảng văn bản, rail, inspector, cảnh báo xuất) dùng chung `boxOverflow` trong `measure.ts`, có dung
+sai `max(2px, 4% cạnh box theo trục tràn)`: box auto_fit do render.py chọn cỡ, đo lại ở trình duyệt lệch vài phần
+nghìn px — không tính là cần xem. "Khối" ở bảng văn bản/đếm/cảnh báo chỉ là vùng chữ; region `bubble` (khung bóng
+thoại) vẫn trong state nhưng không thành dòng (`text-table/rows.ts`).
+
 ## Ảnh và mask
 
 - Ảnh page tải 1 lần (presigned GET ≤ 15') thành `ImageBitmap`, vẽ theo tile 2048px, chỉ tile trong vùng nhìn ± 1;

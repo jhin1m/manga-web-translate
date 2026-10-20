@@ -76,10 +76,27 @@ describe("measure (layout contract)", () => {
     // 3 dòng cỡ 20: cao 20 + 2·20·1.15 = 66 + 2·pad 4 = 74.
     const b = { ...box("t"), lines: ["ab", "ab", "ab"], w: 100, h: 74, pad: 4, font_size: 20, line_height: 1.15 };
     expect(boxOverflows(b, METRICS, measure)).toBe(false);
-    expect(boxOverflows({ ...b, h: 73 }, METRICS, measure)).toBe(true);
-    expect(boxOverflow({ ...b, h: 70 }, METRICS, measure)).toBeCloseTo(4);
-    // Dòng rộng 10 ký tự = 100px > 100 − 8.
-    expect(boxOverflows({ ...b, lines: ["abcdefghij"] }, METRICS, measure)).toBe(true);
+    expect(boxOverflow({ ...b, h: 66 }, METRICS, measure)).toBeCloseTo(8);
+    expect(boxOverflows({ ...b, h: 66 }, METRICS, measure)).toBe(true);
+    // Dòng rộng 20 ký tự = 200px > 100 − 8.
+    expect(boxOverflows({ ...b, lines: ["abcdefghijabcdefghij"] }, METRICS, measure)).toBe(true);
     expect(boxOverflows({ ...b, lines: [] }, METRICS, measure)).toBe(false);
+  });
+
+  it("ignores overflow within the cross-engine tolerance: max(2px, 4% of the box side)", () => {
+    // Cao khối 66 + 2·pad = 74; box 100×73 tràn 1px — sai số làm tròn giữa render.py và trình duyệt.
+    const b = { ...box("t"), lines: ["ab", "ab", "ab"], w: 100, h: 73, pad: 4, font_size: 20, line_height: 1.15 };
+    expect(boxOverflow(b, METRICS, measure)).toBe(0);
+    expect(boxOverflows(b, METRICS, measure)).toBe(false);
+    // Tràn 30px trên box cao 44px: vượt dung sai, báo đúng số px đo thật.
+    expect(boxOverflow({ ...b, h: 44 }, METRICS, measure)).toBeCloseTo(30);
+    // Box cao 200px: dung sai 8px (4%) — tràn 6px bỏ qua, tràn 10px báo.
+    const tall = { ...b, lines: Array(8).fill("ab"), h: 0 };
+    const need = 20 + 7 * 20 * 1.15 + 8;
+    expect(boxOverflows({ ...tall, h: need - 6 }, METRICS, measure)).toBe(false);
+    expect(boxOverflows({ ...tall, h: need - 10 }, METRICS, measure)).toBe(true);
+    // Chiều ngang: dòng 100px trong vùng 92px (tràn 8px > 4px của box rộng 100).
+    expect(boxOverflow({ ...b, h: 74, lines: ["abcdefghij"] }, METRICS, measure)).toBeCloseTo(8);
+    expect(boxOverflow({ ...b, h: 74, w: 95, lines: ["abcdefgh", "ab", "ab"] }, METRICS, measure)).toBe(0);
   });
 });

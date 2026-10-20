@@ -1,6 +1,7 @@
 /**
- * Dòng của bảng văn bản toàn chương (thuần, test không DOM): 1 dòng / region + 1 dòng / text box không gắn region,
- * theo `ord` page rồi thứ tự trong state. Page đang sửa lấy từ `editorStore.doc` (bản đang gõ), page khác từ
+ * Dòng của bảng văn bản toàn chương (thuần, test không DOM): 1 dòng / region chữ + 1 dòng / text box không gắn
+ * region chữ, theo `ord` page rồi thứ tự trong state. Region `bubble` (khung bóng thoại detector trả, không chứa
+ * chữ — worker không OCR/dịch) không thành dòng: vẫn nằm trong state cho typeset, chỉ ẩn khỏi UI văn bản. Page đang sửa lấy từ `editorStore.doc` (bản đang gõ), page khác từ
  * `chapterStore.cache`. Cờ: tràn box, cần soát (`low_conf`), trống, SFX, AI có bản mới (theo page).
  */
 import type { PageState, Region, TextBox } from "@mtl/shared";
@@ -44,9 +45,12 @@ export function kindOf(region: Pick<Region, "kind" | "flags"> | undefined): RowK
   return region.kind === "text_free" ? "free" : "dialog";
 }
 
+/** Region chứa chữ (có dòng trong bảng) — khác khung bóng thoại `bubble`. */
+export const isTextRegion = (r: Pick<Region, "kind">) => r.kind !== "bubble";
+
 /** Khoá dòng của box đang chọn trên canvas. */
 export const rowKeyOfBox = (pageId: string, box: Pick<TextBox, "id" | "region_id">, state: PageState) =>
-  box.region_id && state.regions.some((r) => r.id === box.region_id)
+  box.region_id && state.regions.some((r) => r.id === box.region_id && isTextRegion(r))
     ? `${pageId}:${box.region_id}`
     : `${pageId}:${box.id}`;
 
@@ -58,8 +62,9 @@ export function pageRows(page: RowPage, state: PageState | null, overflowOf: (b:
   if (!state) return [];
   const rows: Row[] = [];
   const ai: RowFlag[] = page.ai_update_available ? ["ai_update"] : [];
-  const regionIds = new Set(state.regions.map((r) => r.id));
-  for (const r of state.regions) {
+  const regions = state.regions.filter(isTextRegion);
+  const regionIds = new Set(regions.map((r) => r.id));
+  for (const r of regions) {
     const linked = state.text_boxes.filter((b) => b.region_id === r.id);
     const flags: RowFlag[] = [];
     if (linked.some((b) => !b.hidden && overflowOf(b))) flags.push("overflow");
@@ -152,6 +157,11 @@ export function filterRows(rows: Row[], f: TableFilter, activeId: string | null,
  */
 export function sameKindBoxIds(state: PageState, kind: RowKind, exceptId: string): string[] {
   return state.text_boxes
-    .filter((b) => b.id !== exceptId && !b.hidden && kindOf(state.regions.find((r) => r.id === b.region_id)) === kind)
+    .filter(
+      (b) =>
+        b.id !== exceptId &&
+        !b.hidden &&
+        kindOf(state.regions.find((r) => r.id === b.region_id && isTextRegion(r))) === kind,
+    )
     .map((b) => b.id);
 }

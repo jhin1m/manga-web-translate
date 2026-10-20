@@ -149,25 +149,36 @@ export function linePlacements(
   });
 }
 
-/**
- * Số px chữ tràn khỏi box (0 = vừa): chiều cao khối dòng + 2·pad vượt `h`, hoặc dòng rộng hơn `w − 2·pad`.
- * Đo trên `lines` đã chốt (như khi vẽ), cùng công thức chiều cao với `fitText` — box auto_fit chỉ tràn khi
- * đã xuống cỡ nhỏ nhất mà vẫn không vừa.
- */
-export function boxOverflow(
-  box: Pick<TextBox, "lines" | "font_family" | "font_size" | "line_height" | "pad" | "w" | "h">,
-  m: FontMetrics,
-  measure: MeasureFn,
-): number {
-  if (box.lines.length === 0) return 0;
+type OverflowBox = Pick<TextBox, "lines" | "font_family" | "font_size" | "line_height" | "pad" | "w" | "h">;
+
+/** Số px chữ tràn theo từng trục (âm/0 = vừa). */
+function overflowAxes(box: OverflowBox, m: FontMetrics, measure: MeasureFn) {
   const tall = blockHeight(m, box.font_size, box.lines.length, box.line_height) + 2 * box.pad - box.h;
   const innerW = box.w - 2 * box.pad;
   let wide = 0;
   for (const l of box.lines) wide = Math.max(wide, measure(nfc(l), box.font_family, box.font_size) - innerW);
-  const over = Math.max(tall, wide);
-  // Sai số dấu phẩy động khi box vừa khít.
-  return over > 1e-6 ? over : 0;
+  return { tall, wide };
 }
 
-export const boxOverflows = (box: Parameters<typeof boxOverflow>[0], m: FontMetrics, measure: MeasureFn) =>
-  boxOverflow(box, m, measure) > 0;
+/**
+ * Dung sai tràn khung: tràn ≤ max(2px, 4% cạnh box theo trục tràn) coi như vừa. Box auto_fit do render.py
+ * (Pillow) chọn cỡ và lưu kích thước đã làm tròn; đo lại ở trình duyệt lệch vài phần nghìn px tới ~1px, mắt
+ * không thấy — không được tính là "cần xem".
+ */
+export const OVERFLOW_TOLERANCE_PX = 2;
+export const OVERFLOW_TOLERANCE_RATIO = 0.04;
+const overflowTolerance = (side: number) => Math.max(OVERFLOW_TOLERANCE_PX, OVERFLOW_TOLERANCE_RATIO * side);
+
+/**
+ * Số px chữ tràn khỏi box cần cảnh báo (0 = vừa hoặc tràn trong dung sai): chiều cao khối dòng + 2·pad vượt `h`,
+ * hoặc dòng rộng hơn `w − 2·pad`. Đo trên `lines` đã chốt (như khi vẽ), cùng công thức chiều cao với `fitText` —
+ * box auto_fit chỉ tràn khi đã xuống cỡ nhỏ nhất mà vẫn không vừa. Vượt dung sai → trả số px đo thật (không trừ
+ * dung sai). Nguồn duy nhất cho cờ "tràn khung" (bảng văn bản, rail, inspector, cảnh báo xuất).
+ */
+export function boxOverflow(box: OverflowBox, m: FontMetrics, measure: MeasureFn): number {
+  if (box.lines.length === 0) return 0;
+  const { tall, wide } = overflowAxes(box, m, measure);
+  return Math.max(tall > overflowTolerance(box.h) ? tall : 0, wide > overflowTolerance(box.w) ? wide : 0);
+}
+
+export const boxOverflows = (box: OverflowBox, m: FontMetrics, measure: MeasureFn) => boxOverflow(box, m, measure) > 0;
