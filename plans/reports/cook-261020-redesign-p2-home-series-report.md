@@ -27,12 +27,15 @@ Ngày: 20/10/2026 · Branch: `feat/redesign-p2-home-series` (chưa merge) · Pha
 - Code review (`code-reviewer-261020-2039-redesign-p2-home-series-review-report.md`, 7/10) → đã sửa 3 lỗi High: resume chạy chồng mở "Dịch chương" sớm; nhiều ZIP đánh số sai thứ tự; series list kéo mọi page (chuyển sang `countBy`). Đã sửa thêm Medium: ảnh lẻ không lấy số trang làm số chương; bấm "Tạo" lại sau lỗi không tạo trùng.
 
 ## Lưu ý / chưa làm
-- `apps/api/test/dev-auto-login.test.ts` (P1) fail khi `.env` dev có `DEV_AUTO_LOGIN_PASSWORD`: test lấy `process.env` làm base. Chạy xanh khi để trống biến (`DEV_AUTO_LOGIN_EMAIL= DEV_AUTO_LOGIN_PASSWORD= pnpm test`). Lỗi có sẵn, không thuộc file P2.
 - `docs/development-setup.md` (mục Web) còn nhắc `.../upload` — để P6 (docs), không thuộc file P2.
 - Chương nháp tạo qua API (không qua upload-manager, không có dấu) hiện "Dịch chương"; server không biết file nào đã upload. Bấm sẽ báo lỗi `no_valid_files` ngay trên hàng.
 - Upload đang chạy ở tab khác hiện là "Upload dở" ở tab này.
 - Mỗi tick tiến độ upload render lại cả danh sách (chấp nhận được ở MVP).
 
-## Câu hỏi mở
-1. Chương đã xuất rồi quay lại sửa/dịch lại: có hiện lại trong "Việc cần làm"/"Cần làm" không? Hiện tại: không (đã xuất = xong).
-2. "Việc cần làm" giới hạn 20 chương (`limit=20`) — đủ chưa, hay cần "Xem thêm"?
+## Vòng 2 (controller chốt 20/10/2026)
+- **Xuất lại:** chương đã xuất nhưng sau lần export thành công cuối (mốc `created_at` của job export) có ghi `page_states` (`updated_at`) hoặc job `chapter.translate` mới hơn → `reexport: true`, `exported: false`. Chương này hiện lại trong "Việc cần làm" và chip "Cần làm", nút "Xuất lại" (mở màn chương) khi chương ở `review`/`done`; đang dịch hoặc có trang lỗi thì bước đó đi trước. Chưa sửa gì sau lần xuất thì coi là xong. Không đổi schema: thêm `scoped().maxBy` (GROUP BY max), field additive `reexport` ở series detail/list (`latest_chapter`)/recent-chapters. Test: API (sửa sau khi xuất, dịch lại sau khi xuất, xuất lại thì hết việc) + `next-action.test.ts`.
+- **Giới hạn 20** của "Việc cần làm": giữ nguyên.
+- **`dev-auto-login.test.ts`:** base env bỏ `DEV_AUTO_LOGIN_*` thật → `pnpm test` xanh khi `.env` có biến này (đã chạy với `.env` hiện tại, không xoá biến).
+- Gate: typecheck ✓, lint ✓, test ✓ (shared 8, db 3, web 69, api 142), e2e 9/9 ✓ (5181/8797).
+
+Câu hỏi mở: không còn.
