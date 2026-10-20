@@ -20,3 +20,4 @@ Thứ tự: P1 → P2 → P3 → P4 → P5 → P6 (tuần tự, 1 pane).
 | 2026-10-20 21:11 | R3 | start | worktree ../mtl-wt/r3, branch feat/redesign-p3-chapter-workspace, pane w1H:pE, agent cook-r3 |
 | 2026-10-20 21:38 | R3 | done | cook-r3 báo DONE (web 91, API 143, e2e 12). Lệch plan theo design: rail 196/inspector 320/header 52, màn chương toàn màn hình ngoài app shell, Tìm&Thay/Áp glossary ở thanh bảng dưới. Còn: chương lỗi cắt trang (0 trang) hiện "Chạy lại trang lỗi" vô tác dụng; back/forward giữa 2 chương có thể reset trước lần lưu cuối; docs editor/dev-setup → R6; chưa đo trang thật 800×6000 / Safari |
 | 2026-10-20 21:40 | R3 | merge | Kiểm lại worktree (test + e2e 12/12) → merge --no-ff không conflict. Main xanh, worker 132+2 skip |
+| 2026-10-20 21:40 | R4 | start | worktree ../mtl-wt/r4, branch feat/redesign-p4-text-table-inspector, pane w1H:pF, agent cook-r4; giao thêm sửa nút 'Chạy lại trang lỗi' khi chương 0 trang |
