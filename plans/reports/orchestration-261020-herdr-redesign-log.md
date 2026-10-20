@@ -13,3 +13,4 @@ Thứ tự: P1 → P2 → P3 → P4 → P5 → P6 (tuần tự, 1 pane).
 | 2026-10-20 20:35 | R1 | done | cook-r1 báo DONE_WITH_CONCERNS (API 137, web 56). Lệch nhỏ: createApp({devAutoLogin}) nhận {email,password}\|false; CSS .topbar cũ để P6 dọn; chưa có e2e 2 workspace |
 | 2026-10-20 20:37 | R1 | quyết định | Cho e2e chạy cổng riêng 5181 song song dev 5180: thêm origin vào CORS MinIO dev, dựng lại container mtl-dev-minio/files-proxy (dữ liệu giữ). e2e 7/7 xanh |
 | 2026-10-20 20:39 | R1 | merge | Kiểm lại worktree (typecheck/lint/test + e2e 7/7) → merge --no-ff không conflict. Main xanh, worker 132+2 skip. Bật DEV_AUTO_LOGIN_* trong .env cục bộ (không commit) |
+| 2026-10-20 20:39 | R2 | start | worktree ../mtl-wt/r2, branch feat/redesign-p2-home-series, pane w1H:pD, agent cook-r2 |
