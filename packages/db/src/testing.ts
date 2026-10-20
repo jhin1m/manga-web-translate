@@ -1,15 +1,28 @@
-/** Tiện ích test: mỗi package có DB test riêng (tránh 2 package reset cùng DB khi chạy song song). */
+/**
+ * Tiện ích test: mỗi package VÀ mỗi checkout (repo chính / từng git worktree) có DB test riêng — tránh 2 lần chạy
+ * song song reset (`DROP DATABASE … WITH (FORCE)`) DB của nhau giữa chừng.
+ */
+import { createHash } from "node:crypto";
+import { realpathSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import postgres from "postgres";
 import { loadRootEnv } from "./env.ts";
 import { runMigrations } from "./migrate.ts";
 
-/** URL DB test cho một package: TEST_DATABASE_URL + "_<suffix>". */
+/** 8 hex từ đường dẫn thật của gốc checkout — ổn định giữa các lần chạy, khác nhau giữa các worktree. */
+const checkoutTag = (): string =>
+  createHash("sha1")
+    .update(realpathSync(fileURLToPath(new URL("../../..", import.meta.url))))
+    .digest("hex")
+    .slice(0, 8);
+
+/** URL DB test cho một package: TEST_DATABASE_URL + "_<suffix>_<checkout>". */
 export function testDatabaseUrl(suffix: string): string {
   loadRootEnv();
   const base = process.env.TEST_DATABASE_URL;
   if (!base) throw new Error("TEST_DATABASE_URL is required for tests");
   const u = new URL(base);
-  u.pathname = `${u.pathname}_${suffix}`;
+  u.pathname = `${u.pathname}_${suffix}_${checkoutTag()}`;
   return u.toString();
 }
 

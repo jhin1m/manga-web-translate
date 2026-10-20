@@ -3,6 +3,7 @@
  * Import tương đối để dependency resolve theo package sở hữu file. In 1 dòng JSON cuối cho global-setup.
  */
 import { resetTestDatabase } from "../../../packages/db/src/testing.ts";
+import { E2E_OWNER } from "./env.ts";
 
 const url = process.env.DATABASE_URL ?? "";
 await resetTestDatabase(url);
@@ -12,8 +13,7 @@ const { closeDb, db } = await import("../../api/src/db.ts");
 const { createWorkspace } = await import("../../api/src/lib/workspace-admin.ts");
 const { createWorkerToken } = await import("../../api/src/lib/worker-token.ts");
 
-const email = "owner-e2e@example.com";
-const password = "e2e-password-123";
+const { email, password } = E2E_OWNER;
 const { workspaceId } = await createWorkspace({
   name: "Nhóm e2e",
   slug: "nhom-e2e",

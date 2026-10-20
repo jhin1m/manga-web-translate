@@ -191,4 +191,73 @@ describe("final save on leaving the editor", () => {
     expect(srv.puts).toBe(1);
     expect((await queue.get("p1"))?.ops.length).toBeGreaterThan(0);
   });
+
+  it("saves a snapshot taken before another session resets the shared store, then the unlock runs", async () => {
+    const { store, srv, queue, saver } = setup();
+    store.getState().apply(moveBox("t0", 41, 42));
+    // Phiên chương mới: giao sửa chưa lưu cho Saver cũ rồi reset store ngay (lúc render, trước cleanup phiên cũ).
+    const detached = saver.flushDetached();
+    store.getState().reset();
+    // Cleanup phiên cũ sau đó: lượt lưu cuối (store đã rỗng → không gì) rồi nhả khoá, cùng chuỗi `serial`.
+    const save = serial(() => finalSave(saver, store, async () => undefined));
+    const unlock = serial(async () => {
+      srv.locked = false;
+    });
+    await Promise.all([detached, save, unlock]);
+    expect(srv.state.text_boxes[0]).toMatchObject({ x: 41, y: 42 });
+    expect(srv.puts).toBe(1);
+    expect(await queue.get("p1")).toBeUndefined();
+    expect(store.getState().pageId).toBeNull();
+  });
+
+  it("detached save racing an in-flight autosave rebases onto the saved version (409) and clears the draft", async () => {
+    const store = createEditorStore();
+    const { srv, api } = fakeServer(doc(2));
+    const queue = new PendingQueue(new IDBFactory());
+    store.getState().load({ pageId: "p1", state: doc(2), version: 1, ai: { state: null, rev: 0, available: false } });
+    store.getState().setReadOnly(null);
+    // PUT đầu tiên treo tới khi thả → mô phỏng autosave đang bay.
+    let release = () => {};
+    const gate = new Promise<void>((r) => {
+      release = r;
+    });
+    let calls = 0;
+    const gated: SaveApi = {
+      ...api,
+      put: async (id, state, version) => {
+        if (calls++ === 0) await gate;
+        return api.put(id, state, version);
+      },
+    };
+    const saver = new Saver(store, gated, queue, { debounceMs: 10_000, persistMs: 10_000, retryMs: 10_000 });
+    store.getState().apply(moveBox("t0", 61, 62));
+    const inFlight = saver.flush();
+    await expect.poll(() => calls).toBe(1);
+    // Autosave đang bay (version 1 → 2) thì người dùng sửa tiếp rồi đổi chương ngay.
+    store.getState().apply(editText("t0", "sửa sau", layout));
+    const detached = saver.flushDetached();
+    store.getState().reset();
+    release();
+    await Promise.all([inFlight, detached]);
+    expect(srv.state.text_boxes[0]).toMatchObject({ x: 61, y: 62, text: "sửa sau" });
+    expect(srv.version).toBe(3);
+    expect(await queue.get("p1")).toBeUndefined();
+  });
+
+  it("detached save that fails keeps the edits in IndexedDB", async () => {
+    const { store, srv, queue, saver } = setup();
+    store.getState().apply(moveBox("t0", 51, 52));
+    srv.locked = false;
+    const detached = saver.flushDetached();
+    store.getState().reset();
+    await detached;
+    expect(srv.puts).toBe(1);
+    expect((await queue.get("p1"))?.ops.length).toBeGreaterThan(0);
+  });
+
+  it("detached save is a no-op without unsaved edits", async () => {
+    const { srv, saver } = setup();
+    await saver.flushDetached();
+    expect(srv.puts).toBe(0);
+  });
 });

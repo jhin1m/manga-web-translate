@@ -1,13 +1,14 @@
 /**
  * Luồng chính: thả ZIP 10 trang ở home → dòng xác nhận → "Tạo và mở chương" mở thẳng màn chương trong khi ảnh
  * còn đang upload → upload xong → "Dịch chương" → worker giả → 10 trang "Xong" trên rail. Thêm: màn series (3 ảnh lẻ
- * = 3 chương liên tiếp, glossary thêm nhanh), drawer Hoạt động ở home khi đang upload và redirect trang upload cũ.
+ * = 3 chương liên tiếp, glossary thêm nhanh), drawer Hoạt động ở home khi đang upload. Test đầu đăng nhập bằng form
+ * `/login` (các spec khác dùng dev auto-login).
  */
 import { expect, type Route, test } from "@playwright/test";
 import { zipSync } from "fflate";
 import { WEB_URL } from "./env.ts";
 import { PNG_1PX, runFakeWorker } from "./fake-worker.ts";
-import { login, state } from "./helpers.ts";
+import { login, loginWithForm, state } from "./helpers.ts";
 
 const ws = state.workspaceId;
 const s = state.seriesId;
@@ -32,7 +33,7 @@ test("drop a 10-page ZIP on home, open the chapter while uploading, then transla
     },
   );
 
-  await login(page);
+  await loginWithForm(page);
   await page
     .getByRole("region", { name: "Tạo chương mới" })
     .locator('input[type="file"]')
@@ -114,11 +115,4 @@ test("series page: 3 loose images become 3 consecutive chapters; quick glossary 
   await glossary.getByLabel("Bản dịch").fill("Kim Jun");
   await glossary.getByRole("button", { name: "Thêm" }).click();
   await expect(glossary.getByRole("cell", { name: "Kim Jun" })).toBeVisible();
-});
-
-test("old upload page redirects to the series page", async ({ page }) => {
-  await login(page);
-  await page.goto(`/w/${ws}/series/${s}/upload`);
-  await expect(page).toHaveURL(`${WEB_URL}/w/${ws}/s/${s}`);
-  await expect(page.getByRole("region", { name: "Thêm chương tiếp theo" })).toBeVisible();
 });

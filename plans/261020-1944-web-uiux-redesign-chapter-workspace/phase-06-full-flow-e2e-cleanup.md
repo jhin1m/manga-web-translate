@@ -1,7 +1,7 @@
 ---
 phase: 6
 title: "E2E luồng đầy đủ + dọn code chết + docs"
-status: pending
+status: completed
 priority: P1
 effort: 1.5d
 dependencies: [5]

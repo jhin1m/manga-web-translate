@@ -9,7 +9,13 @@ export default defineConfig({
   workers: 1,
   reporter: [["list"]],
   globalSetup: "./e2e/global-setup.ts",
-  use: { baseURL: WEB_URL, trace: "retain-on-failure", ...devices["Desktop Chrome"] },
+  // Màn ≥ 24" (owner chốt): bố cục mặc định của màn chương hiện đủ rail + canvas + inspector + bảng dưới.
+  use: {
+    baseURL: WEB_URL,
+    trace: "retain-on-failure",
+    ...devices["Desktop Chrome"],
+    viewport: { width: 1920, height: 1080 },
+  },
   webServer: [
     {
       command: "pnpm --filter @mtl/api exec tsx src/index.ts",

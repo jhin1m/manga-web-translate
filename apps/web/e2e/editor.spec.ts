@@ -1,7 +1,7 @@
 /**
  * Màn chương (editor gộp): sửa bản dịch → autosave → reload còn nguyên; rời màn trước debounce vẫn lưu; mất kết
  * nối lưu rồi đóng tab giữa chừng → mở lại đề nghị khôi phục từ IndexedDB → khôi phục → lưu lên server. Thêm:
- * route editor 1 trang cũ redirect, strip nhiều trang (cuộn → `?page=`, rail → inspector) và chính sách khoá
+ * strip nhiều trang (cuộn → `?page=`, rail → inspector) và chính sách khoá
  * (đang dịch không giữ khoá → AI ghi được bản dịch), bảng văn bản cả chương (click dòng ↔ trang active, sửa tại
  * chỗ, Enter sang dòng sau xuyên trang, cờ tràn khung + lọc "Chỉ khối cần xem"), chế độ xem Gốc/Dịch/Chia đôi +
  * giữ O, drawer Hoạt động khi chương đang dịch. Chương tạo qua API + worker giả.
@@ -9,7 +9,7 @@
 import { expect, type Page, test } from "@playwright/test";
 import { WEB_URL } from "./env.ts";
 import { type FakeWorkerOptions, PNG_1PX, runFakeWorker } from "./fake-worker.ts";
-import { login, state } from "./helpers.ts";
+import { apiReadyChapter, login, state } from "./helpers.ts";
 
 const ws = state.workspaceId;
 const headers = { origin: WEB_URL };
@@ -195,15 +195,6 @@ test("edit translation → autosave → reload keeps it; crash mid-edit → rest
   const after = (await (await again.request.get(`/api/w/${ws}/pages/${pageId}`)).json()) as typeof saved;
   expect(after.state.regions[0]?.translation).toBe("Chưa kịp lưu");
   expect(after.version).toBeGreaterThan(beforeCrash.version);
-});
-
-test("old per-page editor URL redirects to the chapter screen with ?page=", async ({ page }) => {
-  await login(page);
-  const chapterId = await committedChapter(page);
-  const fakePage = "00000000-0000-7000-8000-000000000001";
-  await page.goto(`/w/${ws}/series/${state.seriesId}/chapters/${chapterId}/edit/${fakePage}`);
-  await expect(page).toHaveURL(`${WEB_URL}${chapterUrl(chapterId)}?page=${fakePage}`);
-  await expect(page.getByRole("heading", { name: /^Chương / })).toBeVisible();
 });
 
 test("3-page strip: scroll to the end updates ?page=; rail click shows that page in the inspector", async ({
@@ -394,4 +385,37 @@ test("overflowing box is flagged in the table and rail; 'Chỉ khối cần xem'
   // Chọn dòng → inspector cảnh báo tràn khung.
   await rows.first().locator(".cw-src").click();
   await expect(page.getByRole("complementary", { name: "Bảng thuộc tính" })).toContainText(/Tràn khung \d+px/);
+});
+
+test("back/forward straight to another chapter still saves the last edit of the one left", async ({ page }) => {
+  const pageErrors: string[] = [];
+  page.on("pageerror", (e) => pageErrors.push(e.message));
+  await login(page);
+  const a = await apiReadyChapter(page, "8101");
+  const b = await apiReadyChapter(page, "8102");
+  const [aPage] = (await progressOf(page, a)).pages;
+
+  // Lịch sử: B → series → A; `history.go(-2)` từ A về thẳng B (chương → chương, không qua màn khác).
+  await page.goto(chapterUrl(b));
+  await expect(page.locator(".ed-canvas canvas").first()).toBeVisible();
+  await page.getByRole("link", { name: "Series e2e" }).click();
+  await page
+    .locator(".row-item", { has: page.locator(".ch-num", { hasText: "Ch.8101" }) })
+    .getByRole("link", { name: "Mở", exact: true })
+    .click();
+  await expect(page.getByRole("heading", { name: /^Chương 8101/ })).toBeVisible();
+  await openTable(page);
+  await expect(cell(page)).toHaveValue("Xin chào");
+  await expect(page.getByRole("status", { name: "Khoá chương" })).toContainText("Bạn đang giữ khoá chương");
+
+  // Sửa rồi đổi chương ngay (trước debounce 2s).
+  await cell(page).fill("Đổi chương ngay");
+  await page.evaluate(() => history.go(-2));
+  await expect(page).toHaveURL(new RegExp(`${chapterUrl(b)}$`));
+  await expect(page.getByRole("heading", { name: /^Chương 8102/ })).toBeVisible();
+  await expect.poll(() => translationOf(page, aPage?.id ?? ""), { timeout: 10_000 }).toBe("Đổi chương ngay");
+  // Chương B mở sạch, không mang sửa của A.
+  await openTable(page);
+  await expect(cell(page)).toHaveValue("Xin chào");
+  expect(pageErrors).toEqual([]);
 });

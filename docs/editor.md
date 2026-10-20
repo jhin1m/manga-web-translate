@@ -1,7 +1,31 @@
 # Editor (react-konva)
 
-Màn sửa kết quả 1 page: `/w/$ws/series/$seriesId/chapters/$chapterId/edit/$pageId` (toàn màn hình, ngoài layout
-workspace). Code ở `apps/web/src/features/editor/`, API ở `apps/api/src/routes/page-state.ts`.
+Editor là một phần của **màn chương** gộp: `/w/$ws/s/$seriesId/c/$chapterId[?page=<pageId>][&drawer=export]`
+(toàn màn hình, ngoài app shell; route cũ `.../chapters/$c/edit/$pageId` redirect sang `?page=`). Bố cục 4 vùng — rail
+trang (trái) | strip canvas Konva liên tục (mỗi page ảo hoá riêng) | inspector (phải) | bảng dưới — xem
+[design-guidelines.md](./design-guidelines.md). Code: màn ở `apps/web/src/features/chapter/`, editor ở
+`apps/web/src/features/editor/`, API ở `apps/api/src/routes/page-state.ts`.
+
+## Trang đang sửa và cache
+
+Cả chương hiện trên 1 strip nhưng chỉ **1 page active** nằm trong `editorStore` (sửa, undo, autosave như bên dưới);
+page khác đọc từ cache `chapterStore.cache` (`chapter-store.ts`). Cache của page active chỉ cập nhật khi rời page (từ
+`editorStore.base`) hoặc khi server có version mới (`syncActive`). Page active đổi khi bấm rail/canvas/dòng bảng văn
+bản hoặc phím tắt; id phản chiếu vào `?page=`. Store dùng chung cả tab nên mỗi phiên chương bắt đầu bằng `reset()`
+(route đặt `key={chapterId}`).
+
+**Đổi thẳng chương → chương** (back/forward): phiên mới reset store ngay lúc render, trước cleanup của phiên cũ. Vì vậy
+trước khi reset, sửa chưa lưu của chương cũ được giao cho Saver cũ qua `Saver.flushDetached()` (chụp store lúc gọi →
+IndexedDB → PUT; 409 do autosave đang bay → rebase lên bản server rồi PUT lại 1 lần; 423/mạng/xung đột để lại bản
+nháp, lần mở sau đề nghị khôi phục) — xem `use-chapter-session.ts`.
+
+## Khoá chương theo trạng thái
+
+Khoá chỉ giữ khi chương **ổn định** (`review` / `partial_failed` / `done`, đã có page; `isChapterSettled` +
+`pageIds.length > 0`, `lockEnabled` trong `use-chapter-session.ts`). Chương đang cắt/dịch → không giữ khoá, chỉ xem.
+"Dịch chương" / "Dịch lại" / "Chạy lại trang lỗi" đi qua `runAi`: lưu hết (`saver.flush`) → tạm dừng giữ khoá →
+nhả khoá (cùng chuỗi `serial` với lock) → gọi API; khoá được lấy lại khi chương ổn định trở lại. Người khác đang giữ
+khoá → băng khoá báo tên, editor chỉ xem.
 
 ## Dữ liệu và lưu
 
@@ -10,7 +34,7 @@ workspace). Code ở `apps/web/src/features/editor/`, API ở `apps/api/src/rout
 - Ghi: `PUT /api/w/:ws/pages/:id/state` với `If-Match: "<version>"`. Không giữ khoá chương → 423 (editor chuyển chỉ
   xem); version lệch → 409 kèm version hiện tại. Mỗi lần ghi đẩy bản cũ vào `page_state_history` (≤ 50/page),
   `state_origin = 'user'`, `ai_update_available` giữ nguyên.
-- Autosave (`save.ts`): debounce 2s, lưu ngay khi chuyển page/ẩn tab/bấm "← Chương". Lượt lưu tuần tự: ghi
+- Autosave (`save.ts`): debounce 2s, lưu ngay khi chuyển page/ẩn tab/rời màn chương. Lượt lưu tuần tự: ghi
   IndexedDB → PUT → 200 xoá bản ghi | 409 tải state server + rebase | 423 chỉ xem (bản ghi giữ lại) và thử lấy lại
   khoá ngay. Rời editor: lượt lưu cuối chạy trong chuỗi `serial` của `use-chapter-lock.ts`, xếp trước lệnh nhả khoá
   (effect autosave khai báo trước `useChapterLock` → cleanup chạy trước); khoá đã mất từ trước → lấy lại, lưu.
@@ -52,7 +76,7 @@ người gõ = xuống dòng. Box có `text` mà `lines` rỗng (find/replace, �
 `ai_update_available` → panel diff theo vùng (bản hiện tại vs AI mới), áp từng vùng/tất cả (giữ vị trí, kiểu chữ
 người đã chỉnh). "Đã xem" → `POST /pages/:id/ai-update/ack {ai_rev}` (chỉ tắt cờ nếu đúng rev đã xem).
 
-## Chế độ xem
+## Chế độ xem (Gốc / Dịch / Chia đôi)
 
 Thanh trên màn chương: `[Gốc | Dịch | Chia đôi]` (`chapterStore.viewMode`). Gốc = ảnh gốc, ẩn chữ; Dịch = ảnh sạch +
 chữ (mặc định); Chia đôi = cột Gốc bên trái cột Dịch trên cùng 1 Stage (cuộn/zoom đồng bộ), chỉ cột Dịch nhận thao
