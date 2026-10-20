@@ -51,6 +51,7 @@ import { ExportDrawer } from "./export-drawer.tsx";
 import { isExportActive, useExports } from "./export-panel.tsx";
 import { FindReplacePanel } from "./FindReplace.tsx";
 import { Inspector } from "./inspector.tsx";
+import { providerWait, providerWaitText } from "./job-error.ts";
 import { PageRail } from "./page-rail.tsx";
 import { needsReview, pageLevel } from "./page-status.ts";
 import { type ChapterCommand, primaryAction } from "./primary-action.ts";
@@ -426,6 +427,8 @@ function Workspace({ ws, seriesId, chapterId, page: searchPage, drawer: searchDr
   const isDraft = status === "draft";
   const ingestError = data.progress?.jobs.find((j) => j.type === "chapter.ingest" && j.error)?.error ?? null;
   const canTools = settled && pages.length > 0;
+  const aiWaitInfo = providerWait(pages);
+  const aiWait = aiWaitInfo ? providerWaitText(aiWaitInfo) : null;
 
   // ---- Phím tắt (1 listener, bảng ở editor/shortcuts.ts) ----
   const drawerRef = useRef(drawer);
@@ -524,6 +527,7 @@ function Workspace({ ws, seriesId, chapterId, page: searchPage, drawer: searchDr
         recovery={session.recovery}
         canRestore={session.lock.state.status === "held" && session.lockEnabled}
         onRecovery={(accept) => void session.restore(accept)}
+        aiWait={aiWait}
       />
       <PageRail pages={pages} images={data.images} activeId={activeId} overflow={overflowPages} onPick={go} />
       <main className="cw-main">

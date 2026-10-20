@@ -217,6 +217,9 @@ button.link {
 .error {
   color: var(--c-danger);
 }
+.warn-text {
+  color: var(--c-warn);
+}
 .notice {
   padding: var(--sp-2) var(--sp-3);
   border: 1px solid var(--c-line);

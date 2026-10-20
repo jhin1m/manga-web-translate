@@ -4,6 +4,7 @@
  */
 import { memo, useEffect, useRef, useState } from "react";
 import type { PageImage, ProgressPage } from "./api.ts";
+import { describeJobError, waitingOnProvider } from "./job-error.ts";
 import { needsReview, PAGE_LEVEL, pageLevel } from "./page-status.ts";
 
 /** memo: màn chương render lại mỗi lần gõ (bảng văn bản) — rail chỉ đổi khi page/ảnh/active/cờ đổi. */
@@ -46,6 +47,7 @@ export const PageRail = memo(function PageRail(props: {
             p.ai_update_available && "AI có bản mới",
             props.overflow.has(p.id) && "tràn khung",
             p.cut_flag && "cắt ở trần chiều cao",
+            waitingOnProvider(p.job) && "chờ AI thử lại",
           ].filter(Boolean);
           return (
             <button
@@ -54,7 +56,7 @@ export const PageRail = memo(function PageRail(props: {
               data-page={p.id}
               className={on ? "cw-rail-item on" : "cw-rail-item"}
               aria-current={on ? "page" : undefined}
-              title={p.job?.error ? `${p.job.error_class ?? "lỗi"}: ${p.job.error}` : undefined}
+              title={describeJobError(p.job)?.text}
               onClick={() => props.onPick(p.id)}
             >
               <span className="cw-thumb">

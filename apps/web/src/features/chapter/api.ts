@@ -14,6 +14,7 @@ export type JobView = {
   provider_retries: number;
   error_class: string | null;
   error: string | null;
+  run_after: string;
   page_id: string | null;
   created_at: string;
   updated_at: string;

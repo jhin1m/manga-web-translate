@@ -13,6 +13,7 @@ import { fetchRecentChapters, seriesKeys } from "../series/api.ts";
 import { uploadManager, useUploads } from "../upload/upload-manager.ts";
 import { cancelJob, type JobView, type Progress } from "./api.ts";
 import { ExportRow, useExports } from "./export-panel.tsx";
+import { ERROR_CLASS, providerWait, providerWaitText } from "./job-error.ts";
 import { pageLevel } from "./page-status.ts";
 import { formatBytes } from "./text-utils.ts";
 
@@ -31,13 +32,6 @@ const JOB_STATUS: Record<string, { label: string; tone: string }> = {
   succeeded: { label: "Xong", tone: "ok" },
   failed: { label: "Lỗi", tone: "danger" },
   cancelled: { label: "Đã huỷ", tone: "idle" },
-};
-const ERROR_CLASS: Record<string, string> = {
-  provider: "nhà cung cấp AI lỗi",
-  rate_limited: "bị giới hạn tốc độ",
-  schema: "AI trả sai định dạng",
-  invalid_input: "ảnh lỗi hoặc vượt giới hạn",
-  internal: "lỗi hệ thống",
 };
 const ACTIVE = new Set(["queued", "running", "paused_budget"]);
 /** Job theo trang (mỗi trang 1 job) gom vào dòng "trang"; xuất có mục riêng. */
@@ -207,6 +201,7 @@ function ChapterSection(props: {
     byClass.set(k, [...(byClass.get(k) ?? []), f.ord + 1]);
   }
   const jobs = chapterJobs(p.jobs);
+  const wait = providerWait(p.pages);
   return (
     <section className="drawer-section" aria-label="Chương đang mở">
       <h3>Chương đang mở</h3>
@@ -234,6 +229,7 @@ function ChapterSection(props: {
                 Trang {ords.join(", ")}: {ERROR_CLASS[k] ?? k}
               </span>
             ))}
+            {wait && <span className="small warn-text">{providerWaitText(wait)}</span>}
           </div>
         )}
         {jobs.map((j) => {

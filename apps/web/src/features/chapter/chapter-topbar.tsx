@@ -2,7 +2,7 @@
  * Thanh trên màn chương: ← series, tên chương (bấm → đổi series / số chương), chip trạng thái chương (chỗ duy nhất nói chương đang ở đâu), chỉ
  * báo sửa/lưu thu nhỏ (giữ khoá · Đã lưu / Chỉ xem), chế độ xem Gốc/Dịch/Chia đôi, Dịch lại ▾, Huỷ xử lý, icon
  * Hoạt động (+ số việc đang chạy) + Phím tắt, và nút chính theo trạng thái (primary-action.ts; "Xuất" mở drawer).
- * Dưới nó là băng cảnh báo — chỉ hiện khi người dùng phải biết/làm gì (khoá bị giữ/mất/lỗi, khôi phục, lỗi lưu).
+ * Dưới nó là băng cảnh báo — chỉ hiện khi người dùng phải biết/làm gì (khoá bị giữ/mất/lỗi, khôi phục, lỗi lưu, chờ AI).
  */
 import { Link } from "@tanstack/react-router";
 import type { ReactNode } from "react";
@@ -201,7 +201,8 @@ const READ_ONLY_TEXT: Partial<Record<Exclude<ReadOnlyReason, null>, string>> = {
 
 /**
  * Băng cảnh báo dưới thanh trên: chỉ render khi có việc người dùng phải biết/làm — người khác giữ khoá, lỗi khoá,
- * mất khoá, khôi phục thay đổi từ phiên trước, lỗi lưu. Bình thường không chiếm chỗ (trạng thái ở topbar).
+ * mất khoá, khôi phục thay đổi từ phiên trước, lỗi lưu, trang đang chờ AI tự thử lại (hết hạn mức/quá tải). Bình
+ * thường không chiếm chỗ (trạng thái ở topbar).
  */
 export function LockBand(props: {
   access: EditAccess;
@@ -209,6 +210,8 @@ export function LockBand(props: {
   recovery: RecoveryItem[] | null;
   canRestore: boolean;
   onRecovery(accept: boolean): void;
+  /** Câu giải thích khi trang chờ AI thử lại (job-error.ts providerWaitText); null = không có. */
+  aiWait: string | null;
 }) {
   const readOnly = useEditor((s) => s.readOnly);
   const save = useEditor((s) => s.save);
@@ -271,6 +274,7 @@ export function LockBand(props: {
   if (hasPages && save.status === "error" && readOnly !== "lock_lost") {
     items.push({ key: "save", tone: "danger", body: `Lỗi lưu: ${save.error ?? "không lưu được"}` });
   }
+  if (props.aiWait) items.push({ key: "ai", tone: "warn", body: props.aiWait });
   if (!items.length) return null;
   return (
     <div className="cw-band" role="alert" aria-label="Cảnh báo chương">
