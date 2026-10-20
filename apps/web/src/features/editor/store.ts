@@ -15,9 +15,10 @@ export type Tool = "select" | "text" | "brush" | "eraser" | "ocr";
 export type SaveStatus = "saved" | "dirty" | "saving" | "error";
 /**
  * lock_denied: người khác giữ khoá; lock_lost: server trả 423 khi lưu; recovery: đang chờ người dùng quyết
- * khôi phục thay đổi chưa lưu của phiên trước (sửa lúc này sẽ ghi đè bản ghi đó).
+ * khôi phục thay đổi chưa lưu của phiên trước (sửa lúc này sẽ ghi đè bản ghi đó); processing: chương đang
+ * dịch/xử lý — không giữ khoá để AI ghi được bản dịch, sửa được khi xong.
  */
-export type ReadOnlyReason = "lock_denied" | "lock_lost" | "loading" | "recovery" | null;
+export type ReadOnlyReason = "lock_denied" | "lock_lost" | "loading" | "recovery" | "processing" | null;
 
 export type AiInfo = { state: PageState | null; rev: number; available: boolean };
 /** Khung nhìn: toạ độ màn hình = (x, y) + toạ độ page · scale. */
@@ -49,7 +50,11 @@ export type EditorState = {
 type Recipe = (draft: Draft<PageState>) => void | PageState;
 
 export type EditorActions = {
-  load(p: { pageId: string; state: PageState; version: number; ai: AiInfo }): void;
+  /**
+   * Mở page để sửa. Giữ công cụ, layout, khung nhìn (toạ độ strip cả chương), chế độ xem gốc và read-only;
+   * `history` = lịch sử undo đã cất của page này (chỉ truyền khi version không đổi).
+   */
+  load(p: { pageId: string; state: PageState; version: number; ai: AiInfo; history?: History }): void;
   apply(recipe: Recipe, key?: string | null): void;
   undo(): void;
   redo(): void;
@@ -97,13 +102,16 @@ export function createEditorStore() {
   return createStore<EditorState & EditorActions>()((set, get) => ({
     ...initial(),
 
-    load: ({ pageId, state, version, ai }) =>
+    load: ({ pageId, state, version, ai, history }) =>
       set((s) => ({
         ...initial(),
         tool: s.tool,
         layout: s.layout,
+        view: s.view,
+        showOriginal: s.showOriginal,
         mask: { strokes: [], size: s.mask.size },
         readOnly: s.readOnly,
+        history: history ?? emptyHistory(),
         pageId,
         doc: state,
         base: state,
@@ -182,7 +190,7 @@ export function createEditorStore() {
   }));
 }
 
-/** Store dùng chung của màn editor (1 editor mỗi tab). */
+/** Store dùng chung của màn chương (1 màn mỗi tab) — page đang sửa. */
 export const editorStore = createEditorStore();
 
 export function useEditor<T>(selector: (s: EditorState & EditorActions) => T): T {

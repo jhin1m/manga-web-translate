@@ -225,3 +225,30 @@ describe("POST /pages/:id/ocr-region", () => {
     expect(job).toMatchObject({ type: "page.ocr_region", page_id: id });
   });
 });
+
+describe("GET /chapters/:id/states", () => {
+  it("returns every page's state in ord order, without ai_state", async () => {
+    const ids = [await newPage(), await newPage(null)];
+    expect((await lock()).status).toBe(200);
+    const first = ids[0] as string;
+    expect((await put(first, edited("Sửa tay"), 0)).status).toBe(200);
+    await unlock();
+    const res = await call(`/api/w/${A.workspaceId}/chapters/${A.chapterId}/states`, { cookie: A.cookie });
+    expect(res.status).toBe(200);
+    const { pages: list } = (await res.json()) as { pages: Record<string, unknown>[] };
+    const ords = list.map((x) => x.ord as number);
+    expect(ords).toEqual([...ords].sort((a, b) => a - b));
+    for (const id of ids) expect(list.some((x) => x.page_id === id)).toBe(true);
+    for (const x of list) {
+      expect(Object.keys(x).sort()).toEqual(
+        ["ai_rev", "ai_update_available", "ord", "page_id", "state", "state_origin", "version"].sort(),
+      );
+    }
+    expect(list.find((x) => x.page_id === first)).toMatchObject({
+      version: 1,
+      state_origin: "user",
+      ai_rev: 1,
+      state: { regions: [{ translation: "Sửa tay" }] },
+    });
+  });
+});

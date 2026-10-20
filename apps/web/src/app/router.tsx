@@ -3,11 +3,10 @@
  * props — không import ngược router.
  *
  * Đích: `/` (home workspace hiện tại), `/w/$ws/s/$seriesId[?tab]`, `/w/$ws/s/$seriesId/c/$chapterId[?page]`.
- * Path cũ `/w/$ws/series/...` (kể cả trang upload cũ) redirect sang path mới; riêng editor `.../edit/$pageId` còn
- * giữ tới khi màn chương gộp có.
+ * Path cũ `/w/$ws/series/...` (kể cả trang upload cũ và editor 1 trang `.../edit/$pageId`) redirect sang path mới.
  *
- * Editor (`editorRoute`) nằm dưới `authedRoute` nhưng NGOÀI `workspaceRoute` → chiếm toàn màn hình, không có
- * thanh trên của app shell.
+ * Màn chương (= editor gộp, `chapterRoute`) nằm dưới `authedRoute` nhưng NGOÀI `workspaceRoute` → chiếm toàn
+ * màn hình, không có thanh trên của app shell.
  */
 import { QueryClient } from "@tanstack/react-query";
 import {
@@ -19,8 +18,7 @@ import {
   Outlet,
   redirect,
 } from "@tanstack/react-router";
-import { lazy, Suspense } from "react";
-import { ChapterPage } from "../features/chapter/chapter-page.tsx";
+import { lazy, Suspense, useEffect } from "react";
 import { WorkspaceGlossaryPage } from "../features/glossary/glossary-editor.tsx";
 import { HomePage } from "../features/home/home-page.tsx";
 import { SeriesPage } from "../features/series/series-page.tsx";
@@ -32,8 +30,10 @@ import { MembersPage, WorkspacePickerPage } from "../routes/workspaces.tsx";
 import { AppShell } from "./app-shell.tsx";
 import { AuthGate } from "./layout.tsx";
 
-// Chunk riêng (konva + immer + zustand…): chỉ tải khi mở editor.
-const EditorPage = lazy(() => import("../features/editor/EditorPage.tsx").then((m) => ({ default: m.EditorPage })));
+// Chunk riêng (konva + immer + zustand…): chỉ tải khi mở màn chương.
+const ChapterWorkspace = lazy(() =>
+  import("../features/chapter/chapter-workspace.tsx").then((m) => ({ default: m.ChapterWorkspace })),
+);
 
 export const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: true, staleTime: 5_000 } },
@@ -124,14 +124,29 @@ export const seriesRoute = createRoute({
   },
 });
 
+/** Màn chương = editor gộp (toàn màn hình). */
 export const chapterRoute = createRoute({
-  getParentRoute: () => workspaceRoute,
-  path: "s/$seriesId/c/$chapterId",
+  getParentRoute: () => authedRoute,
+  path: "w/$ws/s/$seriesId/c/$chapterId",
   validateSearch: (search: Record<string, unknown>): { page?: string } =>
     typeof search.page === "string" ? { page: search.page } : {},
   component: function ChapterRoute() {
     const { ws, seriesId, chapterId } = chapterRoute.useParams();
-    return <ChapterPage ws={ws} seriesId={seriesId} chapterId={chapterId} />;
+    const { page } = chapterRoute.useSearch();
+    // Ngoài app shell: tự ghi workspace hiện tại (home `/` mở lại đúng chỗ).
+    useEffect(() => setCurrentWs(ws), [ws]);
+    return (
+      <Suspense
+        fallback={
+          <p className="muted" style={{ padding: 16 }}>
+            Đang tải màn chương…
+          </p>
+        }
+      >
+        {/* key: đổi chương = phiên mới (store dùng chung cả tab reset trong lần render đầu). */}
+        <ChapterWorkspace key={chapterId} ws={ws} seriesId={seriesId} chapterId={chapterId} page={page} />
+      </Suspense>
+    );
   },
 });
 
@@ -189,23 +204,12 @@ const legacyChapterRoute = createRoute({
   },
 });
 
-/** Editor 1 trang (toàn màn hình). */
-export const editorRoute = createRoute({
-  getParentRoute: () => authedRoute,
-  path: "w/$ws/series/$seriesId/chapters/$chapterId/edit/$pageId",
-  component: function EditorRoute() {
-    const p = editorRoute.useParams();
-    return (
-      <Suspense
-        fallback={
-          <p className="muted" style={{ padding: 16 }}>
-            Đang tải editor…
-          </p>
-        }
-      >
-        <EditorPage ws={p.ws} seriesId={p.seriesId} chapterId={p.chapterId} pageId={p.pageId} />
-      </Suspense>
-    );
+/** Editor 1 trang cũ → màn chương mở đúng page. */
+const legacyEditorRoute = createRoute({
+  getParentRoute: () => workspaceRoute,
+  path: "series/$seriesId/chapters/$chapterId/edit/$pageId",
+  beforeLoad: ({ params: { pageId, ...params } }) => {
+    throw redirect({ to: "/w/$ws/s/$seriesId/c/$chapterId", params, search: { page: pageId }, replace: true });
   },
 });
 
@@ -218,7 +222,6 @@ export const routeTree = rootRoute.addChildren([
     workspaceRoute.addChildren([
       workspaceIndexRoute,
       seriesRoute,
-      chapterRoute,
       glossaryRoute,
       membersRoute,
       legacySeriesListRoute,
@@ -226,8 +229,9 @@ export const routeTree = rootRoute.addChildren([
       legacySeriesSettingsRoute,
       legacyUploadRoute,
       legacyChapterRoute,
+      legacyEditorRoute,
     ]),
-    editorRoute,
+    chapterRoute,
   ]),
 ]);
 

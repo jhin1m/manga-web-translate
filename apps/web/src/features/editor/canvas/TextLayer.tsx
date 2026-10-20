@@ -1,11 +1,12 @@
 /**
- * Lớp chữ: box trong vùng nhìn (± lề) + Transformer cho box đang chọn. Kéo/đổi khung ghi vào store khi thả
+ * Lớp chữ của page đang sửa (đặt tại `offset` trên strip chương; `viewport` là toạ độ trong page): box trong vùng
+ * nhìn (± lề) + Transformer cho box đang chọn. Kéo/đổi khung ghi vào store khi thả
  * (1 bước undo mỗi thao tác); kích thước mới = khung × scale của Transformer, rồi trả scale về 1.
  */
 import type { TextBox } from "@mtl/shared";
 import type Konva from "konva";
 import { useCallback, useEffect, useRef } from "react";
-import { Layer, Transformer } from "react-konva";
+import { Group, Layer, Transformer } from "react-konva";
 import { moveBox, resizeBox } from "../actions.ts";
 import type { FontKit } from "../fonts.ts";
 import { editorStore, useEditor } from "../store.ts";
@@ -21,7 +22,15 @@ export function boxInView(b: TextBox, top: number, bottom: number) {
   return cy + r >= top - MARGIN && cy - r <= bottom + MARGIN;
 }
 
-export function TextLayer({ kit, viewport }: { kit: FontKit; viewport: { y: number; h: number } }) {
+export function TextLayer({
+  kit,
+  viewport,
+  offset = 0,
+}: {
+  kit: FontKit;
+  viewport: { y: number; h: number };
+  offset?: number;
+}) {
   const boxes = useEditor((s) => s.doc?.text_boxes ?? NO_BOXES);
   const selection = useEditor((s) => s.selection);
   const tool = useEditor((s) => s.tool);
@@ -75,18 +84,20 @@ export function TextLayer({ kit, viewport }: { kit: FontKit; viewport: { y: numb
 
   return (
     <Layer ref={layerRef}>
-      {visible.map((b) => (
-        <TextBoxNode
-          key={b.id}
-          box={b}
-          kit={kit}
-          draggable={editable}
-          selected={b.id === selection}
-          onSelect={onSelect}
-          onDragEnd={onDragEnd}
-          onEdit={onEdit}
-        />
-      ))}
+      <Group y={offset}>
+        {visible.map((b) => (
+          <TextBoxNode
+            key={b.id}
+            box={b}
+            kit={kit}
+            draggable={editable}
+            selected={b.id === selection}
+            onSelect={onSelect}
+            onDragEnd={onDragEnd}
+            onEdit={onEdit}
+          />
+        ))}
+      </Group>
       <Transformer
         ref={trRef}
         rotateEnabled

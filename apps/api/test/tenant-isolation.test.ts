@@ -156,6 +156,7 @@ const RESOURCE_CASES: Record<string, (b: Seed) => Record<string, string>> = {
   "POST /api/w/:ws/chapters/:chapterId/find-replace/undo": (b) => ({ chapterId: b.chapterId }),
   "POST /api/w/:ws/chapters/:chapterId/glossary-apply/preview": (b) => ({ chapterId: b.chapterId }),
   "POST /api/w/:ws/chapters/:chapterId/glossary-apply/apply": (b) => ({ chapterId: b.chapterId }),
+  "GET /api/w/:ws/chapters/:chapterId/states": (b) => ({ chapterId: b.chapterId }),
 };
 
 /** Mọi (method, path) người dùng dưới /api/w/:ws — lấy từ router thật, không liệt kê tay. */

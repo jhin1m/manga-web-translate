@@ -45,6 +45,14 @@ export class PendingQueue {
     return req<PendingRecord | undefined>((await this.store("readonly")).get(pageId));
   }
 
+  /** Bản ghi của nhiều page (bỏ qua page không có), cùng 1 transaction đọc. */
+  async getMany(pageIds: string[]): Promise<PendingRecord[]> {
+    if (pageIds.length === 0) return [];
+    const store = await this.store("readonly");
+    const out = await Promise.all(pageIds.map((id) => req<PendingRecord | undefined>(store.get(id))));
+    return out.filter((r): r is PendingRecord => !!r);
+  }
+
   /** Ghi đè bản ghi của page (op luôn là diff đầy đủ base → local, không cộng dồn). Rỗng → xoá. */
   async put(rec: PendingRecord): Promise<void> {
     if (rec.ops.length === 0) return this.delete(rec.pageId);

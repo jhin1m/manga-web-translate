@@ -17,7 +17,7 @@ import {
 } from "./api.ts";
 import { LockBanner, Modal } from "./Modal.tsx";
 import { describeWriteError, splitHighlight } from "./text-utils.ts";
-import { type LockState, useChapterLock } from "./use-chapter-lock.ts";
+import type { LockState } from "./use-chapter-lock.ts";
 
 type Ids = { ws: string; seriesId: string; chapterId: string };
 
@@ -228,11 +228,8 @@ export function MatchList({
                 </td>
                 <td className="num">{m.count}</td>
                 <td>
-                  <Link
-                    to="/w/$ws/series/$seriesId/chapters/$chapterId/edit/$pageId"
-                    params={{ ...ids, pageId: m.page_id }}
-                  >
-                    Mở editor
+                  <Link to="/w/$ws/s/$seriesId/c/$chapterId" params={ids} search={{ page: m.page_id }}>
+                    Mở trang
                   </Link>
                 </td>
               </tr>
@@ -244,8 +241,16 @@ export function MatchList({
   );
 }
 
-export function FindReplaceDialog({ ws, seriesId, chapterId, onClose }: Ids & { onClose(): void }) {
-  const lock = useChapterLock(ws, chapterId, true);
+/** Khoá của phiên màn chương (hộp thoại KHÔNG tự lấy khoá: cleanup của hook khoá sẽ nhả khoá của phiên). */
+export type SessionLock = { state: LockState; retry(): Promise<void> };
+
+export function FindReplaceDialog({
+  ws,
+  seriesId,
+  chapterId,
+  lock,
+  onClose,
+}: Ids & { lock: SessionLock; onClose(): void }) {
   const [find, setFind] = useState("");
   const [replace, setReplace] = useState("");
   const [cs, setCs] = useState(false);

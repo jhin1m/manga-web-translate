@@ -6,9 +6,8 @@ import { useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { errorMessage } from "../../lib/api.ts";
 import { applyGlossaryRules, type GlossaryRule, previewGlossaryApply } from "../chapter/api.ts";
-import { FlowPanel, useBatchFlow } from "../chapter/FindReplace.tsx";
+import { FlowPanel, type SessionLock, useBatchFlow } from "../chapter/FindReplace.tsx";
 import { LockBanner, Modal } from "../chapter/Modal.tsx";
-import { useChapterLock } from "../chapter/use-chapter-lock.ts";
 import { fetchGlossary, type GlossaryEntry, glossaryKey } from "./api.ts";
 
 /** Gộp glossary: entry series đè entry workspace trùng từ gốc (không phân biệt hoa thường). */
@@ -17,9 +16,15 @@ export function mergeGlossary(entries: GlossaryEntry[], inherited: GlossaryEntry
   return [...entries, ...inherited.filter((e) => !own.has(e.source_term.toLowerCase()))];
 }
 
-export function ApplyGlossaryDialog(props: { ws: string; seriesId: string; chapterId: string; onClose(): void }) {
-  const { ws, seriesId, chapterId, onClose } = props;
-  const lock = useChapterLock(ws, chapterId, true);
+export function ApplyGlossaryDialog(props: {
+  ws: string;
+  seriesId: string;
+  chapterId: string;
+  /** Khoá của phiên màn chương (không tự lấy khoá — xem FindReplaceDialog). */
+  lock: SessionLock;
+  onClose(): void;
+}) {
+  const { ws, seriesId, chapterId, lock, onClose } = props;
   const q = useQuery({ queryKey: glossaryKey(ws, seriesId), queryFn: () => fetchGlossary(ws, seriesId) });
   const entries = useMemo(() => (q.data ? mergeGlossary(q.data.entries, q.data.inherited) : []), [q.data]);
   const [picked, setPicked] = useState<Set<string>>(new Set());

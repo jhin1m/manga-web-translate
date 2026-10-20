@@ -64,8 +64,8 @@ async function readyChapter(page: Page) {
 async function openChapter(page: Page, chapterId: string) {
   await page.goto(`/w/${ws}/s/${state.seriesId}/c/${chapterId}`);
   await expect(page.getByRole("heading", { name: /^Chương / })).toBeVisible();
-  // Nút công cụ chỉ hiện khi chương ở trạng thái review/done và có trang.
-  await expect(page.getByRole("button", { name: "Tìm & thay", exact: true })).toBeVisible({ timeout: 15_000 });
+  // Nút công cụ chỉ bật khi chương ở trạng thái review/done và có trang.
+  await expect(page.getByRole("button", { name: "Tìm & thay", exact: true })).toBeEnabled({ timeout: 15_000 });
 }
 
 /** Bản dịch vùng đầu tiên của page, đọc thẳng từ API (không qua UI). */
@@ -155,7 +155,7 @@ test.describe("công cụ chương", () => {
     let exportDone = false;
     const worker = runFakeWorker(state.token, () => exportDone, 90_000);
 
-    await page.getByRole("button", { name: "Xuất chương", exact: true }).click();
+    await page.getByRole("button", { name: "Xuất", exact: true }).click();
     const dlg = page.getByRole("dialog", { name: "Xuất chương" });
     await dlg.getByRole("button", { name: "Xuất", exact: true }).click();
 

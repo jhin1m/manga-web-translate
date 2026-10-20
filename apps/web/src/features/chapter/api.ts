@@ -1,4 +1,5 @@
 /** Kiểu + gọi API của chương (khớp apps/api/src/routes/{chapters,pages,progress}.ts). */
+import type { PageState } from "@mtl/shared";
 import { api, wsPath } from "../../lib/api.ts";
 import type { ChapterStatus, ChapterSummary } from "../series/api.ts";
 import type { PageStatus } from "./status.ts";
@@ -54,12 +55,26 @@ export type PageImage = {
   height: number;
   clean_rev: number | null;
   image: { kind: "clean" | "original"; url: string };
+  /** Ảnh gốc + ảnh sạch (null khi chưa xoá chữ) cho canvas màn chương. */
+  images: { original: string; clean: string | null };
+};
+
+/** State của 1 page trong `GET /chapters/:id/states` (không kèm ai_state). */
+export type PageStateRow = {
+  page_id: string;
+  ord: number;
+  version: number;
+  state: PageState | null;
+  state_origin: "ai" | "user";
+  ai_rev: number;
+  ai_update_available: boolean;
 };
 
 export const chapterKeys = {
   detail: (ws: string, ch: string) => ["chapter", ws, ch] as const,
   progress: (ws: string, ch: string) => ["chapter", ws, ch, "progress"] as const,
   pages: (ws: string, ch: string, sig: string) => ["chapter", ws, ch, "pages", sig] as const,
+  states: (ws: string, ch: string) => ["chapter", ws, ch, "states"] as const,
 };
 
 const base = (ws: string, ch: string, path = "") => wsPath(ws, `/chapters/${ch}${path}`);
@@ -68,6 +83,7 @@ export const fetchChapter = (ws: string, ch: string) => api<ChapterDetail>(base(
 export const fetchProgress = (ws: string, ch: string) => api<Progress>(base(ws, ch, "/progress"));
 export const fetchPages = (ws: string, ch: string) =>
   api<{ expires_at: string; pages: PageImage[] }>(base(ws, ch, "/pages"));
+export const fetchChapterStates = (ws: string, ch: string) => api<{ pages: PageStateRow[] }>(base(ws, ch, "/states"));
 
 export type Rejected = { id: string; ord: number; reason: "missing" | "too_large" | "type_mismatch" };
 export const commitChapter = (ws: string, ch: string) =>

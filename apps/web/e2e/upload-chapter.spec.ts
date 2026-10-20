@@ -1,6 +1,6 @@
 /**
  * Luồng chính: thả ZIP 10 trang ở home → dòng xác nhận → "Tạo và mở chương" mở thẳng màn chương trong khi ảnh
- * còn đang upload → upload xong → "Dịch chương" → worker giả → 10 trang "Sẵn sàng". Thêm: màn series (3 ảnh lẻ
+ * còn đang upload → upload xong → "Dịch chương" → worker giả → 10 trang "Xong" trên rail. Thêm: màn series (3 ảnh lẻ
  * = 3 chương liên tiếp, glossary thêm nhanh) và redirect trang upload cũ.
  */
 import { expect, type Route, test } from "@playwright/test";
@@ -58,14 +58,16 @@ test("drop a 10-page ZIP on home, open the chapter while uploading, then transla
 
   let ready = false;
   const worker = runFakeWorker(state.token, () => ready);
-  await expect(page.getByText(/10 trang · sẵn sàng 10/)).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByText(/AI xong 10\/10/)).toBeVisible({ timeout: 30_000 });
   ready = true;
   await worker;
-  await expect(page.locator(".status", { hasText: "Sẵn sàng" })).toHaveCount(10);
+  const rail = page.getByRole("complementary", { name: "Danh sách trang" });
+  await expect(rail.locator(".status", { hasText: "Xong" })).toHaveCount(10);
   // Thumbnail là ảnh sạch ký qua FILES_DOMAIN.
-  await expect(page.locator("img").first()).toHaveAttribute("src", /localhost:9100\/.*\/clean\//);
+  await expect(rail.locator("img").first()).toHaveAttribute("src", /localhost:9100\/.*\/clean\//);
 
   // Home: chương vừa dịch nằm trong "Việc cần làm" với bước tiếp theo "Tiếp tục sửa".
+  await page.getByRole("link", { name: "Series e2e" }).click();
   await page.getByRole("link", { name: "MTL" }).click();
   const todo = page.getByRole("region", { name: "Việc cần làm" });
   await expect(

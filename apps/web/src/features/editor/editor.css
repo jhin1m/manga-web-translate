@@ -1,49 +1,7 @@
 /*
- * Editor (Phase 5) — cùng token/hướng A với phần còn lại (docs/design-guidelines.md). Vùng canvas nền xám
- * trung tính để nhìn ảnh; không gradient, không bóng lớn, 1 màu nhấn.
+ * Panel + canvas editor (dùng trong màn chương gộp, chapter-workspace.css lo bố cục) — cùng token/hướng A với phần
+ * còn lại (docs/design-guidelines.md). Vùng canvas nền xám trung tính để nhìn ảnh; không gradient, không bóng lớn.
  */
-.editor {
-  position: fixed;
-  inset: 0;
-  display: grid;
-  grid-template-columns: 56px minmax(0, 1fr) 340px;
-  grid-template-rows: var(--topbar-h) minmax(0, 1fr);
-  grid-template-areas:
-    "top top top"
-    "strip main side";
-  background: var(--c-bg);
-}
-
-.ed-top {
-  grid-area: top;
-  display: flex;
-  align-items: center;
-  gap: var(--sp-3);
-  padding: 0 var(--sp-3);
-  border-bottom: 1px solid var(--c-line);
-  min-width: 0;
-  overflow-x: auto;
-}
-.ed-top .spacer {
-  flex: 1;
-}
-.ed-group {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-1);
-}
-.ed-group + .ed-group {
-  padding-left: var(--sp-3);
-  border-left: 1px solid var(--c-line);
-}
-.ed-pageno,
-.ed-zoom {
-  font-size: var(--fs-sm);
-  color: var(--c-fg-muted);
-  min-width: 48px;
-  text-align: center;
-  font-variant-numeric: tabular-nums;
-}
 .ed-tool kbd {
   font: inherit;
   font-size: var(--fs-xs);
@@ -54,49 +12,6 @@
   background: var(--c-accent-weak);
   border-color: var(--c-accent);
   color: var(--c-accent);
-}
-
-.ed-strip {
-  grid-area: strip;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: var(--sp-2) var(--sp-1);
-  border-right: 1px solid var(--c-line);
-  overflow-y: auto;
-}
-.ed-strip button {
-  position: relative;
-  justify-content: center;
-  padding: 4px 0;
-  border-color: transparent;
-  font-variant-numeric: tabular-nums;
-}
-.ed-strip button .status {
-  font-size: 0;
-  gap: 0;
-}
-.ed-strip button.on {
-  border-color: var(--c-accent);
-  background: var(--c-accent-weak);
-}
-.ed-dot {
-  position: absolute;
-  top: 3px;
-  right: 3px;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--c-accent);
-}
-
-.ed-main {
-  grid-area: main;
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  min-height: 0;
 }
 .ed-notices:empty {
   display: none;
