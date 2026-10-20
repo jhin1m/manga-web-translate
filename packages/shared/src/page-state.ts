@@ -5,7 +5,8 @@ import { z } from "zod";
  * 1. Text chuẩn hoá NFC trước khi đo/vẽ — schema từ chối chuỗi không NFC.
  * 2. Baseline dòng i = box.y + pad + ascent + i·(ascent+descent)·line_height; ascent/descent đọc từ
  *    bảng hhea/OS/2 của file font (manifest font do worker sinh), không dùng metric trình duyệt.
- * 3. stroke.width = bề rộng viền ra NGOÀI glyph. Pillow: stroke_width=w; Konva: strokeWidth=2w + fillAfterStrokeEnabled.
+ * 3. stroke.width = bề rộng viền ra NGOÀI glyph. Konva: lineWidth=2w + stroke trước, fill đè (≡ strokeWidth=2w +
+ *    fillAfterStrokeEnabled); Pillow: dilate mask glyph 4× bằng đĩa bán kính 4w (không dùng stroke_width).
  * 4. Pillow bắt buộc raqm; không fallback basic layout.
  * 5. `lines[]` là kết quả ngắt dòng đã chốt; renderer chỉ vẽ, không ngắt lại (trừ box auto chưa có lines).
  * Tên trường TextBox khớp docs/typeset-layout-contract.md và worker/mtl_pipeline/schema.py.
