@@ -1,7 +1,7 @@
 ---
 title: "Manga translate editor MVP"
 description: "Web app tự dịch manhwa KO sang tiếng Việt (pipeline 2 giai đoạn) + editor kiểu Canva để sửa, worker AI chạy local Mac hoặc Modal, invite-only, kiến trúc sẵn multi-tenant."
-status: pending
+status: in-progress
 priority: P1
 effort: "~39d (MVP P1-P7) + ~8d trước mở đăng ký công khai (P8) + ~5d extension (P9)"
 tags: [manga, manhwa, translation, ai-pipeline, editor, konva, hono, drizzle, python-worker, multi-tenant]
@@ -53,7 +53,7 @@ upload (presigned POST) ─> commit (HEAD + magic bytes) ─> chapter.ingest (c�
 | # | Phase | Ưu tiên | Effort | Phụ thuộc | Trạng thái |
 |---|---|---|---|---|---|
 | 1 | [Spike & benchmark pipeline (KO, 2 giai đoạn)](./phase-01-pipeline-spike-benchmark.md) | P1 | 5d | — | Pending |
-| 2 | [Scaffold monorepo, DB, auth, storage](./phase-02-monorepo-db-auth-storage.md) | P1 | 4d | — (song song P1) | Pending |
+| 2 | [Scaffold monorepo, DB, auth, storage](./phase-02-monorepo-db-auth-storage.md) | P1 | 4d | — (song song P1) | Completed |
 | 3 | [Hàng đợi job + worker protocol + worker local](./phase-03-job-queue-worker.md) | P1 | 7d | 1 (gate), 2 | Pending |
 | 4 | [Web: upload, cài đặt series, tiến độ, danh sách trang](./phase-04-web-upload-series-progress.md) | P1 | 4d | 2, 3 | Pending |
 | 5 | [Editor react-konva](./phase-05-editor-konva.md) | P1 | 12d | 3, 4 (router/layout) | Pending |
