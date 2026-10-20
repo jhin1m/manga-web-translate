@@ -1,7 +1,7 @@
 ---
 phase: 4
 title: "Web: upload chương, cài đặt series, tiến độ job, danh sách trang"
-status: pending
+status: completed
 priority: P1
 effort: "4d"
 dependencies: [2, 3]
