@@ -41,7 +41,7 @@ Không phải lỗi (đã kiểm): `chapter.translate` chạy → queued → ch�
 | 1 | [Tín hiệu "cần xem" đúng: bỏ region bubble, dung sai tràn khung](./phase-01-accurate-review-signals.md) | feat/ux-p1-review-signals | — | Done |
 | 2 | [Canvas: vừa 1 trang, chỉ báo trang, toolbar không đè, ảnh gốc khi đang dịch](./phase-02-canvas-fit-indicator-processing-view.md) | feat/ux-p2-canvas | 1 | Done |
 | 3 | [Gom trạng thái về 1 chỗ](./phase-03-consolidate-status.md) | feat/ux-p3-status | 2 | Done |
-| 4 | [Thả là dịch: tự tạo + tự commit, sửa series/số chương trên header](./phase-04-drop-to-translate-flow.md) | feat/ux-p4-drop-flow | 3 | Pending |
+| 4 | [Thả là dịch: tự tạo + tự commit, sửa series/số chương trên header](./phase-04-drop-to-translate-flow.md) | feat/ux-p4-drop-flow | 3 | Done |
 | 5 | [Typeset mặc định chất manga: font comic + viền trắng](./phase-05-comic-typeset-defaults.md) | feat/ux-p5-typeset | 4 | Pending |
 | 6 | [Kiểm thử toàn luồng với chương mẫu + docs](./phase-06-verify-and-docs.md) | feat/ux-p6-verify | 5 | Pending |
 
