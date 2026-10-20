@@ -1,0 +1,27 @@
+# Process nền: reaper lease 30s + dispatcher Modal 5s + kill-switch ngân sách + runner_heartbeat (healthz).
+# Chạy đúng 1 instance (dispatcher có khoá advisory nhưng reaper không cần chạy song song).
+[Unit]
+Description=mtl jobs runner (reaper + dispatcher)
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=mtl
+Group=mtl
+WorkingDirectory=/srv/mtl/current/apps/api
+Environment=NODE_ENV=production
+ExecStart=/srv/mtl/current/apps/api/node_modules/.bin/tsx src/jobs/runner.ts
+Restart=always
+RestartSec=2
+TimeoutStopSec=30
+StandardOutput=journal
+StandardError=journal
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadOnlyPaths=/srv/mtl
+
+[Install]
+WantedBy=multi-user.target

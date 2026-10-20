@@ -37,6 +37,7 @@ import {
 } from "drizzle-orm/pg-core";
 import { organization } from "./auth.ts";
 import { idPk, inList, timestamps } from "./columns.ts";
+import { dispatches } from "./dispatches.ts";
 
 type ChapterStatus = (typeof CHAPTER_STATUSES)[number];
 type PageStatus = (typeof PAGE_STATUSES)[number];
@@ -282,8 +283,8 @@ export const jobs = pgTable(
     pipelineVersion: text("pipeline_version"),
     chapterId: uuid("chapter_id"),
     pageId: uuid("page_id"),
-    /** Bảng dispatches do Phase 7 tạo — chưa gắn FK. */
-    dispatchId: uuid("dispatch_id"),
+    /** Dispatch Modal của lần claim gần nhất (null = worker Mac / worker không qua dispatcher). */
+    dispatchId: uuid("dispatch_id").references(() => dispatches.id, { onDelete: "set null" }),
     ...timestamps,
   },
   (t) => [
@@ -310,13 +311,18 @@ export const jobs = pgTable(
   ],
 );
 
-/** Append-only. workspace_id null = chi phí nền tảng (VD GPU rỗi). Giá tính ở server từ số đếm thô. */
+/**
+ * Append-only. workspace_id null = chi phí nền tảng (VD GPU rỗi). Giá tính ở server từ số đếm thô.
+ * Khử trùng: dòng theo job → unique (job_id, attempt, seq, kind); dòng nền tảng theo dispatch (job_id null) →
+ * unique (dispatch_id, kind) — sessions/end gửi lại hoặc reaper ước lượng sau đó không ghi lần 2.
+ */
 export const usageLedger = pgTable(
   "usage_ledger",
   {
     id: idPk(),
     workspaceId: uuid("workspace_id").references(() => organization.id, { onDelete: "cascade" }),
     jobId: uuid("job_id").references(() => jobs.id, { onDelete: "set null" }),
+    dispatchId: uuid("dispatch_id").references(() => dispatches.id, { onDelete: "restrict" }),
     attempt: integer("attempt").notNull().default(0),
     seq: integer("seq").notNull().default(0),
     kind: text("kind").$type<UsageKind>().notNull(),
@@ -327,7 +333,10 @@ export const usageLedger = pgTable(
   },
   (t) => [
     unique("usage_ledger_job_attempt_seq_kind_uq").on(t.jobId, t.attempt, t.seq, t.kind),
+    uniqueIndex("usage_ledger_dispatch_kind_uq").on(t.dispatchId, t.kind).where(sql`${t.dispatchId} is not null`),
     index("usage_ledger_ws_created_idx").on(t.workspaceId, t.createdAt),
+    // Kill-switch ngân sách cộng cost_usd toàn cục theo ngày/tháng.
+    index("usage_ledger_created_idx").on(t.createdAt),
     check("usage_ledger_kind_chk", inList(sql`${t.kind}`, USAGE_KINDS)),
   ],
 );

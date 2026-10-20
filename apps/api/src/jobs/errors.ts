@@ -40,7 +40,7 @@ export function decideFailure(
 /** Lỗi nghiệp vụ ánh xạ ra HTTP ở route worker. */
 export class JobHttpError extends Error {
   constructor(
-    readonly status: 400 | 409 | 426,
+    readonly status: 400 | 403 | 404 | 409 | 426,
     readonly code: string,
     message = code,
   ) {

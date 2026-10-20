@@ -85,6 +85,8 @@ class JobContext:
         self._gpu_reported = 0.0
         self.lost = threading.Event()
         self.cancelled = threading.Event()
+        #: Lý do server bảo dừng: "cancel" (người dùng huỷ) hoặc "paused_budget" (kill-switch ngân sách).
+        self.stop_reason: str | None = None
 
     # ---- tiến độ / huỷ ----
 
@@ -97,7 +99,7 @@ class JobContext:
         if self.lost.is_set():
             raise JobAborted("lease lost")
         if self.cancelled.is_set():
-            raise JobAborted("cancelled")
+            raise JobAborted(self.stop_reason or "cancelled")
         if self._deadline():
             raise JobFailure("internal", "worker shutting down")
 
@@ -149,7 +151,10 @@ class JobContext:
             self.restore_usage(usage)
             log.warning("heartbeat %s lỗi: %s", self.job["id"], e)
             return
-        if res.get("stop") == "cancel":
+        # Cả hai: server đã kết thúc lease → dừng sạch, không gọi complete/fail (job về paused_budget không mất
+        # attempt; server giữ artifact đã ghi của attempt trước).
+        if res.get("stop") in ("cancel", "paused_budget"):
+            self.stop_reason = res["stop"]
             self.cancelled.set()
 
     # ---- I/O ----

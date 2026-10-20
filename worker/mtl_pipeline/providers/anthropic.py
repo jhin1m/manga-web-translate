@@ -15,6 +15,7 @@ from .base import (
     TRANSLATE_SCHEMA,
     ProviderError,
     classify_status,
+    guard_output_tokens,
     load_prompt,
     ocr_user_text,
     parse_ocr,
@@ -60,6 +61,7 @@ class AnthropicProvider:
             input_tokens=resp.usage.input_tokens,
             output_tokens=resp.usage.output_tokens,
         )
+        guard_output_tokens(usage)
         if resp.stop_reason in ("refusal", "max_tokens"):
             raise ProviderError("schema", f"anthropic dừng với {resp.stop_reason}", usage=[usage])
         text = next((b.text for b in resp.content if b.type == "text"), "")

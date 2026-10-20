@@ -1,7 +1,7 @@
 ---
 phase: 7
 title: "Production MVP: VPS, systemd, backup, kill-switch ngân sách, Modal worker"
-status: pending
+status: completed
 priority: P1
 effort: "4d"
 dependencies: [3, 4, 5, 6]

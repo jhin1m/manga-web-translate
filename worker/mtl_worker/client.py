@@ -65,8 +65,18 @@ class WorkerApi(Protocol):
 
 
 class WorkerClient:
-    def __init__(self, api: str, token: str, worker_id: str, timeout: float = 30.0, retries: int = 4):
+    def __init__(
+        self,
+        api: str,
+        token: str,
+        worker_id: str,
+        timeout: float = 30.0,
+        retries: int = 4,
+        dispatch_id: str | None = None,
+    ):
         self.worker_id = worker_id
+        # Container Modal: id dispatch gửi kèm mọi claim (server đánh dấu dispatch active, gắn vào job).
+        self.dispatch_id = dispatch_id
         self.retries = retries
         self.http = httpx.Client(
             base_url=api.rstrip("/") + "/worker/v1",
@@ -116,7 +126,7 @@ class WorkerClient:
                 "capabilities": capabilities,
                 "max": max_jobs,
                 "pipeline_version": PIPELINE_VERSION,
-                "dispatch_id": None,
+                "dispatch_id": self.dispatch_id,
             },
             retry=False,
         )
@@ -161,6 +171,17 @@ class WorkerClient:
             "partial": partial,
         }
         return self._post(f"/jobs/{job['id']}/fail", body)
+
+    def sessions_end(self, lifetime_s: float, busy_s: float) -> dict[str, Any]:
+        """Container thoát (mode drain): server ghi GPU rỗi = lifetime − busy (chi phí nền tảng). Gửi lại an toàn."""
+        if not self.dispatch_id:
+            raise RuntimeError("sessions_end cần dispatch_id")
+        body = {
+            "dispatch_id": self.dispatch_id,
+            "lifetime_s": round(lifetime_s, 3),
+            "busy_s": round(busy_s, 3),
+        }
+        return self._post("/sessions/end", body)
 
     def download(self, url: str) -> bytes:
         r = self.files.get(url)

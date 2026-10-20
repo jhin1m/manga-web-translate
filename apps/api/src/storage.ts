@@ -7,6 +7,7 @@
 import {
   GetObjectCommand,
   GetObjectTaggingCommand,
+  HeadBucketCommand,
   HeadObjectCommand,
   NoSuchKey,
   NotFound,
@@ -111,4 +112,14 @@ export async function readPrefix(key: string, n: number): Promise<Uint8Array> {
   const r = await internal.send(new GetObjectCommand({ Bucket, Key: key, Range: `bytes=0-${n - 1}` }));
   const bytes = await r.Body?.transformToByteArray();
   return bytes ?? new Uint8Array();
+}
+
+/** healthz: bucket tới được bằng credential của API. */
+export async function bucketReachable(): Promise<boolean> {
+  try {
+    await internal.send(new HeadBucketCommand({ Bucket }), { abortSignal: AbortSignal.timeout(3_000) });
+    return true;
+  } catch {
+    return false;
+  }
 }

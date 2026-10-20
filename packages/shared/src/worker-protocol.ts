@@ -76,6 +76,13 @@ export const FailRequest = z.object({
   partial: PreparePartial.nullable(),
 });
 
+/** Container Modal báo lúc thoát (chỉ token nền tảng) → ledger `gpu_idle_seconds = lifetime − busy`. */
+export const SessionsEndRequest = z.object({
+  dispatch_id: Uuid,
+  lifetime_s: z.number().nonnegative().max(86_400),
+  busy_s: z.number().nonnegative().max(86_400),
+});
+
 /** Dòng ngữ cảnh lân cận (bản dịch rỗng = trang sau, chưa dịch). */
 export const ContextLine = z.object({ source: z.string(), translation: z.string() });
 

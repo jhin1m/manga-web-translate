@@ -3,10 +3,18 @@
  * mọi lệnh sau claim fenced bằng {lease_token, attempt} — xem jobs/queue.ts.
  */
 import { isUuid } from "@mtl/db";
-import { ClaimRequest, CompleteRequest, FailRequest, HeartbeatRequest, PresignOutputsRequest } from "@mtl/shared";
+import {
+  ClaimRequest,
+  CompleteRequest,
+  FailRequest,
+  HeartbeatRequest,
+  PresignOutputsRequest,
+  SessionsEndRequest,
+} from "@mtl/shared";
 import { Hono } from "hono";
 import { createMiddleware } from "hono/factory";
 import { HTTPException } from "hono/http-exception";
+import { endSession } from "../jobs/dispatcher.ts";
 import { JobHttpError } from "../jobs/errors.ts";
 import { claim, complete, fail, heartbeat, presignJobOutputs } from "../jobs/queue.ts";
 import { parseJson } from "../lib/validate.ts";
@@ -61,4 +69,11 @@ workerRoutes.post("/jobs/:id/complete", async (c) => {
 workerRoutes.post("/jobs/:id/fail", async (c) => {
   const body = await parseJson(c, FailRequest);
   return c.json(await fail(c.get("worker"), jobId(c.req.param("id")), body));
+});
+
+// Container Modal báo lúc thoát (chỉ token nền tảng): GPU rỗi = lifetime − busy → ledger chi phí nền tảng.
+workerRoutes.post("/sessions/end", async (c) => {
+  if (c.get("worker").workspaceId) throw new JobHttpError(403, "platform_token_required");
+  const body = await parseJson(c, SessionsEndRequest);
+  return c.json(await endSession(body));
 });

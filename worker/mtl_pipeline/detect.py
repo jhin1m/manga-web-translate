@@ -155,10 +155,12 @@ class Detector:
     def __init__(self, model_path: Path, score_thresh: float = 0.35, threads: int = 0):
         import onnxruntime as ort
 
+        from .models import ort_providers
+
         so = ort.SessionOptions()
         if threads:
             so.intra_op_num_threads = threads
-        self.session = ort.InferenceSession(str(model_path), so, providers=["CPUExecutionProvider"])
+        self.session = ort.InferenceSession(str(model_path), so, providers=ort_providers())
         self.score_thresh = score_thresh
 
     def _run_tile(self, tile: np.ndarray) -> list[tuple[int, np.ndarray, float]]:

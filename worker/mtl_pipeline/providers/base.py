@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from importlib import resources
 from typing import Any, Protocol
 
@@ -18,6 +19,9 @@ PRICES_PER_MTOK: dict[str, tuple[float, float]] = {
 
 OCR_MAX_OUTPUT_TOKENS = 2048
 TRANSLATE_MAX_OUTPUT_TOKENS = 4096
+# Guardrail chi phí (red team #14): token ra thật của 1 call vượt ngưỡng (thinking lọt, model lặp) → lỗi schema
+# không thử lại trong job; hàng đợi tính attempt. Server vẫn clamp riêng (apps/api/src/billing/prices.ts).
+OUTPUT_TOKENS_GUARD = int(os.environ.get("MTL_MAX_OUTPUT_TOKENS_PER_CALL", "2000"))
 
 OCR_SCHEMA: dict[str, Any] = {
     "type": "object",
@@ -84,6 +88,21 @@ class ProviderError(RuntimeError):
         self.retry_after = retry_after
         self.retryable = retryable
         self.usage: list[TokenUsage] = list(usage or [])
+
+    #: False → ocr/translate không gọi lại provider trong cùng job (lặp lại chỉ tốn thêm token).
+    retry_in_job = True
+
+
+class OutputTokensExceeded(ProviderError):
+    retry_in_job = False
+
+
+def guard_output_tokens(usage: TokenUsage, limit: int | None = None) -> None:
+    limit = OUTPUT_TOKENS_GUARD if limit is None else limit
+    if usage.output_tokens > limit:
+        raise OutputTokensExceeded(
+            "schema", f"output_tokens {usage.output_tokens} > {limit}/call (guardrail)", usage=[usage]
+        )
 
 
 class UnknownPrice(KeyError):

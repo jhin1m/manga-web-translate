@@ -1,4 +1,5 @@
-"""Đọc token worker: file (MTL_TOKEN_FILE, quyền 600, của chính user) hoặc macOS Keychain. Không bao giờ qua argv."""
+"""Đọc token worker: env MTL_TOKEN (Modal secret), file (MTL_TOKEN_FILE, quyền 600, của chính user) hoặc macOS
+Keychain. Không bao giờ qua argv."""
 
 from __future__ import annotations
 
@@ -41,6 +42,10 @@ def read_keychain(account: str) -> str:
 
 
 def load_token() -> str:
+    # Container Modal: token nền tảng do Modal secret bơm vào env (không có file/Keychain, không qua argv).
+    env_token = os.environ.get("MTL_TOKEN", "").strip()
+    if env_token:
+        return env_token
     path = os.environ.get("MTL_TOKEN_FILE")
     if path:
         return read_token_file(Path(path).expanduser())
