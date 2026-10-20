@@ -47,13 +47,16 @@ Font UI tự host qua `@fontsource/be-vietnam-pro` (400/500/600) — không gọ
 
 Toàn màn hình (ngoài app shell), `chapter-workspace.css`: thanh trên 52px (+ băng cảnh báo, chỉ khi có), rồi 4 vùng.
 
+- **Tên chương** ("Chương N") bấm được → popover đổi series (select) / số chương (`chapter-meta-popover.tsx`,
+  `PATCH /chapters/:id`; trùng số → báo lỗi tại chỗ; đổi series → URL theo series mới).
 - **Trạng thái chương ở 1 chỗ**: chip cạnh tên chương (`status.ts` `chapterChip`, `role="status"`, aria-live
   polite): "Đang tải ảnh 2/5", "Đang dịch 3/5", "Chờ duyệt · 2 cần xem", "Xong". Rail chỉ giữ trạng thái theo trang.
   Cạnh chip: chỉ báo nhỏ khoá + lưu (icon khoá + Đã lưu / Đang lưu…, hoặc "Chỉ xem"). Hoạt động và Phím tắt là icon nhỏ.
 - **Băng cảnh báo** (`LockBand`, `role="alert"`): chỉ hiện khi người dùng phải biết/làm — người khác giữ khoá (Thử
   lại), lỗi khoá, mất khoá, khôi phục thay đổi từ phiên trước, lỗi lưu. Trạng thái bình thường không chiếm dải.
 - **Thông báo kết quả** (dịch lại, áp kiểu, lỗi thao tác): nổi trên canvas, không đẩy bố cục; info tự ẩn sau 6s.
-  "Dịch chương" thành công không báo thêm; có ảnh bị loại → giữ thông báo tới khi chương xử lý xong.
+  "Dịch chương" (bấm tay hoặc tự dịch khi upload xong) thành công không báo thêm; có ảnh bị loại → giữ thông báo tới
+  khi chương xử lý xong; tự dịch lỗi → thông báo lỗi, chương ở lại nháp với nút "Dịch chương".
 
 | Vùng | Nội dung |
 |---|---|
@@ -62,13 +65,15 @@ Toàn màn hình (ngoài app shell), `chapter-workspace.css`: thanh trên 52px (
 | Inspector phải (320px) | Thuộc tính khối/vùng của trang đang sửa |
 | Bảng dưới | Tab Bản dịch (bảng văn bản cả chương) / Tìm / Thay / Áp glossary; kéo cao, thu gọn (mặc định thu gọn khi < 1600px) |
 
-- **Nút chính** (1 nút, theo trạng thái chương, `primary-action.ts`): Tải ảnh → Dịch chương (= commit; upload xong
-  không tự dịch) → "Xuất" khoá trong lúc cắt trang/dịch (tiến độ ở chip) → Xuất. Chương có trang lỗi: "Chạy lại trang lỗi";
+- **Nút chính** (1 nút, theo trạng thái chương, `primary-action.ts`): Tải ảnh → Dịch chương (= commit; chương tạo
+  bằng cách thả file tự dịch khi upload xong — nút khoá trong lúc chờ/đang bắt đầu dịch) → "Xuất" khoá trong lúc cắt trang/dịch (tiến độ ở chip) → Xuất. Chương có trang lỗi: "Chạy lại trang lỗi";
   "Dịch lại cả chương" nằm trong menu phụ.
 - **Drawer phải 420px** (`app/drawer.tsx`): Xuất (cảnh báo "Trước khi xuất", định dạng, tải) và Hoạt động (upload +
   job chương + lượt xuất). Không dùng modal cho thao tác chính. Chi tiết: [editor.md](./editor.md).
-- **Home** (`/`): vùng thả file lớn → dòng xác nhận "Sau khi thả file" → "Việc cần làm" (chương chưa xong của
-  workspace, mỗi chương 1 nút bước kế tiếp) → hàng series. **Series**: hàng chương + vùng thả cho chương kế.
+- **Home** (`/`): vùng thả file lớn ("thả là dịch": đoán được series → tạo chương + tự dịch + mở màn chương; không
+  đoán được / file lỗi → dòng xác nhận "Sau khi thả file") → "Việc cần làm" (chương chưa xong của workspace, mỗi
+  chương 1 nút bước kế tiếp) → hàng series. **Series**: hàng chương + vùng thả cho chương kế (series cố định, cũng
+  tự tạo + tự dịch).
 
 ## Thành phần
 
