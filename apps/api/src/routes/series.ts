@@ -21,6 +21,7 @@ export const LLM_TIERS = ["standard", "premium"] as const;
 export const FONT_IDS = [
   "Anton-Regular",
   "Baloo2-Variable",
+  "Bangers-Regular",
   "BeVietnamPro-Bold",
   "BeVietnamPro-Regular",
   "Itim-Regular",

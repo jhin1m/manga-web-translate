@@ -1,7 +1,7 @@
 {
   "version": 1,
   "defaults": [
-    "PatrickHand-Regular",
+    "Bangers-Regular",
     "BeVietnamPro-Regular",
     "Anton-Regular"
   ],
@@ -20,6 +20,15 @@
       "unitsPerEm": 1000,
       "ascent": 1078,
       "descent": 524,
+      "metricsSource": "OS/2.typo",
+      "viComplete": true,
+      "missing": []
+    },
+    "Bangers-Regular": {
+      "file": "Bangers-Regular.ttf",
+      "unitsPerEm": 1000,
+      "ascent": 883,
+      "descent": 181,
       "metricsSource": "OS/2.typo",
       "viComplete": true,
       "missing": []

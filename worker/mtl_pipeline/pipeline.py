@@ -16,6 +16,7 @@ from pathlib import Path
 import numpy as np
 
 from .detect import Detector
+from .fonts import DEFAULT_FONT
 from .images import open_rgb, save_png
 from .inpaint import CompositeInpainter, FloodFillInpainter, LamaInpainter
 from .models import verify_all
@@ -28,7 +29,6 @@ from .translate import SeriesSettings, qualified_id, translate_chapter
 from .typeset import typeset_region
 
 IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".webp"}
-DEFAULT_FONT = "PatrickHand-Regular"
 
 
 def natural_key(p: Path) -> list[int | str]:

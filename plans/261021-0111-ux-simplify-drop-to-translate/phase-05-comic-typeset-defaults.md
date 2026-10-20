@@ -1,6 +1,6 @@
 # Phase 5 — Typeset mặc định chất manga
 
-Status: Pending · Branch: `feat/ux-p5-typeset` · Context: [plan.md](./plan.md), [docs/typeset-layout-contract.md](../../docs/typeset-layout-contract.md)
+Status: Done (2026-10-21, chờ controller review/merge; report: [phase-05-261021-ux-simplify-report.md](../reports/phase-05-261021-ux-simplify-report.md)) · Branch: `feat/ux-p5-typeset` · Context: [plan.md](./plan.md), [docs/typeset-layout-contract.md](../../docs/typeset-layout-contract.md)
 
 ## Vấn đề
 Bản dịch dùng PatrickHand, `stroke: null`, trông như chữ gõ dán lên. Torii: font comic (WildWords) in hoa đậm, viền trắng. Memory dự án: MVP chưa ràng buộc license, nhưng ưu tiên font OFL để khỏi phải thay sau.

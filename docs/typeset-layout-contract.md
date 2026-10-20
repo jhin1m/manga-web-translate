@@ -11,7 +11,7 @@ lệch bbox mực từng dòng ≤ 1px — xem `benchmarks/phase-01-results.md`)
 |---|---|
 | `x, y, w, h` | Khung box, px trên page (float). |
 | `rotation` | Độ, chiều kim đồng hồ, quay quanh **tâm box**. |
-| `font_family` | `font_id` = tên file font không đuôi trong `worker/fonts/` (vd. `PatrickHand-Regular`); khoá của `fonts/manifest.json`. |
+| `font_family` | `font_id` = tên file font không đuôi trong `worker/fonts/` (vd. `Bangers-Regular`); khoá của `fonts/manifest.json`. |
 | `font_size` | px theo em (canvas `${size}px`, Pillow `truetype(size)`). |
 | `line_height` | Hệ số nhân bước dòng (mặc định 1.15). |
 | `pad` | Lề trong (px). |
@@ -42,6 +42,21 @@ lệch bbox mực từng dòng ≤ 1px — xem `benchmarks/phase-01-results.md`)
 7. **raqm bắt buộc**: `PIL.features.check("raqm")` sai → worker từ chối chạy (`RaqmMissing`), không fallback
    basic layout. macOS: `brew install libraqm`; Linux: wheel manylinux của Pillow đã kèm raqm.
 8. **Chỉ chữ ngang** (không có chữ dọc trong MVP).
+
+## Mặc định auto-typeset
+
+- **Font thoại** (series chưa chọn): `Bangers-Regular` — font comic OFL lấy từ `github.com/google/fonts`
+  (`ofl/bangers`), đủ 146 chữ cái tiếng Việt (`viComplete`). Chọn vì nét đậm in hoa giống lettering manga/comic;
+  Comic Neue Bold thiếu ~100 chữ có dấu (Ơ, Ư, ạ…ỹ) nên loại; Itim/Mali/Baloo 2 đủ dấu nhưng trông như chữ gõ.
+  Một nguồn mỗi phía, khớp nhau: `manifest.defaults[0]` (`PREFERRED_DEFAULTS` trong `scripts/font_glyph_check.py`),
+  `DEFAULT_FONT` (`worker/mtl_pipeline/fonts.py`), `DEFAULT_DIALOGUE_FONT` (`apps/api/src/jobs/enqueue.ts`; test
+  `apps/api/test/fonts.test.ts` + `worker/tests/test_typeset_fit.py` giữ khớp). Series đã chọn font riêng giữ nguyên.
+- **Viền**: mọi box auto-typeset có viền màu tương phản với chữ (chữ đen → viền trắng, chữ trắng → viền đen),
+  `width = max(1.5, font_size × k)` làm tròn 0.1, `k = 0.1` trong bóng, `0.12` chữ ngoài bóng đè art
+  (`STROKE_BUBBLE`/`STROKE_FREE` ở `typeset.py`; editor dùng cùng công thức `contrastStroke` cho khối chèn OCR /
+  vẽ tay). Viền nằm ngoài glyph, có thể tràn quá `pad` ở cỡ chữ lớn — không tính vào tràn khung.
+- Thêm font: chép file vào `worker/fonts/` → `cd worker && uv run python scripts/font_glyph_check.py` (sinh manifest)
+  → `pnpm --filter @mtl/web fonts:sync` → thêm id vào `FONT_IDS` (API + web) → `node scripts/typeset-parity.ts`.
 
 ## Editor (Phase 5)
 

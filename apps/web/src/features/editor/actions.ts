@@ -168,7 +168,20 @@ export const refreshRegionFromOcr = (regionId: string, ocr: Region, layout: Layo
   }
 };
 
-/** Box mặc định cho vùng/khung mới. */
+/** Bề rộng viền / cỡ chữ — khớp worker/mtl_pipeline/typeset.py (STROKE_BUBBLE, STROKE_FREE). */
+const STROKE_BUBBLE = 0.1;
+const STROKE_FREE = 0.12;
+
+/** Viền màu tương phản với chữ, dày theo cỡ chữ (như auto-typeset của worker). */
+export function contrastStroke(fill: string, fontSize: number, kind?: Region["kind"]): NonNullable<TextBox["stroke"]> {
+  const ratio = kind === "text_free" ? STROKE_FREE : STROKE_BUBBLE;
+  return {
+    color: fill.toLowerCase() === "#ffffff" ? "#000000" : "#ffffff",
+    width: Math.round(Math.max(1.5, fontSize * ratio) * 10) / 10,
+  };
+}
+
+/** Box mặc định cho vùng/khung mới: chữ đen viền trắng. */
 export function newTextBox(id: string, g: Pick<TextBox, "x" | "y" | "w" | "h">, font: string, regionId: string | null) {
   return {
     id,
@@ -187,7 +200,7 @@ export function newTextBox(id: string, g: Pick<TextBox, "x" | "y" | "w" | "h">, 
     letter_spacing: 0,
     align: "center",
     fill: "#000000",
-    stroke: null,
+    stroke: contrastStroke("#000000", 22),
     auto_fit: true,
     hidden: false,
   } satisfies TextBox;
@@ -195,7 +208,7 @@ export function newTextBox(id: string, g: Pick<TextBox, "x" | "y" | "w" | "h">, 
 
 /**
  * Chèn kết quả OCR vùng chọn: region (id mới, worker luôn trả "r-user") + box phủ bbox với bản dịch.
- * Màu chữ theo polarity như auto-typeset (chữ sáng trên nền tối → trắng viền đen).
+ * Màu chữ + viền theo polarity như auto-typeset (chữ sáng trên nền tối → trắng viền đen, ngược lại đen viền trắng).
  */
 export const insertOcrRegion =
   (region: Region, ids: { region: string; box: string }, font: string, layout: Layout) => (s: S) => {
@@ -209,10 +222,9 @@ export const insertOcrRegion =
     s.regions.push(r);
     const [x, y, w, h] = r.bbox;
     const box: TextBox = { ...newTextBox(ids.box, { x, y, w, h }, font, r.id), text: r.translation };
-    if (r.polarity === "light_on_dark") {
-      box.fill = "#ffffff";
-      box.stroke = { color: "#000000", width: 2 };
-    }
+    if (r.polarity === "light_on_dark") box.fill = "#ffffff";
     s.text_boxes.push(box);
-    relayout(boxOf(s, ids.box) as Draft<TextBox>, layout);
+    const b = boxOf(s, ids.box) as Draft<TextBox>;
+    relayout(b, layout);
+    b.stroke = contrastStroke(b.fill, b.font_size, r.kind);
   };

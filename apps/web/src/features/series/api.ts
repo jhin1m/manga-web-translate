@@ -2,6 +2,7 @@
 import { api, wsPath } from "../../lib/api.ts";
 
 export const FONT_IDS = [
+  "Bangers-Regular",
   "PatrickHand-Regular",
   "BeVietnamPro-Regular",
   "BeVietnamPro-Bold",

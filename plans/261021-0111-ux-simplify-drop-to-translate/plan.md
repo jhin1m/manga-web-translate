@@ -42,7 +42,7 @@ Không phải lỗi (đã kiểm): `chapter.translate` chạy → queued → ch�
 | 2 | [Canvas: vừa 1 trang, chỉ báo trang, toolbar không đè, ảnh gốc khi đang dịch](./phase-02-canvas-fit-indicator-processing-view.md) | feat/ux-p2-canvas | 1 | Done |
 | 3 | [Gom trạng thái về 1 chỗ](./phase-03-consolidate-status.md) | feat/ux-p3-status | 2 | Done |
 | 4 | [Thả là dịch: tự tạo + tự commit, sửa series/số chương trên header](./phase-04-drop-to-translate-flow.md) | feat/ux-p4-drop-flow | 3 | Done |
-| 5 | [Typeset mặc định chất manga: font comic + viền trắng](./phase-05-comic-typeset-defaults.md) | feat/ux-p5-typeset | 4 | Pending |
+| 5 | [Typeset mặc định chất manga: font comic + viền trắng](./phase-05-comic-typeset-defaults.md) | feat/ux-p5-typeset | 4 | Done |
 | 6 | [Kiểm thử toàn luồng với chương mẫu + docs](./phase-06-verify-and-docs.md) | feat/ux-p6-verify | 5 | Pending |
 
 Tuần tự (e2e dùng DB `mtl_test_e2e` + cổng cố định chung → không chạy song song). File chung: `chapter-workspace.tsx` (P2, P3, P4), `chapter-topbar.tsx` (P3, P4), `chapter-workspace.css` (P2, P3), e2e `full-flow`/`click-budget`/`upload-chapter` (P3, P4).
@@ -61,5 +61,5 @@ Tuần tự (e2e dùng DB `mtl_test_e2e` + cổng cố định chung → không 
 - [ ] Trạng thái chương chỉ ở topbar (+ rail theo trang); không banner tồn đọng.
 - [ ] Từ home: thả 5 ảnh (series đoán được) → ≤ 1 thao tác (chính lần thả) tới khi chương tự dịch; e2e click-budget cập nhật.
 - [ ] Đổi series/số chương trên header hoạt động, có test API + tenant isolation.
-- [ ] Bản dịch mặc định: font comic tiếng Việt, viền trắng; `typeset-parity` xanh.
+- [x] Bản dịch mặc định: font comic tiếng Việt, viền trắng; `typeset-parity` xanh.
 - [ ] `pnpm typecheck && pnpm lint && pnpm test` + toàn bộ e2e xanh trên main sau P6.

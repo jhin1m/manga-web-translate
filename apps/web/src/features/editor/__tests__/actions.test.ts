@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   addBox,
   applyRegionTranslation,
+  contrastStroke,
   deleteBox,
   diffRegions,
   editText,
@@ -97,9 +98,14 @@ describe("editor actions", () => {
     };
     const s = run(doc(0), insertOcrRegion(r, { region: "r-new", box: "t-new" }, "F", layout));
     expect(s.regions[0]?.id).toBe("r-new");
-    expect(s.text_boxes[0]).toMatchObject({ id: "t-new", region_id: "r-new", text: "Chữ ngoài bóng", fill: "#ffffff" });
-    expect(s.text_boxes[0]?.lines.length).toBeGreaterThan(0);
-    expect(newTextBox("x", { x: 0, y: 0, w: 1, h: 1 }, "F", null).w).toBe(8);
+    const box = s.text_boxes[0];
+    expect(box).toMatchObject({ id: "t-new", region_id: "r-new", text: "Chữ ngoài bóng", fill: "#ffffff" });
+    expect(box?.lines.length).toBeGreaterThan(0);
+    expect(box?.stroke).toEqual(contrastStroke("#ffffff", box?.font_size ?? 0, r.kind));
+    expect(box?.stroke?.color).toBe("#000000");
+    const drawn = newTextBox("x", { x: 0, y: 0, w: 1, h: 1 }, "F", null);
+    expect(drawn.w).toBe(8);
+    expect(drawn.stroke).toEqual({ color: "#ffffff", width: 2.2 });
   });
 
   it("setStyleMany styles several boxes in one change; refreshRegionFromOcr keeps ids and box geometry", () => {

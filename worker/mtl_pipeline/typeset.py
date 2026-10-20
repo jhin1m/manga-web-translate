@@ -16,6 +16,9 @@ MAX_SIZE = 64
 LINE_HEIGHT = 1.15
 PAD = 4.0
 INTERIOR_TOL = 18
+# Bề rộng viền / cỡ chữ.
+STROKE_BUBBLE = 0.1
+STROKE_FREE = 0.12
 
 
 @dataclass(frozen=True)
@@ -134,14 +137,13 @@ def hard_wrap(text: str, font_id: str, size: float, max_w: float) -> list[str]:
     return lines
 
 
-def style_for(region: Region, size: float) -> tuple[str, Stroke | None]:
-    if region.kind == "text_free":
-        # Chữ ngoài bóng đè art: viền tương phản để đọc được trên mọi nền.
-        light = region.polarity == "light_on_dark"
-        return ("#ffffff" if light else "#000000"), Stroke(
-            color="#000000" if light else "#ffffff", width=round(max(1.5, size * 0.12), 1)
-        )
-    return ("#ffffff" if region.polarity == "light_on_dark" else "#000000"), None
+def style_for(region: Region, size: float) -> tuple[str, Stroke]:
+    """Chữ luôn có viền màu tương phản (chất lettering manga). Chữ ngoài bóng đè art cần viền dày hơn để đọc được."""
+    light = region.polarity == "light_on_dark"
+    ratio = STROKE_FREE if region.kind == "text_free" else STROKE_BUBBLE
+    return ("#ffffff" if light else "#000000"), Stroke(
+        color="#000000" if light else "#ffffff", width=round(max(1.5, size * ratio), 1)
+    )
 
 
 def typeset_region(
