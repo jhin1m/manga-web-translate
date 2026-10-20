@@ -1,0 +1,37 @@
+/** Job theo workspace: xem trạng thái/kết quả (VD page.ocr_region cho editor) và huỷ. */
+import { jobs } from "@mtl/db";
+import { Hono } from "hono";
+import { cancelJob } from "../jobs/queue.ts";
+import { type AppEnv, requireWorkspace } from "../middleware/workspace.ts";
+
+type Job = typeof jobs.$inferSelect;
+
+export const jobView = (j: Job) => ({
+  id: j.id,
+  type: j.type,
+  status: j.status,
+  progress: j.progress,
+  stage: j.stage,
+  attempts: j.attempts,
+  provider_retries: j.providerRetries,
+  error_class: j.errorClass,
+  error: j.error,
+  chapter_id: j.chapterId,
+  page_id: j.pageId,
+  result: j.result,
+  created_at: j.createdAt,
+  updated_at: j.updatedAt,
+});
+
+export const jobRoutes = new Hono<AppEnv>();
+
+jobRoutes.get("/w/:ws/jobs/:jobId", requireWorkspace(), async (c) => {
+  const job = await c.get("sdb").byId(jobs, c.req.param("jobId"), "job");
+  return c.json(jobView(job));
+});
+
+jobRoutes.post("/w/:ws/jobs/:jobId/cancel", requireWorkspace(), async (c) => {
+  const job = await c.get("sdb").byId(jobs, c.req.param("jobId"), "job");
+  const after = await cancelJob(c.get("workspaceId"), job.id);
+  return c.json(jobView(after ?? job));
+});

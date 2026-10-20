@@ -3,7 +3,10 @@ import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { secureHeaders } from "hono/secure-headers";
 import { auth } from "./auth.ts";
+import { jobRoutes } from "./routes/jobs.ts";
+import { progressRoutes } from "./routes/progress.ts";
 import { uploadRoutes } from "./routes/uploads.ts";
+import { workerRoutes } from "./routes/worker.ts";
 import { workspaceRoutes } from "./routes/workspaces.ts";
 
 export function createApp() {
@@ -15,6 +18,11 @@ export function createApp() {
   // Route người dùng: /api/me/* và /api/w/:ws/* (workspace trên URL).
   app.route("/api", workspaceRoutes);
   app.route("/api", uploadRoutes);
+  app.route("/api", jobRoutes);
+  app.route("/api", progressRoutes);
+
+  // Worker (Bearer token worker, không cookie) — giao thức có fencing, xem jobs/queue.ts.
+  app.route("/worker/v1", workerRoutes);
 
   app.notFound((c) => c.json({ error: "not_found" }, 404));
   app.onError((err, c) => {

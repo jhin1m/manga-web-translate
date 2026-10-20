@@ -18,7 +18,9 @@
     "typecheck": "pnpm -r typecheck",
     "lint": "biome check .",
     "format": "biome format --write .",
-    "test": "pnpm -r test"
+    "test": "pnpm -r test",
+    "worker-token": "pnpm --filter @mtl/api exec tsx ../../scripts/worker-token.ts",
+    "jobs": "pnpm --filter @mtl/api jobs"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.15",
