@@ -22,6 +22,27 @@ describe("primary action", () => {
     });
   });
 
+  it("auto translate: disabled while waiting or starting, enabled again when it failed", () => {
+    const waiting = { phase: "uploading" as const, done: 1, total: 3, autoCommit: "waiting" as const };
+    expect(primaryAction({ ...base, status: "draft", upload: waiting, pages: 0 })).toMatchObject({
+      disabled: true,
+      title: "Tự dịch khi tải xong ảnh (1/3)",
+    });
+    for (const autoCommit of ["running", "done"] as const) {
+      const upload = { phase: "uploaded" as const, done: 3, total: 3, autoCommit };
+      expect(primaryAction({ ...base, status: "draft", upload, pages: 0 })).toMatchObject({
+        command: "commit",
+        disabled: true,
+      });
+    }
+    const failed = { phase: "uploaded" as const, done: 3, total: 3, autoCommit: "failed" as const };
+    expect(primaryAction({ ...base, status: "draft", upload: failed, pages: 0 })).toMatchObject({
+      command: "commit",
+      label: "Dịch chương",
+      disabled: false,
+    });
+  });
+
   it("draft with every file → Dịch chương", () => {
     const uploaded = { phase: "uploaded" as const, done: 3, total: 3 };
     for (const upload of [uploaded, null]) {

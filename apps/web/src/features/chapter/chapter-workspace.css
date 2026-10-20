@@ -580,3 +580,42 @@
 .cw-page-info .danger {
   color: var(--c-danger);
 }
+
+/* Tên chương bấm được → popover đổi series / số chương. */
+.cw-meta {
+  position: relative;
+}
+.cw-meta-toggle {
+  font: inherit;
+  font-weight: inherit;
+  border-color: transparent;
+  background: transparent;
+  padding: 2px var(--sp-1);
+}
+.cw-meta-toggle:hover {
+  border-color: var(--c-line-strong);
+}
+.cw-meta-pop {
+  position: absolute;
+  left: 0;
+  top: calc(100% + 4px);
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  min-width: 260px;
+  padding: var(--sp-3);
+  font-size: var(--fs-sm);
+  font-weight: normal;
+  background: var(--c-bg);
+  border: 1px solid var(--c-line-strong);
+  border-radius: var(--radius);
+}
+.cw-meta-pop label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.cw-meta-pop .row {
+  justify-content: flex-end;
+}

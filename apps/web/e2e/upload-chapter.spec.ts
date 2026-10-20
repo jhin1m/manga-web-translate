@@ -1,8 +1,9 @@
 /**
- * Luồng chính: thả ZIP 10 trang ở home → dòng xác nhận → "Tạo và mở chương" mở thẳng màn chương trong khi ảnh
- * còn đang upload → upload xong → "Dịch chương" → worker giả → 10 trang "Xong" trên rail. Thêm: màn series (3 ảnh lẻ
- * = 3 chương liên tiếp, glossary thêm nhanh), drawer Hoạt động ở home khi đang upload. Test đầu đăng nhập bằng form
- * `/login` (các spec khác dùng dev auto-login).
+ * Luồng chính: thả ZIP 10 trang ở home → mở thẳng màn chương (series duy nhất, số chương từ tên ZIP) trong khi ảnh
+ * còn đang upload → upload xong tự dịch → worker giả → 10 trang "Xong" trên rail. Thêm: drawer Hoạt động ở home khi
+ * đang upload; màn series (3 ảnh lẻ = 1 chương số kế tiếp, tự dịch) + đổi số chương / series trên thanh trên +
+ * glossary thêm nhanh; file lỗi → dòng xác nhận cũ báo lỗi. Test đầu đăng nhập bằng form `/login` (các spec khác
+ * dùng dev auto-login).
  */
 import { expect, type Route, test } from "@playwright/test";
 import { zipSync } from "fflate";
@@ -13,7 +14,7 @@ import { login, loginWithForm, state } from "./helpers.ts";
 const ws = state.workspaceId;
 const s = state.seriesId;
 
-test("drop a 10-page ZIP on home, open the chapter while uploading, then translate", async ({ page }) => {
+test("drop a 10-page ZIP on home, open the chapter while uploading, then it translates itself", async ({ page }) => {
   const names = ["10.png", "2.png", "1.png", "9.png", "3.png", "8.png", "4.png", "7.png", "5.png", "6.png"];
   const zip = zipSync(
     Object.fromEntries([
@@ -37,15 +38,9 @@ test("drop a 10-page ZIP on home, open the chapter while uploading, then transla
   await page
     .getByRole("region", { name: "Tạo chương mới" })
     .locator('input[type="file"]')
-    .setInputFiles({ name: "chuong-1.zip", mimeType: "application/zip", buffer: Buffer.from(zip) });
+    .setInputFiles({ name: "chuong-501.zip", mimeType: "application/zip", buffer: Buffer.from(zip) });
 
-  const confirm = page.getByRole("form", { name: "Sau khi thả file" });
-  await expect(confirm.getByText("chuong-1.zip · 10 ảnh")).toBeVisible();
-  await confirm.getByLabel("Series (đoán từ tên file)").selectOption({ label: "Series e2e" });
-  await expect(confirm.getByLabel("Chương số")).toHaveValue("1");
-  await confirm.getByLabel("Chương số").fill("501");
-  await confirm.getByRole("button", { name: "Tạo và mở chương" }).click();
-
+  // Không có dòng xác nhận: workspace chỉ có 1 series, số chương lấy từ tên ZIP.
   await expect(page).toHaveURL(/\/w\/.+\/s\/.+\/c\/[0-9a-f-]{36}$/, { timeout: 30_000 });
   await expect(page.getByRole("heading", { name: /^Chương 501/ })).toBeVisible();
   await expect(page.getByRole("status", { name: "Tiến độ tải ảnh" })).toContainText("Đang tải ảnh");
@@ -71,8 +66,10 @@ test("drop a 10-page ZIP on home, open the chapter while uploading, then transla
   hold = false;
   for (const r of held.splice(0)) await r.continue();
 
-  await expect(page.getByText("Đã tải xong 10 ảnh")).toBeVisible({ timeout: 30_000 });
-  await page.getByRole("button", { name: "Dịch chương" }).click();
+  // Upload xong → tự dịch, không bấm "Dịch chương".
+  await expect(page.getByRole("status", { name: "Trạng thái chương" })).toHaveText(/^Đang (cắt trang|dịch)/, {
+    timeout: 30_000,
+  });
 
   let ready = false;
   const worker = runFakeWorker(state.token, () => ready);
@@ -93,8 +90,18 @@ test("drop a 10-page ZIP on home, open the chapter while uploading, then transla
   ).toBeVisible();
 });
 
-test("series page: 3 loose images become 3 consecutive chapters; quick glossary add shows up", async ({ page }) => {
+test("series page: 3 loose images = 1 chapter that translates itself; fix its number/series in the header", async ({
+  page,
+}) => {
   await login(page);
+  // Series thứ 2 để chuyển chương sang (series đích phải cùng workspace).
+  const other = await page.request.post(`/api/w/${ws}/series`, {
+    headers: { origin: WEB_URL },
+    data: { title: "Series phụ e2e" },
+  });
+  expect(other.status()).toBe(201);
+  const otherId = ((await other.json()) as { id: string }).id;
+
   await page.goto(`/w/${ws}/s/${s}`);
   const zone = page.getByRole("region", { name: "Thêm chương tiếp theo" });
   const next = Number((await zone.getByText(/^Thả strip của Chương \d+/).textContent())?.match(/\d+/)?.[0]);
@@ -102,22 +109,44 @@ test("series page: 3 loose images become 3 consecutive chapters; quick glossary 
   await zone
     .locator('input[type="file"]')
     .setInputFiles(["p1.png", "p2.png", "p3.png"].map((name) => ({ name, mimeType: "image/png", buffer: PNG_1PX })));
-  const confirm = page.getByRole("form", { name: "Sau khi thả file" });
-  await expect(confirm.getByLabel("1 chương gồm 3 ảnh")).toBeChecked();
-  await confirm.getByLabel("3 chương, mỗi ảnh 1 chương").check();
-  await confirm.getByRole("button", { name: "Tạo 3 chương" }).click();
-  await expect(confirm).toBeHidden();
-  for (const n of [next, next + 1, next + 2]) {
-    await expect(
-      page.locator(".row-item", { hasText: `Ch.${n}` }).getByRole("button", { name: "Dịch chương" }),
-    ).toBeVisible({
-      timeout: 15_000,
-    });
-  }
+  // Ảnh lẻ 1 chương, số kế tiếp (tên ảnh là số trang) → mở thẳng màn chương, tự dịch khi tải xong.
+  await expect(page).toHaveURL(new RegExp(`/s/${s}/c/[0-9a-f-]{36}$`), { timeout: 30_000 });
+  await expect(page.getByRole("heading", { name: new RegExp(`^Chương ${next}$`) })).toBeVisible();
+  await expect(page.getByRole("status", { name: "Trạng thái chương" })).toHaveText(/^Đang (bắt đầu dịch|cắt trang)/, {
+    timeout: 30_000,
+  });
 
+  // Số trùng chương có sẵn → báo lỗi, không đổi; số mới + series khác → URL theo series mới.
+  const title = page.getByRole("button", { name: `Chương ${next}`, exact: true });
+  await title.click();
+  const pop = page.getByRole("dialog", { name: "Đổi series / số chương" });
+  await pop.getByLabel("Chương số").fill("501");
+  await pop.getByRole("button", { name: "Lưu" }).click();
+  await expect(pop.getByText("series đã có chương 501")).toBeVisible();
+  await pop.getByLabel("Chương số").fill(String(next + 1000));
+  await pop.getByLabel("Series").selectOption({ label: "Series phụ e2e" });
+  await pop.getByRole("button", { name: "Lưu" }).click();
+  await expect(pop).toBeHidden();
+  await expect(page).toHaveURL(new RegExp(`/s/${otherId}/c/[0-9a-f-]{36}`));
+  await expect(page.getByRole("heading", { name: new RegExp(`^Chương ${next + 1000}$`) })).toBeVisible();
+  await expect(page.locator(".cw-back")).toHaveText("Series phụ e2e");
+
+  await page.goto(`/w/${ws}/s/${s}`);
   const glossary = page.getByRole("region", { name: "Glossary của series" });
   await glossary.getByLabel("Từ gốc").fill("김준");
   await glossary.getByLabel("Bản dịch").fill("Kim Jun");
   await glossary.getByRole("button", { name: "Thêm" }).click();
   await expect(glossary.getByRole("cell", { name: "Kim Jun" })).toBeVisible();
+});
+
+test("files the app cannot take as-is fall back to the confirm row with the problem", async ({ page }) => {
+  await login(page);
+  await page
+    .getByRole("region", { name: "Tạo chương mới" })
+    .locator('input[type="file"]')
+    .setInputFiles({ name: "bia.gif", mimeType: "image/gif", buffer: PNG_1PX });
+  const confirm = page.getByRole("form", { name: "Sau khi thả file" });
+  await expect(confirm.getByText("1 file không hợp lệ — bỏ chúng trước khi upload.")).toBeVisible();
+  await expect(confirm.getByRole("button", { name: "Tạo và mở chương" })).toBeDisabled();
+  await expect(page).toHaveURL(/\/$/);
 });

@@ -13,6 +13,11 @@ describe("chapter status chip", () => {
     const incomplete = { phase: "incomplete" as const, done: 2, total: 5 };
     expect(chapterChip({ ...base, status: "draft", pages: 0, upload: incomplete }).tone).toBe("warn");
     expect(chapterChip({ ...base, status: "draft", pages: 0 })).toEqual({ label: "Nháp", tone: "idle" });
+    const starting = { phase: "uploaded" as const, done: 5, total: 5, autoCommit: "running" as const };
+    expect(chapterChip({ ...base, status: "draft", pages: 0, upload: starting })).toEqual({
+      label: "Đang bắt đầu dịch",
+      tone: "busy",
+    });
   });
 
   it("processing shows page progress", () => {

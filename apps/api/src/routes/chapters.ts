@@ -55,13 +55,20 @@ const UploadFile = z.object({
   bytes: z.number().int().min(1).max(MAX_FILE_BYTES),
 });
 
+const ChapterNumber = z.union([z.number().nonnegative(), z.string().regex(/^\d+(\.\d+)?$/)]).transform(String);
+
 const ChapterCreate = z.object({
   series_id: z.string().uuid(),
-  number: z.union([z.number(), z.string().regex(/^\d+(\.\d+)?$/)]).transform(String),
+  number: ChapterNumber,
   title: z.string().trim().max(200).default(""),
   /** Theo thứ tự trang (client đã sort tên tự nhiên + cho kéo thả). */
   files: z.array(UploadFile).min(1).max(MAX_FILES_PER_CHAPTER),
 });
+
+/** Sửa số chương / chuyển series (sửa sau khi thả file tự tạo chương). */
+const ChapterPatch = z
+  .object({ number: ChapterNumber.optional(), series_id: z.string().uuid().optional() })
+  .refine((b) => b.number !== undefined || b.series_id !== undefined, { message: "number hoặc series_id" });
 
 const PresignBody = z.object({ file_ids: z.array(z.string().uuid()).min(1).max(MAX_FILES_PER_CHAPTER) });
 const CommitBody = z.object({ mode: z.enum(["strip", "pages"]).default("strip") });
@@ -166,6 +173,28 @@ chapterRoutes.post("/w/:ws/chapters", requireWorkspace(), async (c) => {
     },
     201,
   );
+});
+
+/**
+ * Đổi số chương và/hoặc series (series đích cùng workspace, không thì 404). Mọi trạng thái chương: storage key theo
+ * id chương nên không phải chép object; lần xuất sau đặt tên file theo số mới. Trùng số trong series đích → 409.
+ */
+chapterRoutes.patch("/w/:ws/chapters/:chapterId", requireWorkspace(), async (c) => {
+  const body = await parseJson(c, ChapterPatch);
+  const updated = await c.get("sdb").transaction(async (tx) => {
+    const ch = await tx.byId(chapters, c.req.param("chapterId"), "chapter");
+    const seriesId = body.series_id ? (await tx.byId(series, body.series_id, "series")).id : ch.seriesId;
+    const number = body.number ?? ch.number;
+    if (seriesId === ch.seriesId && Number(number) === Number(ch.number)) return ch;
+    const siblings = await tx.select(chapters, eq(chapters.seriesId, seriesId));
+    if (siblings.some((x) => x.id !== ch.id && Number(x.number) === Number(number))) {
+      throw conflict("chapter_number_taken", `series đã có chương ${number}`);
+    }
+    const [row] = await tx.update(chapters, eq(chapters.id, ch.id), { seriesId, number });
+    if (!row) throw new HTTPException(404, { message: "chapter not found" });
+    return row;
+  });
+  return c.json(chapterSummary(updated));
 });
 
 /** Ký lại POST cho file chưa upload xong (retry sau mất mạng / policy hết hạn). Chỉ khi chương còn draft. */

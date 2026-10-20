@@ -1,6 +1,6 @@
 # Phase 4 — Thả là dịch
 
-Status: Pending · Branch: `feat/ux-p4-drop-flow` · Context: [plan.md](./plan.md), [docs/development-setup.md](../../docs/development-setup.md) mục Upload
+Status: Done (2026-10-21, chờ controller review/merge; report: [phase-04-261021-ux-simplify-report.md](../reports/phase-04-261021-ux-simplify-report.md)) · Branch: `feat/ux-p4-drop-flow` · Context: [plan.md](./plan.md), [docs/development-setup.md](../../docs/development-setup.md) mục Upload
 
 ## Vấn đề
 Thả 5 ảnh ở home → `NewChapterConfirmRow` (series, số chương, "1 chương gồm N ảnh / N chương") → "Tạo và mở chương" → màn chương nháp → bấm "Dịch chương". Torii: thả → vào editor → 1 nút dịch.

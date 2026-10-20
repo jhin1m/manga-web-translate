@@ -22,6 +22,8 @@ describe("nextAction", () => {
       [nextAction(ch("draft"), { phase: "failed", done: 9, total: 10 }), "Tải tiếp ảnh"],
       [nextAction(ch("draft"), { phase: "uploading", done: 2, total: 10 }), "Xem tiến độ"],
       [nextAction(ch("draft"), { phase: "uploaded", done: 10, total: 10 }), "Dịch chương"],
+      [nextAction(ch("draft"), { phase: "uploaded", done: 10, total: 10, autoCommit: "running" }), "Xem tiến độ"],
+      [nextAction(ch("draft"), { phase: "uploaded", done: 10, total: 10, autoCommit: "failed" }), "Dịch chương"],
       [nextAction(ch("draft")), "Dịch chương"],
       [nextAction(ch("ingesting")), "Xem tiến độ"],
       [nextAction(ch("processing", pc(52, 24))), "Xem tiến độ"],

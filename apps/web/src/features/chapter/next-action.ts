@@ -6,7 +6,17 @@ import type { ChapterRow } from "../series/api.ts";
 import type { Tone } from "./status.ts";
 
 /** Upload phía client của chương nháp (upload-manager; "incomplete" = tab cũ đóng giữa chừng). */
-export type UploadView = { phase: "uploading" | "uploaded" | "failed" | "incomplete"; done: number; total: number };
+export type UploadView = {
+  phase: "uploading" | "uploaded" | "failed" | "incomplete";
+  done: number;
+  total: number;
+  /** Tự dịch khi upload xong (thả file ở home/series); undefined = không bật. */
+  autoCommit?: "waiting" | "running" | "done" | "failed";
+};
+
+/** Upload xong và đang/đã tự commit — chương sắp rời nháp (chờ lần tải trạng thái kế tiếp). */
+export const autoCommitStarting = (u: UploadView | null | undefined) =>
+  u?.autoCommit === "running" || u?.autoCommit === "done";
 
 export type NextActionKind = "progress" | "resume" | "translate" | "retry" | "edit" | "reexport" | "open";
 
@@ -33,12 +43,21 @@ export function nextAction(
   const a = (x: Omit<NextAction, "progress"> & { progress?: number }): NextAction => ({ progress: 0, ...x });
 
   if (ch.status === "draft" && upload) {
+    if (autoCommitStarting(upload)) {
+      return a({
+        kind: "progress",
+        action: "Xem tiến độ",
+        state: "Bắt đầu dịch",
+        detail: `Đã tải ${upload.total} ảnh · đang bắt đầu dịch`,
+        tone: "busy",
+      });
+    }
     if (upload.phase === "uploading") {
       return a({
         kind: "progress",
         action: "Xem tiến độ",
         state: "Đang tải ảnh",
-        detail: `Đang tải ${upload.done}/${upload.total} ảnh`,
+        detail: `Đang tải ${upload.done}/${upload.total} ảnh${upload.autoCommit === "waiting" ? " · tự dịch khi xong" : ""}`,
         tone: "busy",
         progress: ratio(upload.done, upload.total),
       });

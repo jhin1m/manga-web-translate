@@ -90,6 +90,9 @@ export const fetchSourceFiles = (ws: string, ch: string) =>
 export const fetchChapterStates = (ws: string, ch: string) => api<{ pages: PageStateRow[] }>(base(ws, ch, "/states"));
 
 export type Rejected = { id: string; ord: number; reason: "missing" | "too_large" | "type_mismatch" };
+/** Đổi số chương / chuyển series (409 `chapter_number_taken` khi series đích đã có số đó). */
+export const patchChapter = (ws: string, ch: string, body: { number?: string; series_id?: string }) =>
+  api<ChapterSummary>(base(ws, ch), { method: "PATCH", body });
 export const commitChapter = (ws: string, ch: string) =>
   api<{ job: JobView; accepted: number; rejected: Rejected[] }>(base(ws, ch, "/commit"), { method: "POST", body: {} });
 export const retryFailed = (ws: string, ch: string) =>
