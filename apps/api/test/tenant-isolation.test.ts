@@ -90,6 +90,7 @@ const BODIES: Record<string, unknown> = {
     return { file_ids: [sourceFileA] };
   },
   "POST /api/w/:ws/chapters/:chapterId/commit": {},
+  "PATCH /api/w/:ws/chapters/:chapterId": { number: "99" },
   "POST /api/w/:ws/chapters/:chapterId/translate": {},
   "POST /api/w/:ws/glossary": { source_term: "마법", target_term: "ma pháp" },
   "POST /api/w/:ws/series/:seriesId/glossary": { source_term: "마법", target_term: "phép thuật" },
@@ -125,6 +126,7 @@ const RESOURCE_CASES: Record<string, (b: Seed) => Record<string, string>> = {
   "GET /api/w/:ws/series/:seriesId": (b) => ({ seriesId: b.seriesId }),
   "PATCH /api/w/:ws/series/:seriesId": (b) => ({ seriesId: b.seriesId }),
   "GET /api/w/:ws/chapters/:chapterId": (b) => ({ chapterId: b.chapterId }),
+  "PATCH /api/w/:ws/chapters/:chapterId": (b) => ({ chapterId: b.chapterId }),
   "GET /api/w/:ws/chapters/:chapterId/pages": (b) => ({ chapterId: b.chapterId }),
   "GET /api/w/:ws/chapters/:chapterId/source-files": (b) => ({ chapterId: b.chapterId }),
   // presign trước commit: commit (own) loại source file giả (không có object) khỏi chương A.

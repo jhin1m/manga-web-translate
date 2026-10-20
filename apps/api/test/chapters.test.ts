@@ -2,7 +2,7 @@
  * Luồng chương qua API người dùng + worker giả lập (giao thức có fencing): upload → commit → ingest →
  * giai đoạn 1/2 → review; chạy lại trang lỗi; dịch lại 1 trang với glossary mới; huỷ; khoá chương.
  */
-import { chapters, jobs, pageStates, pages, scoped } from "@mtl/db";
+import { chapters, jobs, pageStates, pages, scoped, series } from "@mtl/db";
 import { emptyPageState, pageId } from "@mtl/shared";
 import { eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
@@ -446,5 +446,46 @@ describe("recent chapters", () => {
     const s = l.series.find((x) => x.id === A.seriesId);
     expect(s?.next_number).toBe("41");
     expect(s?.latest_chapter?.id).toBe(ch);
+  });
+});
+
+describe("edit chapter number / series", () => {
+  it("renumbers, moves to another series of the workspace, rejects a taken number and foreign series", async () => {
+    const R = await seedWorkspace("patch");
+    const O = await seedWorkspace("patch-other");
+    const sdb = scoped(db, R.workspaceId);
+    const other = await sdb.insert(series, { title: "Series khác" });
+    await sdb.insert(chapters, { seriesId: R.seriesId, number: "2" });
+    await sdb.insert(chapters, { seriesId: other.id, number: "7" });
+    const patch = (body: unknown, id = R.chapterId) =>
+      call(`/api/w/${R.workspaceId}/chapters/${id}`, { method: "PATCH", cookie: R.cookie, body });
+    type Summary = { id: string; series_id: string; number: string };
+
+    expect(await json<Summary>(await patch({ number: "3" }), 200)).toMatchObject({
+      number: "3",
+      series_id: R.seriesId,
+    });
+    // Giữ nguyên số của chính nó: không phải trùng.
+    await json(await patch({ number: "3.0" }), 200);
+    const taken = await json<{ error: string }>(await patch({ number: "2" }), 409);
+    expect(taken.error).toBe("chapter_number_taken");
+    expect((await json<{ error: string }>(await patch({ series_id: other.id, number: "7" }), 409)).error).toBe(
+      "chapter_number_taken",
+    );
+
+    const moved = await json<Summary>(await patch({ series_id: other.id, number: "8" }), 200);
+    expect(moved).toMatchObject({ series_id: other.id, number: "8" });
+    const detail = await json<{ series: { id: string } }>(
+      await call(`/api/w/${R.workspaceId}/chapters/${R.chapterId}`, { cookie: R.cookie }),
+      200,
+    );
+    expect(detail.series.id).toBe(other.id);
+
+    // Series của workspace khác → 404, chương không đổi.
+    expect((await patch({ series_id: O.seriesId })).status).toBe(404);
+    expect((await patch({})).status).toBe(400);
+    expect((await patch({ number: "abc" })).status).toBe(400);
+    const [row] = await sdb.select(chapters, eq(chapters.id, R.chapterId));
+    expect(row).toMatchObject({ seriesId: other.id, number: "8" });
   });
 });
