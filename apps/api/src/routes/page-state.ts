@@ -6,9 +6,9 @@
  * (423 nếu không). Mỗi lần ghi đẩy bản cũ vào `page_state_history` (giữ 50 bản mới nhất/page).
  * `ai_update_available` giữ nguyên khi người sửa lưu — chỉ tắt bằng ack sau khi đã xem kết quả AI mới.
  */
-import { pageStateHistory, pageStates, pages, type Scoped } from "@mtl/db";
+import { chapters, pageStateHistory, pageStates, pages, type Scoped } from "@mtl/db";
 import { BBox, PageState, storageKeys } from "@mtl/shared";
-import { and, eq, lt, type SQL } from "drizzle-orm";
+import { and, eq, inArray, lt, type SQL } from "drizzle-orm";
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { v7 as uuidv7 } from "uuid";
@@ -96,6 +96,45 @@ pageStateRoutes.get("/w/:ws/pages/:pageId", requireWorkspace(), async (c) => {
     ai_update_available: st.aiUpdateAvailable,
     images: { original, clean },
     expires_at: new Date(Date.now() + ttl * 1000),
+  });
+});
+
+/**
+ * State mọi page của chương (màn chương vẽ cả strip): theo `ord`, KHÔNG kèm `ai_state` (lấy theo page khi cần).
+ * 2 truy vấn: pages của chương rồi page_states theo danh sách id.
+ */
+pageStateRoutes.get("/w/:ws/chapters/:chapterId/states", requireWorkspace(), async (c) => {
+  const sdb = c.get("sdb");
+  const ch = await sdb.byId(chapters, c.req.param("chapterId"), "chapter");
+  const rows = await sdb.select(pages, eq(pages.chapterId, ch.id));
+  rows.sort((a, b) => a.ord - b.ord);
+  const states = rows.length
+    ? await sdb.select(
+        pageStates,
+        inArray(
+          pageStates.pageId,
+          rows.map((p) => p.id),
+        ),
+      )
+    : [];
+  const byPage = new Map(states.map((s) => [s.pageId, s]));
+  return c.json({
+    pages: rows.flatMap((p) => {
+      const st = byPage.get(p.id);
+      return st
+        ? [
+            {
+              page_id: p.id,
+              ord: p.ord,
+              version: st.version,
+              state: st.state,
+              state_origin: st.stateOrigin,
+              ai_rev: st.aiRev,
+              ai_update_available: st.aiUpdateAvailable,
+            },
+          ]
+        : [];
+    }),
   });
 });
 

@@ -1,35 +1,39 @@
 /**
- * Khung canvas: Stage bằng kích thước vùng nhìn (không bao giờ bằng page — strip 12.000px+), page vẽ qua
- * transform `view` (scale + dịch). Cuộn = kéo dọc strip; Ctrl/Cmd+cuộn = zoom quanh con trỏ; Space giữ (hoặc
- * chuột giữa) + kéo = kéo canvas. Con trỏ theo công cụ: chọn/kéo box, vẽ khung chữ mới (T), vẽ mask (B/E),
- * kéo khung OCR (O). Sửa chữ = textarea HTML phủ lên box (double-click).
+ * Canvas cả chương: 1 Stage bằng khung nhìn (không bao giờ bằng strip — giới hạn canvas Safari), các page xếp dọc
+ * theo `offsets` và vẽ qua transform `view` (toạ độ strip). Chỉ ≤ 4 page trong tầm nhìn mount ảnh (PageSlot).
+ * Page đang sửa (active) có lớp chữ/mask/OCR sửa được; page khác chỉ vẽ chữ từ cache.
+ *
+ * Cuộn = cuộn strip; Ctrl/Cmd+cuộn = zoom quanh con trỏ; Space giữ (hoặc chuột giữa) + kéo = kéo canvas.
+ * Bấm vào page không active chỉ kích hoạt page đó (không bắt đầu công cụ). Sửa chữ = textarea HTML phủ lên box.
  */
+import type { TextBox } from "@mtl/shared";
 import type Konva from "konva";
 import { useEffect, useRef, useState } from "react";
-import { Stage as KStage, Layer, Rect } from "react-konva";
+import { Stage as KStage, Layer } from "react-konva";
 import { addBox, editText, newTextBox } from "../actions.ts";
+import { activeOffset, chapterStore, useChapterStore } from "../chapter-store.ts";
 import type { FontKit } from "../fonts.ts";
 import { lineStep } from "../measure.ts";
 import { editorStore, useEditor, type View } from "../store.ts";
+import {
+  clampView,
+  EDGE,
+  pageAt,
+  screenToStrip,
+  stripSize,
+  stripToPage,
+  viewAtOffset,
+  visiblePages,
+} from "../strip-layout.ts";
 import { MaskLayer } from "./MaskLayer.tsx";
 import { OcrOverlay, type PageRect } from "./OcrSelect.tsx";
+import { PageSlot, type SlotImages } from "./PageSlot.tsx";
+import { StaticTextLayer } from "./StaticTextLayer.tsx";
 import { TextLayer } from "./TextLayer.tsx";
-import { TileLayer } from "./TileLayer.tsx";
 
 const MIN_SCALE = 0.1;
 const MAX_SCALE = 4;
-const EDGE = 40;
-
-type Images = { original: string; clean: string | null; cleanRev: number | null };
-
-/** Giữ page trong tầm: page hẹp hơn khung → căn giữa ngang; không cuộn quá đầu/cuối strip. */
-export function clampView(v: View, page: { w: number; h: number }, box: { w: number; h: number }): View {
-  const pw = page.w * v.scale;
-  const ph = page.h * v.scale;
-  const x = pw + 2 * EDGE <= box.w ? (box.w - pw) / 2 : Math.min(EDGE, Math.max(box.w - pw - EDGE, v.x));
-  const y = ph + 2 * EDGE <= box.h ? EDGE : Math.min(EDGE, Math.max(box.h - ph - EDGE, v.y));
-  return { scale: v.scale, x, y };
-}
+const NO_BOXES: TextBox[] = [];
 
 const normRect = (a: { x: number; y: number }, b: { x: number; y: number }): PageRect => ({
   x: Math.min(a.x, b.x),
@@ -38,22 +42,33 @@ const normRect = (a: { x: number; y: number }, b: { x: number; y: number }): Pag
   h: Math.abs(a.y - b.y),
 });
 
-export function EditorStage(props: {
+const clipRect = (r: PageRect, page: { w: number; h: number }): PageRect => {
+  const x = Math.max(0, r.x);
+  const y = Math.max(0, r.y);
+  return { x, y, w: Math.min(page.w, r.x + r.w) - x, h: Math.min(page.h, r.y + r.h) - y };
+};
+
+export function ChapterCanvas(props: {
   kit: FontKit;
-  images: Images;
-  page: { w: number; h: number };
+  images: Map<string, SlotImages>;
   defaultFont: string;
+  /** Page đưa lên đầu khung khi mở chương (từ `?page=`); không có → đầu strip. */
+  initialPageId: string | null;
   ocrPending: PageRect[];
   onOcr(r: PageRect): void;
+  onActivate(pageId: string): void;
   onImageError(msg: string | null): void;
 }) {
-  const { page, kit } = props;
+  const { kit } = props;
   const wrapRef = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ w: 0, h: 0 });
+  const pages = useChapterStore((s) => s.pages);
+  const offsets = useChapterStore((s) => s.offsets);
+  const cache = useChapterStore((s) => s.cache);
   const view = useEditor((s) => s.view);
   const tool = useEditor((s) => s.tool);
   const showOriginal = useEditor((s) => s.showOriginal);
-  const pageId = useEditor((s) => s.pageId);
+  const activeId = useEditor((s) => s.pageId);
   const [draft, setDraft] = useState<PageRect | null>(null);
   const [space, setSpace] = useState(false);
   const gesture = useRef<{
@@ -63,23 +78,46 @@ export function EditorStage(props: {
     start: View;
     from: { x: number; y: number };
   } | null>(null);
-  const fittedFor = useRef<string | null>(null);
+  const fitted = useRef(false);
+
+  const strip = stripSize(pages.map((p) => ({ w: p.width, h: p.height })));
+  const activeIdx = pages.findIndex((p) => p.id === activeId);
+  const active = activeIdx >= 0 ? pages[activeIdx] : undefined;
+  const activeOff = activeIdx >= 0 ? (offsets[activeIdx] ?? 0) : 0;
 
   useEffect(() => {
     const el = wrapRef.current;
     if (!el) return;
-    const ro = new ResizeObserver(([e]) => e && setSize({ w: e.contentRect.width, h: e.contentRect.height }));
+    const ro = new ResizeObserver(([e]) => {
+      if (!e) return;
+      const box = { w: e.contentRect.width, h: e.contentRect.height };
+      setSize(box);
+      chapterStore.getState().setBox(box);
+    });
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
 
-  // Mở page: vừa bề ngang khung (không phóng quá 100%), đầu strip ở trên.
+  // Mở chương: vừa bề ngang khung (không phóng quá 100%), page từ `?page=` (hoặc đầu strip) ở trên.
+  const { initialPageId } = props;
   useEffect(() => {
-    if (!pageId || size.w === 0 || fittedFor.current === pageId) return;
-    fittedFor.current = pageId;
-    const scale = Math.min(1, Math.max(MIN_SCALE, (size.w - 2 * EDGE) / page.w));
-    editorStore.getState().setView(clampView({ scale, x: 0, y: EDGE }, page, size));
-  }, [pageId, size, page]);
+    if (fitted.current || size.w === 0 || pages.length === 0) return;
+    fitted.current = true;
+    const s = chapterStore.getState();
+    const scale = Math.min(1, Math.max(MIN_SCALE, (size.w - 2 * EDGE) / strip.w));
+    const i = initialPageId ? s.pages.findIndex((p) => p.id === initialPageId) : -1;
+    const v = viewAtOffset({ scale, x: 0, y: EDGE }, i >= 0 ? (s.offsets[i] ?? 0) : 0);
+    editorStore.getState().setView(clampView(v, strip, size));
+  }, [size, pages.length, strip, initialPageId]);
+
+  // Page ở giữa khung nhìn (để ghi `?page=`).
+  const centerY = (size.h / 2 - view.y) / view.scale;
+  const centerIdx = pageAt(centerY, offsets);
+  const centerId = centerIdx >= 0 ? (pages[centerIdx]?.id ?? null) : null;
+  useEffect(() => {
+    if (fitted.current && chapterStore.getState().centerPageId !== centerId)
+      chapterStore.getState().setCenter(centerId);
+  }, [centerId]);
 
   useEffect(() => {
     const isField = (t: EventTarget | null) =>
@@ -99,8 +137,9 @@ export function EditorStage(props: {
     };
   }, []);
 
-  const setView = (v: View) => editorStore.getState().setView(clampView(v, page, size));
-  const toPage = (p: { x: number; y: number }) => ({ x: (p.x - view.x) / view.scale, y: (p.y - view.y) / view.scale });
+  const setView = (v: View) => editorStore.getState().setView(clampView(v, strip, size));
+  /** Toạ độ màn hình → toạ độ trong page active. */
+  const toPage = (p: { x: number; y: number }) => stripToPage(screenToStrip(p, view), activeOff);
 
   const onWheel = (e: Konva.KonvaEventObject<WheelEvent>) => {
     e.evt.preventDefault();
@@ -108,7 +147,7 @@ export function EditorStage(props: {
     if (ctrlKey || metaKey) {
       const p = e.target.getStage()?.getPointerPosition() ?? { x: size.w / 2, y: size.h / 2 };
       const scale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, view.scale * Math.exp(-deltaY * 0.0015)));
-      const at = toPage(p);
+      const at = screenToStrip(p, view);
       setView({ scale, x: p.x - at.x * scale, y: p.y - at.y * scale });
     } else if (shiftKey) setView({ ...view, x: view.x - deltaY });
     else setView({ ...view, x: view.x - deltaX, y: view.y - deltaY });
@@ -125,11 +164,26 @@ export function EditorStage(props: {
       return;
     }
     if (e.evt.button !== 0) return;
-    if (tool === "select") {
-      if (e.target === stage || e.target.getLayer()?.listening() === false) s.select(null);
+    // Bấm vào page khác → chỉ kích hoạt page đó.
+    const at = screenToStrip(p, view);
+    const hit = at.y >= 0 && at.y < strip.h ? pageAt(at.y, offsets) : -1;
+    const hitId = hit >= 0 ? pages[hit]?.id : undefined;
+    if (hitId && hitId !== activeId) {
+      s.select(null);
+      props.onActivate(hitId);
       return;
     }
-    if (s.readOnly) return;
+    if (tool === "select") {
+      if (
+        e.target === stage ||
+        e.target.getLayer()?.listening() === false ||
+        e.target.getParent()?.listening() === false
+      ) {
+        s.select(null);
+      }
+      return;
+    }
+    if (s.readOnly || !active) return;
     if (tool === "brush" || tool === "eraser") {
       gesture.current = { kind: "paint", ...base };
       const stroke = {
@@ -162,9 +216,10 @@ export function EditorStage(props: {
   const onUp = () => {
     const g = gesture.current;
     gesture.current = null;
-    if (g?.kind !== "rect" || !draft) return;
+    if (g?.kind !== "rect" || !draft || !active) return;
     setDraft(null);
     const s = editorStore.getState();
+    const page = { w: active.width, h: active.height };
     if (tool === "ocr") {
       if (draft.w >= 8 && draft.h >= 8) props.onOcr(clipRect(draft, page));
       return;
@@ -179,12 +234,17 @@ export function EditorStage(props: {
     }
   };
 
+  // Vùng nhìn theo toạ độ strip; mỗi page dùng bản dịch theo offset của nó.
   const viewport = { x: -view.x / view.scale, y: -view.y / view.scale, w: size.w / view.scale, h: size.h / view.scale };
-  const showClean = !showOriginal && props.images.clean;
-  // Layer ảnh gốc: chỉ tải khi so sánh lần đầu, sau đó giữ (bật/tắt không tải + giải mã lại cả page).
-  const [originalFor, setOriginalFor] = useState<string | null>(null);
-  if (!showClean && pageId && originalFor !== pageId) setOriginalFor(pageId);
-  const originalSeen = originalFor === pageId;
+  const mounted = visiblePages(
+    offsets,
+    pages.map((p) => p.height),
+    viewport,
+  );
+  const local = (off: number) => ({ ...viewport, y: viewport.y - off });
+  // Đã xem ảnh gốc 1 lần → giữ layer gốc của page đang mount (bật/tắt không tải lại).
+  const [originalSeen, setOriginalSeen] = useState(false);
+  if (showOriginal && !originalSeen) setOriginalSeen(true);
   const cursor = space ? "grab" : tool === "select" ? "default" : "crosshair";
 
   return (
@@ -204,31 +264,43 @@ export function EditorStage(props: {
           onPointerLeave={onUp}
         >
           <Layer listening={false}>
-            <Rect x={0} y={0} width={page.w} height={page.h} fill="#ffffff" />
-            {props.images.clean && (
-              <TileLayer
-                url={props.images.clean}
-                revKey={`clean:${pageId}:${props.images.cleanRev}`}
-                page={page}
-                viewport={viewport}
-                visible={!!showClean}
-                onError={props.onImageError}
-              />
-            )}
-            {(!showClean || originalSeen) && (
-              <TileLayer
-                url={props.images.original}
-                revKey={`original:${pageId}`}
-                page={page}
-                viewport={viewport}
-                visible={!showClean}
-                onError={props.onImageError}
-              />
-            )}
+            {mounted.map((i) => {
+              const p = pages[i];
+              if (!p) return null;
+              const off = offsets[i] ?? 0;
+              return (
+                <PageSlot
+                  key={p.id}
+                  pageId={p.id}
+                  size={{ w: p.width, h: p.height }}
+                  offset={off}
+                  images={props.images.get(p.id)}
+                  viewport={local(off)}
+                  showOriginal={showOriginal}
+                  keepOriginal={originalSeen}
+                  onImageError={props.onImageError}
+                />
+              );
+            })}
+            {!showOriginal &&
+              mounted.map((i) => {
+                const p = pages[i];
+                if (!p || p.id === activeId) return null;
+                const off = offsets[i] ?? 0;
+                return (
+                  <StaticTextLayer
+                    key={p.id}
+                    kit={kit}
+                    boxes={cache[p.id]?.state?.text_boxes ?? NO_BOXES}
+                    offset={off}
+                    viewport={local(off)}
+                  />
+                );
+              })}
           </Layer>
-          {!showOriginal && <TextLayer kit={kit} viewport={viewport} />}
-          <MaskLayer />
-          <OcrOverlay draft={draft} pending={props.ocrPending} />
+          {!showOriginal && active && <TextLayer kit={kit} viewport={local(activeOff)} offset={activeOff} />}
+          <MaskLayer offset={activeOff} />
+          <OcrOverlay draft={draft} pending={props.ocrPending} offset={activeOff} />
         </KStage>
       )}
       <TextEditOverlay kit={kit} />
@@ -236,17 +308,12 @@ export function EditorStage(props: {
   );
 }
 
-const clipRect = (r: PageRect, page: { w: number; h: number }): PageRect => {
-  const x = Math.max(0, r.x);
-  const y = Math.max(0, r.y);
-  return { x, y, w: Math.min(page.w, r.x + r.w) - x, h: Math.min(page.h, r.y + r.h) - y };
-};
-
 /** Textarea phủ đúng vị trí/xoay/cỡ chữ của box; blur hoặc Ctrl/Cmd+Enter = lưu, Esc = huỷ. */
 function TextEditOverlay({ kit }: { kit: FontKit }) {
   const editing = useEditor((s) => s.editing);
   const box = useEditor((s) => (s.editing ? s.doc?.text_boxes.find((b) => b.id === s.editing) : undefined));
   const view = useEditor((s) => s.view);
+  const offset = useChapterStore((s) => activeOffset(s));
   const ref = useRef<HTMLTextAreaElement>(null);
   const cancelled = useRef(false);
 
@@ -281,7 +348,7 @@ function TextEditOverlay({ kit }: { kit: FontKit }) {
       }}
       style={{
         left: view.x + box.x * k,
-        top: view.y + box.y * k,
+        top: view.y + (offset + box.y) * k,
         width: box.w * k,
         height: box.h * k,
         transform: `rotate(${box.rotation}deg)`,

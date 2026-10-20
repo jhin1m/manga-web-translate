@@ -1,5 +1,6 @@
 /**
  * Danh sách page của chương cho lưới thumbnail: ảnh sạch rev hiện tại khi có, fallback ảnh gốc sau ingest.
+ * `images` = cả ảnh gốc lẫn ảnh sạch (canvas màn chương vẽ từng page, so sánh gốc/dịch); `image` giữ cho client cũ.
  * URL là presigned GET TTL ngắn trên FILES_DOMAIN (bucket private) — tách khỏi /progress để polling 2–3s
  * không ký lại URL mỗi lượt.
  */
@@ -25,7 +26,10 @@ pageRoutes.get("/w/:ws/chapters/:chapterId/pages", requireWorkspace(), async (c)
     expires_at: expiresAt,
     pages: await Promise.all(
       rows.map(async (p) => {
-        const key = p.cleanRev !== null ? storageKeys.clean(ws, p.id, p.cleanRev) : p.originalKey;
+        const [original, clean] = await Promise.all([
+          presignGet(p.originalKey, THUMB_TTL_S),
+          p.cleanRev !== null ? presignGet(storageKeys.clean(ws, p.id, p.cleanRev), THUMB_TTL_S) : null,
+        ]);
         return {
           id: p.id,
           ord: p.ord,
@@ -34,7 +38,8 @@ pageRoutes.get("/w/:ws/chapters/:chapterId/pages", requireWorkspace(), async (c)
           status: p.status,
           clean_rev: p.cleanRev,
           cut_flag: p.cutFlag,
-          image: { kind: p.cleanRev !== null ? "clean" : "original", url: await presignGet(key, THUMB_TTL_S) },
+          image: { kind: clean !== null ? "clean" : "original", url: clean ?? original },
+          images: { original, clean },
         };
       }),
     ),

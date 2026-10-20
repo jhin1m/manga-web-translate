@@ -125,12 +125,17 @@ describe("chapter flow", () => {
     expect(p.chapter.status).toBe("review");
     expect(p.counts.ready).toBe(3);
 
-    const { pages } = await json<{ pages: { ord: number; image: { kind: string; url: string } }[] }>(
-      await api(`/chapters/${ch}/pages`),
-      200,
-    );
+    const { pages } = await json<{
+      pages: {
+        ord: number;
+        image: { kind: string; url: string };
+        images: { original: string; clean: string | null };
+      }[];
+    }>(await api(`/chapters/${ch}/pages`), 200);
     expect(pages.map((x) => x.ord)).toEqual([0, 1, 2]);
     expect(pages.every((x) => x.image.kind === "clean")).toBe(true);
+    // Cả ảnh gốc lẫn ảnh sạch cho canvas màn chương; `image` (thumbnail) = ảnh sạch.
+    expect(pages.every((x) => x.images.clean === x.image.url && x.images.original.includes("/ingest/"))).toBe(true);
     const img = await fetch(pages[0]?.image.url ?? "");
     expect(img.status).toBe(200);
     expect(img.headers.get("x-content-type-options")).toBe("nosniff");

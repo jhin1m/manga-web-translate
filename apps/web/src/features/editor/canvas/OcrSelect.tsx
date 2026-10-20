@@ -4,7 +4,7 @@
  */
 import type { Region } from "@mtl/shared";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Layer, Rect } from "react-konva";
+import { Group, Layer, Rect } from "react-konva";
 import { errorMessage } from "../../../lib/api.ts";
 import { insertOcrRegion } from "../actions.ts";
 import { type OcrRegionResult, startOcrRegion, waitJob } from "../api.ts";
@@ -62,23 +62,33 @@ export function useOcrRegion(ws: string, pageId: string, defaultFont: string, pa
   return { pending, error, start };
 }
 
-/** Khung đang kéo + khung đang chờ OCR. */
-export function OcrOverlay({ draft, pending }: { draft: PageRect | null; pending: PageRect[] }) {
+/** Khung đang kéo + khung đang chờ OCR (toạ độ page đang sửa, đặt tại `offset` trên strip chương). */
+export function OcrOverlay({
+  draft,
+  pending,
+  offset = 0,
+}: {
+  draft: PageRect | null;
+  pending: PageRect[];
+  offset?: number;
+}) {
   return (
     <Layer listening={false}>
-      {pending.map((r) => (
-        <Rect
-          key={`${r.x}:${r.y}:${r.w}`}
-          {...r}
-          stroke="#1f4fd1"
-          strokeWidth={1.5}
-          strokeScaleEnabled={false}
-          dash={[6, 4]}
-        />
-      ))}
-      {draft && (
-        <Rect {...draft} stroke="#1f4fd1" strokeWidth={1.5} strokeScaleEnabled={false} fill="rgba(31,79,209,0.08)" />
-      )}
+      <Group y={offset}>
+        {pending.map((r) => (
+          <Rect
+            key={`${r.x}:${r.y}:${r.w}`}
+            {...r}
+            stroke="#1f4fd1"
+            strokeWidth={1.5}
+            strokeScaleEnabled={false}
+            dash={[6, 4]}
+          />
+        ))}
+        {draft && (
+          <Rect {...draft} stroke="#1f4fd1" strokeWidth={1.5} strokeScaleEnabled={false} fill="rgba(31,79,209,0.08)" />
+        )}
+      </Group>
     </Layer>
   );
 }

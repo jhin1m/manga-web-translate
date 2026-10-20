@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { strokesBounds } from "../canvas/MaskLayer.tsx";
-import { clampView } from "../canvas/Stage.tsx";
 import { TILE, visibleTiles } from "../canvas/TileLayer.tsx";
+import { clampView } from "../strip-layout.ts";
 
 describe("tile culling (strip 800×12000)", () => {
   const page = { w: 800, h: 12_000 };

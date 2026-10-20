@@ -3,28 +3,31 @@
  * đỏ mờ. Khi gửi: dựng PNG chỉ phủ vùng có nét (offscreen canvas ≤ 4096px/cạnh, không toDataURL cả page),
  * nền đen, nét vẽ trắng, nét tẩy đen → worker lấy pixel > 0 làm mask tại `offset`.
  */
-import { Layer, Line } from "react-konva";
+import { Group, Layer, Line } from "react-konva";
 import { type MaskStroke, useEditor } from "../store.ts";
 
 export const MAX_MASK_SIDE = 4096;
 
-export function MaskLayer() {
+/** Nét mask của page đang sửa, đặt tại `offset` trên strip chương. */
+export function MaskLayer({ offset = 0 }: { offset?: number }) {
   const strokes = useEditor((s) => s.mask.strokes);
   return (
     <Layer listening={false} opacity={0.45}>
-      {strokes.map((st, i) => (
-        <Line
-          // biome-ignore lint/suspicious/noArrayIndexKey: nét chỉ thêm/xoá toàn bộ, không đổi thứ tự.
-          key={i}
-          points={st.points}
-          stroke="#dc2626"
-          strokeWidth={st.size}
-          lineCap="round"
-          lineJoin="round"
-          tension={0}
-          globalCompositeOperation={st.mode === "erase" ? "destination-out" : "source-over"}
-        />
-      ))}
+      <Group y={offset}>
+        {strokes.map((st, i) => (
+          <Line
+            // biome-ignore lint/suspicious/noArrayIndexKey: nét chỉ thêm/xoá toàn bộ, không đổi thứ tự.
+            key={i}
+            points={st.points}
+            stroke="#dc2626"
+            strokeWidth={st.size}
+            lineCap="round"
+            lineJoin="round"
+            tension={0}
+            globalCompositeOperation={st.mode === "erase" ? "destination-out" : "source-over"}
+          />
+        ))}
+      </Group>
     </Layer>
   );
 }

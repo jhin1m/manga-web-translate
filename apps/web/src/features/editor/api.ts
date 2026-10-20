@@ -3,7 +3,7 @@ import type { PageState, Region } from "@mtl/shared";
 import { api, wsPath } from "../../lib/api.ts";
 import type { JobView } from "../chapter/api.ts";
 
-export type EditorPage = {
+export type PageDetail = {
   page: {
     id: string;
     chapter_id: string;
@@ -29,7 +29,7 @@ const page = (ws: string, id: string, path = "") => wsPath(ws, `/pages/${id}${pa
 
 export const editorKeys = { page: (ws: string, id: string) => ["editor", ws, id] as const };
 
-export const fetchEditorPage = (ws: string, id: string) => api<EditorPage>(page(ws, id));
+export const fetchPageDetail = (ws: string, id: string) => api<PageDetail>(page(ws, id));
 
 export const putPageState = (ws: string, id: string, state: PageState, version: number) =>
   api<{ version: number }>(page(ws, id, "/state"), {

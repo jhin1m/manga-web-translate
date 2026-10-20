@@ -3,20 +3,20 @@
  * (1 bước undo mỗi lượt gõ liên tục). Bấm dòng → chọn box và cuộn canvas tới vùng đó.
  */
 import { setRegionTranslation } from "../actions.ts";
+import { focusPage } from "../chapter-store.ts";
 import { editorStore, useEditor } from "../store.ts";
 import { TextField } from "./TextField.tsx";
 
 const FLAG_LABEL = { sfx: "SFX", empty: "trống", low_conf: "cần soát" } as const;
 
-/** Cuộn khung nhìn để vùng nằm ở 1/3 trên màn hình. */
+/** Cuộn khung nhìn (strip cả chương) để vùng của page đang sửa nằm gần mép trên màn hình. */
 function focusRegion(regionId: string) {
   const s = editorStore.getState();
   const r = s.doc?.regions.find((x) => x.id === regionId);
-  if (!r) return;
+  if (!r || !s.pageId) return;
   const box = s.doc?.text_boxes.find((b) => b.region_id === regionId);
   if (box) s.select(box.id);
-  const y = r.bbox[1];
-  s.setView({ ...s.view, y: -y * s.view.scale + 120 });
+  focusPage(s.pageId, r.bbox[1], 80);
 }
 
 export function RegionTable() {

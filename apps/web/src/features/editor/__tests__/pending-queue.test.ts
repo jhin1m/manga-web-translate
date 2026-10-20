@@ -20,6 +20,7 @@ describe("pending queue (IndexedDB)", () => {
     expect(rec).toMatchObject({ pageId: "p1", baseVersion: 7 });
     expect(rec?.ops).toEqual(ops);
     expect(await q2.get("other")).toBeUndefined();
+    expect((await q2.getMany(["other", "p1"])).map((r) => r.pageId)).toEqual(["p1"]);
 
     await q2.put({ pageId: "p1", baseVersion: 8, ops: [], updatedAt: 2 });
     expect(await q2.get("p1")).toBeUndefined();

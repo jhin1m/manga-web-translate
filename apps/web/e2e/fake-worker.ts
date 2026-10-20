@@ -1,6 +1,7 @@
 /**
  * Worker giả lập CHỈ cho e2e: gọi đúng giao thức /worker/v1 (claim → presign-outputs/PUT → complete với
- * lease_token + attempt) nhưng không chạy AI — mỗi slice = 1 page, OCR/dịch cố định.
+ * lease_token + attempt) nhưng không chạy AI — mỗi slice = `pagesPerSource` page (mặc định 1) cao 1000px,
+ * OCR/dịch cố định. Server chỉ kiểm `source_file_id` của source_map, nên 1 slice cắt k page được.
  */
 import { zipSync } from "fflate";
 import { emptyPageState, type PageState } from "../../../packages/shared/src/index.ts";
@@ -72,10 +73,21 @@ function aiState(w: number, h: number): PageState {
   };
 }
 
-async function handle(token: string, j: Claimed) {
+export type FakeWorkerOptions = {
+  /** Số page cắt từ mỗi slice nguồn (page cao 1000, `src_y = i·1000`). */
+  pagesPerSource?: number;
+  /** Loại job nhận (mặc định tất cả) — VD chỉ ingest + prepare để giữ chương ở "processing". */
+  capabilities?: string[];
+};
+
+const ALL_CAPABILITIES = ["chapter.ingest", "page.prepare", "chapter.translate", "chapter.export"];
+
+async function handle(token: string, j: Claimed, opts: FakeWorkerOptions) {
   if (j.type === "chapter.ingest") {
+    const k = opts.pagesPerSource ?? 1;
     const sources = (j.inputs as { sources: { source_file_id: string }[] }).sources;
-    const names = sources.map((_, i) => `page:${i}`);
+    const cuts = sources.flatMap((s) => Array.from({ length: k }, (_, i) => ({ id: s.source_file_id, i })));
+    const names = cuts.map((_, i) => `page:${i}`);
     const { outputs } = await call<{ outputs: Record<string, { put: string }> }>(
       token,
       `/jobs/${j.id}/presign-outputs`,
@@ -84,12 +96,12 @@ async function handle(token: string, j: Claimed) {
     await Promise.all(names.map((n) => put(outputs[n]?.put ?? "")));
     return complete(token, j, {
       type: "chapter.ingest",
-      pages: sources.map((s, ord) => ({
+      pages: cuts.map((c, ord) => ({
         ord,
         width: 720,
         height: 1000,
         original_sha256: SHA,
-        source_map: [{ source_file_id: s.source_file_id, src_y: 0, page_y: 0, h: 1000 }],
+        source_map: [{ source_file_id: c.id, src_y: c.i * 1000, page_y: 0, h: 1000 }],
         cut_flag: false,
       })),
     });
@@ -119,17 +131,22 @@ async function handle(token: string, j: Claimed) {
 }
 
 /** Vòng lặp claim tới khi `until()` đúng hoặc hết giờ. */
-export async function runFakeWorker(token: string, until: () => boolean, timeoutMs = 30_000) {
+export async function runFakeWorker(
+  token: string,
+  until: () => boolean,
+  timeoutMs = 30_000,
+  opts: FakeWorkerOptions = {},
+) {
   const deadline = Date.now() + timeoutMs;
   while (!until() && Date.now() < deadline) {
     const { jobs } = await call<{ jobs: Claimed[] }>(token, "/claim", {
       worker_id: "e2e-fake",
-      capabilities: ["chapter.ingest", "page.prepare", "chapter.translate", "chapter.export"],
+      capabilities: opts.capabilities ?? ALL_CAPABILITIES,
       max: 8,
       pipeline_version: VERSION,
       dispatch_id: null,
     });
     if (jobs.length === 0) await new Promise((r) => setTimeout(r, 300));
-    await Promise.all(jobs.map((j) => handle(token, j)));
+    await Promise.all(jobs.map((j) => handle(token, j, opts)));
   }
 }
