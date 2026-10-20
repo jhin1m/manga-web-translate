@@ -18,16 +18,31 @@ export type LockState =
   | { status: "denied"; holderName: string | null }
   | { status: "error"; message: string };
 
+/**
+ * Mọi lock/unlock của tab đi tuần tự: StrictMode hoặc đổi chương tạo chuỗi unlock(cũ) → lock(mới); chạy
+ * song song thì unlock có thể tới server SAU lock và nhả mất khoá đang hiển thị là "đang giữ".
+ */
+let lockChain: Promise<unknown> = Promise.resolve();
+function serial<T>(op: () => Promise<T>): Promise<T> {
+  const run = lockChain.then(op, op);
+  lockChain = run.catch(() => undefined);
+  return run;
+}
+
 export function useChapterLock(ws: string, chapterId: string, enabled = true) {
   const qc = useQueryClient();
   const [state, setState] = useState<LockState>({ status: "acquiring" });
   const lastActivity = useRef(Date.now());
 
+  /** false sau cleanup — response muộn của lần mount cũ không ghi đè state của chương mới. */
+  const live = useRef(false);
+
   const acquire = useCallback(async () => {
     try {
-      const r = await lockChapter(ws, chapterId);
-      setState({ status: "held", expiresAt: r.expires_at });
+      const r = await serial(() => lockChapter(ws, chapterId));
+      if (live.current) setState({ status: "held", expiresAt: r.expires_at });
     } catch (e) {
+      if (!live.current) return;
       if (e instanceof ApiError && e.status === 423) {
         setState({ status: "denied", holderName: (e.body.holder_name as string | null) ?? null });
       } else setState({ status: "error", message: e instanceof Error ? e.message : String(e) });
@@ -38,6 +53,8 @@ export function useChapterLock(ws: string, chapterId: string, enabled = true) {
 
   useEffect(() => {
     if (!enabled) return;
+    live.current = true;
+    setState({ status: "acquiring" });
     void acquire();
     const mark = () => {
       lastActivity.current = Date.now();
@@ -60,7 +77,8 @@ export function useChapterLock(ws: string, chapterId: string, enabled = true) {
       for (const ev of events) removeEventListener(ev, mark);
       removeEventListener("pagehide", onHide);
       clearInterval(timer);
-      void unlockChapter(ws, chapterId).catch(() => undefined);
+      live.current = false;
+      void serial(() => unlockChapter(ws, chapterId)).catch(() => undefined);
     };
   }, [ws, chapterId, enabled, acquire]);
 

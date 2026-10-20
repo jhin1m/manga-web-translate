@@ -5,12 +5,10 @@ golden/
 worker/models/*.onnx
 *.safetensors
 .venv/
-<<<<<<< HEAD
 dist/
 coverage/
 *.tsbuildinfo
 .DS_Store
-=======
 __pycache__/
 *.pyc
 .mypy_cache/
@@ -20,7 +18,6 @@ worker/models/*.part
 worker/spikes/typeset-parity/out/
 worker/spikes/typeset-parity/test-results/
 worker/spikes/typeset-parity/playwright-report/
->>>>>>> feat/p1-pipeline-spike-benchmark
 
 # Playwright e2e (apps/web)
 apps/web/e2e/.state.json

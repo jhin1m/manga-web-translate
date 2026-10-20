@@ -4,7 +4,7 @@
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { errorMessage } from "../../lib/api.ts";
 import { seriesKeys } from "../series/api.ts";
 import {
@@ -37,10 +37,12 @@ export function ChapterPage({ ws, seriesId, chapterId }: { ws: string; seriesId:
   const progressQ = useQuery({
     queryKey: chapterKeys.progress(ws, chapterId),
     queryFn: () => fetchProgress(ws, chapterId),
-    refetchInterval: (q) => (isChapterSettled(q.state.data?.chapter.status) ? false : PROGRESS_POLL_MS),
+    // Dừng khi chương ổn định hoặc request lỗi (refetch lại khi người dùng thao tác/focus tab).
+    refetchInterval: (q) =>
+      q.state.status === "error" || isChapterSettled(q.state.data?.chapter.status) ? false : PROGRESS_POLL_MS,
     refetchIntervalInBackground: false,
   });
-  // URL ảnh ký 15': chỉ lấy lại khi tập page/clean_rev đổi hoặc gần hết hạn.
+  // URL ảnh ký 15': lấy lại danh sách khi tập page/clean_rev đổi hoặc gần hết hạn.
   const pagesSig = (progressQ.data?.pages ?? []).map((p) => `${p.id}:${p.clean_rev ?? "o"}`).join(",");
   const pagesQ = useQuery({
     queryKey: chapterKeys.pages(ws, chapterId, pagesSig),
@@ -50,6 +52,7 @@ export function ChapterPage({ ws, seriesId, chapterId }: { ws: string; seriesId:
     refetchInterval: 12 * 60_000,
     placeholderData: (prev) => prev,
   });
+  const images = useStableImages(pagesQ.data?.pages);
 
   const refresh = () => {
     void qc.invalidateQueries({ queryKey: ["chapter", ws, chapterId] });
@@ -82,7 +85,6 @@ export function ChapterPage({ ws, seriesId, chapterId }: { ws: string; seriesId:
   const prog = progressQ.data;
   const status = prog?.chapter.status ?? ch?.status;
   const st = status ? CHAPTER_STATUS[status] : null;
-  const images = new Map((pagesQ.data?.pages ?? []).map((p) => [p.id, p]));
   const pages = prog?.pages ?? [];
   const counts = prog?.counts ?? {};
   const busy = status === "ingesting" || status === "processing";
@@ -189,6 +191,27 @@ export function ChapterPage({ ws, seriesId, chapterId }: { ws: string; seriesId:
       </div>
     </div>
   );
+}
+
+const URL_REUSE_MS = 10 * 60_000;
+
+/**
+ * Giữ nguyên URL ảnh của page khi ảnh không đổi (cùng clean_rev) — mỗi lần ký lại cho URL mới khiến trình
+ * duyệt tải lại cả ảnh. Chỉ thay URL khi clean_rev đổi hoặc URL cũ sắp hết hạn (ký 15').
+ */
+function useStableImages(list: PageImage[] | undefined): Map<string, PageImage> {
+  const cache = useRef(new Map<string, { img: PageImage; at: number }>());
+  const out = new Map<string, PageImage>();
+  for (const p of list ?? []) {
+    const key = `${p.id}:${p.clean_rev ?? "o"}`;
+    const hit = cache.current.get(key);
+    if (hit && Date.now() - hit.at < URL_REUSE_MS) out.set(p.id, hit.img);
+    else {
+      cache.current.set(key, { img: p, at: Date.now() });
+      out.set(p.id, p);
+    }
+  }
+  return out;
 }
 
 function PageCard(props: {

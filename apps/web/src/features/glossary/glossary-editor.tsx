@@ -28,6 +28,7 @@ export function GlossaryEditor({ ws, seriesId }: { ws: string; seriesId: string 
   const [mode, setMode] = useState<"merge" | "replace">("merge");
   const [message, setMessage] = useState<{ tone: "info" | "danger"; text: string } | null>(null);
   const [filter, setFilter] = useState("");
+  const [pendingReplace, setPendingReplace] = useState<File | null>(null);
 
   const done = (text?: string) => {
     if (text) setMessage({ tone: "info", text });
@@ -119,7 +120,9 @@ export function GlossaryEditor({ ws, seriesId }: { ws: string; seriesId: string 
             style={{ display: "none" }}
             onChange={(e) => {
               const f = e.target.files?.[0];
-              if (f) upload.mutate(f);
+              // "Thay toàn bộ" xoá mọi mục hiện có → hỏi lại trước khi gửi.
+              if (f && mode === "replace") setPendingReplace(f);
+              else if (f) upload.mutate(f);
               e.target.value = "";
             }}
           />
@@ -128,6 +131,27 @@ export function GlossaryEditor({ ws, seriesId }: { ws: string; seriesId: string 
       <p className="muted small" style={{ margin: "0 0 8px" }}>
         CSV: cột <span className="mono">source_term,target_term,note,case_sensitive</span> (UTF-8).
       </p>
+      {pendingReplace && (
+        <div className="notice danger row">
+          <span>
+            Thay toàn bộ {q.data?.entries.length ?? 0} mục hiện có bằng nội dung{" "}
+            <span className="mono">{pendingReplace.name}</span>?
+          </span>
+          <button
+            type="button"
+            className="btn-danger"
+            onClick={() => {
+              upload.mutate(pendingReplace);
+              setPendingReplace(null);
+            }}
+          >
+            Thay toàn bộ
+          </button>
+          <button type="button" onClick={() => setPendingReplace(null)}>
+            Huỷ
+          </button>
+        </div>
+      )}
       {message && <p className={`notice ${message.tone}`}>{message.text}</p>}
       {q.error && <p className="notice danger">{errorMessage(q.error)}</p>}
 
