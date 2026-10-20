@@ -1,5 +1,6 @@
 /** Glossary workspace/series: CRUD, glossary_rev cùng transaction, ghi đè theo series, import/export CSV. */
-import { chapters, scoped, series } from "@mtl/db";
+import { chapters, glossaryEntries, scoped, series } from "@mtl/db";
+import { and, eq, isNull } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { inJobTx, translateSettings } from "../src/jobs/enqueue.ts";
 import { parseCsvRows, parseGlossaryCsv, toCsv } from "../src/routes/glossary.ts";
@@ -89,6 +90,33 @@ describe("glossary CRUD + revs", () => {
     const before = await sdb.byId(chapters, A.chapterId);
     await api("/glossary", { method: "POST", body: { source_term: "용", target_term: "rồng" } });
     expect((await sdb.byId(chapters, A.chapterId)).updatedAt).toEqual(before.updatedAt);
+  });
+});
+
+describe("unique term per scope (DB constraint)", () => {
+  it("concurrent creates of the same term → exactly one row, the loser gets 409 duplicate_term", async () => {
+    const { sdb, api } = await setup();
+    const body = { source_term: "동시", target_term: "đồng thời" };
+    const res = await Promise.all(Array.from({ length: 6 }, () => api("/glossary", { method: "POST", body })));
+    const codes = res.map((r) => r.status).sort();
+    expect(codes.filter((c) => c === 201)).toHaveLength(1);
+    expect(codes.filter((c) => c !== 201).every((c) => c === 409)).toBe(true);
+    for (const r of res.filter((r) => r.status === 409)) {
+      expect(((await r.json()) as { error: string }).error).toBe("duplicate_term");
+    }
+    const rows = await sdb.select(
+      glossaryEntries,
+      and(isNull(glossaryEntries.seriesId), eq(glossaryEntries.sourceTerm, "동시")),
+    );
+    expect(rows).toHaveLength(1);
+  });
+
+  it("same term is allowed once per scope (workspace and each series)", async () => {
+    const { A, other, api } = await setup();
+    const body = { source_term: "범위", target_term: "phạm vi" };
+    expect((await api("/glossary", { method: "POST", body })).status).toBe(201);
+    expect((await api(`/series/${A.seriesId}/glossary`, { method: "POST", body })).status).toBe(201);
+    expect((await api(`/series/${other.id}/glossary`, { method: "POST", body })).status).toBe(201);
   });
 });
 
