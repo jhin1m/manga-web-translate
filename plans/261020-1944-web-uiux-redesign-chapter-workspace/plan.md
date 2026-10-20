@@ -65,7 +65,7 @@ sửa (canvas | bảng | inspector) → editorStore.apply → Saver (IndexedDB �
 | # | Phase | Ưu tiên | Effort | Phụ thuộc | Status |
 |---|---|---|---|---|---|
 | 1 | [Nền: dev auto-login, app shell, router mới + redirect](./phase-01-dev-login-app-shell-router.md) | P1 | 1.5d | — | Completed |
-| 2 | [Home + series + upload inline](./phase-02-home-series-inline-upload.md) | P1 | 3.5d | 1 | Pending |
+| 2 | [Home + series + upload inline](./phase-02-home-series-inline-upload.md) | P1 | 3.5d | 1 | Completed |
 | 3 | [Màn chương gộp: layout, rail, canvas cuộn liên tục](./phase-03-chapter-workspace-continuous-canvas.md) | P1 | 4.5d | 2 | Pending |
 | 4 | [Bảng văn bản + inspector + đồng bộ](./phase-04-text-table-inspector-sync.md) | P1 | 3d | 3 | Pending |
 | 5 | [Drawer Xuất/Hoạt động, chế độ xem, phím tắt](./phase-05-drawers-view-modes-shortcuts.md) | P1 | 2.5d | 4 | Pending |
