@@ -1,0 +1,13 @@
+{
+  "$id": "https://mtl.local/schema/job-type.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "string",
+  "enum": [
+    "chapter.ingest",
+    "page.prepare",
+    "chapter.translate",
+    "page.reinpaint",
+    "page.ocr_region",
+    "chapter.export"
+  ]
+}

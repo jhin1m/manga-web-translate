@@ -1,0 +1,27 @@
+{
+  "name": "mtl",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@12.14.0",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "dev": "pnpm --parallel --filter @mtl/api --filter @mtl/web dev",
+    "infra:up": "docker compose -f infra/docker-compose.dev.yml up -d --wait postgres minio files-proxy && docker compose -f infra/docker-compose.dev.yml run --rm minio-init",
+    "infra:down": "docker compose -f infra/docker-compose.dev.yml down",
+    "db:generate": "pnpm --filter @mtl/db generate",
+    "db:migrate": "pnpm --filter @mtl/db migrate",
+    "auth:generate": "pnpm --filter @mtl/api auth:generate",
+    "schema:emit": "pnpm --filter @mtl/shared emit",
+    "create-workspace": "pnpm --filter @mtl/api exec tsx ../../scripts/create-workspace.ts",
+    "typecheck": "pnpm -r typecheck",
+    "lint": "biome check .",
+    "format": "biome format --write .",
+    "test": "pnpm -r test"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.15",
+    "typescript": "7.0.2"
+  }
+}

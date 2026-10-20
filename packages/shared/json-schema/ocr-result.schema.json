@@ -1,0 +1,102 @@
+{
+  "$id": "https://mtl.local/schema/ocr-result.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "regions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "bubble",
+              "text_bubble",
+              "text_free"
+            ]
+          },
+          "bbox": {
+            "type": "array",
+            "prefixItems": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "number",
+                "minimum": 0
+              },
+              {
+                "type": "number",
+                "minimum": 0
+              }
+            ],
+            "items": false,
+            "minItems": 4,
+            "maxItems": 4
+          },
+          "polarity": {
+            "type": "string",
+            "enum": [
+              "dark_on_light",
+              "light_on_dark"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "bbox",
+          "polarity"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "source": {
+            "type": "string"
+          },
+          "is_sfx": {
+            "type": "boolean"
+          },
+          "empty": {
+            "type": "boolean"
+          },
+          "confidence": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          }
+        },
+        "required": [
+          "id",
+          "source",
+          "is_sfx",
+          "empty",
+          "confidence"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "regions",
+    "items"
+  ],
+  "additionalProperties": false
+}

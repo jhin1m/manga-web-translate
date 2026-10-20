@@ -1,0 +1,81 @@
+{
+  "$id": "https://mtl.local/schema/region.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "kind": {
+      "type": "string",
+      "enum": [
+        "bubble",
+        "text_bubble",
+        "text_free"
+      ]
+    },
+    "bbox": {
+      "type": "array",
+      "prefixItems": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "number",
+          "minimum": 0
+        },
+        {
+          "type": "number",
+          "minimum": 0
+        }
+      ],
+      "items": false,
+      "minItems": 4,
+      "maxItems": 4
+    },
+    "polarity": {
+      "type": "string",
+      "enum": [
+        "dark_on_light",
+        "light_on_dark"
+      ]
+    },
+    "source_text": {
+      "type": "string"
+    },
+    "translation": {
+      "type": "string"
+    },
+    "confidence": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "flags": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "sfx",
+          "empty",
+          "low_conf"
+        ]
+      }
+    }
+  },
+  "required": [
+    "id",
+    "kind",
+    "bbox",
+    "polarity",
+    "source_text",
+    "translation",
+    "confidence",
+    "flags"
+  ],
+  "additionalProperties": false
+}

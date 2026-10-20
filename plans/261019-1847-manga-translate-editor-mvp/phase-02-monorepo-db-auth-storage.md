@@ -1,7 +1,7 @@
 ---
 phase: 2
 title: "Scaffold monorepo, DB schema, auth+workspace, storage"
-status: pending
+status: completed
 priority: P1
 effort: "4d"
 dependencies: []
@@ -88,12 +88,12 @@ Create:
 9. SPA: login, nhận lời mời, chọn workspace; không style cầu kỳ.
 
 ## Success Criteria
-- [ ] `pnpm i && docker compose up && pnpm db:migrate && pnpm dev` chạy từ clone sạch < 5 phút.
-- [ ] Seed workspace bằng script; mời thành viên (link invite log ở dev) → đăng ký được; đăng ký không lời mời → bị từ chối; user không tạo được workspace mới.
-- [ ] Test cô lập tenant (cả 2 kiểu a/b) pass cho 100% route đã có.
-- [ ] Presigned POST: file > `maxBytes` hoặc sai Content-Type → MinIO từ chối; URL hết hạn sau TTL; GET không ký → 403; response có `nosniff`.
-- [ ] Partial unique index: tạo job trùng key khi job cũ `failed` → được; khi job cũ `queued` → vi phạm unique.
-- [ ] JSON Schema từ `packages/shared` được commit và worker đọc được.
+- [x] `pnpm i && docker compose up && pnpm db:migrate && pnpm dev` chạy từ clone sạch < 5 phút.
+- [x] Seed workspace bằng script; mời thành viên (link invite log ở dev) → đăng ký được; đăng ký không lời mời → bị từ chối; user không tạo được workspace mới.
+- [x] Test cô lập tenant (cả 2 kiểu a/b) pass cho 100% route đã có.
+- [x] Presigned POST: file > `maxBytes` hoặc sai Content-Type → MinIO từ chối; URL hết hạn sau TTL; GET không ký → 403; response có `nosniff`.
+- [x] Partial unique index: tạo job trùng key khi job cũ `failed` → được; khi job cũ `queued` → vi phạm unique.
+- [x] JSON Schema từ `packages/shared` được commit và worker đọc được.
 
 ## Risk Assessment
 | Rủi ro | K×A | Giảm thiểu |
