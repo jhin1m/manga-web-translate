@@ -46,12 +46,13 @@ test("drop a strip on home → translate → edit → export", async ({ page }) 
   hold = false;
   for (const r of held.splice(0)) await r.continue();
 
-  // Nút chính: Dịch chương → (khoá) Đang cắt trang/Đang dịch → Xuất.
+  // Nút chính: Dịch chương → (Xuất bị khoá, chip "Đang cắt trang/Đang dịch") → Xuất. Thành công không thêm banner.
   await expect(page.getByText("Đã tải xong 1 ảnh")).toBeVisible({ timeout: 30_000 });
   await page.getByRole("button", { name: "Dịch chương" }).click();
-  const busy = page.getByRole("button", { name: /^Đang (cắt trang|dịch)/ });
-  await expect(busy).toBeVisible();
-  await expect(busy).toBeDisabled();
+  const chip = page.getByRole("status", { name: "Trạng thái chương" });
+  await expect(chip).toHaveText(/^Đang (cắt trang|dịch)/);
+  await expect(page.getByRole("button", { name: "Xuất", exact: true })).toBeDisabled();
+  await expect(page.getByText(/Bắt đầu dịch|Đang dịch \d+ ảnh/)).toHaveCount(0);
 
   let ready = false;
   const worker = runFakeWorker(state.token, () => ready, 60_000, { pagesPerSource: 3 });
@@ -59,7 +60,10 @@ test("drop a strip on home → translate → edit → export", async ({ page }) 
   await expect(rail.locator(".status", { hasText: "Xong" })).toHaveCount(3, { timeout: 30_000 });
   const primary = page.getByRole("button", { name: "Xuất", exact: true });
   await expect(primary).toBeEnabled({ timeout: 15_000 });
+  await expect(chip).toHaveText(/^Chờ duyệt/);
   await expect(page.getByRole("status", { name: "Khoá chương" })).toContainText("Bạn đang giữ khoá chương");
+  // Trạng thái bình thường không chiếm dải riêng dưới thanh trên.
+  await expect(page.getByRole("alert", { name: "Cảnh báo chương" })).toHaveCount(0);
 
   // Sửa bản dịch trang 2 trong bảng văn bản → "Đã lưu" → API khớp.
   const progress = (await (

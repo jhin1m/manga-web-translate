@@ -1,5 +1,5 @@
 /*
- * Màn chương gộp (docs/design-guidelines.md, hướng A): thanh trên + băng khoá | rail trang · canvas · inspector |
+ * Màn chương gộp (docs/design-guidelines.md, hướng A): thanh trên + băng cảnh báo (chỉ khi có) | rail trang · canvas · inspector |
  * bảng văn bản dưới. Toàn màn hình (ngoài app shell). Canvas nền xám trung tính để nhìn ảnh.
  */
 .cw {
@@ -7,7 +7,7 @@
   inset: 0;
   display: grid;
   grid-template-columns: 196px minmax(0, 1fr) 320px;
-  grid-template-rows: 52px 30px minmax(0, 1fr) auto;
+  grid-template-rows: 52px auto minmax(0, 1fr) auto;
   grid-template-areas:
     "top top top"
     "band band band"
@@ -40,10 +40,33 @@
   font-size: var(--fs-lg);
   white-space: nowrap;
 }
-.cw-top > .status {
+.cw-chip {
+  display: flex;
+  min-width: 0;
+}
+.cw-chip > .status {
   font-size: var(--fs-sm);
   overflow: hidden;
   text-overflow: ellipsis;
+}
+/* Chỉ báo sửa/lưu: nhỏ, sau chip; chấm màu thay bằng icon khoá khi đang giữ khoá. */
+.cw-edit {
+  position: relative;
+  gap: 4px;
+}
+.cw-edit:has(svg)::before {
+  display: none;
+}
+.cw-edit[data-tone="danger"] svg {
+  color: var(--c-danger);
+}
+.cw-icons {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.cw-icons > button {
+  padding: 0 8px;
 }
 .cw-seg,
 .cw-rail-filter {
@@ -103,16 +126,21 @@
 .cw-band {
   grid-area: band;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: var(--sp-3);
-  padding: 0 var(--sp-4);
+  gap: var(--sp-1) var(--sp-4);
+  min-height: 30px;
+  padding: 4px var(--sp-4);
   background: var(--c-surface);
   border-bottom: 1px solid var(--c-line);
   min-width: 0;
   overflow: hidden;
 }
-.cw-band .btn-ghost {
-  padding: 0 4px;
+.cw-band .status {
+  white-space: normal;
+}
+.cw-band button {
+  padding: 0 6px;
   min-height: 0;
 }
 
@@ -198,6 +226,21 @@
   flex-direction: column;
   min-width: 0;
   min-height: 0;
+}
+/* Thông báo/lỗi nổi trên canvas (không đẩy canvas xuống). */
+.cw-toasts {
+  position: absolute;
+  top: 44px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 30;
+  width: min(640px, calc(100% - 24px));
+  padding: 0;
+  pointer-events: none;
+}
+.cw-toasts > .notice {
+  pointer-events: auto;
+  box-shadow: 0 2px 8px rgb(0 0 0 / 0.12);
 }
 .cw-canvas {
   position: relative;

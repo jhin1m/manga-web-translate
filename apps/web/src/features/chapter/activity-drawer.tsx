@@ -63,10 +63,32 @@ export function chapterActivityCount(progress: Progress | undefined, exportsActi
   return exportsActive + Math.max(jobs, pagesBusy ? 1 : 0);
 }
 
-export function ActivityButton({ count, onClick }: { count: number; onClick(): void }) {
+/** `icon`: chỉ biểu tượng + số (thanh trên màn chương, chật chỗ); tên đầy đủ ở aria-label/title. */
+export function ActivityButton({ count, onClick, icon }: { count: number; onClick(): void; icon?: boolean }) {
   return (
-    <button type="button" onClick={onClick} aria-label={count ? `Hoạt động (${count} đang chạy)` : "Hoạt động"}>
-      Hoạt động{count > 0 && <span className="count-badge">{count}</span>}
+    <button
+      type="button"
+      className={icon ? "btn-ghost" : undefined}
+      onClick={onClick}
+      aria-label={count ? `Hoạt động (${count} đang chạy)` : "Hoạt động"}
+      title={icon ? "Hoạt động" : undefined}
+    >
+      {icon ? (
+        <svg
+          width="16"
+          height="16"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          aria-hidden="true"
+        >
+          <path d="M3 12h4l3-8 4 16 3-8h4" />
+        </svg>
+      ) : (
+        "Hoạt động"
+      )}
+      {count > 0 && <span className="count-badge">{count}</span>}
     </button>
   );
 }

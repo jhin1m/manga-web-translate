@@ -76,7 +76,7 @@ test("drop a 10-page ZIP on home, open the chapter while uploading, then transla
 
   let ready = false;
   const worker = runFakeWorker(state.token, () => ready);
-  await expect(page.getByText(/AI xong 10\/10/)).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByRole("status", { name: "Trạng thái chương" })).toHaveText(/^Chờ duyệt/, { timeout: 30_000 });
   ready = true;
   await worker;
   const rail = page.getByRole("complementary", { name: "Danh sách trang" });

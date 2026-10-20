@@ -45,7 +45,15 @@ Font UI tự host qua `@fontsource/be-vietnam-pro` (400/500/600) — không gọ
 
 ## Màn chương
 
-Toàn màn hình (ngoài app shell), `chapter-workspace.css`: thanh trên 52px + băng khoá 30px, rồi 4 vùng.
+Toàn màn hình (ngoài app shell), `chapter-workspace.css`: thanh trên 52px (+ băng cảnh báo, chỉ khi có), rồi 4 vùng.
+
+- **Trạng thái chương ở 1 chỗ**: chip cạnh tên chương (`status.ts` `chapterChip`, `role="status"`, aria-live
+  polite): "Đang tải ảnh 2/5", "Đang dịch 3/5", "Chờ duyệt · 2 cần xem", "Xong". Rail chỉ giữ trạng thái theo trang.
+  Cạnh chip: chỉ báo nhỏ khoá + lưu (icon khoá + Đã lưu / Đang lưu…, hoặc "Chỉ xem"). Hoạt động và Phím tắt là icon nhỏ.
+- **Băng cảnh báo** (`LockBand`, `role="alert"`): chỉ hiện khi người dùng phải biết/làm — người khác giữ khoá (Thử
+  lại), lỗi khoá, mất khoá, khôi phục thay đổi từ phiên trước, lỗi lưu. Trạng thái bình thường không chiếm dải.
+- **Thông báo kết quả** (dịch lại, áp kiểu, lỗi thao tác): nổi trên canvas, không đẩy bố cục; info tự ẩn sau 6s.
+  "Dịch chương" thành công không báo thêm; có ảnh bị loại → giữ thông báo tới khi chương xử lý xong.
 
 | Vùng | Nội dung |
 |---|---|
@@ -55,7 +63,7 @@ Toàn màn hình (ngoài app shell), `chapter-workspace.css`: thanh trên 52px +
 | Bảng dưới | Tab Bản dịch (bảng văn bản cả chương) / Tìm / Thay / Áp glossary; kéo cao, thu gọn (mặc định thu gọn khi < 1600px) |
 
 - **Nút chính** (1 nút, theo trạng thái chương, `primary-action.ts`): Tải ảnh → Dịch chương (= commit; upload xong
-  không tự dịch) → (disabled) "Đang cắt trang…" / "Đang dịch x/y" → Xuất. Chương có trang lỗi: "Chạy lại trang lỗi";
+  không tự dịch) → "Xuất" khoá trong lúc cắt trang/dịch (tiến độ ở chip) → Xuất. Chương có trang lỗi: "Chạy lại trang lỗi";
   "Dịch lại cả chương" nằm trong menu phụ.
 - **Drawer phải 420px** (`app/drawer.tsx`): Xuất (cảnh báo "Trước khi xuất", định dạng, tải) và Hoạt động (upload +
   job chương + lượt xuất). Không dùng modal cho thao tác chính. Chi tiết: [editor.md](./editor.md).

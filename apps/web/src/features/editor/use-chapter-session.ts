@@ -289,8 +289,19 @@ export type RecoveryItem = PendingRecord & { ord: number };
 let activeSaver: Saver | null = null;
 
 /**
+ * Bắt đầu phiên chương mới trên store dùng chung cả tab — gọi TRƯỚC khi render cây dùng `useChapterSession`.
+ * Đổi thẳng từ chương khác (back/forward) thì cleanup của phiên cũ chưa chạy → giao sửa chưa lưu của nó cho Saver cũ
+ * lưu trước khi reset.
+ */
+export function resetChapterSession(chapterId: string) {
+  activeSaver?.flushDetached();
+  editorStore.getState().reset();
+  chapterStore.getState().reset(chapterId);
+}
+
+/**
  * Hook React quanh `ChapterSession`. `settled` = chương ổn định (không còn job), `pageIds` theo ord,
- * `refetchProgress` trả trạng thái chương mới.
+ * `refetchProgress` trả trạng thái chương mới. Store phải được `resetChapterSession` trước lần render đầu.
  */
 export function useChapterSession(opts: {
   ws: string;
@@ -300,13 +311,6 @@ export function useChapterSession(opts: {
   refetchProgress(): Promise<boolean | undefined>;
 }) {
   const { ws, chapterId, settled, pageIds } = opts;
-  // Store dùng chung cả tab: phiên mới bắt đầu sạch (chạy trước mọi effect con). Đổi thẳng từ chương khác
-  // (back/forward) thì phiên cũ chưa kịp cleanup → giao sửa chưa lưu của nó cho Saver cũ lưu trước khi reset.
-  useState(() => {
-    activeSaver?.flushDetached();
-    editorStore.getState().reset();
-    chapterStore.getState().reset(chapterId);
-  });
   const { kit, error: fontError } = useFontKit();
   const queue = pendingQueue();
   const [error, setError] = useState<string | null>(null);
