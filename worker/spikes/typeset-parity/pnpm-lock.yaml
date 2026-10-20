@@ -1,0 +1,83 @@
+lockfileVersion: '9.0'
+
+settings:
+  autoInstallPeers: true
+  excludeLinksFromLockfile: false
+
+importers:
+
+  .:
+    devDependencies:
+      '@playwright/test':
+        specifier: 1.64.0
+        version: 1.64.0
+      '@types/node':
+        specifier: 24.6.0
+        version: 24.6.0
+      konva:
+        specifier: 10.7.0
+        version: 10.7.0
+      typescript:
+        specifier: 5.9.3
+        version: 5.9.3
+
+packages:
+
+  '@playwright/test@1.64.0':
+    resolution: {integrity: sha512-oTN9FNYuN6bqQMwiho6jJKLCG2/QOYCixGXuCjRmzOq23eODeukuY2XiAVoVpAECbuezMt1MHQjAiQxK8F+Y+g==}
+    engines: {node: '>=20'}
+    hasBin: true
+
+  '@types/node@24.6.0':
+    resolution: {integrity: sha512-F1CBxgqwOMc4GKJ7eY22hWhBVQuMYTtqI8L0FcszYcpYX0fzfDGpez22Xau8Mgm7O9fI+zA/TYIdq3tGWfweBA==}
+
+  konva@10.7.0:
+    resolution: {integrity: sha512-2CwuytBrOlTh7WHCSeXyUeysB2rpwHruUUDD5etYtrzijkCVH+00+CQz5fJUGI0hm7mzxxDLYLw4Wpo+8QGJ4g==}
+    peerDependencies:
+      canvas: ^3.0.0
+      skia-canvas: ^3.0.0
+    peerDependenciesMeta:
+      canvas:
+        optional: true
+      skia-canvas:
+        optional: true
+
+  playwright-core@1.64.0:
+    resolution: {integrity: sha512-T9r+MZkTECl2+oUcZ26YgZzTrYidTsIhYYkJix+6iDOymOb1FB2RLLSOxRGnZGv5DStt+aduIVbt+E8WygXYpg==}
+    engines: {node: '>=20'}
+    hasBin: true
+
+  playwright@1.64.0:
+    resolution: {integrity: sha512-kVzTnYFYEyQ9RGzBjNCd2+yEqWmVbxl3AHPynv3qQ6JTjv4a+kwRcnqQwIpuP3NnrnIrE/Q6wWAIAvMfIE2/Yg==}
+    engines: {node: '>=20'}
+    hasBin: true
+
+  typescript@5.9.3:
+    resolution: {integrity: sha512-jl1vZzPDinLr9eUt3J/t7V6FgNEw9QjvBPdysz9KfQDD41fQrC2Y4vKQdiaUpFT4bXlb1RHhLpp8wtm6M5TgSw==}
+    engines: {node: '>=14.17'}
+    hasBin: true
+
+  undici-types@7.13.0:
+    resolution: {integrity: sha512-Ov2Rr9Sx+fRgagJ5AX0qvItZG/JKKoBRAVITs1zk7IqZGTJUwgUr7qoYBpWwakpWilTZFM98rG/AFRocu10iIQ==}
+
+snapshots:
+
+  '@playwright/test@1.64.0':
+    dependencies:
+      playwright: 1.64.0
+
+  '@types/node@24.6.0':
+    dependencies:
+      undici-types: 7.13.0
+
+  konva@10.7.0: {}
+
+  playwright-core@1.64.0: {}
+
+  playwright@1.64.0:
+    dependencies:
+      playwright-core: 1.64.0
+
+  typescript@5.9.3: {}
+
+  undici-types@7.13.0: {}

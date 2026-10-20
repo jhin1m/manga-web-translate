@@ -5,3 +5,12 @@ golden/
 worker/models/*.onnx
 *.safetensors
 .venv/
+__pycache__/
+*.pyc
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+worker/models/*.part
+worker/spikes/typeset-parity/out/
+worker/spikes/typeset-parity/test-results/
+worker/spikes/typeset-parity/playwright-report/

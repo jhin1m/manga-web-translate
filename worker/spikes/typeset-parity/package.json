@@ -1,0 +1,20 @@
+{
+  "name": "typeset-parity-spike",
+  "private": true,
+  "type": "module",
+  "description": "Spike: so bbox glyph từng dòng giữa render.py (Pillow+raqm) và Konva headless theo hợp đồng layout",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "boxes": "cd ../.. && uv run python spikes/typeset-parity/render_boxes.py",
+    "test": "pnpm run boxes && playwright test",
+    "typecheck": "tsc -p ."
+  },
+  "devDependencies": {
+    "@playwright/test": "1.64.0",
+    "@types/node": "24.6.0",
+    "konva": "10.7.0",
+    "typescript": "5.9.3"
+  }
+}

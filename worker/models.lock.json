@@ -1,0 +1,25 @@
+{
+  "models": [
+    {
+      "name": "rtdetr_v2_comic",
+      "file": "rtdetr-v2-comic.onnx",
+      "url": "https://huggingface.co/ogkalu/comic-text-and-bubble-detector/resolve/16e8a622f91fabc6b5b65c96d32d1183f8843546/detector.onnx",
+      "revision": "16e8a622f91fabc6b5b65c96d32d1183f8843546",
+      "sha256": "065744e91c0594ad8663aa8b870ce3fb27222942eded5a3cc388ce23421bd195"
+    },
+    {
+      "name": "comic_text_detector",
+      "file": "comictextdetector.pt.onnx",
+      "url": "https://github.com/zyddnys/manga-image-translator/releases/download/beta-0.3/comictextdetector.pt.onnx",
+      "revision": "beta-0.3",
+      "sha256": "1a86ace74961413cbd650002e7bb4dcec4980ffa21b2f19b86933372071d718f"
+    },
+    {
+      "name": "big_lama",
+      "file": "lama_fp32.onnx",
+      "url": "https://huggingface.co/Carve/LaMa-ONNX/resolve/c3c0c9e468934d62e79c329e35d82dd09ff8c444/lama_fp32.onnx",
+      "revision": "c3c0c9e468934d62e79c329e35d82dd09ff8c444",
+      "sha256": "1faef5301d78db7dda502fe59966957ec4b79dd64e16f03ed96913c7a4eb68d6"
+    }
+  ]
+}
