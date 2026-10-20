@@ -9,7 +9,10 @@ pnpm infra:up                     # Postgres 17 :5442, MinIO :9200 (nội bộ),
 pnpm db:migrate
 OWNER_PASSWORD='...' pnpm create-workspace --name "Nhóm dịch" --slug nhom-dich --owner-email you@example.com
 pnpm dev                          # API :8787, SPA :5180 (proxy /api → API)
+pnpm jobs                         # process nền: reaper lease hết hạn (tách khỏi API)
 ```
+
+Worker AI (Python, `worker/`) và token worker: xem [job-queue-worker.md](./job-queue-worker.md).
 
 Mở http://localhost:5180 → đăng nhập owner → "Mời thành viên". MVP chưa gửi mail: link mời (có token đăng ký HMAC) hiện trên UI cho owner/admin và trong log API (`[invite] …`). Người được mời mở `/accept-invite?id=…&token=…` để đăng ký.
 
@@ -20,7 +23,8 @@ Mở http://localhost:5180 → đăng nhập owner → "Mời thành viên". MVP
 | `apps/api` | Hono (Node). Route người dùng `/api/me/*`, `/api/w/:ws/*`; better-auth ở `/api/auth/*` |
 | `apps/web` | Vite + React SPA |
 | `packages/db` | Drizzle schema, migration, `scoped(db, wsId)` |
-| `packages/shared` | zod: `PageState` (+ hợp đồng layout), `JobType/JobPayload/JobResult/ErrorClass`, `input_rev`, storage keys; JSON Schema ở `packages/shared/json-schema/` cho worker |
+| `packages/shared` | zod: `PageState` (+ hợp đồng layout), `JobType/JobPayload/JobResult/ErrorClass`, giao thức worker, `input_rev`, storage keys; JSON Schema ở `packages/shared/json-schema/` cho worker |
+| `worker` | Python: `mtl_pipeline` (pipeline 2 giai đoạn), `mtl_worker` (vòng lặp claim/heartbeat/complete) |
 | `infra` | docker-compose dev, Caddy giả lập domain file riêng |
 
 ## Quy ước bắt buộc
