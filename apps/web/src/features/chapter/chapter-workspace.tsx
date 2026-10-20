@@ -1,7 +1,7 @@
 /**
  * Màn chương = editor gộp (`/w/:ws/s/:s/c/:c?page=`): thanh trên + băng khoá | rail trang · canvas cuộn liên tục
  * cả chương · inspector | bảng dưới (Bản dịch cả chương / Tìm–Thay / Áp glossary). Chương nháp: canvas là tiến
- * độ upload + vùng thả để tải tiếp.
+ * độ upload + vùng thả để tải tiếp + ảnh gốc xem trước (cả lúc đang cắt trang).
  *
  * Drawer phải: Xuất (nút "Xuất" hoặc `?drawer=export` từ "Xuất lại" ở home), Hoạt động, Phím tắt (`?`). Chế độ xem
  * Gốc / Dịch / Chia đôi + giữ `O` (chapterStore.viewMode). Phím tắt: `editor/shortcuts.ts` (1 listener).
@@ -43,6 +43,7 @@ import { PageRail } from "./page-rail.tsx";
 import { needsReview } from "./page-status.ts";
 import { type ChapterCommand, primaryAction } from "./primary-action.ts";
 import { ShortcutHelp } from "./shortcut-help.tsx";
+import { SourcePreview } from "./source-preview.tsx";
 import { isChapterSettled } from "./status.ts";
 import { filterRows, KIND_LABEL, type Row, rowKeyOfBox, sameKindBoxIds, type TableFilter } from "./text-table/rows.ts";
 import { TableFilters, TextTable, useChapterRows } from "./text-table/text-table.tsx";
@@ -456,15 +457,19 @@ export function ChapterWorkspace({ ws, seriesId, chapterId, page: searchPage, dr
                     onFiles={resume}
                   />
                 )}
+                <SourcePreview ws={ws} chapterId={chapterId} />
               </>
             ) : (
-              <p className="muted">
-                {status === "ingesting"
-                  ? "Đang ghép và cắt trang theo bóng thoại…"
-                  : status === "partial_failed"
-                    ? `Cắt trang lỗi${ingestError ? `: ${ingestError}` : ""} — bấm "Chạy lại cắt trang" để cắt lại từ ảnh đã tải.`
-                    : "Chưa có trang."}
-              </p>
+              <>
+                <p className="muted">
+                  {status === "ingesting"
+                    ? "Đang ghép và cắt trang theo bóng thoại…"
+                    : status === "partial_failed"
+                      ? `Cắt trang lỗi${ingestError ? `: ${ingestError}` : ""} — bấm "Chạy lại cắt trang" để cắt lại từ ảnh đã tải.`
+                      : "Chưa có trang."}
+                </p>
+                <SourcePreview ws={ws} chapterId={chapterId} />
+              </>
             )}
           </div>
         ) : (

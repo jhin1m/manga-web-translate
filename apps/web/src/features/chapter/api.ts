@@ -75,6 +75,7 @@ export const chapterKeys = {
   progress: (ws: string, ch: string) => ["chapter", ws, ch, "progress"] as const,
   pages: (ws: string, ch: string, sig: string) => ["chapter", ws, ch, "pages", sig] as const,
   states: (ws: string, ch: string) => ["chapter", ws, ch, "states"] as const,
+  sourceFiles: (ws: string, ch: string) => ["chapter", ws, ch, "source-files"] as const,
 };
 
 const base = (ws: string, ch: string, path = "") => wsPath(ws, `/chapters/${ch}${path}`);
@@ -83,6 +84,9 @@ export const fetchChapter = (ws: string, ch: string) => api<ChapterDetail>(base(
 export const fetchProgress = (ws: string, ch: string) => api<Progress>(base(ws, ch, "/progress"));
 export const fetchPages = (ws: string, ch: string) =>
   api<{ expires_at: string; pages: PageImage[] }>(base(ws, ch, "/pages"));
+export type SourceFileImage = { id: string; ord: number; url: string };
+export const fetchSourceFiles = (ws: string, ch: string) =>
+  api<{ expires_at: string; files: SourceFileImage[] }>(base(ws, ch, "/source-files"));
 export const fetchChapterStates = (ws: string, ch: string) => api<{ pages: PageStateRow[] }>(base(ws, ch, "/states"));
 
 export type Rejected = { id: string; ord: number; reason: "missing" | "too_large" | "type_mismatch" };

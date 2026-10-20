@@ -126,6 +126,7 @@ const RESOURCE_CASES: Record<string, (b: Seed) => Record<string, string>> = {
   "PATCH /api/w/:ws/series/:seriesId": (b) => ({ seriesId: b.seriesId }),
   "GET /api/w/:ws/chapters/:chapterId": (b) => ({ chapterId: b.chapterId }),
   "GET /api/w/:ws/chapters/:chapterId/pages": (b) => ({ chapterId: b.chapterId }),
+  "GET /api/w/:ws/chapters/:chapterId/source-files": (b) => ({ chapterId: b.chapterId }),
   // presign trước commit: commit (own) loại source file giả (không có object) khỏi chương A.
   "POST /api/w/:ws/chapters/:chapterId/presign": (b) => ({ chapterId: b.chapterId }),
   "POST /api/w/:ws/chapters/:chapterId/commit": (b) => ({ chapterId: b.chapterId }),
