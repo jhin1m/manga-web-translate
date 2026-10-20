@@ -3,8 +3,8 @@
  * props — không import ngược router.
  *
  * Đích: `/` (home workspace hiện tại), `/w/$ws/s/$seriesId[?tab]`, `/w/$ws/s/$seriesId/c/$chapterId[?page]`.
- * Path cũ `/w/$ws/series/...` redirect sang path mới; riêng `.../upload` và editor `.../edit/$pageId` còn giữ tới
- * khi màn thay thế có.
+ * Path cũ `/w/$ws/series/...` (kể cả trang upload cũ) redirect sang path mới; riêng editor `.../edit/$pageId` còn
+ * giữ tới khi màn chương gộp có.
  *
  * Editor (`editorRoute`) nằm dưới `authedRoute` nhưng NGOÀI `workspaceRoute` → chiếm toàn màn hình, không có
  * thanh trên của app shell.
@@ -22,9 +22,8 @@ import {
 import { lazy, Suspense } from "react";
 import { ChapterPage } from "../features/chapter/chapter-page.tsx";
 import { WorkspaceGlossaryPage } from "../features/glossary/glossary-editor.tsx";
-import { SeriesDetailPage, SeriesListPage } from "../features/series/series-list-page.tsx";
-import { SeriesSettingsPage } from "../features/series/series-settings-page.tsx";
-import { UploadPage } from "../features/upload/upload-page.tsx";
+import { HomePage } from "../features/home/home-page.tsx";
+import { SeriesPage } from "../features/series/series-page.tsx";
 import { errorMessage } from "../lib/api.ts";
 import { setCurrentWs, useCurrentWorkspace } from "../lib/current-workspace.ts";
 import { AcceptInvitePage } from "../routes/accept-invite.tsx";
@@ -62,7 +61,7 @@ const acceptInviteRoute = createRoute({
 /** Mọi route cần đăng nhập. */
 export const authedRoute = createRoute({ getParentRoute: () => rootRoute, id: "authed", component: AuthGate });
 
-/** Home của workspace hiện tại (nội dung tạm: danh sách series); chưa xác định được → picker. */
+/** Home của workspace hiện tại; chưa xác định được → picker. */
 const homeRoute = createRoute({
   getParentRoute: () => authedRoute,
   path: "/",
@@ -79,7 +78,7 @@ const homeRoute = createRoute({
     if (!("ws" in current)) return <Navigate to="/workspaces" replace />;
     return (
       <AppShell ws={current.ws}>
-        <SeriesListPage ws={current.ws} />
+        <HomePage ws={current.ws} />
       </AppShell>
     );
   },
@@ -121,9 +120,7 @@ export const seriesRoute = createRoute({
   component: function SeriesRoute() {
     const { ws, seriesId } = seriesRoute.useParams();
     const { tab } = seriesRoute.useSearch();
-    // Tạm tới khi màn series mới có tab: glossary nằm chung trang cài đặt.
-    if (tab === "settings" || tab === "glossary") return <SeriesSettingsPage ws={ws} seriesId={seriesId} />;
-    return <SeriesDetailPage ws={ws} seriesId={seriesId} />;
+    return <SeriesPage ws={ws} seriesId={seriesId} tab={tab} />;
   },
 });
 
@@ -135,15 +132,6 @@ export const chapterRoute = createRoute({
   component: function ChapterRoute() {
     const { ws, seriesId, chapterId } = chapterRoute.useParams();
     return <ChapterPage ws={ws} seriesId={seriesId} chapterId={chapterId} />;
-  },
-});
-
-const uploadRoute = createRoute({
-  getParentRoute: () => workspaceRoute,
-  path: "series/$seriesId/upload",
-  component: function UploadRoute() {
-    const { ws, seriesId } = uploadRoute.useParams();
-    return <UploadPage ws={ws} seriesId={seriesId} />;
   },
 });
 
@@ -181,6 +169,15 @@ const legacySeriesSettingsRoute = createRoute({
   path: "series/$seriesId/settings",
   beforeLoad: ({ params }) => {
     throw redirect({ to: "/w/$ws/s/$seriesId", params, search: { tab: "settings" }, replace: true });
+  },
+});
+
+/** Trang upload riêng đã bỏ: upload = thả file ở home/series. */
+const legacyUploadRoute = createRoute({
+  getParentRoute: () => workspaceRoute,
+  path: "series/$seriesId/upload",
+  beforeLoad: ({ params }) => {
+    throw redirect({ to: "/w/$ws/s/$seriesId", params, replace: true });
   },
 });
 
@@ -222,12 +219,12 @@ export const routeTree = rootRoute.addChildren([
       workspaceIndexRoute,
       seriesRoute,
       chapterRoute,
-      uploadRoute,
       glossaryRoute,
       membersRoute,
       legacySeriesListRoute,
       legacySeriesRoute,
       legacySeriesSettingsRoute,
+      legacyUploadRoute,
       legacyChapterRoute,
     ]),
     editorRoute,

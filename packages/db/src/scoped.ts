@@ -1,4 +1,4 @@
-import { and, eq, type SQL } from "drizzle-orm";
+import { and, eq, type SQL, sql } from "drizzle-orm";
 import type { PgColumn, PgTable } from "drizzle-orm/pg-core";
 import type { DbLike } from "./client.ts";
 
@@ -30,6 +30,19 @@ export interface Scoped {
   readonly workspaceId: string;
   select<T extends WsTable>(table: T, where?: SQL): Promise<Row<T>[]>;
   find<T extends WsTable>(table: T, where?: SQL): Promise<Row<T> | undefined>;
+  /** Đếm dòng theo nhóm cột (GROUP BY trong SQL) — không kéo cả dòng về khi chỉ cần số lượng. */
+  countBy<T extends WsTable, C extends Record<string, PgColumn>>(
+    table: T,
+    by: C,
+    where?: SQL,
+  ): Promise<({ [K in keyof C]: C[K]["_"]["data"] } & { n: number })[]>;
+  /** Giá trị lớn nhất của `col` theo nhóm cột (GROUP BY trong SQL). */
+  maxBy<T extends WsTable, C extends Record<string, PgColumn>, M extends PgColumn>(
+    table: T,
+    by: C,
+    col: M,
+    where?: SQL,
+  ): Promise<({ [K in keyof C]: C[K]["_"]["data"] } & { max: M["_"]["data"] })[]>;
   /** Không thấy trong workspace (kể cả id thuộc workspace khác, id không phải uuid) → NotFoundError. */
   byId<T extends WsTableWithId>(table: T, id: string, what?: string): Promise<Row<T>>;
   insert<T extends WsTable>(table: T, values: Values<T>): Promise<Row<T>>;
@@ -62,6 +75,29 @@ export function scoped(db: DbLike, wsId: string): Scoped {
         .where(own(table, where))
         .limit(1)) as Row<T>[];
       return rows[0];
+    },
+
+    countBy<T extends WsTable, C extends Record<string, PgColumn>>(table: T, by: C, where?: SQL) {
+      return db
+        .select({ ...by, n: sql<number>`count(*)::int` })
+        .from(table as PgTable)
+        .where(own(table, where))
+        .groupBy(...Object.values(by)) as unknown as Promise<({ [K in keyof C]: C[K]["_"]["data"] } & { n: number })[]>;
+    },
+
+    maxBy<T extends WsTable, C extends Record<string, PgColumn>, M extends PgColumn>(
+      table: T,
+      by: C,
+      col: M,
+      where?: SQL,
+    ) {
+      return db
+        .select({ ...by, max: sql`max(${col})`.mapWith(col) })
+        .from(table as PgTable)
+        .where(own(table, where))
+        .groupBy(...Object.values(by)) as unknown as Promise<
+        ({ [K in keyof C]: C[K]["_"]["data"] } & { max: M["_"]["data"] })[]
+      >;
     },
 
     async byId<T extends WsTableWithId>(table: T, id: string, what?: string): Promise<Row<T>> {

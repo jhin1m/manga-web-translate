@@ -1,7 +1,7 @@
 ---
 phase: 2
 title: "Home + series + upload inline"
-status: pending
+status: completed
 priority: P1
 effort: 3.5d
 dependencies: [1]

@@ -1,22 +1,11 @@
 /**
- * Cài đặt series: ngôn ngữ, kính ngữ, quy tắc xưng hô theo cặp nhân vật, style prompt, font mặc định, tier
- * model + glossary của series. Server tăng settings_rev khi trường ảnh hưởng dịch đổi.
+ * Form cài đặt dịch của series: ngôn ngữ, kính ngữ, quy tắc xưng hô theo cặp nhân vật, style prompt, font mặc định,
+ * tier model. Server tăng settings_rev khi trường ảnh hưởng dịch đổi. Dùng ở `?tab=settings` của màn series.
  */
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link } from "@tanstack/react-router";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { type FormEvent, useState } from "react";
 import { errorMessage } from "../../lib/api.ts";
-import { GlossaryEditor } from "../glossary/glossary-editor.tsx";
-import {
-  FONT_IDS,
-  type FontSlot,
-  fetchSeries,
-  type PronounRule,
-  patchSeries,
-  type Series,
-  type SeriesSettings,
-  seriesKeys,
-} from "./api.ts";
+import { FONT_IDS, type FontSlot, type PronounRule, patchSeries, type Series, type SeriesSettings } from "./api.ts";
 
 const FONT_SLOTS: { slot: FontSlot; label: string }[] = [
   { slot: "dialogue", label: "Thoại" },
@@ -37,36 +26,7 @@ const toForm = (s: Series): Form => ({
   llm_tier: s.llm_tier,
 });
 
-export function SeriesSettingsPage({ ws, seriesId }: { ws: string; seriesId: string }) {
-  const q = useQuery({ queryKey: seriesKeys.detail(ws, seriesId), queryFn: () => fetchSeries(ws, seriesId) });
-  return (
-    <div className="page page-narrow">
-      <div className="crumbs">
-        <Link to="/">Series</Link> /{" "}
-        <Link to="/w/$ws/s/$seriesId" params={{ ws, seriesId }}>
-          {q.data?.title ?? "…"}
-        </Link>
-      </div>
-      <div className="page-head">
-        <h1>Cài đặt series</h1>
-        {q.data && (
-          <span className="muted small mono">
-            settings_rev {q.data.settings_rev} · glossary_rev {q.data.glossary_rev}
-          </span>
-        )}
-      </div>
-      {q.error && <p className="notice danger">{errorMessage(q.error)}</p>}
-      {/* key: dựng lại form khi dữ liệu server đổi rev (sau khi lưu). */}
-      {q.data && <SettingsForm key={`${q.data.id}:${q.data.settings_rev}`} ws={ws} series={q.data} />}
-      <div className="section">
-        <h2 style={{ marginBottom: 8 }}>Glossary của series</h2>
-        <GlossaryEditor ws={ws} seriesId={seriesId} />
-      </div>
-    </div>
-  );
-}
-
-function SettingsForm({ ws, series }: { ws: string; series: Series }) {
+export function SeriesSettingsForm({ ws, series }: { ws: string; series: Series }) {
   const qc = useQueryClient();
   const [f, setF] = useState<Form>(() => toForm(series));
   const [saved, setSaved] = useState<string | null>(null);

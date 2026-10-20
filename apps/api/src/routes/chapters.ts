@@ -19,7 +19,7 @@ import { parseJson } from "../lib/validate.ts";
 import { type AppEnv, requireWorkspace } from "../middleware/workspace.ts";
 import { head, MAX_POST_TTL_S, presignPost, readPrefix } from "../storage.ts";
 import { jobView } from "./jobs.ts";
-import { chapterSummary } from "./series.ts";
+import { chapterStats, chapterSummary, exportStatus } from "./series.ts";
 
 /** Ảnh nhận upload → đuôi key. Content-Type nằm trong policy POST nên MinIO giữ đúng giá trị này. */
 export const CHAPTER_UPLOAD_TYPES = { "image/png": "png", "image/jpeg": "jpg", "image/webp": "webp" } as const;
@@ -65,6 +65,10 @@ const ChapterCreate = z.object({
 
 const PresignBody = z.object({ file_ids: z.array(z.string().uuid()).min(1).max(MAX_FILES_PER_CHAPTER) });
 const CommitBody = z.object({ mode: z.enum(["strip", "pages"]).default("strip") });
+const RecentQuery = z.object({
+  limit: z.coerce.number().int().min(1).max(100).default(20),
+  open: z.enum(["0", "1"]).default("0"),
+});
 const TranslateBody = z.object({ page_ids: z.array(z.string().uuid()).min(1).max(1000).optional() });
 
 type SourceFile = typeof sourceFiles.$inferSelect;
@@ -89,6 +93,48 @@ async function mapLimit<T, R>(items: T[], limit: number, fn: (t: T) => Promise<R
 }
 
 export const chapterRoutes = new Hono<AppEnv>();
+
+/**
+ * Chương gần đây của workspace cho "Việc cần làm" ở home. Path riêng (không `/chapters/recent`) để không đụng
+ * `/chapters/:chapterId`. Thứ tự: chương mình đang giữ khoá trước, rồi `updated_at` mới nhất (heartbeat khoá cũng
+ * bump cột này = "đang làm"). `open=1` bỏ chương đã xuất/xong (trừ chương sửa sau lần xuất cuối); nháp upload dở
+ * vẫn có.
+ */
+chapterRoutes.get("/w/:ws/recent-chapters", requireWorkspace(), async (c) => {
+  const q = RecentQuery.safeParse(c.req.query());
+  if (!q.success) {
+    throw new HTTPException(400, {
+      res: Response.json({ error: "invalid_query", issues: q.error.issues }, { status: 400 }),
+    });
+  }
+  const sdb = c.get("sdb");
+  const me = c.get("user").id;
+  const all = await sdb.select(chapters);
+  // open=1: bỏ chương đã xuất mà chưa sửa gì sau đó (chương cần "Xuất lại" vẫn còn trong danh sách).
+  const exported = q.data.open === "1" ? (await exportStatus(sdb, all)).exported : new Set<string>();
+  const mine = (ch: (typeof all)[number]) => activeLockHolder(ch) === me;
+  const picked = all
+    .filter((ch) => !exported.has(ch.id))
+    .sort((a, b) => Number(mine(b)) - Number(mine(a)) || b.updatedAt.getTime() - a.updatedAt.getTime())
+    .slice(0, q.data.limit);
+  const [seriesRows, pickedStats] = await Promise.all([
+    picked.length
+      ? sdb.select(series, inArray(series.id, [...new Set(picked.map((ch) => ch.seriesId))]))
+      : Promise.resolve([]),
+    chapterStats(sdb, picked),
+  ]);
+  const title = new Map(seriesRows.map((s) => [s.id, s.title]));
+  return c.json({
+    chapters: picked.map((ch) => ({
+      ...chapterSummary(ch),
+      series_title: title.get(ch.seriesId) ?? "",
+      page_counts: pickedStats.pageCounts(ch.id),
+      exported: pickedStats.exported(ch.id),
+      reexport: pickedStats.reexport(ch.id),
+      lock_holder_is_me: mine(ch),
+    })),
+  });
+});
 
 /** Tạo chương (draft) + source_files theo thứ tự + presigned POST cho từng file. */
 chapterRoutes.post("/w/:ws/chapters", requireWorkspace(), async (c) => {
