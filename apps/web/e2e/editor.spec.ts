@@ -108,6 +108,10 @@ test("edit translation → autosave → reload keeps it; crash mid-edit → rest
   await expect(page.locator(".status", { hasText: "Đã lưu" })).toBeVisible({ timeout: 10_000 });
 
   // Rời editor ngay sau khi sửa (trước debounce 2s) → vẫn lưu trước khi nhả khoá.
+  const lockedPuts: number[] = [];
+  page.on("response", (r) => {
+    if (r.request().method() === "PUT" && r.url().endsWith("/state") && r.status() === 423) lockedPuts.push(1);
+  });
   await page.getByLabel("Bản dịch vùng 1").fill("Rời ngay");
   await page.getByRole("link", { name: "← Chương" }).click();
   await expect(page).toHaveURL(new RegExp(`/chapters/${chapterId}$`));
@@ -117,6 +121,8 @@ test("edit translation → autosave → reload keeps it; crash mid-edit → rest
       return r.state.regions[0]?.translation;
     })
     .toBe("Rời ngay");
+  // Lượt lưu cuối tới server trước lệnh nhả khoá (không có PUT nào bị 423).
+  expect(lockedPuts).toEqual([]);
   await page.goto(editorUrl(chapterId, pageId));
   await page.getByLabel("Bản dịch vùng 1").fill("Chào cậu, ệ ẫ ữ");
   await expect(page.locator(".status", { hasText: "Đã lưu" })).toBeVisible({ timeout: 10_000 });

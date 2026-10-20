@@ -28,6 +28,28 @@ const statusOf = (e: unknown) =>
   e && typeof e === "object" && "status" in e && typeof e.status === "number" ? e.status : 0;
 const messageOf = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
+/**
+ * Lượt lưu cuối khi rời editor — chạy trong chuỗi `serial` của khoá chương, xếp TRƯỚC lệnh nhả khoá của
+ * useChapterLock, nên PUT tới server khi khoá còn giữ. Nếu khoá đã mất từ trước (PUT 423) → `relock` rồi lưu
+ * lại; lệnh nhả khoá xếp sau trong chuỗi sẽ nhả. Không lấy lại được → thay đổi vẫn nằm trong IndexedDB.
+ * (Đóng tab không đi qua đây: pagehide không chờ được promise — dựa vào khôi phục IndexedDB.)
+ */
+export async function finalSave(saver: Saver, store: EditorStore, relock: () => Promise<unknown>) {
+  await saver.flush();
+  const s = store.getState();
+  if (s.readOnly !== "lock_lost" || !s.pageId || s.doc === s.base) return;
+  const pageId = s.pageId;
+  try {
+    await relock();
+    // Editor mới đã mở (store reset/đổi page) trong lúc chờ khoá → không đụng trạng thái của phiên đó.
+    if (store.getState().pageId !== pageId) return;
+    store.getState().setReadOnly(null);
+    await saver.flush();
+  } catch {
+    // Không lấy lại được khoá: bản nháp IndexedDB sẽ được đề nghị khôi phục lần mở sau.
+  }
+}
+
 export class Saver {
   private saveTimer: ReturnType<typeof setTimeout> | undefined;
   private persistTimer: ReturnType<typeof setTimeout> | undefined;

@@ -9,8 +9,8 @@ import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { errorMessage } from "../../lib/api.ts";
-import { chapterKeys, fetchProgress, lockChapter, unlockChapter } from "../chapter/api.ts";
-import { useChapterLock } from "../chapter/use-chapter-lock.ts";
+import { chapterKeys, fetchProgress, lockChapter } from "../chapter/api.ts";
+import { serial, useChapterLock } from "../chapter/use-chapter-lock.ts";
 import { deleteBox } from "./actions.ts";
 import { fetchEditorPage, type EditorPage as PageData, putPageState } from "./api.ts";
 import { useOcrRegion } from "./canvas/OcrSelect.tsx";
@@ -25,7 +25,7 @@ import { RegionTable } from "./panels/RegionTable.tsx";
 import { Toolbar } from "./panels/Toolbar.tsx";
 import { PendingQueue, type PendingRecord } from "./pending-queue.ts";
 import { rebase, same } from "./rebase.ts";
-import { Saver } from "./save.ts";
+import { finalSave, Saver } from "./save.ts";
 import { editorStore, type Tool, useEditor } from "./store.ts";
 
 type Props = { ws: string; seriesId: string; chapterId: string; pageId: string };
@@ -34,28 +34,6 @@ const TOOL_KEYS: Record<string, Tool> = { v: "select", t: "text", b: "brush", e:
 const queue = new PendingQueue();
 
 const stateOf = (d: PageData) => d.state ?? emptyPageState(d.page.width, d.page.height);
-
-/**
- * Lượt lưu cuối khi rời editor. Hook khoá chương nhả khoá trong cleanup của nó (có thể tới server trước PUT này)
- * → PUT 423: lấy lại khoá, lưu, rồi nhả. Người khác đã lấy khoá thì thay đổi vẫn nằm trong IndexedDB.
- */
-async function finalSave(saver: Saver, ws: string, chapterId: string) {
-  await saver.flush();
-  const s = editorStore.getState();
-  if (s.readOnly !== "lock_lost" || !s.pageId || s.doc === s.base) return;
-  const pageId = s.pageId;
-  try {
-    await lockChapter(ws, chapterId);
-    // Editor mới đã mở (store reset/đổi page) trong lúc chờ khoá → không đụng trạng thái của phiên đó.
-    if (editorStore.getState().pageId !== pageId) return;
-    editorStore.getState().setReadOnly(null);
-    await saver.flush();
-  } catch {
-    // Không lấy lại được khoá: bản nháp IndexedDB sẽ được đề nghị khôi phục lần mở sau.
-  } finally {
-    await unlockChapter(ws, chapterId).catch(() => undefined);
-  }
-}
 
 function useFontKit() {
   const [kit, setKit] = useState<FontKit | null>(null);
@@ -81,24 +59,6 @@ export function EditorPage({ ws, seriesId, chapterId, pageId }: Props) {
   // Store dùng chung cả tab: phiên editor mới bắt đầu sạch (chạy trước mọi effect con).
   useState(() => editorStore.getState().reset());
   const { kit, error: fontError } = useFontKit();
-  const lock = useChapterLock(ws, chapterId);
-  const lockHeld = useRef(false);
-  lockHeld.current = lock.state.status === "held";
-  const progress = useQuery({
-    queryKey: chapterKeys.progress(ws, chapterId),
-    queryFn: () => fetchProgress(ws, chapterId),
-    refetchInterval: 15_000,
-  });
-  const pages = progress.data?.pages ?? [];
-  const [data, setData] = useState<PageData | null>(null);
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [imageError, setImageError] = useState<string | null>(null);
-  const [recovery, setRecovery] = useState<PendingRecord | null>(null);
-  const readOnly = useEditor((s) => s.readOnly);
-  const selection = useEditor((s) => s.selection);
-  const tool = useEditor((s) => s.tool);
-  const hasStrokes = useEditor((s) => s.mask.strokes.length > 0);
-
   const saver = useMemo(
     () =>
       new Saver(
@@ -116,7 +76,7 @@ export function EditorPage({ ws, seriesId, chapterId, pageId }: Props) {
     [ws],
   );
 
-  // Mọi thay đổi doc → lưu nháp IndexedDB + autosave.
+  // Mọi thay đổi doc → lưu nháp IndexedDB + autosave. Phải khai báo TRƯỚC useChapterLock (thứ tự cleanup).
   useEffect(() => {
     saver.start();
     const unsub = editorStore.subscribe((s, prev) => {
@@ -140,9 +100,29 @@ export function EditorPage({ ws, seriesId, chapterId, pageId }: Props) {
       document.removeEventListener("visibilitychange", onVisibility);
       removeEventListener("beforeunload", onBeforeUnload);
       saver.dispose();
-      void finalSave(saver, ws, chapterId);
+      // Cleanup này chạy TRƯỚC cleanup của useChapterLock (khai báo trước) → lượt lưu cuối vào chuỗi khoá trước
+      // lệnh nhả khoá.
+      void serial(() => finalSave(saver, editorStore, () => lockChapter(ws, chapterId)));
     };
   }, [saver, ws, chapterId]);
+
+  const lock = useChapterLock(ws, chapterId);
+  const lockHeld = useRef(false);
+  lockHeld.current = lock.state.status === "held";
+  const progress = useQuery({
+    queryKey: chapterKeys.progress(ws, chapterId),
+    queryFn: () => fetchProgress(ws, chapterId),
+    refetchInterval: 15_000,
+  });
+  const pages = progress.data?.pages ?? [];
+  const [data, setData] = useState<PageData | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [imageError, setImageError] = useState<string | null>(null);
+  const [recovery, setRecovery] = useState<PendingRecord | null>(null);
+  const readOnly = useEditor((s) => s.readOnly);
+  const selection = useEditor((s) => s.selection);
+  const tool = useEditor((s) => s.tool);
+  const hasStrokes = useEditor((s) => s.mask.strokes.length > 0);
 
   // Khoá chương ↔ read-only. Phụ thuộc cả object state: mỗi heartbeat thành công là object mới, nên sau
   // `lock_lost` (PUT 423) lần lấy lại khoá kế tiếp mở lại quyền sửa và lưu tiếp phần đang chờ.

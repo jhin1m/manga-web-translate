@@ -21,9 +21,10 @@ export type LockState =
 /**
  * Mọi lock/unlock của tab đi tuần tự: StrictMode hoặc đổi chương tạo chuỗi unlock(cũ) → lock(mới); chạy
  * song song thì unlock có thể tới server SAU lock và nhả mất khoá đang hiển thị là "đang giữ".
+ * Export để thao tác cần khoá (lượt lưu cuối của editor) xếp hàng TRƯỚC lệnh nhả khoá khi unmount.
  */
 let lockChain: Promise<unknown> = Promise.resolve();
-function serial<T>(op: () => Promise<T>): Promise<T> {
+export function serial<T>(op: () => Promise<T>): Promise<T> {
   const run = lockChain.then(op, op);
   lockChain = run.catch(() => undefined);
   return run;

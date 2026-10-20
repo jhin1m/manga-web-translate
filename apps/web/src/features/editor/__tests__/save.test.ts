@@ -1,10 +1,11 @@
 import type { PageState } from "@mtl/shared";
 import { IDBFactory } from "fake-indexeddb";
 import { describe, expect, it } from "vitest";
+import { serial } from "../../chapter/use-chapter-lock.ts";
 import { editText, moveBox } from "../actions.ts";
 import { change } from "../history.ts";
 import { PendingQueue } from "../pending-queue.ts";
-import { type SaveApi, Saver } from "../save.ts";
+import { finalSave, type SaveApi, Saver } from "../save.ts";
 import { createEditorStore } from "../store.ts";
 import { doc, layout } from "./fixtures.ts";
 
@@ -140,5 +141,54 @@ describe("store", () => {
     expect(store.getState().doc).toEqual(doc(2));
     for (let i = 0; i < 100; i++) store.getState().redo();
     expect(store.getState().doc?.text_boxes[1]?.text).toBe("Lần 98");
+  });
+});
+
+describe("final save on leaving the editor", () => {
+  it("runs in the lock chain before the queued unlock, so the PUT lands while the lock is held", async () => {
+    const { store, srv, saver } = setup();
+    store.getState().apply(moveBox("t0", 11, 12));
+    const relock = async () => {
+      srv.locked = true;
+    };
+    // Thứ tự cleanup khi unmount: lượt lưu cuối xếp trước, lệnh nhả khoá của useChapterLock xếp sau.
+    const save = serial(() => finalSave(saver, store, relock));
+    const unlock = serial(async () => {
+      srv.locked = false;
+    });
+    await Promise.all([save, unlock]);
+    expect(srv.state.text_boxes[0]).toMatchObject({ x: 11, y: 12 });
+    // Một PUT duy nhất: không có vòng 423 → lấy lại khoá.
+    expect(srv.puts).toBe(1);
+    expect(store.getState().save.status).toBe("saved");
+    expect(srv.locked).toBe(false);
+  });
+
+  it("re-acquires a lock lost earlier (423) and saves", async () => {
+    const { store, srv, queue, saver } = setup();
+    srv.locked = false;
+    store.getState().apply(moveBox("t0", 21, 22));
+    await saver.flush();
+    expect(store.getState().readOnly).toBe("lock_lost");
+    await serial(() =>
+      finalSave(saver, store, async () => {
+        srv.locked = true;
+      }),
+    );
+    expect(srv.state.text_boxes[0]).toMatchObject({ x: 21, y: 22 });
+    expect(await queue.get("p1")).toBeUndefined();
+  });
+
+  it("keeps edits in IndexedDB when the lock cannot be re-acquired", async () => {
+    const { store, srv, queue, saver } = setup();
+    srv.locked = false;
+    store.getState().apply(moveBox("t0", 31, 32));
+    await serial(() =>
+      finalSave(saver, store, async () => {
+        throw new Error("423");
+      }),
+    );
+    expect(srv.puts).toBe(1);
+    expect((await queue.get("p1"))?.ops.length).toBeGreaterThan(0);
   });
 });
