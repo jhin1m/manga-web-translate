@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { clampView, MAX_MOUNTED, pageAt, pageOffsets, stripToPage, visiblePages } from "../strip-layout.ts";
+import {
+  clampView,
+  contentBox,
+  MAX_MOUNTED,
+  pageAt,
+  pageOffsets,
+  SPLIT_GAP,
+  stripToPage,
+  visiblePages,
+} from "../strip-layout.ts";
 
 describe("strip layout", () => {
   const heights = [1000, 2000, 500];
@@ -46,5 +55,16 @@ describe("strip layout", () => {
     const v = clampView({ scale: 1, x: 999, y: -99_999 }, { w: 800, h: 12_000 }, { w: 1200, h: 800 });
     expect(v.x).toBe(200);
     expect(v.y).toBe(800 - 12_000 - 40);
+  });
+
+  it("split view: original column sits left of the strip, clamping keeps both columns in view", () => {
+    const c = contentBox({ w: 800, h: 12_000 }, true);
+    expect(c).toEqual({ x: -(800 + SPLIT_GAP), w: 1600 + SPLIT_GAP, h: 12_000 });
+    // Rộng hơn khung → mép trái nội dung (cột Gốc) không vượt quá lề.
+    const v = clampView({ scale: 1, x: 5000, y: 0 }, c, { w: 1200, h: 800 }, c.x);
+    expect(v.x + c.x).toBe(40);
+    // Hẹp hơn khung → căn giữa cả 2 cột.
+    const z = clampView({ scale: 0.5, x: 0, y: 0 }, c, { w: 1200, h: 800 }, c.x);
+    expect(z.x + c.x * 0.5).toBeCloseTo((1200 - c.w * 0.5) / 2);
   });
 });

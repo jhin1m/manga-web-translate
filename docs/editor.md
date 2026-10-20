@@ -45,18 +45,53 @@ người gõ = xuống dòng. Box có `text` mà `lines` rỗng (find/replace, �
 - Mask (B tô, E tẩy) → PNG chỉ phủ vùng có nét (≤ 4096px/cạnh) → `POST /pages/:id/mask-upload` (presigned POST
   PNG ≤ 5MB, key `user-mask/{uuid}.png`) → `POST /pages/:id/reinpaint {user_mask_key, offset, base_clean_rev}`
   (cần khoá; rev cũ → 409) → poll `/jobs/:id` → tải lại page lấy `clean_rev` mới.
-- OCR vùng (O): kéo khung → `POST /pages/:id/ocr-region {bbox}` → poll → chèn region + box (thao tác có undo).
+- OCR vùng (R): kéo khung → `POST /pages/:id/ocr-region {bbox}` → poll → chèn region + box (thao tác có undo).
 
 ## Kết quả AI mới
 
 `ai_update_available` → panel diff theo vùng (bản hiện tại vs AI mới), áp từng vùng/tất cả (giữ vị trí, kiểu chữ
 người đã chỉnh). "Đã xem" → `POST /pages/:id/ai-update/ack {ai_rev}` (chỉ tắt cờ nếu đúng rev đã xem).
 
+## Chế độ xem
+
+Thanh trên màn chương: `[Gốc | Dịch | Chia đôi]` (`chapterStore.viewMode`). Gốc = ảnh gốc, ẩn chữ; Dịch = ảnh sạch +
+chữ (mặc định); Chia đôi = cột Gốc bên trái cột Dịch trên cùng 1 Stage (cuộn/zoom đồng bộ), chỉ cột Dịch nhận thao
+tác — bấm/kéo ở cột Gốc = kéo canvas; trần mount 2 page (mỗi page 2 ảnh). Giữ `O` = tạm xem Gốc, nhả = về chế độ
+trước (chia đôi: cột phải cũng hiện gốc, bố cục giữ nguyên). `editorStore.showOriginal` suy ra từ chế độ đang hiện.
+
 ## Phím tắt
 
-V chọn · T khung chữ mới · B mask · E tẩy mask · O OCR vùng · Ctrl/Cmd+Z, Ctrl/Cmd+Shift+Z (Ctrl+Y) · Space giữ + kéo
-(hoặc chuột giữa) kéo canvas · cuộn = cuộn strip, Ctrl/Cmd+cuộn = zoom · ←/→ chuyển trang · `\` ảnh gốc/bản dịch ·
-Enter hoặc double-click sửa chữ (Ctrl/Cmd+Enter lưu, Esc huỷ) · Delete xoá khung · Esc bỏ chọn.
+Bảng duy nhất ở `apps/web/src/features/editor/shortcuts.ts` (thuần, có test), 1 listener `use-shortcuts.ts` chỉ gắn
+khi màn chương mount; bảng tra trong UI: nút `?` trên thanh trên. Phím đơn tắt khi focus trong ô nhập; drawer đang
+mở → tắt phím màn chương (Esc đóng drawer).
+
+| Phím | Hành động |
+|---|---|
+| V · T · B · E · R | Chọn · khung chữ mới · mask · tẩy mask · OCR vùng (OCR đổi từ `O` sang `R`) |
+| giữ O · `\` | Tạm xem gốc · đổi Gốc ↔ Dịch |
+| A / D · PageUp / PageDown · ← / → | Trang trước / sau (cuộn tới + thành trang đang sửa) |
+| Alt+↑ / Alt+↓ | Khối trước / sau theo bảng văn bản (xuyên trang) |
+| Ctrl/Cmd+Z · Ctrl/Cmd+Shift+Z · Ctrl+Y | Hoàn tác · làm lại (trang đang sửa; trong ô nhập là hoàn tác của ô) |
+| Ctrl/Cmd+S (cả trong ô) | Lưu ngay, chặn hộp lưu của trình duyệt |
+| Ctrl/Cmd+F (cả trong ô) | Mở tab Tìm / Thay, focus ô tìm (khi chương đã dịch xong) |
+| Enter · Delete · Esc | Sửa chữ box đang chọn (double-click cũng được; Ctrl/Cmd+Enter lưu, Esc huỷ) · xoá box · bỏ chọn |
+| ? | Bảng phím tắt |
+| Space giữ + kéo (hoặc chuột giữa) | Kéo canvas; cuộn = cuộn strip, Ctrl/Cmd+cuộn = zoom |
+
+## Drawer Xuất / Hoạt động
+
+Drawer phải 420px (`apps/web/src/app/drawer.tsx`): scrim xám, Esc/scrim/Đóng = đóng, focus vào drawer khi mở, trả về
+nút đã mở khi đóng.
+
+- **Xuất chương** (`features/chapter/export-drawer.tsx` + `export-panel.tsx`): phạm vi cả chương; ZIP PNG / CBZ (chất
+  lượng); "Cắt lại theo slice gốc" (= `layout: original_slices`, bỏ chọn = theo trang); kèm trang chưa dịch; tên file
+  `{series}-ch{số}.{zip|cbz}`. Cảnh báo trước khi xuất (`export-warnings.ts`, từ dữ liệu đã có, không gọi API): trang
+  lỗi, trang chưa xong, khối tràn khung, khối chưa có bản dịch (bỏ SFX), trang có bản AI mới chưa áp → "Xem các khối
+  này" mở bảng lọc "Chỉ khối cần xem". Vẫn xuất được khi có cảnh báo. `?drawer=export` (nút "Xuất lại" ở "Việc cần
+  làm") mở chương với drawer Xuất mở sẵn.
+- **Hoạt động** (`features/chapter/activity-drawer.tsx`): nút ở thanh trên màn chương + app shell, kèm số việc đang
+  chạy. Upload của tab (mọi chương, thử lại file lỗi); ở màn chương thêm job của chương (trang đang xử lý/lỗi theo
+  `error_class`, "Chạy lại trang lỗi") và lượt xuất gần đây (tải lại, huỷ).
 
 ## Chưa đo
 

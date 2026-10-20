@@ -16,7 +16,7 @@ import {
   previewFindReplace,
   undoBatch,
 } from "./api.ts";
-import { LockBanner } from "./Modal.tsx";
+import { LockBanner } from "./lock-banner.tsx";
 import { describeWriteError, splitHighlight } from "./text-utils.ts";
 import type { LockState } from "./use-chapter-lock.ts";
 

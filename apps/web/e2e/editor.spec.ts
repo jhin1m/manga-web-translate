@@ -3,7 +3,8 @@
  * nối lưu rồi đóng tab giữa chừng → mở lại đề nghị khôi phục từ IndexedDB → khôi phục → lưu lên server. Thêm:
  * route editor 1 trang cũ redirect, strip nhiều trang (cuộn → `?page=`, rail → inspector) và chính sách khoá
  * (đang dịch không giữ khoá → AI ghi được bản dịch), bảng văn bản cả chương (click dòng ↔ trang active, sửa tại
- * chỗ, Enter sang dòng sau xuyên trang, cờ tràn khung + lọc "Chỉ khối cần xem"). Chương tạo qua API + worker giả.
+ * chỗ, Enter sang dòng sau xuyên trang, cờ tràn khung + lọc "Chỉ khối cần xem"), chế độ xem Gốc/Dịch/Chia đôi +
+ * giữ O, drawer Hoạt động khi chương đang dịch. Chương tạo qua API + worker giả.
  */
 import { expect, type Page, test } from "@playwright/test";
 import { WEB_URL } from "./env.ts";
@@ -125,6 +126,28 @@ test("edit translation → autosave → reload keeps it; crash mid-edit → rest
     await expect(original).toHaveAttribute("aria-pressed", pressed);
     await page.waitForTimeout(150);
   }
+  // Segmented Gốc / Dịch / Chia đôi.
+  const seg = page.getByRole("group", { name: "Chế độ xem" });
+  for (const name of ["Chia đôi", "Gốc", "Chia đôi", "Dịch"]) {
+    await seg.getByRole("button", { name, exact: true }).click();
+    await expect(seg.getByRole("button", { name, exact: true })).toHaveAttribute("aria-pressed", "true");
+    await page.waitForTimeout(150);
+  }
+  // Giữ O = tạm xem gốc, nhả = về Dịch.
+  await page.locator(".ed-canvas").click({ position: { x: 5, y: 5 } });
+  await page.keyboard.down("o");
+  await page.waitForTimeout(150);
+  await expect(original).toHaveAttribute("aria-pressed", "true");
+  await page.keyboard.up("o");
+  await expect(seg.getByRole("button", { name: "Dịch", exact: true })).toHaveAttribute("aria-pressed", "true");
+  // Chia đôi: sửa ô Dịch vẫn lưu.
+  await seg.getByRole("button", { name: "Chia đôi", exact: true }).click();
+  await cell(page).fill("Chia đôi vẫn lưu");
+  await expect(page.locator(".status", { hasText: "Đã lưu" })).toBeVisible({ timeout: 10_000 });
+  await expect.poll(() => translationOf(page, pageId)).toBe("Chia đôi vẫn lưu");
+  await cell(page).fill("Chào cậu, ệ ẫ ữ");
+  await expect(page.locator(".status", { hasText: "Đã lưu" })).toBeVisible({ timeout: 10_000 });
+  await seg.getByRole("button", { name: "Dịch", exact: true }).click();
   expect(pageErrors).toEqual([]);
 
   // Undo/redo bằng phím tắt.
@@ -246,6 +269,15 @@ test("opening a chapter while it translates does not hold the lock; the AI trans
   const detail = async () =>
     (await (await page.request.get(`/api/w/${ws}/chapters/${chapterId}`)).json()) as { lock: unknown; status: string };
   expect(await detail()).toMatchObject({ status: "processing", lock: null });
+
+  // Drawer Hoạt động liệt kê job dịch chương đang chờ.
+  await page.getByRole("button", { name: /^Hoạt động/ }).click();
+  const activity = page.getByRole("dialog", { name: "Hoạt động" });
+  await expect(activity.locator('[data-job-type="chapter.translate"]')).toContainText("Dịch chương", {
+    timeout: 15_000,
+  });
+  await page.keyboard.press("Escape");
+  await expect(activity).toBeHidden();
 
   const pages = await runUntil(page, chapterId, allReady);
   await expect(cell(page)).toHaveValue("Xin chào", { timeout: 15_000 });

@@ -8,7 +8,7 @@ import { useMemo, useState } from "react";
 import { errorMessage } from "../../lib/api.ts";
 import { applyGlossaryRules, type GlossaryRule, previewGlossaryApply } from "../chapter/api.ts";
 import { FlowPanel, type ToolPanelProps, useBatchFlow } from "../chapter/FindReplace.tsx";
-import { LockBanner } from "../chapter/Modal.tsx";
+import { LockBanner } from "../chapter/lock-banner.tsx";
 import { fetchGlossary, type GlossaryEntry, glossaryKey } from "./api.ts";
 
 /** Gộp glossary: entry series đè entry workspace trùng từ gốc (không phân biệt hoa thường). */

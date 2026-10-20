@@ -1,7 +1,8 @@
 /**
  * Bảng dưới màn chương: tab Bản dịch (bảng văn bản cả chương) / Tìm–Thay / Áp glossary; kéo cao, thu gọn, nhớ
  * trong localStorage `mtl.layout` (< 1600px mặc định thu gọn). Tab đã mở giữ nguyên nội dung khi đổi tab/thu gọn
- * (không mất kết quả xem trước); tab chưa mở lần nào thì chưa mount.
+ * (không mất kết quả xem trước); tab chưa mở lần nào thì chưa mount. `request` mở tab từ ngoài (Ctrl/Cmd+F → Tìm /
+ * Thay + focus ô tìm; "Xem các khối này" của drawer Xuất → Bản dịch).
  */
 import { type ReactNode, useEffect, useRef, useState } from "react";
 
@@ -36,7 +37,10 @@ export type BottomTab = {
   flush?: boolean;
 };
 
-export function BottomPanel({ tabs }: { tabs: BottomTab[] }) {
+/** Mở 1 tab từ ngoài (phím tắt, drawer Xuất); `seq` đổi = yêu cầu mới; `focus` = selector cần focus trong panel. */
+export type TabRequest = { tab: string; seq: number; focus?: string };
+
+export function BottomPanel({ tabs, request }: { tabs: BottomTab[]; request?: TabRequest | null }) {
   const [prefs, setPrefs] = useState(readLayout);
   const [tab, setTab] = useState(tabs[0]?.id ?? "");
   const [seen, setSeen] = useState<Set<string>>(() => new Set([tab]));
@@ -54,6 +58,25 @@ export function BottomPanel({ tabs }: { tabs: BottomTab[] }) {
     setSeen((s) => (s.has(id) ? s : new Set(s).add(id)));
     setPrefs((p) => (p.bottomOpen ? p : { ...p, bottomOpen: true }));
   };
+
+  const pickRef = useRef(pick);
+  pickRef.current = pick;
+  const pendingFocus = useRef<TabRequest | null>(null);
+  useEffect(() => {
+    if (!request) return;
+    pendingFocus.current = request.focus ? request : null;
+    pickRef.current(request.tab);
+  }, [request]);
+  // Sau khi panel đã hiện (tab vừa mount lần đầu cũng vậy) → focus phần tử được yêu cầu.
+  useEffect(() => {
+    const r = pendingFocus.current;
+    if (!r?.focus || !prefs.bottomOpen || current?.id !== r.tab) return;
+    const el = document.getElementById(`cw-panel-${r.tab}`)?.querySelector<HTMLElement>(r.focus);
+    if (!el) return;
+    pendingFocus.current = null;
+    el.focus();
+    if (el instanceof HTMLInputElement) el.select();
+  });
 
   return (
     <section

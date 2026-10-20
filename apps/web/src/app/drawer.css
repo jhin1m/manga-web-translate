@@ -1,0 +1,122 @@
+/* Drawer phải (docs/design-guidelines.md): scrim xám đục, không blur; viền trái, không bóng lớn. */
+.drawer-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  background: rgb(27 27 26 / 0.32);
+}
+.drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 41;
+  width: min(420px, 100vw);
+  display: flex;
+  flex-direction: column;
+  background: var(--c-bg);
+  border-left: 1px solid var(--c-line-strong);
+  outline: none;
+}
+.drawer-head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-3) var(--sp-4);
+  border-bottom: 1px solid var(--c-line);
+}
+.drawer-head h2 {
+  flex: 1;
+  margin: 0;
+  font-size: var(--fs-lg);
+}
+.drawer-body {
+  flex: 1;
+  overflow: auto;
+  padding: var(--sp-4);
+  display: grid;
+  align-content: start;
+  gap: var(--sp-4);
+}
+.drawer-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--sp-2);
+  padding: var(--sp-3) var(--sp-4);
+  border-top: 1px solid var(--c-line);
+}
+.drawer-section > h3 {
+  margin: 0 0 var(--sp-2);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--c-fg-muted);
+}
+.drawer-list {
+  display: grid;
+  gap: var(--sp-2);
+}
+.drawer-item {
+  border: 1px solid var(--c-line);
+  border-radius: var(--radius);
+  padding: var(--sp-2) var(--sp-3);
+  display: grid;
+  gap: 4px;
+}
+.drawer-item-head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+.drawer-item-head > .grow {
+  flex: 1;
+  min-width: 0;
+  font-weight: 500;
+}
+.drawer-choice {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2) var(--sp-4);
+}
+.drawer-choice label,
+.drawer-check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-weight: 400;
+}
+.drawer-warn {
+  border-left: 3px solid var(--c-warn);
+  background: var(--c-surface);
+  padding: var(--sp-2) var(--sp-3);
+  display: grid;
+  gap: 4px;
+}
+.drawer-keys {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-sm);
+}
+.drawer-keys td {
+  padding: 6px 0;
+  border-bottom: 1px solid var(--c-line);
+  vertical-align: top;
+}
+.drawer-keys td:first-child {
+  width: 46%;
+  padding-right: var(--sp-3);
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+}
+.count-badge {
+  display: inline-block;
+  min-width: 18px;
+  margin-left: 6px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: var(--c-accent);
+  color: #fff;
+  font-size: var(--fs-xs);
+  line-height: 18px;
+  text-align: center;
+}
