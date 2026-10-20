@@ -18,3 +18,8 @@ Thứ tự: Wave 1 = P1 ‖ P2 → P3 → P4 → P5 → P6 → P7 (tối đa 2 p
 | 2026-10-20 17:10 | P3 | done | cook-p3 báo DONE_WITH_CONCERNS (API 57 test, worker 99). Chưa đo: golden 40 slice, kill -9 ≤150s thật, ảnh 20000px e2e; chapter.export hoãn P6; breaker dùng chung mọi workspace |
 | 2026-10-20 17:12 | P3 | quyết định | Worker Mac do team owner chạy (invite-only) → giữ server clamp số đếm + tin lớp lỗi, rủi ro ghi cho P8; huỷ ingest về draft: đồng ý. Yêu cầu sửa 7 lỗi mypy ở tests → sạch |
 | 2026-10-20 17:15 | P3 | merge | Kiểm lại worktree xanh → merge --no-ff không conflict. Main: typecheck/lint/test xanh (API 57), worker pytest 97 pass 2 skip, mypy sạch |
+| 2026-10-20 17:17 | P4 | start | worktree ../mtl-wt/p4, branch feat/p4-web-upload-series-progress, pane w1H:p8, agent cook-p4 |
+| 2026-10-20 17:40 | P4 | done | cook-p4 báo DONE_WITH_CONCERNS (API 76, web 6). Lệch plan: client API viết tay (không hc<AppType>), route mount ở apps/api/src/app.ts. Còn mở: link upload hiệu lực ≤15' sau commit; glossary thiếu unique index; worktree dùng chung DB test |
+| 2026-10-20 17:41 | P4 | quyết định | UI hướng A (dày thông tin, trung tính, 1 màu nhấn) giữ tạm, chờ owner duyệt; retry/dịch lại/huỷ không chặn 423 (job AI không ghi đè state khi chương khoá); unique index glossary giao cho P6 (sở hữu glossary) |
+| 2026-10-20 17:41 | P1 | sự cố | Controller giải conflict .gitignore ở merge P1 bằng sed BSD (không hiểu `\|`) → còn sót 3 dấu conflict trên main; P4 đã xoá, merge P4 sửa main. Bài học: kiểm lại file sau khi giải conflict |
+| 2026-10-20 17:42 | P4 | merge | Kiểm lại worktree xanh → merge --no-ff không conflict. Main: typecheck/lint/test xanh (API 76, web 6), worker pytest 97+2 skip, ruff/mypy sạch |
