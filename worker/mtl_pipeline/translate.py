@@ -119,9 +119,14 @@ def _translate_once(
 
 
 def translate_chapter(
-    provider: LLMProvider, pages: list[PageText], settings: SeriesSettings, mode: ContextMode = "rolling"
+    provider: LLMProvider,
+    pages: list[PageText],
+    settings: SeriesSettings,
+    mode: ContextMode = "rolling",
+    initial_context: RollingContext | None = None,
 ) -> ChapterTranslation:
     """mode=rolling: lô K trang + ngữ cảnh cuộn; mode=none: từng trang riêng, không ngữ cảnh (nhánh đối chứng).
+    initial_context: ngữ cảnh mở đầu (dịch lại 1 trang: nguồn + bản dịch trang n−1, nguồn trang n+1).
 
     id vùng phải duy nhất trong cả chương (region id chỉ duy nhất trong trang → dùng `qualified_id`)."""
     ids = [r.id for p in pages for r in p.regions]
@@ -132,7 +137,7 @@ def translate_chapter(
         if mode == "rolling"
         else [[p] for p in sorted(pages, key=lambda p: p.ord) if p.regions]
     )
-    ctx = RollingContext()
+    ctx = initial_context.model_copy(deep=True) if initial_context else RollingContext()
     out: dict[str, dict[str, TranslateItem]] = {}
     usage: list[TokenUsage] = []
     for batch in batches:

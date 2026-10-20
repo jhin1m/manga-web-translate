@@ -2,9 +2,47 @@
 
 from __future__ import annotations
 
-from typing import Literal
+import json
+import os
+from functools import cache
+from pathlib import Path
+from typing import Any, Literal
 
+from jsonschema import Draft202012Validator
 from pydantic import BaseModel, Field
+
+# JSON Schema sinh từ zod ở packages/shared (`pnpm schema:emit`) — nguồn duy nhất cho hợp đồng worker ↔ API.
+# Triển khai tách khỏi monorepo (Modal) thì copy thư mục và trỏ MTL_SCHEMA_DIR.
+DEFAULT_SCHEMA_DIR = Path(__file__).resolve().parents[2] / "packages" / "shared" / "json-schema"
+
+
+class ContractError(ValueError):
+    """Dữ liệu không khớp JSON Schema dùng chung (payload, inputs, result)."""
+
+
+def schema_dir() -> Path:
+    return Path(os.environ.get("MTL_SCHEMA_DIR", DEFAULT_SCHEMA_DIR))
+
+
+@cache
+def _validator(name: str) -> Draft202012Validator:
+    path = schema_dir() / f"{name}.schema.json"
+    if not path.is_file():
+        raise ContractError(f"thiếu JSON Schema {path} (chạy pnpm schema:emit hoặc đặt MTL_SCHEMA_DIR)")
+    schema = json.loads(path.read_text())
+    Draft202012Validator.check_schema(schema)
+    return Draft202012Validator(schema)
+
+
+def validate_contract(name: str, data: Any) -> None:
+    """Validate `data` theo `<name>.schema.json`; sai → ContractError liệt kê tối đa 5 lỗi."""
+    errors = sorted(_validator(name).iter_errors(data), key=lambda e: list(e.absolute_path))
+    if errors:
+        detail = "; ".join(
+            f"{'/'.join(map(str, e.absolute_path)) or '<root>'}: {e.message}" for e in errors[:5]
+        )
+        raise ContractError(f"{name}: {detail}")
+
 
 RegionKind = Literal["bubble", "text_bubble", "text_free"]
 Polarity = Literal["dark_on_light", "light_on_dark"]

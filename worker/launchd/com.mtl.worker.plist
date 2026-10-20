@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Mẫu launchd cho worker Mac. Sửa đường dẫn /Users/YOU/… rồi:
+    cp worker/launchd/com.mtl.worker.plist ~/Library/LaunchAgents/
+    launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.mtl.worker.plist
+  Token KHÔNG đặt ở đây: MTL_TOKEN_FILE trỏ tới file quyền 600 (hoặc bỏ dòng đó để đọc Keychain).
+  API key LLM đặt trong file env riêng hoặc Keychain, không commit.
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.mtl.worker</string>
+  <key>WorkingDirectory</key><string>/Users/YOU/mtl/worker</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/opt/homebrew/bin/uv</string>
+    <string>run</string>
+    <string>mtl-worker</string>
+    <string>--api</string>
+    <string>https://app.example.com</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>MTL_TOKEN_FILE</key><string>/Users/YOU/.config/mtl/worker.token</string>
+    <key>HF_HUB_OFFLINE</key><string>1</string>
+    <key>MTL_SHUTDOWN_GRACE_S</key><string>90</string>
+  </dict>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <!-- launchd gửi SIGTERM rồi chờ ExitTimeOut trước SIGKILL: phải ≥ MTL_SHUTDOWN_GRACE_S. -->
+  <key>ExitTimeOut</key><integer>120</integer>
+  <key>ThrottleInterval</key><integer>30</integer>
+  <key>StandardOutPath</key><string>/Users/YOU/Library/Logs/mtl-worker.log</string>
+  <key>StandardErrorPath</key><string>/Users/YOU/Library/Logs/mtl-worker.log</string>
+</dict>
+</plist>
