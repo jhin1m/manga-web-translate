@@ -57,7 +57,7 @@ upload (presigned POST) ─> commit (HEAD + magic bytes) ─> chapter.ingest (c�
 | 3 | [Hàng đợi job + worker protocol + worker local](./phase-03-job-queue-worker.md) | P1 | 7d | 1 (gate), 2 | Completed |
 | 4 | [Web: upload, cài đặt series, tiến độ, danh sách trang](./phase-04-web-upload-series-progress.md) | P1 | 4d | 2, 3 | Completed |
 | 5 | [Editor react-konva](./phase-05-editor-konva.md) | P1 | 12d | 3, 4 (router/layout) | Completed |
-| 6 | [Export + glossary/find-replace](./phase-06-export-glossary-polish.md) | P1 | 3d | 3, 5 | Pending |
+| 6 | [Export + glossary/find-replace](./phase-06-export-glossary-polish.md) | P1 | 3d | 3, 5 | Completed |
 | 7 | [Production MVP: VPS, systemd, backup, kill-switch, Modal](./phase-07-production-deploy-quotas.md) | P1 | 4d | 3–6 | Pending |
 | 8 | [Trước khi mở đăng ký công khai: quota, BYOK, admin, takedown](./phase-08-pre-public-signup-saas.md) | P2 | ~8d | 7 | Pending |
 | 9 | [(Sau MVP) Chrome extension — phác thảo](./phase-09-chrome-extension-outline.md) | P3 | ~5d | 7 (nội bộ); đăng công khai cần 8 | Pending |
