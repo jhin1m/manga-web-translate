@@ -411,7 +411,7 @@ function Workspace({ ws, seriesId, chapterId, page: searchPage, drawer: searchDr
   );
   const idx = pages.findIndex((p) => p.id === activeId);
   const activeMeta = pages[idx];
-  const defaultFont = kit?.manifest.defaults[0] ?? "PatrickHand-Regular";
+  const defaultFont = kit?.manifest.defaults[0] ?? "Bangers-Regular";
   const ocr = useOcrRegion(ws, activeId ?? "", defaultFont, { w: activeMeta?.width ?? 0, h: activeMeta?.height ?? 0 });
   const ocrStart = ocr.start;
   const onOcr = useCallback((r: PageRect) => void ocrStart(r), [ocrStart]);

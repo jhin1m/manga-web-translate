@@ -8,6 +8,7 @@ import os
 import sys
 from pathlib import Path
 
+from .fonts import DEFAULT_FONT
 from .translate import SeriesSettings
 
 
@@ -48,14 +49,14 @@ def main(argv: list[str] | None = None) -> int:
     add_common(p_tr)
     p_tr.add_argument("--context", default="rolling", choices=["rolling", "none"])
     p_tr.add_argument("--series", help="JSON {glossary, pronoun_rules, honorific_policy}")
-    p_tr.add_argument("--font", default="PatrickHand-Regular")
+    p_tr.add_argument("--font", default=DEFAULT_FONT)
 
     p_run = sub.add_parser("run", help="cả 2 giai đoạn")
     add_common(p_run)
     p_run.add_argument("--workers", type=int, default=2)
     p_run.add_argument("--context", default="rolling", choices=["rolling", "none"])
     p_run.add_argument("--series")
-    p_run.add_argument("--font", default="PatrickHand-Regular")
+    p_run.add_argument("--font", default=DEFAULT_FONT)
 
     p_bench = sub.add_parser("bench", help="đo golden set → bench.csv + blind.html")
     p_bench.add_argument("golden")

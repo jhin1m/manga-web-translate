@@ -32,7 +32,7 @@ type Page = typeof pages.$inferSelect;
 type Chapter = typeof chapters.$inferSelect;
 type Series = typeof series.$inferSelect;
 
-export const DEFAULT_DIALOGUE_FONT = "PatrickHand-Regular";
+export const DEFAULT_DIALOGUE_FONT = "Bangers-Regular";
 const HONORIFIC_TEXT: Record<string, string> = {
   translate: "chuyển -nim/-ssi sang cách xưng hô tiếng Việt tự nhiên",
   keep: "giữ nguyên hậu tố kính ngữ (-nim, -ssi) ở dạng phiên âm",

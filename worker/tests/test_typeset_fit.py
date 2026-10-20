@@ -1,16 +1,18 @@
 from __future__ import annotations
 
+import json
 import unicodedata
 
 import cv2
 import numpy as np
 
-from mtl_pipeline.fonts import metrics_for, vietnamese_chars
+from mtl_pipeline.fonts import DEFAULT_FONT, MANIFEST, metrics_for, vietnamese_chars
 from mtl_pipeline.render import layout_lines, line_advance, line_ink_bboxes, render_page
 from mtl_pipeline.schema import BBox, Region, Stroke, TextBox
 from mtl_pipeline.typeset import (
     LINE_HEIGHT,
     PAD,
+    STROKE_BUBBLE,
     block_height,
     fit_text,
     inscribed_rect,
@@ -107,7 +109,10 @@ def test_typeset_region_uses_bubble_interior_and_renders():
         id="r1", kind="text_bubble", bbox=BBox(x=140, y=120, w=120, h=60), score=1.0, bubble_id="r0"
     )
     tb = typeset_region(clean, text, bubble, TEXT, FONT)
-    assert tb.w * tb.h > 0 and tb.lines and tb.stroke is None and tb.fill == "#000000"
+    assert tb.w * tb.h > 0 and tb.lines and tb.fill == "#000000"
+    # Chữ đen trong bóng: viền trắng dày theo cỡ chữ (chất lettering manga).
+    assert tb.stroke is not None and tb.stroke.color == "#ffffff"
+    assert tb.stroke.width == round(max(1.5, tb.font_size * STROKE_BUBBLE), 1)
     assert tb.w > text.bbox.w  # nới ra lòng bóng
     out = render_page(clean, [tb])
     assert (out != clean).any()
@@ -120,6 +125,21 @@ def test_text_free_gets_contrast_stroke():
     r = Region(id="r0", kind="text_free", bbox=BBox(x=20, y=20, w=260, h=80), score=1.0)
     tb = typeset_region(clean, r, None, "Đêm đó", FONT)
     assert tb.stroke is not None and tb.stroke.width >= 1.5
+
+
+def test_light_text_gets_dark_stroke():
+    clean = np.full((200, 300, 3), 20, np.uint8)
+    r = Region(
+        id="r0", kind="text_bubble", bbox=BBox(x=20, y=20, w=260, h=80), score=1.0, polarity="light_on_dark"
+    )
+    tb = typeset_region(clean, r, None, "Đêm đó", FONT)
+    assert tb.fill == "#ffffff" and tb.stroke is not None and tb.stroke.color == "#000000"
+
+
+def test_default_font_is_manifest_default_and_covers_vietnamese():
+    manifest = json.loads(MANIFEST.read_text())
+    assert manifest["defaults"][0] == DEFAULT_FONT
+    assert manifest["fonts"][DEFAULT_FONT]["viComplete"] and not manifest["fonts"][DEFAULT_FONT]["missing"]
 
 
 def test_all_fonts_cover_vietnamese():

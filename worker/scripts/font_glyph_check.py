@@ -16,7 +16,7 @@ from mtl_pipeline.render import require_raqm
 
 SAMPLE = "ếệỗửữẫ ẤẬỖỬỮẪ Đường đời"
 # Thứ tự ưu tiên khi chọn font mặc định (thoại, lời dẫn, nhấn mạnh) — chỉ nhận font đủ dấu.
-PREFERRED_DEFAULTS = ["PatrickHand-Regular", "BeVietnamPro-Regular", "Anton-Regular"]
+PREFERRED_DEFAULTS = ["Bangers-Regular", "BeVietnamPro-Regular", "Anton-Regular"]
 
 
 def main() -> int:
