@@ -36,7 +36,7 @@ import { PageRail } from "./page-rail.tsx";
 import { needsReview } from "./page-status.ts";
 import { type ChapterCommand, primaryAction } from "./primary-action.ts";
 import { isChapterSettled } from "./status.ts";
-import { filterRows, KIND_LABEL, kindOf, type Row, rowKeyOfBox, type TableFilter } from "./text-table/rows.ts";
+import { filterRows, KIND_LABEL, type Row, rowKeyOfBox, sameKindBoxIds, type TableFilter } from "./text-table/rows.ts";
 import { TableFilters, TextTable, useChapterRows } from "./text-table/text-table.tsx";
 import { useChapterData } from "./use-chapter-data.ts";
 
@@ -267,10 +267,7 @@ export function ChapterWorkspace({ ws, seriesId, chapterId, page: searchPage }: 
         ...(auto_fit ? {} : { font_size }),
       };
       const layout = s.layout;
-      const idsOf = (st: PageState) =>
-        st.text_boxes
-          .filter((b) => b.id !== src.id && kindOf(st.regions.find((r) => r.id === b.region_id)) === row.kind)
-          .map((b) => b.id);
+      const idsOf = (st: PageState) => sameKindBoxIds(st, row.kind, src.id);
       let boxes = 0;
       let touched = 0;
       const own = idsOf(s.doc);

@@ -1,7 +1,7 @@
 import type { PageState } from "@mtl/shared";
 import { describe, expect, it } from "vitest";
 import { box, doc, region } from "../../editor/__tests__/fixtures.ts";
-import { buildRows, filterRows, needsAttention, rowKeyOfBox } from "./rows.ts";
+import { buildRows, filterRows, needsAttention, rowKeyOfBox, sameKindBoxIds } from "./rows.ts";
 
 const pages = [
   { id: "p2", ord: 1, ai_update_available: true },
@@ -80,5 +80,32 @@ describe("text table rows", () => {
     expect(filterRows(rows, { review: true, page: false }, null).map((r) => r.key)).not.toContain("p1:r0");
     expect(filterRows(rows, { review: true, page: false }, null, "p1:r0").map((r) => r.key)).toContain("p1:r0");
     expect(filterRows(rows, { review: false, page: true }, "p1").map((r) => r.key)).toEqual(["p1:r0"]);
+  });
+
+  it("drops the 'empty' flag (worker: blank crop, or no translation) once the block has a translation", () => {
+    const s: PageState = {
+      ...doc(0),
+      regions: [
+        { ...region("blank", ""), flags: ["empty"] },
+        { ...region("typed", "Đã gõ"), flags: ["empty"] },
+        { ...region("untranslated", "  ") },
+      ],
+      text_boxes: [],
+    };
+    const rows = buildRows(
+      [{ id: "p", ord: 0, ai_update_available: false }],
+      { p: { state: s } },
+      { pageId: null, doc: null },
+      () => false,
+    );
+    expect(rows.map((r) => r.flags)).toEqual([["empty"], [], ["empty"]]);
+    expect(rows.map(needsAttention)).toEqual([true, false, true]);
+  });
+
+  it("same-kind boxes for 'apply style' skip the source box and hidden boxes", () => {
+    const s = page2();
+    s.text_boxes.push({ ...box("ta2", "a", "Hai"), hidden: true }, box("ta3", "a", "Ba"));
+    expect(sameKindBoxIds(s, "dialog", "ta")).toEqual(["ta3"]);
+    expect(sameKindBoxIds(s, "box", "x")).toEqual(["free"]);
   });
 });

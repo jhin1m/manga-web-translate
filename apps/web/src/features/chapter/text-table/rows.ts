@@ -63,8 +63,14 @@ export function pageRows(page: RowPage, state: PageState | null, overflowOf: (b:
     const linked = state.text_boxes.filter((b) => b.region_id === r.id);
     const flags: RowFlag[] = [];
     if (linked.some((b) => !b.hidden && overflowOf(b))) flags.push("overflow");
-    for (const f of r.flags) flags.push(f);
-    if (!r.flags.includes("empty") && !r.translation.trim() && !r.flags.includes("sfx")) flags.push("empty");
+    const translated = r.translation.trim().length > 0;
+    for (const f of r.flags) {
+      // Cờ "empty" của worker = crop không có mực (OCR bỏ qua, worker/mtl_pipeline/ocr.py). Người dùng đã gõ bản
+      // dịch cho khối → không còn là khối trống cần xem.
+      if (f === "empty" && translated) continue;
+      flags.push(f);
+    }
+    if (!r.flags.includes("empty") && !translated && !r.flags.includes("sfx")) flags.push("empty");
     const [x, y, w, h] = r.bbox;
     rows.push({
       key: `${page.id}:${r.id}`,
@@ -138,4 +144,14 @@ export type TableFilter = { review: boolean; page: boolean };
 export function filterRows(rows: Row[], f: TableFilter, activeId: string | null, keep: string | null = null) {
   if (!f.review && !f.page) return rows;
   return rows.filter((r) => r.key === keep || ((!f.review || needsAttention(r)) && (!f.page || r.pageId === activeId)));
+}
+
+/**
+ * Box cùng loại với khối nguồn để "Áp kiểu cho khối cùng loại": trừ chính box nguồn và box đang ẩn (ẩn khi xuất —
+ * không đổi kiểu của khung người dùng đã cất đi).
+ */
+export function sameKindBoxIds(state: PageState, kind: RowKind, exceptId: string): string[] {
+  return state.text_boxes
+    .filter((b) => b.id !== exceptId && !b.hidden && kindOf(state.regions.find((r) => r.id === b.region_id)) === kind)
+    .map((b) => b.id);
 }

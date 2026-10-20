@@ -36,6 +36,11 @@ Báo cáo: `plans/reports/code-reviewer-261020-2200-redesign-p4-text-table-inspe
 - Thêm file ngoài danh sách plan (nhỏ): `editor/actions.ts`, `editor/canvas/OcrSelect.tsx`, `editor/canvas/ChapterCanvas.tsx` (memo), `editor/panels/Properties.tsx`, `editor/panels/TextField.tsx`, `primary-action.ts`.
 - Docs (`docs/development-setup.md`, `docs/export-and-batch-edit.md`) còn nhắc hộp thoại Tìm & thay — để P6 (dọn docs).
 
+## Chốt của controller (vòng 2)
+- Cờ `empty` của worker = crop không có mực, OCR bỏ qua (`worker/mtl_pipeline/ocr.py` `ink_ratio < MIN_INK_RATIO`). Khối đã có bản dịch không rỗng → bỏ cờ "Trống" (cả cờ server lẫn cờ suy ra), không còn "cần xem" (`rows.ts` + test).
+- "Áp kiểu cùng loại" không áp cho khung đang ẩn (`sameKindBoxIds` + test).
+- Nút 0 trang: đã xử lý ở commit đầu ("Chạy lại cắt trang").
+- Gate lại: typecheck ✓ · lint ✓ · test ✓ (api 143, web 102, db 3, shared 8) · e2e 14/14 (cổng 5181).
+
 ## Câu hỏi mở
-- Cờ `empty` của region (server) nghĩa là "OCR không thấy chữ" hay "chưa có bản dịch"? Quyết định có ẩn cờ khi người dùng đã gõ bản dịch.
-- "Áp kiểu cùng loại" có nên áp cả box ẩn không (hiện bỏ qua thuộc tính ẩn, vẫn áp kiểu)?
+- Không.
