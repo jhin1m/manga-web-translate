@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   clampView,
   contentBox,
-  EDGE,
+  FIT_EDGE,
   FIT_HEIGHT_MIN,
   fitScale,
   MAX_MOUNTED,
@@ -77,19 +77,25 @@ describe("strip layout", () => {
 
     it("fits a whole portrait page in the view height", () => {
       const s = fitScale(portrait, portrait, box);
-      expect(s).toBeCloseTo((box.h - 2 * EDGE) / portrait.h);
-      expect(portrait.h * s).toBeLessThanOrEqual(box.h - 2 * EDGE + 1e-9);
+      expect(s).toBeCloseTo((box.h - 2 * FIT_EDGE) / portrait.h);
+      expect(portrait.h * s).toBeLessThanOrEqual(box.h - 2 * FIT_EDGE + 1e-9);
     });
 
     it("fits a landscape spread by width", () => {
       const spread = { w: 3000, h: 1500 };
-      expect(fitScale(spread, spread, { w: 1170, h: 900 })).toBeCloseTo((1170 - 2 * EDGE) / spread.w);
+      expect(fitScale(spread, spread, { w: 1170, h: 900 })).toBeCloseTo((1170 - 2 * FIT_EDGE) / spread.w);
+    });
+
+    it("fits a 1500px page whole at the readable minimum in a ~800px view", () => {
+      const s = fitScale(portrait, portrait, { w: 1600, h: 800 });
+      expect(s).toBeGreaterThanOrEqual(FIT_HEIGHT_MIN);
+      expect(portrait.h * s + 2 * FIT_EDGE).toBeLessThanOrEqual(800 + 1e-9);
     });
 
     it("stops shrinking for height at the readable minimum when the view is short", () => {
       expect(fitScale(portrait, portrait, { w: 1170, h: 400 })).toBe(FIT_HEIGHT_MIN);
       // Bề ngang vẫn thắng: khung hẹp thu dưới mức đọc được theo chiều cao.
-      expect(fitScale(portrait, portrait, { w: 300, h: 400 })).toBeCloseTo((300 - 2 * EDGE) / portrait.w);
+      expect(fitScale(portrait, portrait, { w: 300, h: 400 })).toBeCloseTo((300 - 2 * FIT_EDGE) / portrait.w);
     });
 
     it("never zooms past 100%", () => {
@@ -99,15 +105,15 @@ describe("strip layout", () => {
 
     it("fits a tall webtoon slice by width only", () => {
       const slice = { w: 1500, h: 4500 };
-      expect(fitScale(slice, slice, box)).toBeCloseTo((box.w - 2 * EDGE) / slice.w);
+      expect(fitScale(slice, slice, box)).toBeCloseTo((box.w - 2 * FIT_EDGE) / slice.w);
     });
 
     it("split view fits both columns side by side and the page height", () => {
       const both = contentBox(portrait, true);
       const s = fitScale(both, portrait, { w: 1170, h: 1200 });
-      expect(both.w * s).toBeLessThanOrEqual(1170 - 2 * EDGE + 1e-9);
-      expect(s).toBeCloseTo((1170 - 2 * EDGE) / both.w);
-      expect(fitScale(both, portrait, { w: 3000, h: 1000 })).toBeCloseTo((1000 - 2 * EDGE) / portrait.h);
+      expect(both.w * s).toBeLessThanOrEqual(1170 - 2 * FIT_EDGE + 1e-9);
+      expect(s).toBeCloseTo((1170 - 2 * FIT_EDGE) / both.w);
+      expect(fitScale(both, portrait, { w: 3000, h: 1000 })).toBeCloseTo((1000 - 2 * FIT_EDGE) / portrait.h);
     });
 
     it("falls back to width fit without a page and respects the minimum", () => {

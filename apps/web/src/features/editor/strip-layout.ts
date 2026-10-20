@@ -6,6 +6,8 @@ import type { View } from "./store.ts";
 
 /** Lề quanh strip khi kẹp khung nhìn (px màn hình). */
 export const EDGE = 40;
+/** Lề khi vừa khung / đưa page lên đầu khung — nhỏ hơn `EDGE` để trang tờ vừa trọn khung ở mức đọc được. */
+export const FIT_EDGE = 16;
 /** Trần số page mount TileLayer cùng lúc (bộ nhớ bitmap). */
 export const MAX_MOUNTED = 4;
 
@@ -120,14 +122,14 @@ export const FIT_HEIGHT_MIN = 0.5;
 
 /**
  * Scale vừa khung: vừa bề ngang nội dung (`content`, gồm cả cột Gốc khi chia đôi), trọn chiều cao `page` nếu là page
- * dạng tờ (không phải dải webtoon) nhưng không dưới `FIT_HEIGHT_MIN`, không phóng quá 100%; lề `EDGE` mỗi phía.
+ * dạng tờ (không phải dải webtoon) nhưng không dưới `FIT_HEIGHT_MIN`, không phóng quá 100%; lề `FIT_EDGE` mỗi phía.
  */
 export function fitScale(content: Size, page: Size | undefined, box: Size, min = 0.1): number {
-  let s = Math.min(1, (box.w - 2 * EDGE) / content.w);
+  let s = Math.min(1, (box.w - 2 * FIT_EDGE) / content.w);
   if (page && page.h > 0 && page.h <= PAGE_RATIO_MAX * page.w)
-    s = Math.min(s, Math.max(FIT_HEIGHT_MIN, (box.h - 2 * EDGE) / page.h));
+    s = Math.min(s, Math.max(FIT_HEIGHT_MIN, (box.h - 2 * FIT_EDGE) / page.h));
   return Math.max(min, s);
 }
 
 /** Khung nhìn đưa đỉnh page (offset) lên gần mép trên khung, giữ scale. */
-export const viewAtOffset = (v: View, offset: number): View => ({ ...v, y: EDGE - offset * v.scale });
+export const viewAtOffset = (v: View, offset: number): View => ({ ...v, y: FIT_EDGE - offset * v.scale });
