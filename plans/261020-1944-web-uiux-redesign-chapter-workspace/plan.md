@@ -68,7 +68,7 @@ sửa (canvas | bảng | inspector) → editorStore.apply → Saver (IndexedDB �
 | 2 | [Home + series + upload inline](./phase-02-home-series-inline-upload.md) | P1 | 3.5d | 1 | Completed |
 | 3 | [Màn chương gộp: layout, rail, canvas cuộn liên tục](./phase-03-chapter-workspace-continuous-canvas.md) | P1 | 4.5d | 2 | Completed |
 | 4 | [Bảng văn bản + inspector + đồng bộ](./phase-04-text-table-inspector-sync.md) | P1 | 3d | 3 | Completed |
-| 5 | [Drawer Xuất/Hoạt động, chế độ xem, phím tắt](./phase-05-drawers-view-modes-shortcuts.md) | P1 | 2.5d | 4 | Pending |
+| 5 | [Drawer Xuất/Hoạt động, chế độ xem, phím tắt](./phase-05-drawers-view-modes-shortcuts.md) | P1 | 2.5d | 4 | Completed |
 | 6 | [E2E luồng đầy đủ + dọn code chết + docs](./phase-06-full-flow-e2e-cleanup.md) | P1 | 1.5d | 5 | Pending |
 
 Tuần tự P1→P6, mỗi phase để app chạy được (route cũ chỉ redirect khi màn thay thế đã có). File dùng chung qua nhiều phase (tuần tự, không song song): `apps/web/src/app/router.tsx` (P1, P2, P3), `apps/web/e2e/chapter-tools.spec.ts` + `editor.spec.ts` (P1, P3, P4, P5, P6), `apps/web/e2e/fake-worker.ts` (P3), `apps/web/e2e/helpers.ts` (P1, P6), `apps/web/src/features/chapter/chapter-workspace.tsx` + `chapter-topbar.tsx` + `editor/use-chapter-session.ts` (P3 tạo, P4–P5 sửa).
