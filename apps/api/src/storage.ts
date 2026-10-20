@@ -6,6 +6,7 @@
  */
 import {
   GetObjectCommand,
+  GetObjectTaggingCommand,
   HeadObjectCommand,
   NoSuchKey,
   NotFound,
@@ -65,11 +66,29 @@ export function presignGet(key: string, ttlSeconds: number, disposition?: string
 /** Trần TTL presigned PUT cho output worker; caller còn phải giới hạn ≤ thời gian lease còn lại. */
 export const MAX_PUT_TTL_S = 120;
 
-/** Presigned PUT (worker ghi output vào key bất biến); Content-Type cố định nằm trong chữ ký. */
-export function presignPut(key: string, contentType: string, ttlSeconds: number): Promise<string> {
+/**
+ * Presigned PUT (worker ghi output vào key bất biến); Content-Type cố định nằm trong chữ ký. `tagging`
+ * (`k=v&k2=v2`) giữ ở dạng header ký (`x-amz-tagging`, không đưa lên query) → worker phải gửi đúng header,
+ * lifecycle MinIO lọc theo tag này.
+ */
+export function presignPut(
+  key: string,
+  contentType: string,
+  ttlSeconds: number,
+  opts: { tagging?: string } = {},
+): Promise<string> {
   if (ttlSeconds <= 0 || ttlSeconds > MAX_PUT_TTL_S) throw new RangeError(`PUT ttl must be 1..${MAX_PUT_TTL_S}s`);
-  const cmd = new PutObjectCommand({ Bucket, Key: key, ContentType: contentType });
-  return getSignedUrl(publicSigner, cmd, { expiresIn: ttlSeconds });
+  const cmd = new PutObjectCommand({ Bucket, Key: key, ContentType: contentType, Tagging: opts.tagging });
+  return getSignedUrl(publicSigner, cmd, {
+    expiresIn: ttlSeconds,
+    ...(opts.tagging ? { unhoistableHeaders: new Set(["x-amz-tagging"]) } : {}),
+  });
+}
+
+/** Tag của object (kiểm lifecycle trong test). */
+export async function objectTags(key: string): Promise<Record<string, string>> {
+  const r = await internal.send(new GetObjectTaggingCommand({ Bucket, Key: key }));
+  return Object.fromEntries((r.TagSet ?? []).map((t) => [t.Key ?? "", t.Value ?? ""]));
 }
 
 export type HeadResult = { bytes: number; contentType: string | undefined; etag: string | undefined };

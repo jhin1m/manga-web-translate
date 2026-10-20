@@ -25,7 +25,7 @@ import {
 import { and, asc, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
 import { db } from "../db.ts";
-import { ingestKey, type JobKey, pageOpKey, prepareKey, translateKey } from "./idempotency.ts";
+import { exportKey, ingestKey, type JobKey, pageOpKey, prepareKey, translateKey } from "./idempotency.ts";
 
 type Job = typeof jobs.$inferSelect;
 type Page = typeof pages.$inferSelect;
@@ -323,6 +323,36 @@ export async function enqueueOcrRegion(
     key: pageOpKey(payload),
     chapterId: page.chapterId,
     pageId: page.id,
+  });
+}
+
+/**
+ * Xuất chương (render phía server từ page_state hiện tại). Chương chưa có page → 409 `no_pages`; đang ingest/xử lý
+ * → 409 `chapter_busy` (page đang dịch lại bị coi là chưa dịch → file thiếu trang mà không báo).
+ */
+export async function enqueueExport(tx: DbLike, ws: string, payload: Extract<JobPayload, { type: "chapter.export" }>) {
+  const [ch] = await tx
+    .select({ id: chapters.id, status: chapters.status })
+    .from(chapters)
+    .where(and(eq(chapters.workspaceId, ws), eq(chapters.id, payload.chapter_id)));
+  if (!ch) throw new NotFoundError("chapter");
+  if (ch.status === "ingesting" || ch.status === "processing") {
+    throw conflict("chapter_busy", "chương đang xử lý — chờ xong rồi xuất");
+  }
+  const rows = await tx
+    .select({ id: pages.id, cleanRev: pages.cleanRev, status: pages.status, version: pageStates.version })
+    .from(pages)
+    .leftJoin(pageStates, eq(pageStates.pageId, pages.id))
+    .where(eq(pages.chapterId, ch.id));
+  if (rows.length === 0) throw conflict("no_pages", "chương chưa có trang để xuất");
+  return insertJob(tx, {
+    workspaceId: ws,
+    payload,
+    key: exportKey(
+      payload,
+      rows.map((r) => ({ ...r, version: r.version ?? 0 })),
+    ),
+    chapterId: ch.id,
   });
 }
 

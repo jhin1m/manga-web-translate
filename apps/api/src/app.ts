@@ -4,6 +4,8 @@ import { HTTPException } from "hono/http-exception";
 import { secureHeaders } from "hono/secure-headers";
 import { auth } from "./auth.ts";
 import { chapterRoutes } from "./routes/chapters.ts";
+import { exportRoutes } from "./routes/export.ts";
+import { findReplaceRoutes } from "./routes/find-replace.ts";
 import { glossaryRoutes } from "./routes/glossary.ts";
 import { jobRoutes } from "./routes/jobs.ts";
 import { pageStateRoutes } from "./routes/page-state.ts";
@@ -30,6 +32,8 @@ export function createApp() {
   app.route("/api", pageRoutes);
   app.route("/api", pageStateRoutes);
   app.route("/api", glossaryRoutes);
+  app.route("/api", exportRoutes);
+  app.route("/api", findReplaceRoutes);
 
   // Worker (Bearer token worker, không cookie) — giao thức có fencing, xem jobs/queue.ts.
   app.route("/worker/v1", workerRoutes);

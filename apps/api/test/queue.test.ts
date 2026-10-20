@@ -1,6 +1,6 @@
 /** Hàng đợi: idempotency, claim song song không trùng, lọc workspace / worker_mode / capability / pipeline_version. */
-import { jobs } from "@mtl/db";
-import type { JobPayload } from "@mtl/shared";
+import { jobs, pages, scoped } from "@mtl/db";
+import { type JobPayload, pageId } from "@mtl/shared";
 import { and, eq } from "drizzle-orm";
 import { v7 as uuidv7 } from "uuid";
 import { beforeAll, describe, expect, it } from "vitest";
@@ -8,7 +8,7 @@ import { inJobTx, insertJob } from "../src/jobs/enqueue.ts";
 import { compareVersion } from "../src/jobs/queue.ts";
 import { reapExpiredLeases } from "../src/jobs/reaper.ts";
 import { db, seedWorkspace } from "./helpers.ts";
-import { claimJobs, expireLease, jobRow, setWorkerMode, VERSION, wcall, workerToken } from "./worker-helpers.ts";
+import { claimJobs, expireLease, jobRow, SHA, setWorkerMode, VERSION, wcall, workerToken } from "./worker-helpers.ts";
 
 type Seed = Awaited<ReturnType<typeof seedWorkspace>>;
 let A: Seed;
@@ -24,7 +24,7 @@ const exportPayload = (chapterId: string): JobPayload => ({
   include_untranslated: true,
 });
 
-/** Job không cần page/output (chapter.export) — đủ để kiểm claim. */
+/** Job chapter.export — inputs chỉ cần chương có ≥ 1 page (seedPage), không cần ảnh thật để kiểm claim. */
 async function addExportJobs(seed: Seed, n: number, key = () => uuidv7()) {
   const ids: string[] = [];
   for (let i = 0; i < n; i++) {
@@ -41,8 +41,21 @@ async function addExportJobs(seed: Seed, n: number, key = () => uuidv7()) {
   return ids;
 }
 
+async function seedPage(seed: Seed) {
+  await scoped(db, seed.workspaceId).insert(pages, {
+    id: pageId(seed.chapterId, 1, 0),
+    chapterId: seed.chapterId,
+    ord: 0,
+    width: 100,
+    height: 100,
+    originalKey: `ws/${seed.workspaceId}/ch/${seed.chapterId}/ingest/1/0.png`,
+    originalSha256: SHA,
+  });
+}
+
 beforeAll(async () => {
   [A, B, M] = await Promise.all([seedWorkspace("qa"), seedWorkspace("qb"), seedWorkspace("qm")]);
+  await Promise.all([A, B, M].map(seedPage));
   await setWorkerMode(M.workspaceId, "modal");
 });
 
@@ -64,6 +77,7 @@ describe("enqueue idempotency", () => {
 describe("claim", () => {
   it("2 workers claiming 1000 jobs concurrently never get the same job", async () => {
     const W = await seedWorkspace("q1000");
+    await seedPage(W);
     const ids = new Set(await addExportJobs(W, 1000));
     const t1 = (await workerToken(W.workspaceId, "w1")).token;
     const t2 = (await workerToken(W.workspaceId, "w2")).token;
@@ -120,6 +134,7 @@ describe("claim", () => {
 describe("reaper", () => {
   it("fails a job whose lease expired on its last attempt", async () => {
     const W = await seedWorkspace("reap");
+    await seedPage(W);
     const [id] = await addExportJobs(W, 1);
     await db
       .update(jobs)

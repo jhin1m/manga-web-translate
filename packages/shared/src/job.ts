@@ -44,7 +44,18 @@ const Uuid = z.uuid();
 const Rev = z.number().int().nonnegative();
 
 export const ExportFormat = z.enum(["png_zip", "cbz"]);
+export type ExportFormat = z.infer<typeof ExportFormat>;
+/** original_slices = cắt lại đúng các slice upload gốc (theo pages.source_map); pages = 1 file / page. */
 export const ExportLayout = z.enum(["original_slices", "pages"]);
+export type ExportLayout = z.infer<typeof ExportLayout>;
+/** Đuôi + MIME của file export (MIME nằm trong chữ ký presigned PUT). */
+export const EXPORT_FILE = {
+  png_zip: { ext: "zip", mime: "application/zip" },
+  cbz: { ext: "cbz", mime: "application/vnd.comicbook+zip" },
+} as const satisfies Record<ExportFormat, { ext: "zip" | "cbz"; mime: string }>;
+/** File export bị xoá sau 7 ngày (lifecycle MinIO theo tag `EXPORT_OBJECT_TAG`); quá hạn → download 410. */
+export const EXPORT_RETENTION_DAYS = 7;
+export const EXPORT_OBJECT_TAG = "mtl-kind=export";
 
 /** strip = ghép slice cùng width thành strip ảo rồi cắt theo detector (manhwa); pages = 1 file = 1 page (manga). */
 export const IngestMode = z.enum(["strip", "pages"]);

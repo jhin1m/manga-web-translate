@@ -315,8 +315,20 @@ async function applyResult(t: DbLike, job: Job, attempt: number, result: JobResu
       await t.update(pages).set({ cleanRev: result.clean_rev }).where(eq(pages.id, job.pageId));
       return undefined;
     }
+    case "chapter.export": {
+      // Chỉ nhận đúng key cấp lúc claim; kích thước lấy từ object thật (không tin số worker gửi).
+      const key = outputKey(job, "export")?.key;
+      if (!key || result.key !== key)
+        throw new JobHttpError(400, "wrong_output_key", "key export khác key cấp lúc claim");
+      const h = await head(key);
+      if (!h) throw new JobHttpError(400, "output_missing", `output chưa upload: ${key}`);
+      await t
+        .update(jobs)
+        .set({ result: { ...result, bytes: h.bytes } })
+        .where(eq(jobs.id, job.id));
+      return undefined;
+    }
     case "page.ocr_region":
-    case "chapter.export":
       return undefined; // kết quả nằm ở jobs.result
   }
 }

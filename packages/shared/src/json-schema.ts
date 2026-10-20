@@ -3,6 +3,7 @@ import { ErrorClass, JobPayload, JobResult, JobType, PreparePartial } from "./jo
 import { OcrResult, PageState, Region, TextBox } from "./page-state.ts";
 import {
   ClaimResponse,
+  ExportInputs,
   IngestInputs,
   OcrRegionInputs,
   PrepareInputs,
@@ -31,6 +32,7 @@ export const exportedSchemas = {
   "inputs-chapter-translate": TranslateInputs,
   "inputs-page-reinpaint": ReinpaintInputs,
   "inputs-page-ocr-region": OcrRegionInputs,
+  "inputs-chapter-export": ExportInputs,
 } as const;
 
 export function buildJsonSchemas(): Record<string, unknown> {
