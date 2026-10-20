@@ -4,7 +4,18 @@
  *  (b) `:ws` của A nhưng id tài nguyên thuộc B → 404
  * Phase sau thêm route → thêm case vào RESOURCE_CASES (chỉ append).
  */
-import { chapters, glossaryEntries, jobs, NotFoundError, scoped, series, sourceFiles } from "@mtl/db";
+import {
+  chapters,
+  glossaryEntries,
+  jobs,
+  NotFoundError,
+  pageStates,
+  pages,
+  scoped,
+  series,
+  sourceFiles,
+} from "@mtl/db";
+import { emptyPageState, pageId } from "@mtl/shared";
 import { eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { app, call, db, seedWorkspace } from "./helpers.ts";
@@ -17,6 +28,8 @@ let B: Seed;
 const jobOf: Record<string, string> = {};
 /** Entry glossary mẫu (route /glossary/:entryId) và source file của chương A (route presign). */
 const entryOf: Record<string, string> = {};
+/** Page mẫu (route editor /pages/:pageId). */
+const pageOf: Record<string, string> = {};
 let sourceFileA = "";
 
 beforeAll(async () => {
@@ -39,6 +52,18 @@ beforeAll(async () => {
     jobOf[s.workspaceId] = j.id;
     const e = await scoped(db, s.workspaceId).insert(glossaryEntries, { sourceTerm: "검", targetTerm: "kiếm" });
     entryOf[s.workspaceId] = e.id;
+    const pid = pageId(s.chapterId, 1, 0);
+    await scoped(db, s.workspaceId).insert(pages, {
+      id: pid,
+      chapterId: s.chapterId,
+      ord: 0,
+      width: 100,
+      height: 100,
+      originalKey: `ws/${s.workspaceId}/ch/${s.chapterId}/ingest/1/0.png`,
+      originalSha256: "ab".repeat(32),
+    });
+    await scoped(db, s.workspaceId).insert(pageStates, { pageId: pid, state: emptyPageState(100, 100) });
+    pageOf[s.workspaceId] = pid;
   }
   const f = await scoped(db, A.workspaceId).insert(sourceFiles, {
     chapterId: A.chapterId,
@@ -71,6 +96,14 @@ const BODIES: Record<string, unknown> = {
   "PATCH /api/w/:ws/glossary/:entryId": { note: "tên kiếm" },
   "POST /api/w/:ws/glossary/csv": { csv: "source_term,target_term\n용,rồng\n" },
   "POST /api/w/:ws/series/:seriesId/glossary/csv": { csv: "source_term,target_term\n용,long\n" },
+  "PUT /api/w/:ws/pages/:pageId/state": { state: emptyPageState(100, 100) },
+  "POST /api/w/:ws/pages/:pageId/ai-update/ack": { ai_rev: 0 },
+  "POST /api/w/:ws/pages/:pageId/reinpaint": {
+    user_mask_key: "ws/x/pg/x/user-mask/x.png",
+    offset: [0, 0],
+    base_clean_rev: 1,
+  },
+  "POST /api/w/:ws/pages/:pageId/ocr-region": { bbox: [0, 0, 10, 10] },
 };
 
 /** Route có id tài nguyên ngoài :ws → tham số trỏ vào tài nguyên của B. */
@@ -99,6 +132,12 @@ const RESOURCE_CASES: Record<string, (b: Seed) => Record<string, string>> = {
   // PATCH trước DELETE: DELETE (own) xoá entry mẫu của A.
   "PATCH /api/w/:ws/glossary/:entryId": (b) => ({ entryId: entryOf[b.workspaceId] ?? "" }),
   "DELETE /api/w/:ws/glossary/:entryId": (b) => ({ entryId: entryOf[b.workspaceId] ?? "" }),
+  "GET /api/w/:ws/pages/:pageId": (b) => ({ pageId: pageOf[b.workspaceId] ?? "" }),
+  "PUT /api/w/:ws/pages/:pageId/state": (b) => ({ pageId: pageOf[b.workspaceId] ?? "" }),
+  "POST /api/w/:ws/pages/:pageId/ai-update/ack": (b) => ({ pageId: pageOf[b.workspaceId] ?? "" }),
+  "POST /api/w/:ws/pages/:pageId/mask-upload": (b) => ({ pageId: pageOf[b.workspaceId] ?? "" }),
+  "POST /api/w/:ws/pages/:pageId/reinpaint": (b) => ({ pageId: pageOf[b.workspaceId] ?? "" }),
+  "POST /api/w/:ws/pages/:pageId/ocr-region": (b) => ({ pageId: pageOf[b.workspaceId] ?? "" }),
 };
 
 /** Mọi (method, path) người dùng dưới /api/w/:ws — lấy từ router thật, không liệt kê tay. */
