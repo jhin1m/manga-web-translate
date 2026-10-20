@@ -89,13 +89,27 @@ export const screenToStrip = (p: { x: number; y: number }, v: View) => ({
   y: (p.y - v.y) / v.scale,
 });
 
-/** Giữ strip trong tầm: strip hẹp hơn khung → căn giữa ngang; không cuộn quá đầu/cuối strip. */
-export function clampView(v: View, strip: Size, box: Size): View {
+/** Khoảng cách giữa cột Gốc và cột Dịch khi chia đôi (px page). */
+export const SPLIT_GAP = 32;
+
+/**
+ * Vùng nội dung vẽ trên canvas (toạ độ strip). Chia đôi: cột Dịch giữ nguyên toạ độ strip (x = 0, mọi lớp sửa
+ * không đổi), cột Gốc nằm bên trái tại x = −(rộng + gap).
+ */
+export const contentBox = (strip: Size, split: boolean): Size & { x: number } =>
+  split ? { x: -(strip.w + SPLIT_GAP), w: 2 * strip.w + SPLIT_GAP, h: strip.h } : { x: 0, ...strip };
+
+/**
+ * Giữ nội dung (rộng `strip.w`, mép trái tại `x0` toạ độ strip) trong tầm: hẹp hơn khung → căn giữa ngang; không
+ * cuộn quá đầu/cuối strip.
+ */
+export function clampView(v: View, strip: Size, box: Size, x0 = 0): View {
   const pw = strip.w * v.scale;
   const ph = strip.h * v.scale;
-  const x = pw + 2 * EDGE <= box.w ? (box.w - pw) / 2 : Math.min(EDGE, Math.max(box.w - pw - EDGE, v.x));
+  const left = v.x + x0 * v.scale;
+  const l = pw + 2 * EDGE <= box.w ? (box.w - pw) / 2 : Math.min(EDGE, Math.max(box.w - pw - EDGE, left));
   const y = ph + 2 * EDGE <= box.h ? EDGE : Math.min(EDGE, Math.max(box.h - ph - EDGE, v.y));
-  return { scale: v.scale, x, y };
+  return { scale: v.scale, x: l - x0 * v.scale, y };
 }
 
 /** Khung nhìn đưa đỉnh page (offset) lên gần mép trên khung, giữ scale. */

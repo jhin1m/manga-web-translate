@@ -8,7 +8,7 @@ import { useStore } from "zustand";
 import { createStore } from "zustand/vanilla";
 import type { PageStatus } from "../chapter/status.ts";
 import { editorStore } from "./store.ts";
-import { clampView, pageOffsets, type Size, stripSize, viewAtOffset } from "./strip-layout.ts";
+import { clampView, contentBox, pageOffsets, type Size, stripSize, viewAtOffset } from "./strip-layout.ts";
 
 export type PageMeta = {
   id: string;
@@ -29,6 +29,9 @@ export type CachedState = {
   ai_update_available: boolean;
 };
 
+/** Gốc = ảnh gốc, ẩn chữ; Dịch = ảnh sạch + chữ; Chia đôi = gốc (trái) cạnh dịch (phải) trên cùng 1 canvas. */
+export type ViewMode = "original" | "translated" | "split";
+
 export type ChapterState = {
   chapterId: string | null;
   pages: PageMeta[];
@@ -38,6 +41,9 @@ export type ChapterState = {
   centerPageId: string | null;
   /** Kích thước khung canvas (px màn hình) — để kẹp khung nhìn khi cuộn tới page từ ngoài canvas. */
   box: Size;
+  viewMode: ViewMode;
+  /** Đang giữ `O`: tạm xem ảnh gốc, nhả = về `viewMode`. */
+  holdOriginal: boolean;
 };
 
 export type ChapterActions = {
@@ -49,6 +55,8 @@ export type ChapterActions = {
   setActive(pageId: string | null): void;
   setCenter(pageId: string | null): void;
   setBox(box: Size): void;
+  setViewMode(mode: ViewMode): void;
+  setHoldOriginal(hold: boolean): void;
 };
 
 const initial = (chapterId: string | null): ChapterState => ({
@@ -59,7 +67,13 @@ const initial = (chapterId: string | null): ChapterState => ({
   activePageId: null,
   centerPageId: null,
   box: { w: 0, h: 0 },
+  viewMode: "translated",
+  holdOriginal: false,
 });
+
+/** Chế độ đang hiển thị: giữ `O` → Gốc (chia đôi: cột phải cũng hiện gốc, bố cục giữ nguyên). */
+export const effectiveMode = (s: Pick<ChapterState, "viewMode" | "holdOriginal">): ViewMode =>
+  s.holdOriginal ? "original" : s.viewMode;
 
 const samePages = (a: PageMeta[], b: PageMeta[]) =>
   a.length === b.length &&
@@ -119,6 +133,10 @@ export function createChapterStore() {
     setActive: (activePageId) => set({ activePageId }),
     setCenter: (centerPageId) => set({ centerPageId }),
     setBox: (box) => set({ box }),
+    setViewMode: (viewMode) => set({ viewMode }),
+    setHoldOriginal: (holdOriginal) => {
+      if (get().holdOriginal !== holdOriginal) set({ holdOriginal });
+    },
   }));
 }
 
@@ -126,6 +144,12 @@ export type ChapterStore = ReturnType<typeof createChapterStore>;
 
 /** Store dùng chung của màn chương (1 màn mỗi tab). */
 export const chapterStore = createChapterStore();
+
+// `editorStore.showOriginal` giữ cho tương thích: suy ra từ chế độ xem của màn chương.
+chapterStore.subscribe((s) => {
+  const v = effectiveMode(s) === "original";
+  if (editorStore.getState().showOriginal !== v) editorStore.getState().setShowOriginal(v);
+});
 
 export function useChapterStore<T>(selector: (s: ChapterState & ChapterActions) => T): T {
   return useStore(chapterStore, selector);
@@ -144,8 +168,8 @@ export function focusPage(pageId: string, y = 0, margin = 0) {
   if (i < 0) return;
   const e = editorStore.getState();
   const v = viewAtOffset(e.view, (s.offsets[i] ?? 0) + y);
-  const strip = stripSize(s.pages.map((p) => ({ w: p.width, h: p.height })));
-  e.setView(clampView({ ...v, y: v.y + margin }, strip, s.box));
+  const c = contentBox(stripSize(s.pages.map((p) => ({ w: p.width, h: p.height }))), s.viewMode === "split");
+  e.setView(clampView({ ...v, y: v.y + margin }, c, s.box, c.x));
 }
 
 /** Cuộn canvas tới khối (toạ độ page) chỉ khi khối đang nằm ngoài khung nhìn theo chiều dọc. */

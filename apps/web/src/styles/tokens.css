@@ -357,36 +357,7 @@ table.data th.num {
   margin-top: var(--sp-4);
 }
 
-/* ---- Hộp thoại (native <dialog>) + highlight khớp ---- */
-dialog.modal {
-  width: min(880px, calc(100vw - 32px));
-  max-height: calc(100vh - 48px);
-  padding: 0;
-  border: 1px solid var(--c-line-strong);
-  border-radius: var(--radius);
-  color: var(--c-fg);
-  background: var(--c-bg);
-}
-dialog.modal::backdrop {
-  background: rgb(0 0 0 / 0.35);
-}
-dialog.modal .modal-head {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-3);
-  padding: var(--sp-3) var(--sp-4);
-  border-bottom: 1px solid var(--c-line);
-}
-dialog.modal .modal-head h2 {
-  margin: 0;
-  font-size: var(--fs-lg);
-  flex: 1;
-}
-dialog.modal .modal-body {
-  padding: var(--sp-3) var(--sp-4) var(--sp-4);
-  overflow: auto;
-  max-height: calc(100vh - 140px);
-}
+/* ---- Highlight khớp (tìm & thay) ---- */
 mark.hit {
   background: #fff1b8;
   color: inherit;

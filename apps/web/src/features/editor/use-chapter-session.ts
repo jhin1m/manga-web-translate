@@ -468,15 +468,6 @@ export function useChapterSession(opts: {
     [session, refetchProgress],
   );
 
-  /** Lưu phần đang sửa rồi mới chạy `fn` (thao tác đọc/ghi ở server: tìm & thay, áp glossary, xuất). */
-  const withFlush = useCallback(
-    async <T>(fn: () => Promise<T> | T): Promise<T> => {
-      await saver.flush();
-      return fn();
-    },
-    [saver],
-  );
-
   return {
     kit,
     fontError,
@@ -490,7 +481,6 @@ export function useChapterSession(opts: {
     recovery,
     restore,
     runAi,
-    withFlush,
   };
 }
 

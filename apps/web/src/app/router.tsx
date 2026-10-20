@@ -128,11 +128,14 @@ export const seriesRoute = createRoute({
 export const chapterRoute = createRoute({
   getParentRoute: () => authedRoute,
   path: "w/$ws/s/$seriesId/c/$chapterId",
-  validateSearch: (search: Record<string, unknown>): { page?: string } =>
-    typeof search.page === "string" ? { page: search.page } : {},
+  // `drawer=export`: mở thẳng drawer Xuất (nút "Xuất lại" ở home / danh sách chương).
+  validateSearch: (search: Record<string, unknown>): { page?: string; drawer?: "export" } => ({
+    ...(typeof search.page === "string" ? { page: search.page } : {}),
+    ...(search.drawer === "export" ? { drawer: "export" as const } : {}),
+  }),
   component: function ChapterRoute() {
     const { ws, seriesId, chapterId } = chapterRoute.useParams();
-    const { page } = chapterRoute.useSearch();
+    const { page, drawer } = chapterRoute.useSearch();
     // Ngoài app shell: tự ghi workspace hiện tại (home `/` mở lại đúng chỗ).
     useEffect(() => setCurrentWs(ws), [ws]);
     return (
@@ -144,7 +147,14 @@ export const chapterRoute = createRoute({
         }
       >
         {/* key: đổi chương = phiên mới (store dùng chung cả tab reset trong lần render đầu). */}
-        <ChapterWorkspace key={chapterId} ws={ws} seriesId={seriesId} chapterId={chapterId} page={page} />
+        <ChapterWorkspace
+          key={chapterId}
+          ws={ws}
+          seriesId={seriesId}
+          chapterId={chapterId}
+          page={page}
+          drawer={drawer}
+        />
       </Suspense>
     );
   },

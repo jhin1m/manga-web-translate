@@ -1,5 +1,5 @@
 /**
- * Thanh công cụ nổi trên canvas màn chương: công cụ (V/T/B/E/O), hoàn tác/làm lại, về bản AI của page đang sửa.
+ * Thanh công cụ nổi trên canvas màn chương: công cụ (V/T/B/E/R), hoàn tác/làm lại, về bản AI của page đang sửa.
  * Phía dưới canvas: trang đang ở giữa khung + mức zoom.
  */
 import { resetToAI } from "../actions.ts";
@@ -11,7 +11,7 @@ const TOOLS: { id: Tool; label: string; key: string }[] = [
   { id: "text", label: "Chữ", key: "T" },
   { id: "brush", label: "Mask", key: "B" },
   { id: "eraser", label: "Tẩy", key: "E" },
-  { id: "ocr", label: "OCR vùng", key: "O" },
+  { id: "ocr", label: "OCR vùng", key: "R" },
 ];
 
 export function CanvasToolbar() {

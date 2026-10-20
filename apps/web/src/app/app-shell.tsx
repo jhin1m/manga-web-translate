@@ -1,11 +1,12 @@
 /**
- * Khung app của 1 workspace: thanh trên (brand → home `/`, đổi workspace khi > 1, slot phải, menu tài khoản) +
- * nội dung. Vào được workspace nào thì ghi nó thành workspace hiện tại (home `/` mở lại đúng chỗ).
+ * Khung app của 1 workspace: thanh trên (brand → home `/`, đổi workspace khi > 1, slot phải, Hoạt động = upload
+ * của tab, menu tài khoản) + nội dung. Vào được workspace nào thì ghi nó thành workspace hiện tại (home `/` mở lại đúng chỗ).
  * Editor toàn màn hình nằm ngoài shell.
  */
 import { useQuery } from "@tanstack/react-query";
 import { Link, Outlet, useNavigate } from "@tanstack/react-router";
 import { createContext, type ReactNode, useContext, useEffect, useRef } from "react";
+import { ShellActivity } from "../features/chapter/activity-drawer.tsx";
 import { api, authClient, errorMessage, type WorkspaceDetail, wsPath } from "../lib/api.ts";
 import { setCurrentWs, useMyWorkspaces } from "../lib/current-workspace.ts";
 import { markDevSignedOut } from "../lib/dev-login.ts";
@@ -57,6 +58,7 @@ export function AppShell({ ws, right, children }: { ws: string; right?: ReactNod
         <WorkspaceSwitcher current={q.data} />
         <span className="spacer" />
         {right}
+        <ShellActivity ws={ws} />
         <AccountMenu ws={ws} />
       </header>
       {children ?? <Outlet />}

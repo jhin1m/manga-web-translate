@@ -3,7 +3,10 @@
  * cả chương · inspector | bảng dưới (Bản dịch cả chương / Tìm–Thay / Áp glossary). Chương nháp: canvas là tiến
  * độ upload + vùng thả để tải tiếp.
  *
- * Page đang sửa (active) đổi khi bấm vào page trên canvas, chọn ở rail, phím ←/→, focus 1 dòng của bảng hoặc
+ * Drawer phải: Xuất (nút "Xuất" hoặc `?drawer=export` từ "Xuất lại" ở home), Hoạt động, Phím tắt (`?`). Chế độ xem
+ * Gốc / Dịch / Chia đôi + giữ `O` (chapterStore.viewMode). Phím tắt: `editor/shortcuts.ts` (1 listener).
+ *
+ * Page đang sửa (active) đổi khi bấm vào page trên canvas, chọn ở rail, phím ←/→/A/D, focus 1 dòng của bảng hoặc
  * `?page=` đổi từ ngoài; cuộn chỉ cập nhật `?page=` (page ở giữa khung, replace, gộp 400ms). Khối đang chọn
  * (`current`, khoá dòng bảng) đồng bộ 2 chiều giữa bảng, canvas và inspector.
  */
@@ -20,33 +23,38 @@ import { type PageRect, useOcrRegion } from "../editor/canvas/OcrSelect.tsx";
 import type { SlotImages } from "../editor/canvas/PageSlot.tsx";
 import { chapterStore, focusPage, revealRect, useChapterStore } from "../editor/chapter-store.ts";
 import { CanvasStatus, CanvasToolbar } from "../editor/panels/CanvasToolbar.tsx";
-import { editorStore, type Tool, useEditor } from "../editor/store.ts";
+import type { ShortcutAction } from "../editor/shortcuts.ts";
+import { editorStore, useEditor } from "../editor/store.ts";
 import { type RecoveryItem, useChapterSession } from "../editor/use-chapter-session.ts";
+import { useShortcuts } from "../editor/use-shortcuts.ts";
 import { ApplyGlossaryPanel } from "../glossary/ApplyGlossary.tsx";
 import { ChapterUploadStatus, resumeFromFiles } from "../upload/chapter-upload-status.tsx";
 import { DropZone } from "../upload/drop-zone.tsx";
 import { uploadManager, useChapterUpload } from "../upload/upload-manager.ts";
+import { ActivityDrawer, chapterActivityCount, useUploadCount } from "./activity-drawer.tsx";
 import { cancelChapter, commitChapter, type FindMatch, REJECT_REASON, retranslate, retryFailed } from "./api.ts";
-import { BottomPanel } from "./bottom-panel.tsx";
+import { BottomPanel, type TabRequest } from "./bottom-panel.tsx";
 import { ChapterTopbar, LockBand } from "./chapter-topbar.tsx";
-import { ExportDialog } from "./ExportDialog.tsx";
+import { ExportDrawer } from "./export-drawer.tsx";
+import { isExportActive, useExports } from "./export-panel.tsx";
 import { FindReplacePanel } from "./FindReplace.tsx";
 import { Inspector } from "./inspector.tsx";
 import { PageRail } from "./page-rail.tsx";
 import { needsReview } from "./page-status.ts";
 import { type ChapterCommand, primaryAction } from "./primary-action.ts";
+import { ShortcutHelp } from "./shortcut-help.tsx";
 import { isChapterSettled } from "./status.ts";
 import { filterRows, KIND_LABEL, type Row, rowKeyOfBox, sameKindBoxIds, type TableFilter } from "./text-table/rows.ts";
 import { TableFilters, TextTable, useChapterRows } from "./text-table/text-table.tsx";
 import { useChapterData } from "./use-chapter-data.ts";
 
-const TOOL_KEYS: Record<string, Tool> = { v: "select", t: "text", b: "brush", e: "eraser", o: "ocr" };
 const URL_SYNC_MS = 400;
 const NO_PAGES: never[] = [];
 
-type Props = { ws: string; seriesId: string; chapterId: string; page?: string };
+type DrawerKind = "export" | "activity" | "help";
+type Props = { ws: string; seriesId: string; chapterId: string; page?: string; drawer?: "export" };
 
-export function ChapterWorkspace({ ws, seriesId, chapterId, page: searchPage }: Props) {
+export function ChapterWorkspace({ ws, seriesId, chapterId, page: searchPage, drawer: searchDrawer }: Props) {
   const navigate = useNavigate();
   const data = useChapterData(ws, chapterId);
   const status = data.progress?.chapter.status ?? data.detail?.status;
@@ -64,7 +72,13 @@ export function ChapterWorkspace({ ws, seriesId, chapterId, page: searchPage }: 
   const activeId = useEditor((s) => s.pageId);
   const [notice, setNotice] = useState<{ tone: "info" | "danger"; text: string } | null>(null);
   const [imageError, setImageError] = useState<string | null>(null);
-  const [exporting, setExporting] = useState(false);
+  // Mở từ "Xuất lại" (`?drawer=export`): drawer Xuất mở ngay; URL bỏ tham số ở lần đồng bộ `?page=` kế tiếp.
+  const [drawer, setDrawer] = useState<DrawerKind | null>(searchDrawer ?? null);
+  const [tabRequest, setTabRequest] = useState<TabRequest | null>(null);
+  const openTab = useCallback(
+    (tab: string, focus?: string) => setTabRequest((r) => ({ tab, focus, seq: (r?.seq ?? 0) + 1 })),
+    [],
+  );
 
   // Cache page active có version mới (AI dịch xong, tìm & thay…) → nạp lại nếu chưa sửa gì.
   useEffect(
@@ -105,6 +119,16 @@ export function ChapterWorkspace({ ws, seriesId, chapterId, page: searchPage }: 
     if (!pageIds.includes(searchPage)) return;
     go(searchPage);
   }, [searchPage, pageIds, go]);
+  // `?drawer=export` chỉ dùng lúc mở: bỏ khỏi URL (tải lại trang không mở lại drawer).
+  useEffect(() => {
+    if (!searchDrawer) return;
+    void navigate({
+      to: "/w/$ws/s/$seriesId/c/$chapterId",
+      params: { ws, seriesId, chapterId },
+      search: searchPage ? { page: searchPage } : {},
+      replace: true,
+    });
+  }, [searchDrawer, searchPage, navigate, ws, seriesId, chapterId]);
   // Cuộn → `?page=` = page ở giữa khung (replace, gộp).
   const centerId = useChapterStore((s) => s.centerPageId);
   useEffect(() => {
@@ -169,37 +193,6 @@ export function ChapterWorkspace({ ws, seriesId, chapterId, page: searchPage }: 
   const overflowKey = [...new Set(allRows.filter((r) => r.flags.includes("overflow")).map((r) => r.pageId))].join(",");
   const overflowPages = useMemo(() => new Set(overflowKey ? overflowKey.split(",") : []), [overflowKey]);
   const activeOverflow = allRows.filter((r) => r.pageId === activeId && r.flags.includes("overflow")).length;
-
-  // ---- Phím tắt ----
-  const idx = pages.findIndex((p) => p.id === activeId);
-  const keysRef = useRef({ prev: () => {}, next: () => {} });
-  keysRef.current = { prev: () => go(pages[idx - 1]?.id), next: () => go(pages[idx + 1]?.id) };
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      const t = e.target;
-      if (t instanceof HTMLElement && t.closest("input, textarea, select, [contenteditable], dialog")) return;
-      const s = editorStore.getState();
-      const mod = e.metaKey || e.ctrlKey;
-      const k = e.key.toLowerCase();
-      if (mod && k === "z") {
-        e.preventDefault();
-        if (e.shiftKey) s.redo();
-        else s.undo();
-      } else if (mod && k === "y") {
-        e.preventDefault();
-        s.redo();
-      } else if (mod || e.altKey) return;
-      else if (TOOL_KEYS[k]) s.setTool(TOOL_KEYS[k]);
-      else if (e.key === "ArrowLeft") keysRef.current.prev();
-      else if (e.key === "ArrowRight") keysRef.current.next();
-      else if (e.key === "\\") s.setShowOriginal(!s.showOriginal);
-      else if (e.key === "Escape") s.select(null);
-      else if ((e.key === "Delete" || e.key === "Backspace") && s.selection) s.apply(deleteBox(s.selection));
-      else if (e.key === "Enter" && s.selection && !s.readOnly) s.setEditing(s.selection);
-    };
-    addEventListener("keydown", onKey);
-    return () => removeEventListener("keydown", onKey);
-  }, []);
 
   // ---- Thao tác chương ----
   const upload = uploadManager.view(chapterId, useChapterUpload(chapterId));
@@ -302,7 +295,7 @@ export function ChapterWorkspace({ ws, seriesId, chapterId, page: searchPage }: 
   });
 
   const onCommand = (cmd: ChapterCommand) => {
-    if (cmd === "export") return void session.withFlush(() => setExporting(true));
+    if (cmd === "export") return setDrawer("export");
     if (cmd === "upload") return;
     action.mutate(cmd);
   };
@@ -325,6 +318,7 @@ export function ChapterWorkspace({ ws, seriesId, chapterId, page: searchPage }: 
       m.set(id, { original: p.images.original, clean: p.images.clean, cleanRev: p.clean_rev });
     return m;
   }, [data.images]);
+  const idx = pages.findIndex((p) => p.id === activeId);
   const activeMeta = pages[idx];
   const defaultFont = kit?.manifest.defaults[0] ?? "PatrickHand-Regular";
   const ocr = useOcrRegion(ws, activeId ?? "", defaultFont, { w: activeMeta?.width ?? 0, h: activeMeta?.height ?? 0 });
@@ -342,6 +336,72 @@ export function ChapterWorkspace({ ws, seriesId, chapterId, page: searchPage }: 
   const ingestError = data.progress?.jobs.find((j) => j.type === "chapter.ingest" && j.error)?.error ?? null;
   const canTools = settled && pages.length > 0;
 
+  // ---- Phím tắt (1 listener, bảng ở editor/shortcuts.ts) ----
+  const drawerRef = useRef(drawer);
+  drawerRef.current = drawer;
+  /** false = không làm gì (trình duyệt xử lý phím như thường). */
+  const keys = useRef<(a: ShortcutAction) => boolean | undefined>(() => undefined);
+  keys.current = (a) => {
+    const s = editorStore.getState();
+    const cs = chapterStore.getState();
+    switch (a.type) {
+      case "tool":
+        return void s.setTool(a.tool);
+      case "holdOriginalStart":
+        return void cs.setHoldOriginal(true);
+      case "holdOriginalEnd":
+        return void cs.setHoldOriginal(false);
+      case "toggleOriginal":
+        return void cs.setViewMode(cs.viewMode === "original" ? "translated" : "original");
+      case "page":
+        go(pages[idx + a.dir]?.id);
+        return;
+      case "block": {
+        // Khối trước/sau theo thứ tự bảng (xuyên trang); chưa có khối hiện tại → khối đầu/cuối của page active.
+        const i = allRows.findIndex((r) => r.key === current);
+        const onPage = allRows.filter((r) => r.pageId === activeId);
+        const row = i >= 0 ? allRows[i + a.dir] : a.dir > 0 ? onPage[0] : onPage.at(-1);
+        if (row) void pick(row);
+        return;
+      }
+      case "undo":
+        return void s.undo();
+      case "redo":
+        return void s.redo();
+      case "save":
+        void session.saver.flush();
+        return;
+      case "find":
+        if (!canTools) return false;
+        openTab("find", "#fr-find");
+        return;
+      case "editText":
+        if (s.selection && !s.readOnly) s.setEditing(s.selection);
+        return;
+      case "deleteBox":
+        if (s.selection) s.apply(deleteBox(s.selection));
+        return;
+      case "escape":
+        return void s.select(null);
+      case "help":
+        setDrawer((d) => (d === "help" ? null : "help"));
+        return;
+    }
+  };
+  useShortcuts({
+    run: (a) => keys.current(a),
+    context: () => ({ selection: !!editorStore.getState().selection }),
+    blocked: () => drawerRef.current !== null,
+  });
+
+  // ---- Drawer ----
+  const uploadCount = useUploadCount();
+  const exportsActive = (useExports(ws, chapterId).q.data?.exports ?? []).filter((x) =>
+    isExportActive(x.status),
+  ).length;
+  const activityCount = uploadCount + chapterActivityCount(data.progress, exportsActive);
+  const closeDrawer = useCallback(() => setDrawer(null), []);
+
   return (
     <div className="cw">
       <ChapterTopbar
@@ -355,6 +415,9 @@ export function ChapterWorkspace({ ws, seriesId, chapterId, page: searchPage }: 
         onCommand={onCommand}
         onUploadFiles={resume}
         onBack={() => void back()}
+        activityCount={activityCount}
+        onActivity={() => setDrawer("activity")}
+        onHelp={() => setDrawer("help")}
       />
       <LockBand
         status={status}
@@ -449,6 +512,7 @@ export function ChapterWorkspace({ ws, seriesId, chapterId, page: searchPage }: 
         />
       </aside>
       <BottomPanel
+        request={tabRequest}
         tabs={[
           {
             id: "text",
@@ -493,16 +557,40 @@ export function ChapterWorkspace({ ws, seriesId, chapterId, page: searchPage }: 
           },
         ]}
       />
-      {exporting && (
-        <ExportDialog
+      {drawer === "export" && (
+        <ExportDrawer
           ws={ws}
           chapterId={chapterId}
+          detail={data.detail}
+          pages={pages}
+          rows={allRows}
+          beforeStart={flush}
+          onShowWarnings={() => {
+            setFilter({ review: true, page: false });
+            openTab("text");
+            setDrawer(null);
+            data.refresh();
+          }}
           onClose={() => {
-            setExporting(false);
+            setDrawer(null);
             data.refresh();
           }}
         />
       )}
+      {drawer === "activity" && (
+        <ActivityDrawer
+          ws={ws}
+          chapter={{
+            id: chapterId,
+            progress: data.progress,
+            canRetry: settled,
+            retrying: action.isPending,
+            onRetry: () => action.mutate("retry"),
+          }}
+          onClose={closeDrawer}
+        />
+      )}
+      {drawer === "help" && <ShortcutHelp onClose={closeDrawer} />}
     </div>
   );
 }

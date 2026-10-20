@@ -1,6 +1,6 @@
 /**
- * Ảnh 1 page trên strip chương: nền trắng + TileLayer (ảnh sạch / ảnh gốc) đặt tại `offset`, vùng nhìn đổi sang
- * toạ độ page. Chỉ mount cho page trong tầm nhìn (≤ 4, xem strip-layout.visiblePages) — unmount thì TileLayer
+ * Ảnh 1 page trên strip chương: nền trắng + TileLayer (ảnh sạch / ảnh gốc) đặt tại (`x`, `offset`), vùng nhìn đổi
+ * sang toạ độ page. Chia đôi: mỗi page vẽ 2 lần (cột Gốc bên trái, cột Dịch tại x = 0). Chỉ mount cho page trong tầm nhìn (≤ 4, xem strip-layout.visiblePages) — unmount thì TileLayer
  * `close()` mọi bitmap.
  */
 import { Group, Line, Rect } from "react-konva";
@@ -13,6 +13,8 @@ export function PageSlot(props: {
   pageId: string;
   size: { w: number; h: number };
   offset: number;
+  /** Cột (toạ độ strip) — 0 trừ cột Gốc khi chia đôi. */
+  x?: number;
   images: SlotImages | undefined;
   /** Vùng nhìn theo toạ độ page. */
   viewport: Rect4;
@@ -24,7 +26,7 @@ export function PageSlot(props: {
   const { pageId, size, images } = props;
   const showClean = !props.showOriginal && !!images?.clean;
   return (
-    <Group y={props.offset}>
+    <Group x={props.x ?? 0} y={props.offset}>
       <Rect x={0} y={0} width={size.w} height={size.h} fill="#ffffff" />
       {images?.clean && (
         <TileLayer

@@ -1,17 +1,19 @@
 /**
- * Thanh trên màn chương: ← series, tên chương, trạng thái bằng lời, chế độ xem Gốc/Dịch (Chia đôi: P5), menu
- * phụ (Dịch lại / Huỷ / Xuất), Hoạt động (P5) và nút chính theo trạng thái (primary-action.ts). Dưới nó là băng
- * khoá: ai đang giữ khoá + trạng thái lưu.
+ * Thanh trên màn chương: ← series, tên chương, trạng thái bằng lời, chế độ xem Gốc/Dịch/Chia đôi, menu phụ (Dịch
+ * lại / Huỷ / Xuất), Hoạt động (+ số việc đang chạy), bảng phím tắt và nút chính theo trạng thái
+ * (primary-action.ts; "Xuất" mở drawer Xuất). Dưới nó là băng khoá: ai đang giữ khoá + trạng thái lưu.
  */
 import { Link } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 import type { LockState } from "../chapter/use-chapter-lock.ts";
-import { editorStore, type ReadOnlyReason, type SaveStatus, useEditor } from "../editor/store.ts";
+import { type ReadOnlyReason, type SaveStatus, useEditor } from "../editor/store.ts";
 import type { ChapterStatus } from "../series/api.ts";
 import { FilePickButton } from "../upload/drop-zone.tsx";
+import { ActivityButton } from "./activity-drawer.tsx";
 import type { ChapterDetail } from "./api.ts";
 import type { ChapterCommand, PrimaryAction } from "./primary-action.ts";
 import { CHAPTER_STATUS } from "./status.ts";
+import { ViewModeSwitch } from "./view-mode-switch.tsx";
 
 const SAVE_LABEL: Record<SaveStatus, string> = {
   saved: "Đã lưu",
@@ -34,10 +36,13 @@ export function ChapterTopbar(props: {
   onUploadFiles(files: File[]): void;
   /** Lưu xong rồi mới rời (giữ href cho mở tab mới). */
   onBack(): void;
+  /** Số việc đang chạy (upload, job chương, xuất). */
+  activityCount: number;
+  onActivity(): void;
+  onHelp(): void;
 }) {
   const { detail, primary } = props;
   const st = props.status ? CHAPTER_STATUS[props.status] : null;
-  const showOriginal = useEditor((s) => s.showOriginal);
   const menu = primary?.menu ?? [];
   const has = (c: ChapterCommand) => menu.some((m) => m.command === c);
 
@@ -77,27 +82,7 @@ export function ChapterTopbar(props: {
         </span>
       )}
       <span className="spacer" />
-      <fieldset className="cw-seg" aria-label="Chế độ xem">
-        <button
-          type="button"
-          aria-pressed={showOriginal}
-          onClick={() => editorStore.getState().setShowOriginal(true)}
-          title="Ảnh gốc (\)"
-        >
-          Gốc
-        </button>
-        <button
-          type="button"
-          aria-pressed={!showOriginal}
-          onClick={() => editorStore.getState().setShowOriginal(false)}
-          title="Bản dịch (\)"
-        >
-          Dịch
-        </button>
-        <button type="button" aria-pressed={false} disabled title="Sắp có">
-          Chia đôi
-        </button>
-      </fieldset>
+      <ViewModeSwitch />
       {has("retranslate") && (
         <details className="cw-menu">
           <summary className="btn">Dịch lại ▾</summary>
@@ -121,8 +106,9 @@ export function ChapterTopbar(props: {
           Huỷ xử lý
         </button>
       )}
-      <button type="button" disabled title="Sắp có">
-        Hoạt động
+      <ActivityButton count={props.activityCount} onClick={props.onActivity} />
+      <button type="button" className="btn-ghost" aria-label="Phím tắt" title="Phím tắt (?)" onClick={props.onHelp}>
+        ?
       </button>
       {has("export") && (
         <button type="button" onClick={() => props.onCommand("export")}>

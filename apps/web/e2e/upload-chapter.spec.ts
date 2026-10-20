@@ -1,7 +1,7 @@
 /**
  * Luồng chính: thả ZIP 10 trang ở home → dòng xác nhận → "Tạo và mở chương" mở thẳng màn chương trong khi ảnh
  * còn đang upload → upload xong → "Dịch chương" → worker giả → 10 trang "Xong" trên rail. Thêm: màn series (3 ảnh lẻ
- * = 3 chương liên tiếp, glossary thêm nhanh) và redirect trang upload cũ.
+ * = 3 chương liên tiếp, glossary thêm nhanh), drawer Hoạt động ở home khi đang upload và redirect trang upload cũ.
  */
 import { expect, type Route, test } from "@playwright/test";
 import { zipSync } from "fflate";
@@ -50,6 +50,18 @@ test("drop a 10-page ZIP on home, open the chapter while uploading, then transla
   await expect(page.getByRole("status", { name: "Tiến độ tải ảnh" })).toContainText("Đang tải ảnh");
   await expect(page.getByRole("button", { name: "Dịch chương" })).toBeDisabled();
   await expect.poll(() => held.length).toBeGreaterThan(0);
+
+  // Rời về home khi còn đang tải: drawer Hoạt động liệt kê chương đang upload kèm tiến độ → quay lại chương.
+  await page.getByRole("link", { name: "Series e2e" }).click();
+  await page.getByRole("link", { name: "MTL" }).click();
+  await page.getByRole("button", { name: /^Hoạt động/ }).click();
+  const activity = page.getByRole("dialog", { name: "Hoạt động" });
+  const item = activity.locator(".drawer-item", { hasText: "Chương 501" });
+  await expect(item).toContainText(/Đang tải \d+\/10 ảnh/);
+  await expect(item.getByRole("progressbar")).toBeVisible();
+  await item.getByRole("link", { name: /Chương 501/ }).click();
+  await expect(page.getByRole("heading", { name: /^Chương 501/ })).toBeVisible();
+
   hold = false;
   for (const r of held.splice(0)) await r.continue();
 

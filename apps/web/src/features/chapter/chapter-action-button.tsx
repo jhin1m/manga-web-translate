@@ -1,6 +1,7 @@
 /**
  * Nút "bước tiếp theo" của 1 chương (home "Việc cần làm" + danh sách chương của series): mở chương, Dịch chương
- * (= commit), Chạy lại trang lỗi, hoặc Tải tiếp ảnh (chọn lại file → upload phần thiếu).
+ * (= commit), Chạy lại trang lỗi, Tải tiếp ảnh (chọn lại file → upload phần thiếu), hoặc Xuất lại (mở chương với
+ * drawer Xuất mở sẵn).
  */
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
@@ -63,7 +64,12 @@ export function ChapterActionButton(props: {
     );
   }
   return (
-    <Link className={cls} to="/w/$ws/s/$seriesId/c/$chapterId" params={params}>
+    <Link
+      className={cls}
+      to="/w/$ws/s/$seriesId/c/$chapterId"
+      params={params}
+      search={action.kind === "reexport" ? { drawer: "export" } : {}}
+    >
       {action.action}
     </Link>
   );

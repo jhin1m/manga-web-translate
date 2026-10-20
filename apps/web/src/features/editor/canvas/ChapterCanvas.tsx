@@ -3,6 +3,10 @@
  * theo `offsets` và vẽ qua transform `view` (toạ độ strip). Chỉ ≤ 4 page trong tầm nhìn mount ảnh (PageSlot).
  * Page đang sửa (active) có lớp chữ/mask/OCR sửa được; page khác chỉ vẽ chữ từ cache.
  *
+ * Chế độ xem (chapterStore): Gốc = ảnh gốc, ẩn chữ; Dịch = ảnh sạch + chữ; Chia đôi = thêm cột Gốc bên trái cùng
+ * Stage (cuộn/zoom đồng bộ tự nhiên), chỉ cột Dịch nhận thao tác — bấm/kéo ở cột Gốc = kéo canvas; trần mount
+ * tính theo cặp (2 page).
+ *
  * Cuộn = cuộn strip; Ctrl/Cmd+cuộn = zoom quanh con trỏ; Space giữ (hoặc chuột giữa) + kéo = kéo canvas.
  * Bấm vào page không active chỉ kích hoạt page đó (không bắt đầu công cụ). Sửa chữ = textarea HTML phủ lên box.
  */
@@ -11,13 +15,15 @@ import type Konva from "konva";
 import { memo, useEffect, useRef, useState } from "react";
 import { Stage as KStage, Layer } from "react-konva";
 import { addBox, editText, newTextBox } from "../actions.ts";
-import { activeOffset, chapterStore, useChapterStore } from "../chapter-store.ts";
+import { activeOffset, chapterStore, effectiveMode, useChapterStore } from "../chapter-store.ts";
 import type { FontKit } from "../fonts.ts";
 import { lineStep } from "../measure.ts";
 import { editorStore, useEditor, type View } from "../store.ts";
 import {
   clampView,
+  contentBox,
   EDGE,
+  MAX_MOUNTED,
   pageAt,
   screenToStrip,
   stripSize,
@@ -68,7 +74,8 @@ export const ChapterCanvas = memo(function ChapterCanvas(props: {
   const cache = useChapterStore((s) => s.cache);
   const view = useEditor((s) => s.view);
   const tool = useEditor((s) => s.tool);
-  const showOriginal = useEditor((s) => s.showOriginal);
+  const showOriginal = useChapterStore((s) => effectiveMode(s) === "original");
+  const split = useChapterStore((s) => s.viewMode === "split");
   const activeId = useEditor((s) => s.pageId);
   const [draft, setDraft] = useState<PageRect | null>(null);
   const [space, setSpace] = useState(false);
@@ -82,6 +89,7 @@ export const ChapterCanvas = memo(function ChapterCanvas(props: {
   const fitted = useRef(false);
 
   const strip = stripSize(pages.map((p) => ({ w: p.width, h: p.height })));
+  const content = contentBox(strip, split);
   const activeIdx = pages.findIndex((p) => p.id === activeId);
   const active = activeIdx >= 0 ? pages[activeIdx] : undefined;
   const activeOff = activeIdx >= 0 ? (offsets[activeIdx] ?? 0) : 0;
@@ -105,11 +113,25 @@ export const ChapterCanvas = memo(function ChapterCanvas(props: {
     if (fitted.current || size.w === 0 || pages.length === 0) return;
     fitted.current = true;
     const s = chapterStore.getState();
-    const scale = Math.min(1, Math.max(MIN_SCALE, (size.w - 2 * EDGE) / strip.w));
+    const c = contentBox(strip, s.viewMode === "split");
+    const scale = Math.min(1, Math.max(MIN_SCALE, (size.w - 2 * EDGE) / c.w));
     const i = initialPageId ? s.pages.findIndex((p) => p.id === initialPageId) : -1;
     const v = viewAtOffset({ scale, x: 0, y: EDGE }, i >= 0 ? (s.offsets[i] ?? 0) : 0);
-    editorStore.getState().setView(clampView(v, strip, size));
+    editorStore.getState().setView(clampView(v, c, size, c.x));
   }, [size, pages.length, strip, initialPageId]);
+
+  // Bật/tắt chia đôi: vừa lại bề ngang nội dung mới, giữ điểm strip đang ở giữa khung.
+  const lastSplit = useRef(split);
+  useEffect(() => {
+    if (lastSplit.current === split) return;
+    lastSplit.current = split;
+    if (!fitted.current || size.w === 0) return;
+    const v = editorStore.getState().view;
+    const c = contentBox(strip, split);
+    const midY = (size.h / 2 - v.y) / v.scale;
+    const scale = Math.min(1, Math.max(MIN_SCALE, (size.w - 2 * EDGE) / c.w));
+    editorStore.getState().setView(clampView({ scale, x: 0, y: size.h / 2 - midY * scale }, c, size, c.x));
+  }, [split, strip, size]);
 
   // Page ở giữa khung nhìn (để ghi `?page=`).
   const centerY = (size.h / 2 - view.y) / view.scale;
@@ -138,7 +160,7 @@ export const ChapterCanvas = memo(function ChapterCanvas(props: {
     };
   }, []);
 
-  const setView = (v: View) => editorStore.getState().setView(clampView(v, strip, size));
+  const setView = (v: View) => editorStore.getState().setView(clampView(v, content, size, content.x));
   /** Toạ độ màn hình → toạ độ trong page active. */
   const toPage = (p: { x: number; y: number }) => stripToPage(screenToStrip(p, view), activeOff);
 
@@ -160,13 +182,14 @@ export const ChapterCanvas = memo(function ChapterCanvas(props: {
     if (!stage || !p) return;
     const s = editorStore.getState();
     const base = { sx: p.x, sy: p.y, start: view, from: toPage(p) };
-    if (space || e.evt.button === 1) {
+    const at = screenToStrip(p, view);
+    // Cột Gốc khi chia đôi chỉ để xem: kéo = kéo canvas.
+    if (space || e.evt.button === 1 || (split && e.evt.button === 0 && at.x < 0)) {
       gesture.current = { kind: "pan", ...base };
       return;
     }
     if (e.evt.button !== 0) return;
     // Bấm vào page khác → chỉ kích hoạt page đó.
-    const at = screenToStrip(p, view);
     const hit = at.y >= 0 && at.y < strip.h ? pageAt(at.y, offsets) : -1;
     const hitId = hit >= 0 ? pages[hit]?.id : undefined;
     if (hitId && hitId !== activeId) {
@@ -241,6 +264,8 @@ export const ChapterCanvas = memo(function ChapterCanvas(props: {
     offsets,
     pages.map((p) => p.height),
     viewport,
+    1,
+    split ? MAX_MOUNTED / 2 : MAX_MOUNTED,
   );
   const local = (off: number) => ({ ...viewport, y: viewport.y - off });
   // Đã xem ảnh gốc 1 lần → giữ layer gốc của page đang mount (bật/tắt không tải lại).
@@ -265,6 +290,26 @@ export const ChapterCanvas = memo(function ChapterCanvas(props: {
           onPointerLeave={onUp}
         >
           <Layer listening={false}>
+            {split &&
+              mounted.map((i) => {
+                const p = pages[i];
+                if (!p) return null;
+                const off = offsets[i] ?? 0;
+                return (
+                  <PageSlot
+                    key={`orig:${p.id}`}
+                    pageId={p.id}
+                    size={{ w: p.width, h: p.height }}
+                    offset={off}
+                    x={content.x}
+                    images={props.images.get(p.id)}
+                    viewport={{ ...local(off), x: viewport.x - content.x }}
+                    showOriginal
+                    keepOriginal={false}
+                    onImageError={props.onImageError}
+                  />
+                );
+              })}
             {mounted.map((i) => {
               const p = pages[i];
               if (!p) return null;
@@ -278,7 +323,7 @@ export const ChapterCanvas = memo(function ChapterCanvas(props: {
                   images={props.images.get(p.id)}
                   viewport={local(off)}
                   showOriginal={showOriginal}
-                  keepOriginal={originalSeen}
+                  keepOriginal={originalSeen && !split}
                   onImageError={props.onImageError}
                 />
               );

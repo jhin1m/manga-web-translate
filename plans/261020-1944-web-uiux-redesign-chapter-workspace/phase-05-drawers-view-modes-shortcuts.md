@@ -1,7 +1,7 @@
 ---
 phase: 5
 title: "Drawer Xuất/Hoạt động, chế độ xem, phím tắt"
-status: pending
+status: completed
 priority: P1
 effort: 2.5d
 dependencies: [4]

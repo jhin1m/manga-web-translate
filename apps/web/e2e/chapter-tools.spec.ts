@@ -1,7 +1,8 @@
 /**
  * Công cụ màn chương: Tìm & thay (xem trước → áp dụng → hoàn tác), áp glossary (chọn entry → xem trước → áp dụng →
  * hoàn tác) — cả hai là tab ở bảng dưới, không hộp thoại; sau áp dụng bảng văn bản hiện chữ mới không cần tải lại,
- * không PUT nào bị 423. Xuất chương (job chapter.export qua worker giả → nút tải → 302 tới presigned GET). Mỗi test dựng một
+ * không PUT nào bị 423. Xuất chương qua drawer "Xuất chương" (job chapter.export qua worker giả → nút tải → 302 tới
+ * presigned GET; Esc đóng, focus về nút Xuất). Mỗi test dựng một
  * chương 1 trang đã dịch riêng (worker giả) để không phụ thuộc thứ tự test.
  */
 import { type APIRequestContext, expect, type Page, test } from "@playwright/test";
@@ -197,9 +198,19 @@ test.describe("công cụ chương", () => {
     let exportDone = false;
     const worker = runFakeWorker(state.token, () => exportDone, 90_000);
 
-    await page.getByRole("button", { name: "Xuất", exact: true }).click();
+    // "Xuất lại" ở home mở chương với `?drawer=export` → drawer mở sẵn.
+    await page.goto(`/w/${ws}/s/${state.seriesId}/c/${chapterId}?drawer=export`);
+    await expect(page.getByRole("dialog", { name: "Xuất chương" })).toBeVisible();
+    await expect(page).not.toHaveURL(/drawer=export/);
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("dialog", { name: "Xuất chương" })).toBeHidden();
+
+    // Drawer Xuất (editor vẫn ở phía sau): tên file khớp tên server đặt khi tải.
+    const open = page.getByRole("button", { name: "Xuất", exact: true });
+    await open.click();
     const dlg = page.getByRole("dialog", { name: "Xuất chương" });
-    await dlg.getByRole("button", { name: "Xuất", exact: true }).click();
+    await expect(dlg.getByText(`Series e2e-ch${number}.zip`)).toBeVisible();
+    await dlg.getByRole("button", { name: "Xuất ZIP PNG", exact: true }).click();
 
     const row = dlg.locator(".status", { hasText: "Xong" });
     await expect(row).toBeVisible({ timeout: 60_000 });
@@ -234,5 +245,10 @@ test.describe("công cụ chương", () => {
     expect(api.status).toBe("succeeded");
     expect(api.bytes).toBe(body.byteLength);
     expect(api.download_url).toBe(href);
+
+    // Esc đóng drawer, focus về nút Xuất.
+    await page.keyboard.press("Escape");
+    await expect(dlg).toBeHidden();
+    await expect(open).toBeFocused();
   });
 });
