@@ -105,9 +105,12 @@ def _loop(client: Any, handlers: dict[str, Any], **kw: Any) -> tuple[int, float]
 
 def test_drain_exits_after_idle_window_and_counts_busy_time(monkeypatch):
     ran: list[str] = []
-    monkeypatch.setattr(
-        "mtl_worker.main.run_job", lambda client, job, handlers, deps, deadline: ran.append(job["id"]) or "ok"
-    )
+
+    def fake_run_job(client: Any, job: dict[str, Any], handlers: Any, deps: Any, deadline: Any) -> str:
+        ran.append(job["id"])
+        return "succeeded"
+
+    monkeypatch.setattr("mtl_worker.main.run_job", fake_run_job)
     client = LoopClient([[{"id": "a", "type": "page.prepare"}], [], [{"id": "b", "type": "page.prepare"}]])
     code, busy = _loop(client, {}, mode="drain", once=False, drain_idle_s=0.1)
     assert code == 0 and ran == ["a", "b"]

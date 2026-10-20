@@ -102,7 +102,9 @@ modal deploy modal_app.py                                 # URL app `mtl-drain` 
   MODAL_SCALEDOWN_S` (đuôi rỗi sau khi function trả về; workspace null = chi phí nền tảng, 1 dòng/dispatch). Bị kill không kịp báo → `mtl-jobs` ước lượng = `MODAL_SCALEDOWN_S` sau
   `MAX_LIFETIME + SCALEDOWN`.
 - Endpoint `/drain` kiểm HMAC-SHA256 body `{dispatch_id, ts}` (`x-mtl-signature`), ts lệch > 5' → 401;
-  hợp lệ → `drain.spawn()` trả 202.
+  hợp lệ → `drain.spawn()` trả 202. **Chấp nhận cho MVP (controller chốt 20/10/2026):** request hợp lệ bị gửi lại
+  trong cửa sổ 5' sinh thêm container (cùng dispatch_id), luôn trong giới hạn `max_containers`; container thừa thấy
+  hàng đợi rỗng sẽ thoát sau 20s. Chống phát lại triệt để (Modal Dict lưu dispatch_id đã nhận) để sau MVP.
 - Dispatcher (5s) chỉ phục vụ workspace `worker_mode='modal'`: dispatch đầu khi có job đủ điều kiện và không có
   dispatch mở; thêm 1 khi job cũ > 60s, **không còn dispatch pending** và active < max; pending > 120s không claim →
   `no_claim` + backoff 1'→2'→4'→8'→15' + cảnh báo; container thoát mà không chạy job nào → cũng backoff (tránh vòng
@@ -119,6 +121,11 @@ modal deploy modal_app.py                                 # URL app `mtl-drain` 
 - Mở lại: hết vượt (sang ngày/tháng mới hoặc nâng ngưỡng + restart) → `mtl-jobs` tự `paused_budget → queued`;
   hoặc `pnpm budget-resume` (in trạng thái; `--force` mở lại kể cả khi còn vượt).
 - Cảnh báo 50/80/100% mỗi mốc 1 lần/kỳ (ngày, tháng) qua ntfy.
+> **⚠️ Bắt buộc sau khi đo có key LLM:** trần guardrail mặc định **2000 token ra/call** (đúng spec) thấp hơn
+> `max_output_tokens` của lô dịch (tới **4096**, `TRANSLATE_MAX_OUTPUT_TOKENS`) → lô dịch 4 trang dài có thể bị
+> loại (`schema`) dù hợp lệ. Chạy golden set/`mtl bench`, xem phân bố `output_tokens` mỗi call dịch rồi đặt
+> `MTL_MAX_OUTPUT_TOKENS_PER_CALL` (env worker Mac + Modal secret) cho phù hợp, tối đa 4096.
+
 - Worker: thinking tắt, `max_output_tokens` theo loại call, **assert token ra ≤ 2000/call**
   (`MTL_MAX_OUTPUT_TOKENS_PER_CALL`) → vượt = lỗi `schema`, không gọi lại trong job (hàng đợi tính attempt). Server
   vẫn clamp riêng (`apps/api/src/billing/prices.ts`).
