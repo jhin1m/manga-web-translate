@@ -18,7 +18,7 @@ lệch bbox mực từng dòng ≤ 1px — xem `benchmarks/phase-01-results.md`)
 | `align` | `left` \| `center` \| `right`. |
 | `fill` | Màu chữ. |
 | `stroke` | `{color, width}`; `width` = bề rộng viền **ra ngoài** glyph (px). |
-| `lines[]` | Các dòng **đã ngắt sẵn**. Server chỉ vẽ, không tự ngắt lại. |
+| `lines[]` | Các dòng **đã ngắt sẵn** — server chỉ vẽ, không ngắt lại. Rỗng mà có `text` (box auto, sau find/replace) → editor và export cùng ngắt theo `layoutBox` ≡ `render.ensure_lines` (gate parity kiểm khớp từng dòng). |
 
 ## Quy tắc
 
