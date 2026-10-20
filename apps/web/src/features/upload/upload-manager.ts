@@ -217,6 +217,11 @@ export function createUploadManager(deps: UploadDeps) {
       return m ? { phase: "incomplete", done: m.done.length, total: m.total } : null;
     },
 
+    /** File local của chương upload trong tab này (id source file → Blob) — xem trước không cần chờ tải lên. */
+    localFiles(chapterId: string): Map<string, Blob> {
+      return new Map((jobs.get(chapterId)?.items ?? []).map((it) => [it.fileId, it.page.blob]));
+    },
+
     anyUploading: () => Object.values(store.getState().chapters).some((c) => c.phase === "uploading"),
   };
 }

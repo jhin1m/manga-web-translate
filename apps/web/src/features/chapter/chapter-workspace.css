@@ -259,6 +259,29 @@
   overflow-y: auto;
 }
 
+/* Ảnh gốc xem trước của chương chưa có page: cột dọc như strip, giới hạn bề ngang. */
+.source-preview {
+  list-style: none;
+  margin: 0 auto;
+  padding: 0;
+  width: 100%;
+  max-width: 720px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+.source-preview img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.source-preview-missing {
+  display: grid;
+  place-items: center;
+  height: 160px;
+  border: 1px dashed var(--c-line);
+}
+
 .cw-side {
   grid-area: side;
   min-height: 0;

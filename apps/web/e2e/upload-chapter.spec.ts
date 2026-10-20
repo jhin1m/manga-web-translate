@@ -51,6 +51,11 @@ test("drop a 10-page ZIP on home, open the chapter while uploading, then transla
   await expect(page.getByRole("status", { name: "Tiến độ tải ảnh" })).toContainText("Đang tải ảnh");
   await expect(page.getByRole("button", { name: "Dịch chương" })).toBeDisabled();
   await expect.poll(() => held.length).toBeGreaterThan(0);
+  // Chưa file nào lên storage nhưng ảnh xem trước đã hiện từ file local, đúng thứ tự tên tự nhiên.
+  const preview = page.getByRole("list", { name: "Ảnh gốc đã tải" });
+  await expect(preview.locator("img")).toHaveCount(10);
+  await expect(preview.locator("img").first()).toHaveAttribute("src", /^blob:/);
+  await expect(preview.locator("img").first()).toHaveAttribute("alt", "Ảnh gốc 1");
 
   // Rời về home khi còn đang tải: drawer Hoạt động liệt kê chương đang upload kèm tiến độ → quay lại chương.
   await page.getByRole("link", { name: "Series e2e" }).click();

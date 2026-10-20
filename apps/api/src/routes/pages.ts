@@ -4,7 +4,7 @@
  * URL là presigned GET TTL ngắn trên FILES_DOMAIN (bucket private) — tách khỏi /progress để polling 2–3s
  * không ký lại URL mỗi lượt.
  */
-import { chapters, pages } from "@mtl/db";
+import { chapters, pages, sourceFiles } from "@mtl/db";
 import { storageKeys } from "@mtl/shared";
 import { eq } from "drizzle-orm";
 import { Hono } from "hono";
@@ -42,6 +42,23 @@ pageRoutes.get("/w/:ws/chapters/:chapterId/pages", requireWorkspace(), async (c)
           images: { original, clean },
         };
       }),
+    ),
+  });
+});
+
+/**
+ * Ảnh gốc đã khai báo của chương theo thứ tự upload — xem trước khi chưa có page (nháp, đang cắt trang). Không HEAD
+ * từng object: file chưa upload xong thì URL trả 404, client hiện ô "chưa tải".
+ */
+pageRoutes.get("/w/:ws/chapters/:chapterId/source-files", requireWorkspace(), async (c) => {
+  const sdb = c.get("sdb");
+  const ch = await sdb.byId(chapters, c.req.param("chapterId"), "chapter");
+  const rows = await sdb.select(sourceFiles, eq(sourceFiles.chapterId, ch.id));
+  rows.sort((a, b) => a.ord - b.ord);
+  return c.json({
+    expires_at: new Date(Date.now() + THUMB_TTL_S * 1000),
+    files: await Promise.all(
+      rows.map(async (f) => ({ id: f.id, ord: f.ord, url: await presignGet(f.storageKey, THUMB_TTL_S) })),
     ),
   });
 });

@@ -141,6 +141,18 @@ describe("chapter flow", () => {
     expect(img.headers.get("x-content-type-options")).toBe("nosniff");
   });
 
+  it("source-files gives signed original uploads in upload order before any page exists", async () => {
+    const ch = await uploadChapter(2, "1.5");
+    const { files } = await json<{ files: { ord: number; url: string }[] }>(
+      await api(`/chapters/${ch}/source-files`),
+      200,
+    );
+    expect(files.map((f) => f.ord)).toEqual([0, 1]);
+    expect((await fetch(files[0]?.url ?? "")).status).toBe(200);
+    // Không để job ingest treo cho các test claim sau.
+    await json(await api(`/chapters/${ch}/cancel`, { method: "POST", body: {} }), 200);
+  });
+
   it("partial_failed → retry-failed re-runs only the failed page and ends in review", async () => {
     const ch = await uploadChapter(3, "2");
     await ingestAndPrepare(ch, 1);
