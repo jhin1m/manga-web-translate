@@ -7,12 +7,15 @@
  * Stage (cuộn/zoom đồng bộ tự nhiên), chỉ cột Dịch nhận thao tác — bấm/kéo ở cột Gốc = kéo canvas; trần mount
  * tính theo cặp (2 page).
  *
+ * Mở chương / bật-tắt chia đôi: vừa khung (`fitScale` — trọn 1 page dạng tờ, trần 100%); đã tự zoom thì giữ zoom.
+ * Page chưa dịch xong (`processing`) hiện ảnh gốc + nhãn trạng thái, không vẽ chữ.
+ *
  * Cuộn = cuộn strip; Ctrl/Cmd+cuộn = zoom quanh con trỏ; Space giữ (hoặc chuột giữa) + kéo = kéo canvas.
  * Bấm vào page không active chỉ kích hoạt page đó (không bắt đầu công cụ). Sửa chữ = textarea HTML phủ lên box.
  */
 import type { TextBox } from "@mtl/shared";
 import type Konva from "konva";
-import { memo, useEffect, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { Stage as KStage, Layer } from "react-konva";
 import { addBox, editText, newTextBox } from "../actions.ts";
 import { activeOffset, chapterStore, effectiveMode, useChapterStore } from "../chapter-store.ts";
@@ -22,7 +25,7 @@ import { editorStore, useEditor, type View } from "../store.ts";
 import {
   clampView,
   contentBox,
-  EDGE,
+  fitScale,
   MAX_MOUNTED,
   pageAt,
   screenToStrip,
@@ -33,7 +36,7 @@ import {
 } from "../strip-layout.ts";
 import { MaskLayer } from "./MaskLayer.tsx";
 import { OcrOverlay, type PageRect } from "./OcrSelect.tsx";
-import { PageSlot, type SlotImages } from "./PageSlot.tsx";
+import { PageSlot, type SlotImages, type SlotProcessing } from "./PageSlot.tsx";
 import { StaticTextLayer } from "./StaticTextLayer.tsx";
 import { TextLayer } from "./TextLayer.tsx";
 
@@ -58,6 +61,8 @@ const clipRect = (r: PageRect, page: { w: number; h: number }): PageRect => {
 export const ChapterCanvas = memo(function ChapterCanvas(props: {
   kit: FontKit;
   images: Map<string, SlotImages>;
+  /** Page chưa dịch xong theo tiến độ chương (page vắng mặt = xong hoặc lỗi). */
+  processing: ReadonlyMap<string, SlotProcessing>;
   defaultFont: string;
   /** Page đưa lên đầu khung khi mở chương (từ `?page=`); không có → đầu strip. */
   initialPageId: string | null;
@@ -86,9 +91,14 @@ export const ChapterCanvas = memo(function ChapterCanvas(props: {
     start: View;
     from: { x: number; y: number };
   } | null>(null);
-  const fitted = useRef(false);
+  // State (không phải ref): chỉ báo trang cần chạy lại khi vừa khung xong, kể cả khi page ở giữa không đổi.
+  const [fitted, setFitted] = useState(false);
+  /** Người dùng đã tự zoom → bật/tắt chia đôi giữ zoom. */
+  const userZoomed = useRef(false);
+  /** Khung nhìn do lần vừa khung gần nhất đặt; khung nhìn hiện tại khác nó = người dùng đã cuộn/zoom/nhảy page. */
+  const lastFit = useRef<View | null>(null);
 
-  const strip = stripSize(pages.map((p) => ({ w: p.width, h: p.height })));
+  const strip = useMemo(() => stripSize(pages.map((p) => ({ w: p.width, h: p.height }))), [pages]);
   const content = contentBox(strip, split);
   const activeIdx = pages.findIndex((p) => p.id === activeId);
   const active = activeIdx >= 0 ? pages[activeIdx] : undefined;
@@ -107,40 +117,46 @@ export const ChapterCanvas = memo(function ChapterCanvas(props: {
     return () => ro.disconnect();
   }, []);
 
-  // Mở chương: vừa bề ngang khung (không phóng quá 100%), page từ `?page=` (hoặc đầu strip) ở trên.
+  // Mở chương: vừa khung theo page từ `?page=` (hoặc page đầu), đưa page đó lên trên. Khung đổi cỡ khi chưa ai
+  // động vào khung nhìn (bảng dưới mở/thu sau lần đo đầu) → vừa lại.
   const { initialPageId } = props;
   useEffect(() => {
-    if (fitted.current || size.w === 0 || pages.length === 0) return;
-    fitted.current = true;
+    if (size.w === 0 || pages.length === 0) return;
+    if (fitted && editorStore.getState().view !== lastFit.current) return;
     const s = chapterStore.getState();
     const c = contentBox(strip, s.viewMode === "split");
-    const scale = Math.min(1, Math.max(MIN_SCALE, (size.w - 2 * EDGE) / c.w));
-    const i = initialPageId ? s.pages.findIndex((p) => p.id === initialPageId) : -1;
-    const v = viewAtOffset({ scale, x: 0, y: EDGE }, i >= 0 ? (s.offsets[i] ?? 0) : 0);
-    editorStore.getState().setView(clampView(v, c, size, c.x));
-  }, [size, pages.length, strip, initialPageId]);
+    const found = initialPageId ? s.pages.findIndex((p) => p.id === initialPageId) : -1;
+    const i = Math.max(0, found);
+    const p = s.pages[i];
+    const scale = fitScale(c, p && { w: p.width, h: p.height }, size, MIN_SCALE);
+    const v = clampView(viewAtOffset({ scale, x: 0, y: 0 }, s.offsets[i] ?? 0), c, size, c.x);
+    lastFit.current = v;
+    editorStore.getState().setView(v);
+    setFitted(true);
+  }, [fitted, size, pages.length, strip, initialPageId]);
 
-  // Bật/tắt chia đôi: vừa lại bề ngang nội dung mới, giữ điểm strip đang ở giữa khung.
+  // Bật/tắt chia đôi: vừa lại theo nội dung mới (trừ khi đã tự zoom), giữ điểm strip đang ở giữa khung.
   const lastSplit = useRef(split);
   useEffect(() => {
     if (lastSplit.current === split) return;
     lastSplit.current = split;
-    if (!fitted.current || size.w === 0) return;
+    if (!fitted || size.w === 0) return;
     const v = editorStore.getState().view;
     const c = contentBox(strip, split);
     const midY = (size.h / 2 - v.y) / v.scale;
-    const scale = Math.min(1, Math.max(MIN_SCALE, (size.w - 2 * EDGE) / c.w));
+    const s = chapterStore.getState();
+    const p = s.pages[pageAt(midY, s.offsets)];
+    const scale = userZoomed.current ? v.scale : fitScale(c, p && { w: p.width, h: p.height }, size, MIN_SCALE);
     editorStore.getState().setView(clampView({ scale, x: 0, y: size.h / 2 - midY * scale }, c, size, c.x));
-  }, [split, strip, size]);
+  }, [fitted, split, strip, size]);
 
   // Page ở giữa khung nhìn (để ghi `?page=`).
   const centerY = (size.h / 2 - view.y) / view.scale;
   const centerIdx = pageAt(centerY, offsets);
   const centerId = centerIdx >= 0 ? (pages[centerIdx]?.id ?? null) : null;
   useEffect(() => {
-    if (fitted.current && chapterStore.getState().centerPageId !== centerId)
-      chapterStore.getState().setCenter(centerId);
-  }, [centerId]);
+    if (fitted && chapterStore.getState().centerPageId !== centerId) chapterStore.getState().setCenter(centerId);
+  }, [fitted, centerId]);
 
   useEffect(() => {
     const isField = (t: EventTarget | null) =>
@@ -168,6 +184,7 @@ export const ChapterCanvas = memo(function ChapterCanvas(props: {
     e.evt.preventDefault();
     const { deltaX, deltaY, ctrlKey, metaKey, shiftKey } = e.evt;
     if (ctrlKey || metaKey) {
+      userZoomed.current = true;
       const p = e.target.getStage()?.getPointerPosition() ?? { x: size.w / 2, y: size.h / 2 };
       const scale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, view.scale * Math.exp(-deltaY * 0.0015)));
       const at = screenToStrip(p, view);
@@ -304,6 +321,7 @@ export const ChapterCanvas = memo(function ChapterCanvas(props: {
                     x={content.x}
                     images={props.images.get(p.id)}
                     viewport={{ ...local(off), x: viewport.x - content.x }}
+                    scale={view.scale}
                     showOriginal
                     keepOriginal={false}
                     onImageError={props.onImageError}
@@ -322,7 +340,9 @@ export const ChapterCanvas = memo(function ChapterCanvas(props: {
                   offset={off}
                   images={props.images.get(p.id)}
                   viewport={local(off)}
+                  scale={view.scale}
                   showOriginal={showOriginal}
+                  processing={props.processing.get(p.id)}
                   keepOriginal={originalSeen && !split}
                   onImageError={props.onImageError}
                 />
@@ -331,7 +351,7 @@ export const ChapterCanvas = memo(function ChapterCanvas(props: {
             {!showOriginal &&
               mounted.map((i) => {
                 const p = pages[i];
-                if (!p || p.id === activeId) return null;
+                if (!p || p.id === activeId || props.processing.has(p.id)) return null;
                 const off = offsets[i] ?? 0;
                 return (
                   <StaticTextLayer
@@ -344,7 +364,9 @@ export const ChapterCanvas = memo(function ChapterCanvas(props: {
                 );
               })}
           </Layer>
-          {!showOriginal && active && <TextLayer kit={kit} viewport={local(activeOff)} offset={activeOff} />}
+          {!showOriginal && active && !props.processing.has(active.id) && (
+            <TextLayer kit={kit} viewport={local(activeOff)} offset={activeOff} />
+          )}
           <MaskLayer offset={activeOff} />
           <OcrOverlay draft={draft} pending={props.ocrPending} offset={activeOff} />
         </KStage>
