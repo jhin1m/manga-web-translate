@@ -1,6 +1,6 @@
 # Phase 1 — Tín hiệu "cần xem" đúng
 
-Status: Pending · Branch: `feat/ux-p1-review-signals` · Context: [plan.md](./plan.md)
+Status: Done (2026-10-21, có vấn đề mở — xem [report](../reports/phase-01-261021-ux-simplify-report.md)) · Branch: `feat/ux-p1-review-signals` · Context: [plan.md](./plan.md)
 
 ## Vấn đề
 Chương mẫu 5 trang: 145 dòng bảng văn bản, 70 "Trống"; 5/5 trang "tràn khung" → lọc "Cần xem" vô dụng.
