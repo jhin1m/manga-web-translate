@@ -4,7 +4,7 @@
  * MinIO theo policy giới hạn (red team #12), server kiểm lại khi commit.
  */
 
-import { chapters, jobs, pages, series, sourceFiles } from "@mtl/db";
+import { chapters, jobs, pages, scoped, series, sourceFiles } from "@mtl/db";
 import { ACTIVE_JOB_STATUSES, storageKeys } from "@mtl/shared";
 import { and, eq, inArray } from "drizzle-orm";
 import { Hono } from "hono";
@@ -139,16 +139,23 @@ chapterRoutes.post("/w/:ws/chapters/:chapterId/presign", requireWorkspace(), asy
 /**
  * Commit: với từng file HEAD (tồn tại, ≤ 30MB) + 16 byte đầu khớp `mime` khai báo. File sai bị loại (xoá
  * khỏi source_files) và báo lại; còn file hợp lệ → enqueue **chỉ** chapter.ingest (pages do ingest tạo).
- * Chương đã có chỉnh sửa tay → 409 (enqueueIngest chặn).
+ * Chỉ commit chương nháp hoặc chương ingest lỗi (chưa có page) — chương đã xử lý muốn làm lại thì tạo chương
+ * mới (tránh xoá bản AI/chỉnh sửa và trả tiền dịch lại). Loại file + enqueue cùng transaction: enqueueIngest
+ * từ chối (409) thì không mất source_files nào.
  */
 chapterRoutes.post("/w/:ws/chapters/:chapterId/commit", requireWorkspace(), async (c) => {
   const body = await parseJson(c, CommitBody);
   const sdb = c.get("sdb");
+  const ws = c.get("workspaceId");
   const user = c.get("user");
   const ch = await sdb.byId(chapters, c.req.param("chapterId"), "chapter");
   const holder = activeLockHolder(ch);
   if (holder && holder !== user.id) {
     throw new HTTPException(423, { res: Response.json({ error: "chapter_locked", holder }, { status: 423 }) });
+  }
+  const ingestFailed = ch.status === "partial_failed" && !(await sdb.find(pages, eq(pages.chapterId, ch.id)));
+  if (ch.status !== "draft" && !ingestFailed) {
+    throw conflict("chapter_not_draft", "chương đã xử lý — tạo chương mới để upload lại");
   }
   const files = await sdb.select(sourceFiles, eq(sourceFiles.chapterId, ch.id));
   files.sort((a, b) => a.ord - b.ord);
@@ -161,26 +168,30 @@ chapterRoutes.post("/w/:ws/chapters/:chapterId/commit", requireWorkspace(), asyn
   });
   const rejected = checked.filter((r) => r.reason !== null);
   const valid = checked.filter((r) => r.reason === null);
-  if (rejected.length) {
-    await sdb.delete(
-      sourceFiles,
-      inArray(
-        sourceFiles.id,
-        rejected.map((r) => r.file.id),
-      ),
-    );
-  }
-  // Dung lượng thật thay cho số client khai báo.
-  for (const r of valid) {
-    if (r.bytes !== r.file.bytes) await sdb.update(sourceFiles, eq(sourceFiles.id, r.file.id), { bytes: r.bytes });
-  }
   const rejectedView = rejected.map((r) => ({ id: r.file.id, ord: r.file.ord, reason: r.reason }));
   if (valid.length === 0) {
+    // Giữ nguyên source_files: chương vẫn nháp, người dùng upload lại file rồi commit tiếp.
     throw new HTTPException(400, {
       res: Response.json({ error: "no_valid_files", rejected: rejectedView }, { status: 400 }),
     });
   }
-  const { job, created } = await inJobTx((tx) => enqueueIngest(tx, c.get("workspaceId"), ch.id, body.mode));
+  const { job, created } = await inJobTx(async (tx) => {
+    const t = scoped(tx, ws);
+    if (rejected.length) {
+      await t.delete(
+        sourceFiles,
+        inArray(
+          sourceFiles.id,
+          rejected.map((r) => r.file.id),
+        ),
+      );
+    }
+    // Dung lượng thật thay cho số client khai báo.
+    for (const r of valid) {
+      if (r.bytes !== r.file.bytes) await t.update(sourceFiles, eq(sourceFiles.id, r.file.id), { bytes: r.bytes });
+    }
+    return enqueueIngest(tx, ws, ch.id, body.mode);
+  });
   return c.json({ job: jobView(job), created, accepted: valid.length, rejected: rejectedView }, 202);
 });
 

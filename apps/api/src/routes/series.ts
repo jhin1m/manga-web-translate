@@ -3,7 +3,7 @@
  * sau đó có input_rev mới, job cũ không bị dùng lại nhầm.
  */
 import { chapters, series } from "@mtl/db";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { z } from "zod";
@@ -156,7 +156,8 @@ seriesRoutes.patch("/w/:ws/series/:seriesId", requireWorkspace(), async (c) => {
   const updated = await sdb.transaction(async (tx) => {
     const cur = await tx.byId(series, c.req.param("seriesId"), "series");
     const set = toColumns(body);
-    if (translationChanged(cur, set)) set.settingsRev = cur.settingsRev + 1;
+    // Tăng trong SQL (không từ giá trị đã đọc) → 2 lần lưu đồng thời không cùng ra một rev.
+    if (translationChanged(cur, set)) set.settingsRev = sql`${series.settingsRev} + 1` as unknown as number;
     const [row] = await tx.update(series, eq(series.id, cur.id), set);
     if (!row) throw new HTTPException(404, { message: "series not found" });
     return row;

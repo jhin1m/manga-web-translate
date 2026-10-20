@@ -62,9 +62,16 @@ async function assertUniqueTerm(tx: Scoped, seriesId: string | null, term: strin
 // ---- CSV (RFC 4180: dấu phẩy, nháy kép bao trường, "" = nháy kép trong trường) ----
 
 export const CSV_HEADER = ["source_term", "target_term", "note", "case_sensitive"] as const;
+const FORMULA_START = /^[=+\-@\t\r]/;
+/** Bỏ ' do toCsv thêm trước ô dạng công thức. */
+const unescapeCell = (v: string | undefined) => (v?.startsWith("'") && FORMULA_START.test(v.slice(1)) ? v.slice(1) : v);
 
 export function toCsv(rows: EntryIn[]): string {
-  const cell = (v: string) => (/[",\r\n]/.test(v) ? `"${v.replaceAll('"', '""')}"` : v);
+  const cell = (raw: string) => {
+    // Chặn CSV injection: ô bắt đầu bằng = + - @ bị Excel chạy như công thức → thêm ' (import bỏ lại).
+    const v = FORMULA_START.test(raw) ? `'${raw}` : raw;
+    return /[",\r\n]/.test(v) ? `"${v.replaceAll('"', '""')}"` : v;
+  };
   const lines = [CSV_HEADER.join(",")];
   for (const r of rows) {
     lines.push([r.source_term, r.target_term, r.note, r.case_sensitive ? "true" : "false"].map(cell).join(","));
@@ -123,7 +130,7 @@ export function parseGlossaryCsv(text: string): { entries: EntryIn[]; errors: { 
   const errors: { line: number; message: string }[] = [];
   const byTermMap = new Map<string, EntryIn>();
   rows.slice(1).forEach((r, i) => {
-    const get = (name: string) => (col(name) >= 0 ? (r[col(name)] ?? "") : undefined);
+    const get = (name: string) => (col(name) >= 0 ? unescapeCell(r[col(name)] ?? "") : undefined);
     const cs = get("case_sensitive")?.trim().toLowerCase();
     const parsed = Entry.safeParse({
       source_term: get("source_term"),
@@ -191,6 +198,7 @@ async function importCsv(sdb: Scoped, seriesId: string | null, body: z.infer<typ
   if (errors.length) {
     throw new HTTPException(400, { res: Response.json({ error: "invalid_csv", errors }, { status: 400 }) });
   }
+  if (entries.length === 0) throw new HTTPException(400, { message: "CSV không có dòng nào" });
   if (entries.length > MAX_IMPORT_ROWS) throw new HTTPException(400, { message: `tối đa ${MAX_IMPORT_ROWS} dòng` });
   return sdb.transaction(async (tx) => {
     if (body.mode === "replace") await tx.delete(glossaryEntries, scopeWhere(seriesId));

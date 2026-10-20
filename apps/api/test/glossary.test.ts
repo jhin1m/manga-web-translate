@@ -104,6 +104,10 @@ describe("CSV", () => {
     expect(back.errors).toEqual([]);
     expect(back.entries).toEqual(rows);
     expect(parseCsvRows('a,"b\r\nc"\r\n')).toEqual([["a", "b\r\nc"]]);
+    const formula = { source_term: "=HYPERLINK(1)", target_term: "+x", note: "@y", case_sensitive: false };
+    const fcsv = toCsv([formula]);
+    expect(fcsv).toContain("'=HYPERLINK(1)");
+    expect(parseGlossaryCsv(fcsv).entries).toEqual([formula]);
   });
 
   it("reports bad header / rows by line number", () => {
@@ -151,6 +155,12 @@ describe("CSV", () => {
     const listed = await json<{ entries: Entry[] }>(await api(base), 200);
     expect(listed.entries.map((e) => e.source_term)).toEqual(["마법"]);
 
+    const empty = await api(`${base}/csv`, {
+      method: "POST",
+      body: { csv: "source_term,target_term\n", mode: "replace" },
+    });
+    expect(empty.status).toBe(400);
+    expect((await json<{ entries: Entry[] }>(await api(base), 200)).entries).toHaveLength(1);
     const bad = await api(`${base}/csv`, { method: "POST", body: { csv: "a,b\n" } });
     expect(bad.status).toBe(400);
     expect(((await bad.json()) as { error: string }).error).toBe("invalid_csv");

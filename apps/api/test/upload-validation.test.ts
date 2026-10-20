@@ -144,6 +144,14 @@ describe("commit", () => {
       body: { file_ids: [f1.id] },
     });
     expect(pre.status).toBe(409);
+    // Commit lại chương đã xử lý → 409, không loại/xoá source_files nào.
+    const again = await call(`/api/w/${A.workspaceId}/chapters/${chapter.id}/commit`, {
+      method: "POST",
+      cookie: A.cookie,
+      body: {},
+    });
+    expect(again.status).toBe(409);
+    expect(await db.select().from(sourceFiles).where(eq(sourceFiles.chapterId, chapter.id))).toHaveLength(2);
   });
 
   it("all files invalid → 400 and chapter stays draft", async () => {
@@ -160,5 +168,7 @@ describe("commit", () => {
     expect(((await res.json()) as { error: string }).error).toBe("no_valid_files");
     const detail = await call(`/api/w/${A.workspaceId}/chapters/${chapter.id}`, { cookie: A.cookie });
     expect(((await detail.json()) as { status: string }).status).toBe("draft");
+    // File lỗi được giữ lại để upload lại rồi commit tiếp.
+    expect(await db.select().from(sourceFiles).where(eq(sourceFiles.chapterId, chapter.id))).toHaveLength(1);
   });
 });
