@@ -6,6 +6,7 @@ priority: P1
 effort: "5d"
 dependencies: []
 ---
+> gate: GO tạm — chờ golden set, API key, owner chấm
 # Phase 1: Spike & benchmark pipeline (Python CLI trên Mac, chỉ KO)
 
 ## Overview

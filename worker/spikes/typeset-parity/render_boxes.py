@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Literal
 
 from PIL import Image
 
@@ -27,6 +28,7 @@ SAMPLES = [
     ["Quỷ thật, ổn chứ?"],
     ["Rầm!"],
 ]
+ALIGNS: tuple[Literal["center", "left", "right"], ...] = ("center", "left", "right")
 FONTS = ["PatrickHand-Regular", "BeVietnamPro-Regular", "Anton-Regular", "Itim-Regular", "Mali-Regular"]
 
 
@@ -50,7 +52,7 @@ def make_boxes() -> list[TextBox]:
                 font_size=size,
                 line_height=[1.0, 1.15, 1.3][i % 3],
                 pad=4 + i % 3,
-                align=["center", "left", "right"][i % 3],
+                align=ALIGNS[i % 3],
                 fill="#111111" if i % 2 == 0 else "#fafafa",
                 stroke=stroke,
                 lines=lines,
