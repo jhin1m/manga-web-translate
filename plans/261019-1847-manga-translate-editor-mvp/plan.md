@@ -1,7 +1,7 @@
 ---
 title: "Manga translate editor MVP"
 description: "Web app tự dịch manhwa KO sang tiếng Việt (pipeline 2 giai đoạn) + editor kiểu Canva để sửa, worker AI chạy local Mac hoặc Modal, invite-only, kiến trúc sẵn multi-tenant."
-status: in-progress
+status: completed
 priority: P1
 effort: "~39d (MVP P1-P7) + ~8d trước mở đăng ký công khai (P8) + ~5d extension (P9)"
 tags: [manga, manhwa, translation, ai-pipeline, editor, konva, hono, drizzle, python-worker, multi-tenant]
@@ -58,7 +58,7 @@ upload (presigned POST) ─> commit (HEAD + magic bytes) ─> chapter.ingest (c�
 | 4 | [Web: upload, cài đặt series, tiến độ, danh sách trang](./phase-04-web-upload-series-progress.md) | P1 | 4d | 2, 3 | Completed |
 | 5 | [Editor react-konva](./phase-05-editor-konva.md) | P1 | 12d | 3, 4 (router/layout) | Completed |
 | 6 | [Export + glossary/find-replace](./phase-06-export-glossary-polish.md) | P1 | 3d | 3, 5 | Completed |
-| 7 | [Production MVP: VPS, systemd, backup, kill-switch, Modal](./phase-07-production-deploy-quotas.md) | P1 | 4d | 3–6 | Pending |
+| 7 | [Production MVP: VPS, systemd, backup, kill-switch, Modal](./phase-07-production-deploy-quotas.md) | P1 | 4d | 3–6 | Completed |
 | 8 | [Trước khi mở đăng ký công khai: quota, BYOK, admin, takedown](./phase-08-pre-public-signup-saas.md) | P2 | ~8d | 7 | Pending |
 | 9 | [(Sau MVP) Chrome extension — phác thảo](./phase-09-chrome-extension-outline.md) | P3 | ~5d | 7 (nội bộ); đăng công khai cần 8 | Pending |
 
