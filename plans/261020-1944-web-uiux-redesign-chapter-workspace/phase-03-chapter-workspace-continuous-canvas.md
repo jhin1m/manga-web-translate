@@ -1,7 +1,7 @@
 ---
 phase: 3
 title: "Màn chương gộp: layout, rail, canvas cuộn liên tục"
-status: pending
+status: completed
 priority: P1
 effort: 4.5d
 dependencies: [2]
