@@ -1,0 +1,102 @@
+import type { PageState } from "@mtl/shared";
+import { describe, expect, it } from "vitest";
+import {
+  addBox,
+  applyRegionTranslation,
+  deleteBox,
+  diffRegions,
+  editText,
+  insertOcrRegion,
+  moveBox,
+  newTextBox,
+  resetToAI,
+  resizeBox,
+  setRegionTranslation,
+  setStyle,
+} from "../actions.ts";
+import { change } from "../history.ts";
+import { box, doc, layout, region } from "./fixtures.ts";
+
+const run = (s: PageState, recipe: Parameters<typeof change<PageState>>[1]) => change(s, recipe).state;
+
+describe("editor actions", () => {
+  it("moves and resizes; resize re-wraps lines", () => {
+    let s = run(doc(1), moveBox("t0", 50, 60));
+    expect(s.text_boxes[0]).toMatchObject({ x: 50, y: 60 });
+    s = run(s, editText("t0", "Anh đang làm gì vậy", layout));
+    s = run(s, resizeBox("t0", { x: 50, y: 60, w: 88, h: 120, rotation: 15 }, layout));
+    expect(s.text_boxes[0]).toMatchObject({ w: 88, rotation: 15, lines: ["Anh đang", "làm gì", "vậy"] });
+  });
+
+  it("editText normalizes NFC and syncs the linked region translation", () => {
+    const s = run(doc(1), editText("t0", "Tiếng Việt".normalize("NFD"), layout));
+    expect(s.text_boxes[0]?.text).toBe("Tiếng Việt");
+    expect(s.text_boxes[0]?.text).toBe(s.text_boxes[0]?.text.normalize("NFC"));
+    expect(s.regions[0]?.translation).toBe("Tiếng Việt");
+  });
+
+  it("setStyle relayouts only for layout fields", () => {
+    const base = run(doc(1), editText("t0", "Anh đang làm gì vậy", layout));
+    const colored = run(
+      base,
+      setStyle("t0", { fill: "#ff0000" }, () => ({ lines: ["X"], font_size: 1 })),
+    );
+    expect(colored.text_boxes[0]?.lines).toEqual(base.text_boxes[0]?.lines);
+    const fitted = run(base, setStyle("t0", { auto_fit: true }, layout));
+    expect(fitted.text_boxes[0]?.font_size).not.toBe(20);
+  });
+
+  it("adds (no duplicate ids) and deletes boxes", () => {
+    let s = run(doc(1), addBox(box("t9")));
+    s = run(s, addBox(box("t9", null, "khác")));
+    expect(s.text_boxes.map((b) => b.id)).toEqual(["t0", "t9"]);
+    s = run(s, deleteBox("t0"));
+    expect(s.text_boxes.map((b) => b.id)).toEqual(["t9"]);
+  });
+
+  it("setRegionTranslation updates region and linked boxes", () => {
+    const s = run(doc(2), setRegionTranslation("r1", "Đi thôi", layout));
+    expect(s.regions[1]?.translation).toBe("Đi thôi");
+    expect(s.text_boxes[1]).toMatchObject({ text: "Đi thôi", lines: ["Đi thôi"] });
+    expect(s.text_boxes[0]?.text).toBe("Câu 0");
+  });
+
+  it("diffs regions against a new AI result and applies one region, keeping user geometry", () => {
+    const cur = run(doc(2), moveBox("t0", 300, 400));
+    const ai: PageState = structuredClone(doc(2));
+    ai.regions[0] = { ...region("r0"), translation: "AI mới" };
+    ai.regions.push(region("r5", "Vùng mới"));
+    ai.text_boxes.push(box("t5", "r5", "Vùng mới"));
+    ai.regions.splice(1, 1);
+    const diff = diffRegions(cur, ai);
+    expect(diff.map((d) => [d.id, d.kind])).toEqual([
+      ["r0", "changed"],
+      ["r5", "added"],
+      ["r1", "removed"],
+    ]);
+    let s = run(cur, applyRegionTranslation(ai, "r0", layout));
+    expect(s.regions[0]?.translation).toBe("AI mới");
+    expect(s.text_boxes[0]).toMatchObject({ x: 300, y: 400, text: "AI mới" });
+    s = run(s, applyRegionTranslation(ai, "r5", layout));
+    expect(s.regions.map((r) => r.id)).toContain("r5");
+    expect(s.text_boxes.map((b) => b.id)).toContain("t5");
+  });
+
+  it("resetToAI replaces the whole state", () => {
+    const ai = doc(1);
+    expect(run(run(doc(3), moveBox("t0", 1, 1)), resetToAI(ai))).toEqual(ai);
+  });
+
+  it("inserts an OCR region with fresh ids and a fitted box", () => {
+    const r = {
+      ...region("r-user", "Chữ ngoài bóng"),
+      polarity: "light_on_dark" as const,
+      bbox: [0, 0, 120, 60] as [number, number, number, number],
+    };
+    const s = run(doc(0), insertOcrRegion(r, { region: "r-new", box: "t-new" }, "F", layout));
+    expect(s.regions[0]?.id).toBe("r-new");
+    expect(s.text_boxes[0]).toMatchObject({ id: "t-new", region_id: "r-new", text: "Chữ ngoài bóng", fill: "#ffffff" });
+    expect(s.text_boxes[0]?.lines.length).toBeGreaterThan(0);
+    expect(newTextBox("x", { x: 0, y: 0, w: 1, h: 1 }, "F", null).w).toBe(8);
+  });
+});

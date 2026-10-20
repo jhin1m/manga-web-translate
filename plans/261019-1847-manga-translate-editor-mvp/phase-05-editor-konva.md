@@ -1,7 +1,7 @@
 ---
 phase: 5
 title: "Editor react-konva"
-status: pending
+status: completed
 priority: P1
 effort: "12d"
 dependencies: [3, 4]

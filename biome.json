@@ -8,7 +8,8 @@
       "!packages/shared/json-schema",
       "!packages/db/src/schema/auth.ts",
       "!plans",
-      "!worker"
+      "!worker",
+      "!apps/web/public/fonts"
     ]
   },
   "formatter": { "indentStyle": "space", "indentWidth": 2, "lineWidth": 120 },

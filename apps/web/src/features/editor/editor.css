@@ -1,0 +1,270 @@
+/*
+ * Editor (Phase 5) — cùng token/hướng A với phần còn lại (docs/design-guidelines.md). Vùng canvas nền xám
+ * trung tính để nhìn ảnh; không gradient, không bóng lớn, 1 màu nhấn.
+ */
+.editor {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr) 340px;
+  grid-template-rows: var(--topbar-h) minmax(0, 1fr);
+  grid-template-areas:
+    "top top top"
+    "strip main side";
+  background: var(--c-bg);
+}
+
+.ed-top {
+  grid-area: top;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: 0 var(--sp-3);
+  border-bottom: 1px solid var(--c-line);
+  min-width: 0;
+  overflow-x: auto;
+}
+.ed-top .spacer {
+  flex: 1;
+}
+.ed-group {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+}
+.ed-group + .ed-group {
+  padding-left: var(--sp-3);
+  border-left: 1px solid var(--c-line);
+}
+.ed-pageno,
+.ed-zoom {
+  font-size: var(--fs-sm);
+  color: var(--c-fg-muted);
+  min-width: 48px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.ed-tool kbd {
+  font: inherit;
+  font-size: var(--fs-xs);
+  color: var(--c-fg-subtle);
+}
+.ed-tool.on,
+.ed-seg .on {
+  background: var(--c-accent-weak);
+  border-color: var(--c-accent);
+  color: var(--c-accent);
+}
+
+.ed-strip {
+  grid-area: strip;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--sp-2) var(--sp-1);
+  border-right: 1px solid var(--c-line);
+  overflow-y: auto;
+}
+.ed-strip button {
+  position: relative;
+  justify-content: center;
+  padding: 4px 0;
+  border-color: transparent;
+  font-variant-numeric: tabular-nums;
+}
+.ed-strip button .status {
+  font-size: 0;
+  gap: 0;
+}
+.ed-strip button.on {
+  border-color: var(--c-accent);
+  background: var(--c-accent-weak);
+}
+.ed-dot {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--c-accent);
+}
+
+.ed-main {
+  grid-area: main;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+.ed-notices:empty {
+  display: none;
+}
+.ed-notices {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  padding: var(--sp-2);
+}
+.ed-notices .notice {
+  margin: 0;
+}
+.ed-canvas {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  background: #8a8a85;
+  touch-action: none;
+}
+.ed-loading {
+  display: grid;
+  place-items: center;
+}
+.ed-loading .muted {
+  color: #f6f6f5;
+}
+.ed-textedit {
+  position: absolute;
+  min-height: 0;
+  resize: none;
+  overflow: hidden;
+  border: 1px solid var(--c-accent);
+  border-radius: 0;
+  background: rgba(255, 255, 255, 0.92);
+  transform-origin: center;
+  white-space: pre-wrap;
+}
+
+.ed-side {
+  grid-area: side;
+  border-left: 1px solid var(--c-line);
+  overflow-y: auto;
+  font-size: var(--fs-sm);
+}
+.ed-side > section {
+  padding: var(--sp-3);
+  border-bottom: 1px solid var(--c-line);
+}
+.ed-side > .notice {
+  margin: var(--sp-2);
+}
+.ed-h {
+  margin-bottom: var(--sp-1);
+}
+.ed-pad {
+  margin: var(--sp-2) 0;
+}
+.ed-props {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}
+.ed-props label {
+  margin-top: var(--sp-2);
+}
+.ed-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--sp-2);
+}
+.ed-row input[type="color"] {
+  height: 30px;
+  padding: 2px;
+}
+label.ed-check {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  color: var(--c-fg);
+}
+.ed-seg {
+  display: flex;
+}
+.ed-seg button {
+  flex: 1;
+  justify-content: center;
+  border-radius: 0;
+}
+.ed-seg button:first-child {
+  border-radius: var(--radius) 0 0 var(--radius);
+}
+.ed-seg button:last-child {
+  border-radius: 0 var(--radius) var(--radius) 0;
+}
+.ed-seg button + button {
+  margin-left: -1px;
+}
+.ed-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  margin-top: var(--sp-3);
+}
+
+table.ed-regions {
+  font-size: var(--fs-sm);
+}
+table.ed-regions td {
+  vertical-align: top;
+}
+table.ed-regions tr.on td {
+  background: var(--c-accent-weak);
+}
+table.ed-regions textarea {
+  min-height: 0;
+  padding: 4px 6px;
+}
+.ed-src {
+  max-width: 110px;
+  overflow-wrap: anywhere;
+}
+.ed-flags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-1);
+  margin-top: 2px;
+  font-size: var(--fs-xs);
+}
+
+.ed-ai-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--sp-2);
+}
+.ed-diff,
+.ed-conflicts ul {
+  list-style: none;
+  margin: var(--sp-2) 0 0;
+  padding: 0;
+  max-height: 280px;
+  overflow-y: auto;
+}
+.ed-diff li,
+.ed-conflicts li {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-2);
+  padding: var(--sp-1) 0;
+  border-top: 1px solid var(--c-line);
+}
+.ed-diff-body {
+  flex: 1;
+  min-width: 0;
+}
+.ed-conflicts li > div {
+  flex: 1;
+}
+.ed-old {
+  color: var(--c-fg-muted);
+  text-decoration: line-through;
+}
+.ed-new {
+  color: var(--c-fg);
+}
+.ed-mask input[type="range"] {
+  width: 100%;
+}

@@ -6,6 +6,7 @@ import { auth } from "./auth.ts";
 import { chapterRoutes } from "./routes/chapters.ts";
 import { glossaryRoutes } from "./routes/glossary.ts";
 import { jobRoutes } from "./routes/jobs.ts";
+import { pageStateRoutes } from "./routes/page-state.ts";
 import { pageRoutes } from "./routes/pages.ts";
 import { progressRoutes } from "./routes/progress.ts";
 import { seriesRoutes } from "./routes/series.ts";
@@ -27,6 +28,7 @@ export function createApp() {
   app.route("/api", seriesRoutes);
   app.route("/api", chapterRoutes);
   app.route("/api", pageRoutes);
+  app.route("/api", pageStateRoutes);
   app.route("/api", glossaryRoutes);
 
   // Worker (Bearer token worker, không cookie) — giao thức có fencing, xem jobs/queue.ts.

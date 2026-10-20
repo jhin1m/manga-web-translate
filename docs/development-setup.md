@@ -45,7 +45,7 @@ E2E web (Playwright, Chromium): `pnpm --filter @mtl/web e2e` — tự reset DB `
 
 ## Web (`apps/web`)
 
-- Router: `src/app/router.tsx` (TanStack Router, params type-safe); component ở `src/features/*` nhận params qua props. Route editor `/w/$ws/series/$seriesId/chapters/$chapterId/edit/$pageId` nằm ngoài layout workspace (toàn màn hình) — Phase 5 thay component.
+- Router: `src/app/router.tsx` (TanStack Router, params type-safe); component ở `src/features/*` nhận params qua props. Route editor `/w/$ws/series/$seriesId/chapters/$chapterId/edit/$pageId` nằm ngoài layout workspace (toàn màn hình) — xem [editor.md](./editor.md).
 - Dữ liệu: TanStack Query; tiến độ chương poll `/progress` 2,5s cho tới khi chương ổn định (draft/review/partial_failed/done).
 - Upload: ảnh/ZIP giải nén trong Web Worker → presigned POST từng file (song song 4, thử lại 3 lần, ký lại khi thử lại) → `POST /chapters/:id/commit` (server kiểm HEAD + magic bytes).
 - Khoá chương khi mở editor: hook `useChapterLock` (`src/features/chapter/use-chapter-lock.ts`).

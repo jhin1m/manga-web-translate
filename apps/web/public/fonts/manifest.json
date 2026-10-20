@@ -1,0 +1,82 @@
+{
+  "version": 1,
+  "defaults": [
+    "PatrickHand-Regular",
+    "BeVietnamPro-Regular",
+    "Anton-Regular"
+  ],
+  "fonts": {
+    "Anton-Regular": {
+      "file": "Anton-Regular.ttf",
+      "unitsPerEm": 2048,
+      "ascent": 2409,
+      "descent": 674,
+      "metricsSource": "OS/2.typo",
+      "viComplete": true,
+      "missing": []
+    },
+    "Baloo2-Variable": {
+      "file": "Baloo2-Variable.ttf",
+      "unitsPerEm": 1000,
+      "ascent": 1078,
+      "descent": 524,
+      "metricsSource": "OS/2.typo",
+      "viComplete": true,
+      "missing": []
+    },
+    "BeVietnamPro-Bold": {
+      "file": "BeVietnamPro-Bold.ttf",
+      "unitsPerEm": 1000,
+      "ascent": 1000,
+      "descent": 265,
+      "metricsSource": "OS/2.typo",
+      "viComplete": true,
+      "missing": []
+    },
+    "BeVietnamPro-Regular": {
+      "file": "BeVietnamPro-Regular.ttf",
+      "unitsPerEm": 1000,
+      "ascent": 1000,
+      "descent": 265,
+      "metricsSource": "OS/2.typo",
+      "viComplete": true,
+      "missing": []
+    },
+    "Itim-Regular": {
+      "file": "Itim-Regular.ttf",
+      "unitsPerEm": 1000,
+      "ascent": 950,
+      "descent": 250,
+      "metricsSource": "hhea",
+      "viComplete": true,
+      "missing": []
+    },
+    "Lexend-Variable": {
+      "file": "Lexend-Variable.ttf",
+      "unitsPerEm": 1000,
+      "ascent": 1000,
+      "descent": 250,
+      "metricsSource": "OS/2.typo",
+      "viComplete": true,
+      "missing": []
+    },
+    "Mali-Regular": {
+      "file": "Mali-Regular.ttf",
+      "unitsPerEm": 1000,
+      "ascent": 1050,
+      "descent": 250,
+      "metricsSource": "OS/2.typo",
+      "viComplete": true,
+      "missing": []
+    },
+    "PatrickHand-Regular": {
+      "file": "PatrickHand-Regular.ttf",
+      "unitsPerEm": 1000,
+      "ascent": 1042,
+      "descent": 312,
+      "metricsSource": "hhea",
+      "viComplete": true,
+      "missing": []
+    }
+  }
+}
