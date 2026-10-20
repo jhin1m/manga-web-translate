@@ -25,7 +25,8 @@ Khoá chỉ giữ khi chương **ổn định** (`review` / `partial_failed` / `
 `pageIds.length > 0`, `lockEnabled` trong `use-chapter-session.ts`). Chương đang cắt/dịch → không giữ khoá, chỉ xem.
 "Dịch chương" / "Dịch lại" / "Chạy lại trang lỗi" đi qua `runAi`: lưu hết (`saver.flush`) → tạm dừng giữ khoá →
 nhả khoá (cùng chuỗi `serial` với lock) → gọi API; khoá được lấy lại khi chương ổn định trở lại. Người khác đang giữ
-khoá → băng khoá báo tên, editor chỉ xem.
+khoá → băng cảnh báo báo tên + "Thử lại", chỉ báo cạnh chip đổi thành "Chỉ xem", editor chỉ xem. Đang giữ khoá
+bình thường không có băng (chỉ báo nhỏ icon khoá + "Đã lưu" ở thanh trên).
 
 ## Dữ liệu và lưu
 
@@ -124,8 +125,8 @@ nút đã mở khi đóng.
   lỗi, trang chưa xong, khối tràn khung, khối chưa có bản dịch (bỏ SFX), trang có bản AI mới chưa áp → "Xem các khối
   này" mở bảng lọc "Chỉ khối cần xem". Vẫn xuất được khi có cảnh báo. `?drawer=export` (nút "Xuất lại" ở "Việc cần
   làm") mở chương với drawer Xuất mở sẵn.
-- **Hoạt động** (`features/chapter/activity-drawer.tsx`): nút ở thanh trên màn chương + app shell, kèm số việc đang
-  chạy. Upload của tab (mọi chương, thử lại file lỗi); ở màn chương thêm job của chương (trang đang xử lý/lỗi theo
+- **Hoạt động** (`features/chapter/activity-drawer.tsx`): icon ở thanh trên màn chương, nút ở app shell, kèm số việc
+  đang chạy. Upload của tab (mọi chương, thử lại file lỗi); ở màn chương thêm job của chương (trang đang xử lý/lỗi theo
   `error_class`, "Chạy lại trang lỗi") và lượt xuất gần đây (tải lại, huỷ).
 
 ## Chưa đo
