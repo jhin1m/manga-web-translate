@@ -1,0 +1,273 @@
+/**
+ * Vòng đời chương phía người dùng: tạo + presigned POST từng file → commit (HEAD + magic bytes) → ingest,
+ * chạy lại trang lỗi / dịch lại / huỷ, khoá chương. Không có endpoint nhận file: trình duyệt upload thẳng
+ * MinIO theo policy giới hạn (red team #12), server kiểm lại khi commit.
+ */
+
+import { chapters, jobs, pages, series, sourceFiles } from "@mtl/db";
+import { ACTIVE_JOB_STATUSES, storageKeys } from "@mtl/shared";
+import { and, eq, inArray } from "drizzle-orm";
+import { Hono } from "hono";
+import { HTTPException } from "hono/http-exception";
+import { v7 as uuidv7 } from "uuid";
+import { z } from "zod";
+import { enqueueIngest, inJobTx, retranslate, retryFailedPages } from "../jobs/enqueue.ts";
+import { cancelJob } from "../jobs/queue.ts";
+import { acquireChapterLock, activeLockHolder, LOCK_TTL_MS, releaseChapterLock } from "../lib/chapter-lock.ts";
+import { memberNames } from "../lib/member-names.ts";
+import { parseJson } from "../lib/validate.ts";
+import { type AppEnv, requireWorkspace } from "../middleware/workspace.ts";
+import { head, MAX_POST_TTL_S, presignPost, readPrefix } from "../storage.ts";
+import { jobView } from "./jobs.ts";
+import { chapterSummary } from "./series.ts";
+
+/** Ảnh nhận upload → đuôi key. Content-Type nằm trong policy POST nên MinIO giữ đúng giá trị này. */
+export const CHAPTER_UPLOAD_TYPES = { "image/png": "png", "image/jpeg": "jpg", "image/webp": "webp" } as const;
+type UploadMime = keyof typeof CHAPTER_UPLOAD_TYPES;
+export const MAX_FILE_BYTES = 30 * 1024 * 1024;
+export const MAX_FILES_PER_CHAPTER = 400;
+
+/** Nhận dạng ảnh từ 16 byte đầu; không khớp PNG/JPEG/WEBP → null. */
+export function sniffImageMime(b: Uint8Array): UploadMime | null {
+  const at = (i: number, ...sig: number[]) => sig.every((v, k) => b[i + k] === v);
+  if (at(0, 0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a)) return "image/png";
+  if (at(0, 0xff, 0xd8, 0xff)) return "image/jpeg";
+  // RIFF....WEBP
+  if (at(0, 0x52, 0x49, 0x46, 0x46) && at(8, 0x57, 0x45, 0x42, 0x50)) return "image/webp";
+  return null;
+}
+
+export type RejectReason = "missing" | "too_large" | "type_mismatch";
+
+/** Kết quả kiểm 1 object đã upload (tách khỏi I/O để test thuần). */
+export function validateUploaded(
+  declaredMime: string,
+  obj: { bytes: number; prefix: Uint8Array } | null,
+): RejectReason | null {
+  if (!obj) return "missing";
+  if (obj.bytes > MAX_FILE_BYTES || obj.bytes < 1) return "too_large";
+  return sniffImageMime(obj.prefix) === declaredMime ? null : "type_mismatch";
+}
+
+const UploadFile = z.object({
+  name: z.string().min(1).max(255),
+  content_type: z.enum(Object.keys(CHAPTER_UPLOAD_TYPES) as [UploadMime, ...UploadMime[]]),
+  bytes: z.number().int().min(1).max(MAX_FILE_BYTES),
+});
+
+const ChapterCreate = z.object({
+  series_id: z.string().uuid(),
+  number: z.union([z.number(), z.string().regex(/^\d+(\.\d+)?$/)]).transform(String),
+  title: z.string().trim().max(200).default(""),
+  /** Theo thứ tự trang (client đã sort tên tự nhiên + cho kéo thả). */
+  files: z.array(UploadFile).min(1).max(MAX_FILES_PER_CHAPTER),
+});
+
+const PresignBody = z.object({ file_ids: z.array(z.string().uuid()).min(1).max(MAX_FILES_PER_CHAPTER) });
+const CommitBody = z.object({ mode: z.enum(["strip", "pages"]).default("strip") });
+const TranslateBody = z.object({ page_ids: z.array(z.string().uuid()).min(1).max(1000).optional() });
+
+type SourceFile = typeof sourceFiles.$inferSelect;
+
+const conflict = (error: string, message: string) =>
+  new HTTPException(409, { res: Response.json({ error, message }, { status: 409 }) });
+
+async function presignFile(f: SourceFile) {
+  const post = await presignPost(f.storageKey, f.mime, f.bytes, MAX_POST_TTL_S);
+  return { id: f.id, ord: f.ord, url: post.url, fields: post.fields, expires_at: post.expiresAt };
+}
+
+/** Chạy fn trên từng phần tử, tối đa `limit` cùng lúc (giữ thứ tự kết quả). */
+async function mapLimit<T, R>(items: T[], limit: number, fn: (t: T) => Promise<R>): Promise<R[]> {
+  const out = new Array<R>(items.length);
+  let next = 0;
+  const run = async () => {
+    for (let i = next++; i < items.length; i = next++) out[i] = await fn(items[i] as T);
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, run));
+  return out;
+}
+
+export const chapterRoutes = new Hono<AppEnv>();
+
+/** Tạo chương (draft) + source_files theo thứ tự + presigned POST cho từng file. */
+chapterRoutes.post("/w/:ws/chapters", requireWorkspace(), async (c) => {
+  const body = await parseJson(c, ChapterCreate);
+  const ws = c.get("workspaceId");
+  const { chapter, files } = await c.get("sdb").transaction(async (tx) => {
+    const s = await tx.byId(series, body.series_id, "series");
+    const chapter = await tx.insert(chapters, { seriesId: s.id, number: body.number, title: body.title });
+    const files: SourceFile[] = [];
+    for (const [ord, f] of body.files.entries()) {
+      const key = storageKeys.source(ws, chapter.id, uuidv7(), CHAPTER_UPLOAD_TYPES[f.content_type]);
+      files.push(
+        await tx.insert(sourceFiles, {
+          chapterId: chapter.id,
+          ord,
+          storageKey: key,
+          bytes: f.bytes,
+          mime: f.content_type,
+        }),
+      );
+    }
+    return { chapter, files };
+  });
+  const uploads = await Promise.all(files.map(presignFile));
+  return c.json(
+    {
+      chapter: chapterSummary(chapter),
+      files: uploads.map((u, i) => ({ ...u, name: body.files[i]?.name ?? "" })),
+    },
+    201,
+  );
+});
+
+/** Ký lại POST cho file chưa upload xong (retry sau mất mạng / policy hết hạn). Chỉ khi chương còn draft. */
+chapterRoutes.post("/w/:ws/chapters/:chapterId/presign", requireWorkspace(), async (c) => {
+  const body = await parseJson(c, PresignBody);
+  const sdb = c.get("sdb");
+  const ch = await sdb.byId(chapters, c.req.param("chapterId"), "chapter");
+  if (ch.status !== "draft") throw conflict("chapter_not_draft", "chương đã commit — không upload thêm");
+  const rows = await sdb.select(
+    sourceFiles,
+    and(eq(sourceFiles.chapterId, ch.id), inArray(sourceFiles.id, body.file_ids)),
+  );
+  if (rows.length !== new Set(body.file_ids).size) throw new HTTPException(404, { message: "file not found" });
+  return c.json({ files: await Promise.all(rows.map(presignFile)) });
+});
+
+/**
+ * Commit: với từng file HEAD (tồn tại, ≤ 30MB) + 16 byte đầu khớp `mime` khai báo. File sai bị loại (xoá
+ * khỏi source_files) và báo lại; còn file hợp lệ → enqueue **chỉ** chapter.ingest (pages do ingest tạo).
+ * Chương đã có chỉnh sửa tay → 409 (enqueueIngest chặn).
+ */
+chapterRoutes.post("/w/:ws/chapters/:chapterId/commit", requireWorkspace(), async (c) => {
+  const body = await parseJson(c, CommitBody);
+  const sdb = c.get("sdb");
+  const user = c.get("user");
+  const ch = await sdb.byId(chapters, c.req.param("chapterId"), "chapter");
+  const holder = activeLockHolder(ch);
+  if (holder && holder !== user.id) {
+    throw new HTTPException(423, { res: Response.json({ error: "chapter_locked", holder }, { status: 423 }) });
+  }
+  const files = await sdb.select(sourceFiles, eq(sourceFiles.chapterId, ch.id));
+  files.sort((a, b) => a.ord - b.ord);
+  if (files.length === 0) throw new HTTPException(400, { message: "chapter has no source files" });
+
+  const checked = await mapLimit(files, 8, async (f) => {
+    const h = await head(f.storageKey);
+    const obj = h ? { bytes: h.bytes, prefix: await readPrefix(f.storageKey, 16) } : null;
+    return { file: f, bytes: h?.bytes ?? 0, reason: validateUploaded(f.mime, obj) };
+  });
+  const rejected = checked.filter((r) => r.reason !== null);
+  const valid = checked.filter((r) => r.reason === null);
+  if (rejected.length) {
+    await sdb.delete(
+      sourceFiles,
+      inArray(
+        sourceFiles.id,
+        rejected.map((r) => r.file.id),
+      ),
+    );
+  }
+  // Dung lượng thật thay cho số client khai báo.
+  for (const r of valid) {
+    if (r.bytes !== r.file.bytes) await sdb.update(sourceFiles, eq(sourceFiles.id, r.file.id), { bytes: r.bytes });
+  }
+  const rejectedView = rejected.map((r) => ({ id: r.file.id, ord: r.file.ord, reason: r.reason }));
+  if (valid.length === 0) {
+    throw new HTTPException(400, {
+      res: Response.json({ error: "no_valid_files", rejected: rejectedView }, { status: 400 }),
+    });
+  }
+  const { job, created } = await inJobTx((tx) => enqueueIngest(tx, c.get("workspaceId"), ch.id, body.mode));
+  return c.json({ job: jobView(job), created, accepted: valid.length, rejected: rejectedView }, 202);
+});
+
+/** Chi tiết chương + khoá + danh sách source file (để tiếp tục upload/commit chương draft). */
+chapterRoutes.get("/w/:ws/chapters/:chapterId", requireWorkspace(), async (c) => {
+  const sdb = c.get("sdb");
+  const ch = await sdb.byId(chapters, c.req.param("chapterId"), "chapter");
+  const [s, files] = await Promise.all([
+    sdb.byId(series, ch.seriesId, "series"),
+    sdb.select(sourceFiles, eq(sourceFiles.chapterId, ch.id)),
+  ]);
+  const holder = activeLockHolder(ch);
+  const names = holder ? await memberNames(c.get("workspaceId"), [holder]) : new Map<string, string>();
+  return c.json({
+    ...chapterSummary(ch),
+    ingest_rev: ch.ingestRev,
+    series: { id: s.id, title: s.title },
+    lock:
+      holder && ch.lockedAt
+        ? {
+            holder,
+            holder_name: names.get(holder) ?? null,
+            is_me: holder === c.get("user").id,
+            expires_at: new Date(ch.lockedAt.getTime() + LOCK_TTL_MS),
+          }
+        : null,
+    source_files: files
+      .sort((a, b) => a.ord - b.ord)
+      .map((f) => ({ id: f.id, ord: f.ord, bytes: f.bytes, mime: f.mime })),
+  });
+});
+
+/** Page lỗi giai đoạn 1 → page.prepare; lỗi giai đoạn 2 → chapter.translate cho riêng chúng. */
+chapterRoutes.post("/w/:ws/chapters/:chapterId/retry-failed", requireWorkspace(), async (c) => {
+  const ch = await c.get("sdb").byId(chapters, c.req.param("chapterId"), "chapter");
+  const created = await inJobTx((tx) => retryFailedPages(tx, c.get("workspaceId"), ch.id));
+  return c.json({ jobs: created.map(jobView) }, 202);
+});
+
+/** Dịch lại cả chương (ngữ cảnh cuộn) hoặc tập page (`page_ids`, dùng ngữ cảnh trang lân cận). */
+chapterRoutes.post("/w/:ws/chapters/:chapterId/translate", requireWorkspace(), async (c) => {
+  const body = await parseJson(c, TranslateBody);
+  const sdb = c.get("sdb");
+  const ch = await sdb.byId(chapters, c.req.param("chapterId"), "chapter");
+  if (!(await sdb.find(pages, eq(pages.chapterId, ch.id)))) throw conflict("no_pages", "chương chưa có trang để dịch");
+  const { job, created } = await inJobTx((tx) => retranslate(tx, c.get("workspaceId"), ch.id, body.page_ids));
+  return c.json({ job: jobView(job), created }, 202);
+});
+
+/**
+ * Huỷ mọi job đang hoạt động của chương. Huỷ page.prepare cuối có thể nối sang chapter.translate cho page đã
+ * prepare (queue.terminal) → lặp tới khi không còn job active (có trần vòng lặp).
+ */
+chapterRoutes.post("/w/:ws/chapters/:chapterId/cancel", requireWorkspace(), async (c) => {
+  const sdb = c.get("sdb");
+  const ws = c.get("workspaceId");
+  const ch = await sdb.byId(chapters, c.req.param("chapterId"), "chapter");
+  let cancelled = 0;
+  for (let round = 0; round < 5; round++) {
+    const active = await sdb.select(
+      jobs,
+      and(eq(jobs.chapterId, ch.id), inArray(jobs.status, [...ACTIVE_JOB_STATUSES])),
+    );
+    if (active.length === 0) break;
+    active.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+    for (const j of active) {
+      const after = await cancelJob(ws, j.id);
+      if (after?.status === "cancelled") cancelled++;
+    }
+  }
+  const after = await sdb.byId(chapters, ch.id, "chapter");
+  return c.json({ cancelled, chapter: chapterSummary(after) });
+});
+
+/** Lấy/gia hạn khoá (heartbeat từ editor). Người khác giữ → 423 kèm tên người giữ. */
+chapterRoutes.post("/w/:ws/chapters/:chapterId/lock", requireWorkspace(), async (c) => {
+  const sdb = c.get("sdb");
+  const user = c.get("user");
+  const r = await acquireChapterLock(sdb, c.req.param("chapterId"), user.id);
+  if (!r.ok) {
+    const names = await memberNames(c.get("workspaceId"), [r.holder]);
+    return c.json({ error: "chapter_locked", holder: r.holder, holder_name: names.get(r.holder) ?? null }, 423);
+  }
+  return c.json({ holder: user.id, expires_at: new Date(Date.now() + LOCK_TTL_MS) });
+});
+
+chapterRoutes.delete("/w/:ws/chapters/:chapterId/lock", requireWorkspace(), async (c) => {
+  await releaseChapterLock(c.get("sdb"), c.req.param("chapterId"), c.get("user").id);
+  return c.body(null, 204);
+});

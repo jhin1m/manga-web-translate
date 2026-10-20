@@ -4,7 +4,7 @@
  *  (b) `:ws` của A nhưng id tài nguyên thuộc B → 404
  * Phase sau thêm route → thêm case vào RESOURCE_CASES (chỉ append).
  */
-import { chapters, jobs, NotFoundError, scoped, series } from "@mtl/db";
+import { chapters, glossaryEntries, jobs, NotFoundError, scoped, series, sourceFiles } from "@mtl/db";
 import { eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { app, call, db, seedWorkspace } from "./helpers.ts";
@@ -15,6 +15,9 @@ let B: Seed;
 
 /** Job mẫu của mỗi workspace (route /jobs/:jobId). */
 const jobOf: Record<string, string> = {};
+/** Entry glossary mẫu (route /glossary/:entryId) và source file của chương A (route presign). */
+const entryOf: Record<string, string> = {};
+let sourceFileA = "";
 
 beforeAll(async () => {
   [A, B] = await Promise.all([seedWorkspace("a"), seedWorkspace("b")]);
@@ -34,13 +37,40 @@ beforeAll(async () => {
       chapterId: s.chapterId,
     });
     jobOf[s.workspaceId] = j.id;
+    const e = await scoped(db, s.workspaceId).insert(glossaryEntries, { sourceTerm: "검", targetTerm: "kiếm" });
+    entryOf[s.workspaceId] = e.id;
   }
+  const f = await scoped(db, A.workspaceId).insert(sourceFiles, {
+    chapterId: A.chapterId,
+    ord: 0,
+    storageKey: `ws/${A.workspaceId}/ch/${A.chapterId}/src/tenant-fixture.png`,
+    bytes: 100,
+    mime: "image/png",
+  });
+  sourceFileA = f.id;
 });
 
 /** Body hợp lệ tối thiểu cho từng route (để 404 đến từ tra cứu id chứ không phải validate body). */
 const BODIES: Record<string, unknown> = {
   "PATCH /api/w/:ws/settings": { worker_mode: "modal" },
   "POST /api/w/:ws/chapters/:chapterId/uploads": { filename: "001.png", content_type: "image/png", bytes: 1024 },
+  "POST /api/w/:ws/series": { title: "Series mới" },
+  "PATCH /api/w/:ws/series/:seriesId": { style_prompt: "ngắn gọn" },
+  "POST /api/w/:ws/chapters": {
+    series_id: "00000000-0000-7000-8000-000000000000",
+    number: "2",
+    files: [{ name: "001.png", content_type: "image/png", bytes: 1024 }],
+  },
+  get "POST /api/w/:ws/chapters/:chapterId/presign"() {
+    return { file_ids: [sourceFileA] };
+  },
+  "POST /api/w/:ws/chapters/:chapterId/commit": {},
+  "POST /api/w/:ws/chapters/:chapterId/translate": {},
+  "POST /api/w/:ws/glossary": { source_term: "마법", target_term: "ma pháp" },
+  "POST /api/w/:ws/series/:seriesId/glossary": { source_term: "마법", target_term: "phép thuật" },
+  "PATCH /api/w/:ws/glossary/:entryId": { note: "tên kiếm" },
+  "POST /api/w/:ws/glossary/csv": { csv: "source_term,target_term\n용,rồng\n" },
+  "POST /api/w/:ws/series/:seriesId/glossary/csv": { csv: "source_term,target_term\n용,long\n" },
 };
 
 /** Route có id tài nguyên ngoài :ws → tham số trỏ vào tài nguyên của B. */
@@ -50,6 +80,25 @@ const RESOURCE_CASES: Record<string, (b: Seed) => Record<string, string>> = {
   "GET /api/w/:ws/chapters/:chapterId/progress": (b) => ({ chapterId: b.chapterId }),
   "GET /api/w/:ws/jobs/:jobId": (b) => ({ jobId: jobOf[b.workspaceId] ?? "" }),
   "POST /api/w/:ws/jobs/:jobId/cancel": (b) => ({ jobId: jobOf[b.workspaceId] ?? "" }),
+  "GET /api/w/:ws/series/:seriesId": (b) => ({ seriesId: b.seriesId }),
+  "PATCH /api/w/:ws/series/:seriesId": (b) => ({ seriesId: b.seriesId }),
+  "GET /api/w/:ws/chapters/:chapterId": (b) => ({ chapterId: b.chapterId }),
+  "GET /api/w/:ws/chapters/:chapterId/pages": (b) => ({ chapterId: b.chapterId }),
+  // presign trước commit: commit (own) loại source file giả (không có object) khỏi chương A.
+  "POST /api/w/:ws/chapters/:chapterId/presign": (b) => ({ chapterId: b.chapterId }),
+  "POST /api/w/:ws/chapters/:chapterId/commit": (b) => ({ chapterId: b.chapterId }),
+  "POST /api/w/:ws/chapters/:chapterId/retry-failed": (b) => ({ chapterId: b.chapterId }),
+  "POST /api/w/:ws/chapters/:chapterId/translate": (b) => ({ chapterId: b.chapterId }),
+  "POST /api/w/:ws/chapters/:chapterId/cancel": (b) => ({ chapterId: b.chapterId }),
+  "POST /api/w/:ws/chapters/:chapterId/lock": (b) => ({ chapterId: b.chapterId }),
+  "DELETE /api/w/:ws/chapters/:chapterId/lock": (b) => ({ chapterId: b.chapterId }),
+  "GET /api/w/:ws/series/:seriesId/glossary": (b) => ({ seriesId: b.seriesId }),
+  "POST /api/w/:ws/series/:seriesId/glossary": (b) => ({ seriesId: b.seriesId }),
+  "GET /api/w/:ws/series/:seriesId/glossary/csv": (b) => ({ seriesId: b.seriesId }),
+  "POST /api/w/:ws/series/:seriesId/glossary/csv": (b) => ({ seriesId: b.seriesId }),
+  // PATCH trước DELETE: DELETE (own) xoá entry mẫu của A.
+  "PATCH /api/w/:ws/glossary/:entryId": (b) => ({ entryId: entryOf[b.workspaceId] ?? "" }),
+  "DELETE /api/w/:ws/glossary/:entryId": (b) => ({ entryId: entryOf[b.workspaceId] ?? "" }),
 };
 
 /** Mọi (method, path) người dùng dưới /api/w/:ws — lấy từ router thật, không liệt kê tay. */

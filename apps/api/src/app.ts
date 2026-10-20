@@ -3,8 +3,12 @@ import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { secureHeaders } from "hono/secure-headers";
 import { auth } from "./auth.ts";
+import { chapterRoutes } from "./routes/chapters.ts";
+import { glossaryRoutes } from "./routes/glossary.ts";
 import { jobRoutes } from "./routes/jobs.ts";
+import { pageRoutes } from "./routes/pages.ts";
 import { progressRoutes } from "./routes/progress.ts";
+import { seriesRoutes } from "./routes/series.ts";
 import { uploadRoutes } from "./routes/uploads.ts";
 import { workerRoutes } from "./routes/worker.ts";
 import { workspaceRoutes } from "./routes/workspaces.ts";
@@ -20,6 +24,10 @@ export function createApp() {
   app.route("/api", uploadRoutes);
   app.route("/api", jobRoutes);
   app.route("/api", progressRoutes);
+  app.route("/api", seriesRoutes);
+  app.route("/api", chapterRoutes);
+  app.route("/api", pageRoutes);
+  app.route("/api", glossaryRoutes);
 
   // Worker (Bearer token worker, không cookie) — giao thức có fencing, xem jobs/queue.ts.
   app.route("/worker/v1", workerRoutes);
