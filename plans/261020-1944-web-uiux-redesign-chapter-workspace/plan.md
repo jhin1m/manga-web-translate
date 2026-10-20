@@ -1,7 +1,7 @@
 ---
 title: "Redesign UI/UX web: chương là editor gộp"
 description: "Bỏ trang upload riêng và editor route-per-page; 3 màn (home, series, chương = editor gộp cuộn liên tục cả strip) + 2 drawer (Xuất, Hoạt động), dev auto-login."
-status: pending
+status: in-progress
 priority: P1
 effort: 16.5d
 branch: main
@@ -64,7 +64,7 @@ sửa (canvas | bảng | inspector) → editorStore.apply → Saver (IndexedDB �
 ## Phases
 | # | Phase | Ưu tiên | Effort | Phụ thuộc | Status |
 |---|---|---|---|---|---|
-| 1 | [Nền: dev auto-login, app shell, router mới + redirect](./phase-01-dev-login-app-shell-router.md) | P1 | 1.5d | — | Pending |
+| 1 | [Nền: dev auto-login, app shell, router mới + redirect](./phase-01-dev-login-app-shell-router.md) | P1 | 1.5d | — | Completed |
 | 2 | [Home + series + upload inline](./phase-02-home-series-inline-upload.md) | P1 | 3.5d | 1 | Pending |
 | 3 | [Màn chương gộp: layout, rail, canvas cuộn liên tục](./phase-03-chapter-workspace-continuous-canvas.md) | P1 | 4.5d | 2 | Pending |
 | 4 | [Bảng văn bản + inspector + đồng bộ](./phase-04-text-table-inspector-sync.md) | P1 | 3d | 3 | Pending |
