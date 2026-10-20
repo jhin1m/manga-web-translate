@@ -2,8 +2,8 @@
  * Series + cài đặt dịch. Đổi trường ảnh hưởng dịch/typeset → `settings_rev + 1` (red team #3) — job enqueue
  * sau đó có input_rev mới, job cũ không bị dùng lại nhầm.
  */
-import { chapters, series } from "@mtl/db";
-import { eq, sql } from "drizzle-orm";
+import { chapters, jobs, pages, type Scoped, series } from "@mtl/db";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { z } from "zod";
@@ -84,6 +84,52 @@ export const chapterSummary = (ch: ChapterRow) => ({
   updated_at: ch.updatedAt,
 });
 
+export type PageCounts = { total: number; ready: number; failed: number; busy: number };
+
+/** Chương "đã xuất": status done hoặc có ít nhất 1 export thành công (1 truy vấn jobs). */
+export async function exportedChapterIds(sdb: Scoped, chs: ChapterRow[]): Promise<Set<string>> {
+  const out = new Set(chs.filter((c) => c.status === "done").map((c) => c.id));
+  if (!chs.length) return out;
+  const rows = await sdb.select(
+    jobs,
+    and(
+      inArray(
+        jobs.chapterId,
+        chs.map((c) => c.id),
+      ),
+      eq(jobs.type, "chapter.export"),
+      eq(jobs.status, "succeeded"),
+    ),
+  );
+  for (const j of rows) if (j.chapterId) out.add(j.chapterId);
+  return out;
+}
+
+/** Số page theo trạng thái (1 truy vấn GROUP BY cho cả tập chương, không N+1) + cờ đã xuất. */
+export async function chapterStats(sdb: Scoped, chs: ChapterRow[]) {
+  const ids = chs.map((c) => c.id);
+  const counts = new Map<string, PageCounts>(ids.map((id) => [id, { total: 0, ready: 0, failed: 0, busy: 0 }]));
+  const [groups, exported] = await Promise.all([
+    ids.length
+      ? sdb.countBy(pages, { chapterId: pages.chapterId, status: pages.status }, inArray(pages.chapterId, ids))
+      : Promise.resolve([]),
+    exportedChapterIds(sdb, chs),
+  ]);
+  for (const g of groups) {
+    const c = counts.get(g.chapterId);
+    if (!c) continue;
+    c.total += g.n;
+    if (g.status === "ready") c.ready += g.n;
+    else if (g.status === "failed") c.failed += g.n;
+    else c.busy += g.n;
+  }
+  return { pageCounts: (id: string) => counts.get(id) as PageCounts, exported: (id: string) => exported.has(id) };
+}
+
+/** Số chương gợi ý tiếp theo: phần nguyên lớn nhất + 1 (khớp nextChapterNumber ở web). */
+const nextNumber = (chs: ChapterRow[]) =>
+  String(chs.reduce((m, c) => Math.max(m, Math.floor(Number(c.number) || 0)), 0) + 1);
+
 /** Body API → cột DB; trả thêm cờ có trường ảnh hưởng dịch hay không. */
 function toColumns(body: z.infer<typeof SeriesPatch>) {
   const set: Partial<typeof series.$inferInsert> = {};
@@ -126,12 +172,34 @@ seriesRoutes.get("/w/:ws/series", requireWorkspace(), async (c) => {
     if (!prev || ch.updatedAt > prev) last.set(ch.seriesId, ch.updatedAt);
   }
   rows.sort((a, b) => (last.get(b.id) ?? b.updatedAt).getTime() - (last.get(a.id) ?? a.updatedAt).getTime());
+  const bySeries = Map.groupBy(chs, (ch) => ch.seriesId);
+  // Chương mới nhất = số lớn nhất (cùng số: tạo sau) — hiển thị trạng thái ở hàng series.
+  const latest = new Map<string, ChapterRow>();
+  for (const [sid, list] of bySeries) {
+    const top = list.reduce((a, b) =>
+      Number(b.number) > Number(a.number) || (Number(b.number) === Number(a.number) && b.createdAt > a.createdAt)
+        ? b
+        : a,
+    );
+    latest.set(sid, top);
+  }
+  // Số page chỉ cần cho chương mới nhất của mỗi series; "đã xuất" cần trên mọi chương (đếm exported_count).
+  const [stats, exported] = await Promise.all([chapterStats(sdb, [...latest.values()]), exportedChapterIds(sdb, chs)]);
   return c.json({
-    series: rows.map((s) => ({
-      ...seriesView(s),
-      chapter_count: count.get(s.id) ?? 0,
-      last_activity_at: last.get(s.id) ?? s.updatedAt,
-    })),
+    series: rows.map((s) => {
+      const list = bySeries.get(s.id) ?? [];
+      const top = latest.get(s.id);
+      return {
+        ...seriesView(s),
+        chapter_count: count.get(s.id) ?? 0,
+        exported_count: list.filter((ch) => exported.has(ch.id)).length,
+        next_number: nextNumber(list),
+        latest_chapter: top
+          ? { ...chapterSummary(top), page_counts: stats.pageCounts(top.id), exported: stats.exported(top.id) }
+          : null,
+        last_activity_at: last.get(s.id) ?? s.updatedAt,
+      };
+    }),
   });
 });
 
@@ -147,7 +215,15 @@ seriesRoutes.get("/w/:ws/series/:seriesId", requireWorkspace(), async (c) => {
   const chs = await sdb.select(chapters, eq(chapters.seriesId, s.id));
   // numeric → so sánh số; cùng số thì mới nhất trước.
   chs.sort((a, b) => Number(a.number) - Number(b.number) || b.createdAt.getTime() - a.createdAt.getTime());
-  return c.json({ ...seriesView(s), chapters: chs.map(chapterSummary) });
+  const stats = await chapterStats(sdb, chs);
+  return c.json({
+    ...seriesView(s),
+    chapters: chs.map((ch) => ({
+      ...chapterSummary(ch),
+      page_counts: stats.pageCounts(ch.id),
+      exported: stats.exported(ch.id),
+    })),
+  });
 });
 
 seriesRoutes.patch("/w/:ws/series/:seriesId", requireWorkspace(), async (c) => {

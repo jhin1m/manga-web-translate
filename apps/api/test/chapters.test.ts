@@ -2,7 +2,7 @@
  * Luồng chương qua API người dùng + worker giả lập (giao thức có fencing): upload → commit → ingest →
  * giai đoạn 1/2 → review; chạy lại trang lỗi; dịch lại 1 trang với glossary mới; huỷ; khoá chương.
  */
-import { jobs } from "@mtl/db";
+import { chapters, jobs, scoped } from "@mtl/db";
 import { eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { INVITATION_HEADER, INVITATION_TOKEN_HEADER } from "../src/auth.ts";
@@ -271,5 +271,100 @@ describe("series settings", () => {
 
     const list = await json<{ series: { id: string; chapter_count: number }[] }>(await api("/series"), 200);
     expect(list.series.find((x) => x.id === s.id)?.chapter_count).toBe(0);
+  });
+});
+
+describe("recent chapters", () => {
+  type Recent = {
+    chapters: {
+      id: string;
+      number: string;
+      series_title: string;
+      exported: boolean;
+      lock_holder_is_me: boolean;
+      page_counts: { total: number };
+    }[];
+  };
+
+  it("orders by updated_at (own lock first), honours limit and open, carries series_title", async () => {
+    const R = await seedWorkspace("recent");
+    const sdb = scoped(db, R.workspaceId);
+    const at = (min: number) => new Date(Date.now() - min * 60_000);
+    const mk = (number: string, min: number) =>
+      sdb.insert(chapters, { seriesId: R.seriesId, number, createdAt: at(min), updatedAt: at(min) });
+    const old = await mk("2", 30);
+    const mid = await mk("3", 20);
+    const fresh = await mk("4", 10);
+    // Seed chapter "1" mới nhất theo updated_at (vừa tạo) → set về rất cũ để thứ tự xác định.
+    await db
+      .update(chapters)
+      .set({ updatedAt: at(60) })
+      .where(eq(chapters.id, R.chapterId));
+    const get = async (qs: string) =>
+      json<Recent>(await call(`/api/w/${R.workspaceId}/recent-chapters${qs}`, { cookie: R.cookie }), 200);
+
+    const all = await get("");
+    expect(all.chapters.map((c) => c.id)).toEqual([fresh.id, mid.id, old.id, R.chapterId]);
+    expect(all.chapters[0]).toMatchObject({ series_title: "Series recent", lock_holder_is_me: false });
+    expect(all.chapters[0]?.page_counts).toEqual({ total: 0, ready: 0, failed: 0, busy: 0 });
+    expect((await get("?limit=2")).chapters.map((c) => c.id)).toEqual([fresh.id, mid.id]);
+    expect((await call(`/api/w/${R.workspaceId}/recent-chapters?limit=0`, { cookie: R.cookie })).status).toBe(400);
+
+    // Khoá của mình → đứng đầu dù updated_at cũ (lock bump updated_at nên ép lại cho chắc thứ tự).
+    await json(
+      await call(`/api/w/${R.workspaceId}/chapters/${old.id}/lock`, { method: "POST", cookie: R.cookie }),
+      200,
+    );
+    await db
+      .update(chapters)
+      .set({ updatedAt: at(30) })
+      .where(eq(chapters.id, old.id));
+    const locked = await get("");
+    expect(locked.chapters[0]).toMatchObject({ id: old.id, lock_holder_is_me: true });
+
+    // open=1: bỏ chương done và chương đã có export thành công.
+    await db.update(chapters).set({ status: "done" }).where(eq(chapters.id, mid.id));
+    await sdb.insert(jobs, {
+      type: "chapter.export",
+      status: "succeeded",
+      payload: {
+        type: "chapter.export",
+        chapter_id: fresh.id,
+        format: "cbz",
+        layout: "pages",
+        quality: 90,
+        include_untranslated: false,
+      },
+      inputRev: "x",
+      idempotencyKey: uniq("export"),
+      chapterId: fresh.id,
+    });
+    const open = await get("?open=1");
+    expect(open.chapters.map((c) => c.id)).toEqual([old.id, R.chapterId]);
+    expect((await get("")).chapters.find((c) => c.id === fresh.id)?.exported).toBe(true);
+  });
+
+  it("series detail and list carry page_counts / exported / next_number", async () => {
+    const ch = await uploadChapter(3, "40");
+    // Ingest còn treo của test trước (khoá chương) cũng được claim → xử lý hết để page của `ch` chắc chắn có.
+    for (const j of await claimFor(ch, "chapter.ingest")) expect((await doIngest(token, j)).status).toBe(200);
+    const failId = (await progress(ch)).pages[1]?.id;
+    for (const j of await claimFor(ch, "page.prepare")) {
+      const r = j.payload.page_id === failId ? await failJob(token, j, "invalid_input") : await doPrepare(token, j);
+      expect(r.status).toBe(200);
+    }
+    type Detail = { chapters: { id: string; page_counts: Record<string, number>; exported: boolean }[] };
+    const d = await json<Detail>(await api(`/series/${A.seriesId}`), 200);
+    const row = d.chapters.find((c) => c.id === ch);
+    expect(row?.page_counts).toEqual({ total: 3, ready: 0, failed: 1, busy: 2 });
+    expect(row?.exported).toBe(false);
+
+    type List = {
+      series: { id: string; next_number: string; latest_chapter: { id: string; page_counts: object } | null }[];
+    };
+    const l = await json<List>(await api("/series"), 200);
+    const s = l.series.find((x) => x.id === A.seriesId);
+    expect(s?.next_number).toBe("41");
+    expect(s?.latest_chapter?.id).toBe(ch);
   });
 });

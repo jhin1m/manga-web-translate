@@ -208,6 +208,14 @@ describe("tenant isolation", () => {
     expect((await call(`/api/w/${A.workspaceId}`)).status).toBe(401);
     expect((await call("/api/w/not-a-uuid", { cookie: A.cookie })).status).toBe(404);
   });
+
+  it("recent-chapters of A never lists chapters of B", async () => {
+    const res = await call(`/api/w/${A.workspaceId}/recent-chapters?limit=100`, { cookie: A.cookie });
+    expect(res.status).toBe(200);
+    const ids = ((await res.json()) as { chapters: { id: string }[] }).chapters.map((c) => c.id);
+    expect(ids).toContain(A.chapterId);
+    expect(ids).not.toContain(B.chapterId);
+  });
 });
 
 describe("scoped()", () => {
@@ -216,6 +224,12 @@ describe("scoped()", () => {
     await expect(sA.byId(chapters, B.chapterId)).rejects.toBeInstanceOf(NotFoundError);
     await expect(sA.byId(chapters, "not-a-uuid")).rejects.toBeInstanceOf(NotFoundError);
     expect((await sA.byId(chapters, A.chapterId)).id).toBe(A.chapterId);
+  });
+
+  it("countBy only counts rows of its workspace", async () => {
+    const groups = await scoped(db, A.workspaceId).countBy(pages, { chapterId: pages.chapterId });
+    expect(groups).toContainEqual({ chapterId: A.chapterId, n: 1 });
+    expect(groups.map((g) => g.chapterId)).not.toContain(B.chapterId);
   });
 
   it("update/delete of another workspace's id affect nothing", async () => {

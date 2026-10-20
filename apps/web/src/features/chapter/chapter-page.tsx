@@ -1,13 +1,16 @@
 /**
- * Màn chương: tiến độ (polling 2.5s khi chương chưa ổn định, red team #13), lưới thumbnail, các thao tác
- * chạy lại trang lỗi / dịch lại / huỷ / commit chương nháp, và trạng thái khoá ("đang được X sửa").
+ * Màn chương: tiến độ upload (upload-manager, sống qua điều hướng từ home/series) + tiến độ xử lý (polling 2.5s
+ * khi chương chưa ổn định), lưới thumbnail, các thao tác Dịch chương (commit chương nháp) / chạy lại trang lỗi /
+ * dịch lại / huỷ, và trạng thái khoá ("đang được X sửa").
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { errorMessage } from "../../lib/api.ts";
 import { ApplyGlossaryDialog } from "../glossary/ApplyGlossary.tsx";
 import { seriesKeys } from "../series/api.ts";
+import { ChapterUploadStatus, resumeFromFiles } from "../upload/chapter-upload-status.tsx";
+import { uploadManager, useChapterUpload } from "../upload/upload-manager.ts";
 import {
   cancelChapter,
   chapterKeys,
@@ -60,8 +63,13 @@ export function ChapterPage({ ws, seriesId, chapterId }: { ws: string; seriesId:
 
   const refresh = () => {
     void qc.invalidateQueries({ queryKey: ["chapter", ws, chapterId] });
-    void qc.invalidateQueries({ queryKey: seriesKeys.detail(ws, seriesId) });
+    void qc.invalidateQueries({ queryKey: seriesKeys.list(ws) });
   };
+  // Trạng thái chương đổi (worker xong, commit…) → danh sách ở home/series ("Việc cần làm", hàng chương) cũ.
+  const liveStatus = progressQ.data?.chapter.status;
+  useEffect(() => {
+    if (liveStatus) void qc.invalidateQueries({ queryKey: seriesKeys.list(ws) });
+  }, [liveStatus, qc, ws]);
   const action = useMutation({
     mutationFn: async (kind: "retry" | "translate" | "cancel" | "commit") => {
       if (kind === "retry") {
@@ -75,15 +83,22 @@ export function ChapterPage({ ws, seriesId, chapterId }: { ws: string; seriesId:
       if (kind === "cancel") return `Đã huỷ ${(await cancelChapter(ws, chapterId)).cancelled} job.`;
       const r = await commitChapter(ws, chapterId);
       return r.rejected.length
-        ? `Đã commit ${r.accepted} file; loại ${r.rejected.length}: ${r.rejected
+        ? `Bắt đầu dịch ${r.accepted} ảnh; loại ${r.rejected.length}: ${r.rejected
             .map((x) => `#${x.ord + 1} ${REJECT_REASON[x.reason]}`)
             .join(", ")}.`
-        : `Đã commit ${r.accepted} file.`;
+        : `Bắt đầu dịch ${r.accepted} ảnh.`;
     },
     onSuccess: (text) => setNotice({ tone: "info", text }),
     onError: (e) => setNotice({ tone: "danger", text: errorMessage(e) }),
     onSettled: refresh,
   });
+
+  const upload = uploadManager.view(chapterId, useChapterUpload(chapterId));
+  const [resumeError, setResumeError] = useState<string | null>(null);
+  const resume = (files: File[]) => {
+    setResumeError(null);
+    resumeFromFiles(ws, chapterId, files).catch((e: unknown) => setResumeError(errorMessage(e)));
+  };
 
   const ch = detailQ.data;
   const prog = progressQ.data;
@@ -98,7 +113,7 @@ export function ChapterPage({ ws, seriesId, chapterId }: { ws: string; seriesId:
   return (
     <div className="page">
       <div className="crumbs">
-        <Link to="/">Series</Link> /{" "}
+        <Link to="/">Trang chủ</Link> /{" "}
         <Link to="/w/$ws/s/$seriesId" params={{ ws, seriesId }}>
           {ch?.series.title ?? "…"}
         </Link>
@@ -118,10 +133,12 @@ export function ChapterPage({ ws, seriesId, chapterId }: { ws: string; seriesId:
           <button
             type="button"
             className="btn-primary"
-            disabled={action.isPending}
+            // Upload trong tab chưa xong (đang tải / lỗi / tab cũ đóng giữa chừng) → chưa dịch được.
+            disabled={action.isPending || (!!upload && upload.phase !== "uploaded")}
+            title={upload && upload.phase !== "uploaded" ? "Chờ tải xong ảnh" : undefined}
             onClick={() => action.mutate("commit")}
           >
-            Xử lý {ch?.source_files.length} file đã upload
+            Dịch chương
           </button>
         )}
         {status === "partial_failed" && (
@@ -166,6 +183,9 @@ export function ChapterPage({ ws, seriesId, chapterId }: { ws: string; seriesId:
         )}
       </div>
 
+      {status === "draft" && (
+        <ChapterUploadStatus ws={ws} chapterId={chapterId} onResume={resume} resumeError={resumeError} />
+      )}
       {error && <p className="notice danger">{errorMessage(error)}</p>}
       {notice && <p className={`notice ${notice.tone}`}>{notice.text}</p>}
       {lockedByOther && (
@@ -185,12 +205,9 @@ export function ChapterPage({ ws, seriesId, chapterId }: { ws: string; seriesId:
         </p>
       )}
       {status === "ingesting" && <p className="muted">Đang ghép và cắt trang theo bóng thoại…</p>}
-      {status === "draft" && pages.length === 0 && (
+      {status === "draft" && pages.length === 0 && !upload && (
         <p className="muted">
-          Chương nháp: {ch?.source_files.length ?? 0} file đã khai báo.{" "}
-          <Link to="/w/$ws/series/$seriesId/upload" params={{ ws, seriesId }}>
-            Upload chương mới
-          </Link>
+          Chương nháp: {ch?.source_files.length ?? 0} ảnh đã khai báo. Bấm "Dịch chương" khi đã tải đủ ảnh.
         </p>
       )}
 
