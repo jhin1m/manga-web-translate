@@ -1,7 +1,10 @@
 /**
- * Màn chương = editor gộp (`/w/:ws/s/:s/c/:c?page=`): thanh trên + băng khoá | rail trang · canvas cuộn liên tục
+ * Màn chương = editor gộp (`/w/:ws/s/:s/c/:c?page=`): thanh trên (+ băng cảnh báo khi có) | rail trang · canvas cuộn liên tục
  * cả chương · inspector | bảng dưới (Bản dịch cả chương / Tìm–Thay / Áp glossary). Chương nháp: canvas là tiến
  * độ upload + vùng thả để tải tiếp + ảnh gốc xem trước (cả lúc đang cắt trang).
+ *
+ * Trạng thái chương chỉ ở chip thanh trên (+ rail theo trang). Kết quả thao tác (dịch lại, áp kiểu…) là thông báo nổi
+ * trên canvas, tự ẩn; Dịch chương thành công không báo gì thêm (chip đã đổi), chỉ báo khi có ảnh bị loại.
  *
  * Drawer phải: Xuất (nút "Xuất" hoặc `?drawer=export` từ "Xuất lại" ở home), Hoạt động, Phím tắt (`?`). Chế độ xem
  * Gốc / Dịch / Chia đôi + giữ `O` (chapterStore.viewMode). Phím tắt: `editor/shortcuts.ts` (1 listener).
@@ -15,7 +18,7 @@ import "./chapter-workspace.css";
 import type { PageState } from "@mtl/shared";
 import { useMutation } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { errorMessage } from "../../lib/api.ts";
 import { deleteBox, setStyleMany } from "../editor/actions.ts";
 import { ChapterCanvas } from "../editor/canvas/ChapterCanvas.tsx";
@@ -25,7 +28,7 @@ import { chapterStore, focusPage, revealRect, useChapterStore } from "../editor/
 import { CanvasStatus, CanvasToolbar } from "../editor/panels/CanvasToolbar.tsx";
 import type { ShortcutAction } from "../editor/shortcuts.ts";
 import { editorStore, useEditor } from "../editor/store.ts";
-import { type RecoveryItem, useChapterSession } from "../editor/use-chapter-session.ts";
+import { resetChapterSession, useChapterSession } from "../editor/use-chapter-session.ts";
 import { useShortcuts } from "../editor/use-shortcuts.ts";
 import { ApplyGlossaryPanel } from "../glossary/ApplyGlossary.tsx";
 import { ChapterUploadStatus, resumeFromFiles } from "../upload/chapter-upload-status.tsx";
@@ -34,7 +37,7 @@ import { uploadManager, useChapterUpload } from "../upload/upload-manager.ts";
 import { ActivityDrawer, chapterActivityCount, useUploadCount } from "./activity-drawer.tsx";
 import { cancelChapter, commitChapter, type FindMatch, REJECT_REASON, retranslate, retryFailed } from "./api.ts";
 import { BottomPanel, type TabRequest } from "./bottom-panel.tsx";
-import { ChapterTopbar, LockBand } from "./chapter-topbar.tsx";
+import { ChapterTopbar, type EditAccess, LockBand } from "./chapter-topbar.tsx";
 import { ExportDrawer } from "./export-drawer.tsx";
 import { isExportActive, useExports } from "./export-panel.tsx";
 import { FindReplacePanel } from "./FindReplace.tsx";
@@ -44,18 +47,36 @@ import { needsReview, pageLevel } from "./page-status.ts";
 import { type ChapterCommand, primaryAction } from "./primary-action.ts";
 import { ShortcutHelp } from "./shortcut-help.tsx";
 import { SourcePreview } from "./source-preview.tsx";
-import { isChapterSettled } from "./status.ts";
+import { chapterChip, isChapterSettled } from "./status.ts";
 import { filterRows, KIND_LABEL, type Row, rowKeyOfBox, sameKindBoxIds, type TableFilter } from "./text-table/rows.ts";
 import { TableFilters, TextTable, useChapterRows } from "./text-table/text-table.tsx";
 import { useChapterData } from "./use-chapter-data.ts";
 
 const URL_SYNC_MS = 400;
+/** Thông báo kết quả (info) tự ẩn sau chừng này; lỗi giữ tới khi đóng. */
+const NOTICE_MS = 6000;
 const NO_PAGES: never[] = [];
 
 type DrawerKind = "export" | "activity" | "help";
 type Props = { ws: string; seriesId: string; chapterId: string; page?: string; drawer?: "export" };
+/** `untilStable`: giữ tới khi chương chạy xong lượt xử lý vừa bắt đầu (ảnh bị loại khi Dịch chương). */
+type Notice = { tone: "info" | "warn" | "danger"; text: string; untilStable?: boolean };
 
-export function ChapterWorkspace({ ws, seriesId, chapterId, page: searchPage, drawer: searchDrawer }: Props) {
+/**
+ * Store editor/chương dùng chung cả tab: phiên mới bắt đầu sạch. Reset ở layout effect (sau khi cây của chương cũ đã
+ * gỡ, trước khi vẽ) rồi mới render màn chương — reset trong lúc render thì component còn subscribe store của chương
+ * cũ bị cập nhật giữa lúc render (cảnh báo React "Cannot update a component while rendering…").
+ */
+export function ChapterWorkspace(props: Props) {
+  const [ready, setReady] = useState(false);
+  useLayoutEffect(() => {
+    resetChapterSession(props.chapterId);
+    setReady(true);
+  }, [props.chapterId]);
+  return ready ? <Workspace {...props} /> : null;
+}
+
+function Workspace({ ws, seriesId, chapterId, page: searchPage, drawer: searchDrawer }: Props) {
   const navigate = useNavigate();
   const data = useChapterData(ws, chapterId);
   const status = data.progress?.chapter.status ?? data.detail?.status;
@@ -71,7 +92,7 @@ export function ChapterWorkspace({ ws, seriesId, chapterId, page: searchPage, dr
   });
   const { kit } = session;
   const activeId = useEditor((s) => s.pageId);
-  const [notice, setNotice] = useState<{ tone: "info" | "danger"; text: string } | null>(null);
+  const [notice, setNotice] = useState<Notice | null>(null);
   const [imageError, setImageError] = useState<string | null>(null);
   // Mở từ "Xuất lại" (`?drawer=export`): drawer Xuất mở ngay; URL bỏ tham số ở lần đồng bộ `?page=` kế tiếp.
   const [drawer, setDrawer] = useState<DrawerKind | null>(searchDrawer ?? null);
@@ -209,36 +230,69 @@ export function ChapterWorkspace({ ws, seriesId, chapterId, page: searchPage, dr
       })
     : null;
   const review = pages.filter((p) => needsReview(p, overflowPages.has(p.id))).length;
-  const summary = pages.length ? `AI xong ${ready}/${pages.length}${review ? ` · ${review} cần xem` : ""}` : null;
+  const chip = status
+    ? chapterChip({ status, pages: pages.length, ready, failed: counts.failed ?? 0, review, upload })
+    : null;
+  const access: EditAccess = {
+    lock: session.lock.state,
+    lockEnabled: session.lockEnabled,
+    hasPages: pages.length > 0,
+  };
+
+  // Thông báo info tự ẩn; "ảnh bị loại" giữ tới khi chương qua lượt xử lý vừa bắt đầu rồi ổn định lại.
+  const busySeen = useRef(false);
+  const notify = useCallback((n: Notice | null) => {
+    busySeen.current = false;
+    setNotice(n);
+  }, []);
+  useEffect(() => {
+    if (!notice) return;
+    if (notice.untilStable) {
+      if (!settled) busySeen.current = true;
+      else if (busySeen.current) setNotice(null);
+      return;
+    }
+    if (notice.tone !== "info") return;
+    const t = setTimeout(() => setNotice(null), NOTICE_MS);
+    return () => clearTimeout(t);
+  }, [notice, settled]);
 
   const { runAi } = session;
   const action = useMutation({
-    mutationFn: async (kind: "retry" | "retranslate" | "retranslate-page" | "cancel" | "commit") => {
-      if (kind === "cancel") return `Đã huỷ ${(await cancelChapter(ws, chapterId)).cancelled} job.`;
+    mutationFn: async (
+      kind: "retry" | "retranslate" | "retranslate-page" | "cancel" | "commit",
+    ): Promise<Notice | null> => {
+      const info = (text: string): Notice => ({ tone: "info", text });
+      if (kind === "cancel") return info(`Đã huỷ ${(await cancelChapter(ws, chapterId)).cancelled} job.`);
       if (kind === "retry") {
         const r = await runAi(() => retryFailed(ws, chapterId));
-        return r.jobs.length ? `Đã xếp lại ${r.jobs.length} job cho trang lỗi.` : "Không có trang lỗi.";
+        return info(r.jobs.length ? `Đã xếp lại ${r.jobs.length} job cho trang lỗi.` : "Không có trang lỗi.");
       }
       if (kind === "retranslate-page") {
         const id = editorStore.getState().pageId;
         const ord = pages.find((p) => p.id === id)?.ord ?? 0;
-        if (!id) return "Chưa chọn trang.";
+        if (!id) return info("Chưa chọn trang.");
         await runAi(() => retranslate(ws, chapterId, [id]));
-        return `Đã xếp dịch lại trang ${ord + 1} (chỉnh sửa tay được giữ nguyên).`;
+        return info(`Đã xếp dịch lại trang ${ord + 1} (chỉnh sửa tay được giữ nguyên).`);
       }
       if (kind === "retranslate") {
         await runAi(() => retranslate(ws, chapterId));
-        return "Đã xếp dịch lại cả chương (chỉnh sửa tay được giữ nguyên).";
+        return info("Đã xếp dịch lại cả chương (chỉnh sửa tay được giữ nguyên).");
       }
+      // Thành công: chip trạng thái đã nói "Đang cắt trang/Đang dịch" — chỉ báo khi có ảnh bị loại.
       const r = await commitChapter(ws, chapterId);
-      return r.rejected.length
-        ? `Bắt đầu dịch ${r.accepted} ảnh; loại ${r.rejected.length}: ${r.rejected
-            .map((x) => `#${x.ord + 1} ${REJECT_REASON[x.reason]}`)
-            .join(", ")}.`
-        : `Bắt đầu dịch ${r.accepted} ảnh.`;
+      if (!r.rejected.length) return null;
+      return {
+        tone: "warn",
+        untilStable: true,
+        text: `Đang dịch ${r.accepted} ảnh; loại ${r.rejected.length}: ${r.rejected
+          .map((x) => `#${x.ord + 1} ${REJECT_REASON[x.reason]}`)
+          .join(", ")}.`,
+      };
     },
-    onSuccess: (text) => setNotice({ tone: "info", text }),
-    onError: (e) => setNotice({ tone: "danger", text: errorMessage(e) }),
+    onMutate: () => notify(null),
+    onSuccess: notify,
+    onError: (e) => notify({ tone: "danger", text: errorMessage(e) }),
     onSettled: data.refresh,
   });
   // "Áp kiểu này cho khối cùng loại trong chương" (inspector hỏi xác nhận trước): page active = 1 bước undo; page
@@ -291,8 +345,8 @@ export function ChapterWorkspace({ ws, seriesId, chapterId, page: searchPage, dr
       }
       return `Đã áp kiểu cho ${boxes} khối ${KIND_LABEL[row.kind].toLowerCase()} trên ${touched} trang.`;
     },
-    onSuccess: (text) => setNotice({ tone: "info", text }),
-    onError: (e) => setNotice({ tone: "danger", text: errorMessage(e) }),
+    onSuccess: (text) => notify({ tone: "info", text }),
+    onError: (e) => notify({ tone: "danger", text: errorMessage(e) }),
   });
 
   const onCommand = (cmd: ChapterCommand) => {
@@ -421,8 +475,8 @@ export function ChapterWorkspace({ ws, seriesId, chapterId, page: searchPage, dr
         ws={ws}
         seriesId={seriesId}
         detail={data.detail}
-        status={status}
-        summary={summary}
+        chip={chip}
+        access={access}
         primary={primary}
         pending={action.isPending}
         onCommand={onCommand}
@@ -433,22 +487,15 @@ export function ChapterWorkspace({ ws, seriesId, chapterId, page: searchPage, dr
         onHelp={() => setDrawer("help")}
       />
       <LockBand
-        status={status}
-        hasPages={pages.length > 0}
-        lock={session.lock.state}
-        lockEnabled={session.lockEnabled}
+        access={access}
         onRetryLock={() => void session.lock.retry()}
+        recovery={session.recovery}
+        canRestore={session.lock.state.status === "held" && session.lockEnabled}
+        onRecovery={(accept) => void session.restore(accept)}
       />
       <PageRail pages={pages} images={data.images} activeId={activeId} overflow={overflowPages} onPick={go} />
       <main className="cw-main">
-        <Notices
-          errors={errors}
-          notice={notice}
-          onDismiss={() => setNotice(null)}
-          recovery={session.recovery}
-          canRestore={session.lock.state.status === "held" && session.lockEnabled}
-          onRecovery={(accept) => void session.restore(accept)}
-        />
+        <Notices errors={errors} notice={notice} onDismiss={() => notify(null)} />
         {isDraft || pages.length === 0 ? (
           <div className="cw-empty">
             {isDraft ? (
@@ -613,38 +660,13 @@ export function ChapterWorkspace({ ws, seriesId, chapterId, page: searchPage, dr
   );
 }
 
-function Notices(props: {
-  errors: (string | null | undefined)[];
-  notice: { tone: "info" | "danger"; text: string } | null;
-  onDismiss(): void;
-  recovery: RecoveryItem[] | null;
-  canRestore: boolean;
-  onRecovery(accept: boolean): void;
-}) {
+/** Lỗi + kết quả thao tác: nổi trên canvas (CSS `.cw-toasts`), không đẩy bố cục. */
+function Notices(props: { errors: (string | null | undefined)[]; notice: Notice | null; onDismiss(): void }) {
   const errors = [...new Set(props.errors.filter((e): e is string => !!e))];
-  const rec = props.recovery;
   return (
-    <div className="ed-notices">
-      {rec && rec.length > 0 && (
-        <div className="notice info">
-          Có thay đổi chưa lưu từ phiên trước ở trang {rec.map((r) => r.ord + 1).join(", ")} (
-          {new Date(Math.max(...rec.map((r) => r.updatedAt))).toLocaleString("vi-VN")}).{" "}
-          <button
-            type="button"
-            className="btn-primary"
-            disabled={!props.canRestore}
-            title={props.canRestore ? undefined : "Cần giữ khoá chương để khôi phục"}
-            onClick={() => props.onRecovery(true)}
-          >
-            Khôi phục
-          </button>{" "}
-          <button type="button" className="btn-ghost" onClick={() => props.onRecovery(false)}>
-            Bỏ
-          </button>
-        </div>
-      )}
+    <div className="ed-notices cw-toasts" aria-live="polite">
       {props.notice && (
-        <div className={`notice ${props.notice.tone}`}>
+        <div className={`notice ${props.notice.tone}`} role={props.notice.tone === "danger" ? "alert" : "status"}>
           {props.notice.text}{" "}
           <button type="button" className="btn-ghost" onClick={props.onDismiss}>
             Đóng
@@ -652,7 +674,7 @@ function Notices(props: {
         </div>
       )}
       {errors.map((e) => (
-        <div key={e} className="notice danger">
+        <div key={e} className="notice danger" role="alert">
           {e}
         </div>
       ))}

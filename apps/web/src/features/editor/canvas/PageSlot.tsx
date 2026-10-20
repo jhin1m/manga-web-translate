@@ -80,15 +80,30 @@ function ProcessingVeil(props: {
   const fs = LABEL_PX / props.scale;
   const mid = viewport.y + viewport.h / 2;
   const y = Math.min(Math.max(mid, fs), Math.max(fs, size.h - 2 * fs)) - fs / 2;
+  const text = PROCESSING_LABEL[props.kind];
+  // Nền nhãn: bề ngang ước theo số ký tự (font hệ thống đậm ≈ 0.6em/ký tự) — đủ để chữ không lẫn vào ảnh.
+  const padX = fs * 0.8;
+  const pillW = Math.min(size.w, text.length * fs * 0.6 + 2 * padX);
+  const pillH = fs * 1.9;
   return (
     <Group>
       <Rect x={0} y={0} width={size.w} height={size.h} fill="rgba(255,255,255,0.55)" />
+      <Rect
+        x={(size.w - pillW) / 2}
+        y={y - (pillH - fs) / 2}
+        width={pillW}
+        height={pillH}
+        cornerRadius={pillH / 2}
+        fill="rgba(255,255,255,0.92)"
+        stroke="rgba(0,0,0,0.12)"
+        strokeWidth={1 / props.scale}
+      />
       <Text
         x={0}
         y={y}
         width={size.w}
         align="center"
-        text={PROCESSING_LABEL[props.kind]}
+        text={text}
         fontSize={fs}
         fontStyle="bold"
         fontFamily="system-ui, sans-serif"

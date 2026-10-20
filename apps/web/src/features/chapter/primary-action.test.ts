@@ -34,11 +34,14 @@ describe("primary action", () => {
     }
   });
 
-  it("ingesting / processing → disabled progress, cancel in the menu", () => {
+  it("ingesting / processing → Xuất disabled (progress lives in the status chip), cancel in the menu", () => {
     const p = primaryAction({ ...base, status: "processing" });
-    expect(p).toMatchObject({ command: null, label: "Đang dịch 4/10", disabled: true });
+    expect(p).toMatchObject({ command: "export", label: "Xuất", disabled: true });
     expect(p.menu.map((m) => m.command)).toEqual(["cancel"]);
-    expect(primaryAction({ ...base, status: "ingesting", pages: 0 })).toMatchObject({ command: null, disabled: true });
+    expect(primaryAction({ ...base, status: "ingesting", pages: 0 })).toMatchObject({
+      command: "export",
+      disabled: true,
+    });
   });
 
   it("partial_failed → Chạy lại trang lỗi; menu Xuất + Dịch lại", () => {

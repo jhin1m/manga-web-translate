@@ -280,6 +280,34 @@ test("opening a chapter while it translates does not hold the lock; the AI trans
   expect(st).toMatchObject({ state_origin: "ai", ai_update_available: false });
 });
 
+test("lock held by someone else → warning band with retry; once the lock is free the band goes away", async ({
+  page,
+}) => {
+  await login(page);
+  const { chapterId } = await readyChapter(page);
+  // Thành viên khác giữ khoá: server trả 423 cho lần lấy khoá đầu.
+  let denied = true;
+  await page.route(`**/api/w/${ws}/chapters/${chapterId}/lock`, (route) =>
+    denied && route.request().method() === "POST"
+      ? route.fulfill({
+          status: 423,
+          contentType: "application/json",
+          body: JSON.stringify({ error: "chapter_locked", holder: "someone", holder_name: "Thành viên B" }),
+        })
+      : route.fallback(),
+  );
+  await page.goto(chapterUrl(chapterId));
+  const band = page.getByRole("alert", { name: "Cảnh báo chương" });
+  await expect(band).toContainText("Thành viên B đang sửa chương này — bạn chỉ xem được.");
+  const edit = page.getByRole("status", { name: "Khoá chương" });
+  await expect(edit).toContainText("Chỉ xem");
+
+  denied = false;
+  await band.getByRole("button", { name: "Thử lại" }).click();
+  await expect(edit).toContainText("Bạn đang giữ khoá chương");
+  await expect(band).toHaveCount(0);
+});
+
 test("text table: row click activates its page; edit in place autosaves; Enter moves to the next page's row", async ({
   page,
 }) => {
@@ -390,6 +418,9 @@ test("overflowing box is flagged in the table and rail; 'Chỉ khối cần xem'
 test("back/forward straight to another chapter still saves the last edit of the one left", async ({ page }) => {
   const pageErrors: string[] = [];
   page.on("pageerror", (e) => pageErrors.push(e.message));
+  // Đổi chương = reset store dùng chung: không được cập nhật component của chương cũ giữa lúc render chương mới.
+  const renderUpdates: string[] = [];
+  page.on("console", (m) => m.text().includes("Cannot update a component") && renderUpdates.push(m.text()));
   await login(page);
   const a = await apiReadyChapter(page, "8101");
   const b = await apiReadyChapter(page, "8102");
@@ -418,4 +449,5 @@ test("back/forward straight to another chapter still saves the last edit of the 
   await openTable(page);
   await expect(cell(page)).toHaveValue("Xin chào");
   expect(pageErrors).toEqual([]);
+  expect(renderUpdates).toEqual([]);
 });

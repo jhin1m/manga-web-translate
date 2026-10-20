@@ -1,5 +1,6 @@
 /**
- * Nút chính (+ menu phụ) của màn chương theo trạng thái: Tải ảnh → Dịch chương → (đang dịch) → Xuất.
+ * Nút chính (+ menu phụ) của màn chương theo trạng thái: Tải ảnh → Dịch chương → (đang dịch: Xuất khoá) → Xuất.
+ * Tiến độ nằm ở chip trạng thái (status.ts chapterChip), nút chính chỉ là bước tiếp theo.
  * Thuần: nhận trạng thái chương, upload phía client và số trang; không gọi API.
  */
 import type { ChapterStatus } from "../series/api.ts";
@@ -8,8 +9,7 @@ import type { UploadView } from "./next-action.ts";
 export type ChapterCommand = "upload" | "commit" | "retry" | "retranslate" | "cancel" | "export";
 
 export type PrimaryAction = {
-  /** null = nút chỉ báo trạng thái (disabled). */
-  command: ChapterCommand | null;
+  command: ChapterCommand;
   label: string;
   disabled: boolean;
   title?: string;
@@ -44,9 +44,10 @@ export function primaryAction(input: {
   }
   if (status === "ingesting" || status === "processing") {
     return {
-      command: null,
-      label: status === "ingesting" ? "Đang cắt trang…" : `Đang dịch ${input.ready}/${input.pages}`,
+      command: "export",
+      label: "Xuất",
       disabled: true,
+      title: status === "ingesting" ? "Đang cắt trang — dịch xong mới xuất được" : "Dịch xong mới xuất được",
       menu: [{ command: "cancel", label: "Huỷ xử lý" }],
     };
   }

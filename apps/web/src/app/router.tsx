@@ -146,7 +146,7 @@ export const chapterRoute = createRoute({
           </p>
         }
       >
-        {/* key: đổi chương = phiên mới (store dùng chung cả tab reset trong lần render đầu). */}
+        {/* key: đổi chương = phiên mới (store dùng chung cả tab reset trước lần render đầu của màn chương). */}
         <ChapterWorkspace
           key={chapterId}
           ws={ws}
