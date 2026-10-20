@@ -19,3 +19,6 @@ Trạng thái chương hiện ở 5 nơi cùng lúc: chip cạnh tên chương (
 ## Kiểm chứng
 - `pnpm typecheck && pnpm lint && pnpm test` + toàn bộ e2e web.
 - Thủ công: chương nháp / đang dịch / chờ duyệt / mở chương ở tab thứ 2 (khoá bị từ chối → băng cảnh báo hiện).
+
+## Ghi chú thêm (từ phase 1)
+- e2e đang có lỗi console setState-in-render ở `LockBand` (có từ trước) — sửa trong phase này vì đụng LockBand.
