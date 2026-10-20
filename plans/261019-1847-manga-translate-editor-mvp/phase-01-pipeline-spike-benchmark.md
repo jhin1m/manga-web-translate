@@ -1,11 +1,12 @@
 ---
 phase: 1
 title: "Spike & benchmark pipeline (KO manhwa, 2 giai đoạn)"
-status: pending
+status: completed
 priority: P1
 effort: "5d"
 dependencies: []
 ---
+> gate: GO tạm — chờ golden set, API key, owner chấm
 # Phase 1: Spike & benchmark pipeline (Python CLI trên Mac, chỉ KO)
 
 ## Overview
