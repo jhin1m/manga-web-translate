@@ -43,7 +43,7 @@ Không phải lỗi (đã kiểm): `chapter.translate` chạy → queued → ch�
 | 3 | [Gom trạng thái về 1 chỗ](./phase-03-consolidate-status.md) | feat/ux-p3-status | 2 | Done |
 | 4 | [Thả là dịch: tự tạo + tự commit, sửa series/số chương trên header](./phase-04-drop-to-translate-flow.md) | feat/ux-p4-drop-flow | 3 | Done |
 | 5 | [Typeset mặc định chất manga: font comic + viền trắng](./phase-05-comic-typeset-defaults.md) | feat/ux-p5-typeset | 4 | Done |
-| 6 | [Kiểm thử toàn luồng với chương mẫu + docs](./phase-06-verify-and-docs.md) | feat/ux-p6-verify | 5 | Pending |
+| 6 | [Kiểm thử toàn luồng với chương mẫu + docs](./phase-06-verify-and-docs.md) | feat/ux-p6-verify | 5 | Done |
 
 Tuần tự (e2e dùng DB `mtl_test_e2e` + cổng cố định chung → không chạy song song). File chung: `chapter-workspace.tsx` (P2, P3, P4), `chapter-topbar.tsx` (P3, P4), `chapter-workspace.css` (P2, P3), e2e `full-flow`/`click-budget`/`upload-chapter` (P3, P4).
 
@@ -54,12 +54,12 @@ Tuần tự (e2e dùng DB `mtl_test_e2e` + cổng cố định chung → không 
 - Cập nhật Status phase file + bảng trên khi xong; ghi report ngắn `plans/reports/` nếu có vấn đề còn mở.
 
 ## Tiêu chí chấp nhận chung
-- [ ] Chương mẫu 5 trang: không trang nào bị "cần xem" chỉ vì tràn ≤ dung sai; khối tiêu đề tràn thật vẫn bị cờ.
-- [ ] Bảng văn bản chương mẫu không còn dòng region `bubble`; số "khối chưa có bản dịch" ở drawer Xuất chỉ đếm vùng chữ.
-- [ ] Mở chương: 1 trang nằm trọn khung nhìn; góc dưới hiện "Trang i/5" đúng khi cuộn.
-- [ ] Đang dịch: page chưa `ready` hiện ảnh gốc + lớp "Đang dịch…", không hiện bóng thoại trống.
-- [ ] Trạng thái chương chỉ ở topbar (+ rail theo trang); không banner tồn đọng.
-- [ ] Từ home: thả 5 ảnh (series đoán được) → ≤ 1 thao tác (chính lần thả) tới khi chương tự dịch; e2e click-budget cập nhật.
-- [ ] Đổi series/số chương trên header hoạt động, có test API + tenant isolation.
+- [x] Chương mẫu 5 trang: không trang nào bị "cần xem" chỉ vì tràn ≤ dung sai; khối tiêu đề tràn thật vẫn bị cờ.
+- [x] Bảng văn bản chương mẫu không còn dòng region `bubble`; số "khối chưa có bản dịch" ở drawer Xuất chỉ đếm vùng chữ.
+- [ ] Mở chương: 1 trang nằm trọn khung nhìn; góc dưới hiện "Trang i/5" đúng khi cuộn. _(P6: chỉ báo trang đạt; trọn trang chưa đạt ở cửa sổ cao ~945px vì sàn zoom 50% — xem report P6)_
+- [x] Đang dịch: page chưa `ready` hiện ảnh gốc + lớp "Đang dịch…", không hiện bóng thoại trống.
+- [x] Trạng thái chương chỉ ở topbar (+ rail theo trang); không banner tồn đọng.
+- [x] Từ home: thả 5 ảnh (series đoán được) → ≤ 1 thao tác (chính lần thả) tới khi chương tự dịch; e2e click-budget cập nhật.
+- [x] Đổi series/số chương trên header hoạt động, có test API + tenant isolation.
 - [x] Bản dịch mặc định: font comic tiếng Việt, viền trắng; `typeset-parity` xanh.
 - [ ] `pnpm typecheck && pnpm lint && pnpm test` + toàn bộ e2e xanh trên main sau P6.

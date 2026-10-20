@@ -16,6 +16,7 @@ import { Properties } from "../editor/panels/Properties.tsx";
 import { TextField } from "../editor/panels/TextField.tsx";
 import { editorStore, useEditor } from "../editor/store.ts";
 import type { ProgressPage } from "./api.ts";
+import { describeJobError } from "./job-error.ts";
 import { PAGE_LEVEL, pageLevel } from "./page-status.ts";
 import { KIND_LABEL, type Row } from "./text-table/rows.ts";
 import { setRowTranslation } from "./text-table/text-table.tsx";
@@ -59,6 +60,7 @@ export function Inspector(props: InspectorProps) {
     else if (!mask && maskTab) s.setTool("select");
   };
   const lv = PAGE_LEVEL[pageLevel(page.status)];
+  const jobError = describeJobError(page.job);
   const retranslate = (
     <button
       type="button"
@@ -165,12 +167,17 @@ export function Inspector(props: InspectorProps) {
                     <dd>Cắt ở trần chiều cao (không theo khoảng trắng)</dd>
                   </>
                 )}
-                {page.job?.error && (
+                {jobError && (
                   <>
-                    <dt>Lỗi</dt>
-                    <dd className="danger">
-                      {page.job.error_class ? `${page.job.error_class}: ` : ""}
-                      {page.job.error}
+                    <dt>{jobError.waiting ? "AI" : "Lỗi"}</dt>
+                    <dd className={jobError.waiting ? "warn-text" : "danger"}>
+                      {jobError.text}
+                      {page.job?.error && page.job.status !== "cancelled" && (
+                        <details className="cw-error-raw">
+                          <summary>Chi tiết kỹ thuật</summary>
+                          {page.job.error}
+                        </details>
+                      )}
                     </dd>
                   </>
                 )}

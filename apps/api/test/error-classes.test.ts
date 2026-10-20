@@ -10,7 +10,7 @@ import { MAX_OUTPUT_TOKENS_PER_CALL } from "../src/billing/prices.ts";
 import { BREAKER_THRESHOLD } from "../src/jobs/breaker.ts";
 import { enqueueIngest, inJobTx } from "../src/jobs/enqueue.ts";
 import { MAX_PROVIDER_RETRIES } from "../src/jobs/errors.ts";
-import { db, seedWorkspace } from "./helpers.ts";
+import { call, db, seedWorkspace } from "./helpers.ts";
 import {
   addSources,
   type Claimed,
@@ -65,6 +65,15 @@ describe("provider / rate_limited", () => {
     expect(row.attempts).toBe(0);
     expect(row.providerRetries).toBe(1);
     expect(row.runAfter.getTime() - Date.now()).toBeGreaterThan(80_000);
+    // Màn chương đọc lớp lỗi + giờ thử lại từ progress để báo "tự thử lại lúc …" thay vì lỗi thô.
+    const res = await call(`/api/w/${S.workspaceId}/chapters/${S.chapterId}/progress`, { cookie: S.cookie });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      pages: { job: { id: string; error_class: string; run_after: string } | null }[];
+    };
+    const view = body.pages.find((p) => p.job?.id === j.id)?.job;
+    expect(view?.error_class).toBe("rate_limited");
+    expect(view && new Date(view.run_after).getTime()).toBe(row.runAfter.getTime());
 
     // Thêm lỗi tới ngưỡng breaker (mỗi lần lấy job đã đến hạn).
     for (let i = 1; i < BREAKER_THRESHOLD; i++) {

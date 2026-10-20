@@ -580,6 +580,18 @@
 .cw-page-info .danger {
   color: var(--c-danger);
 }
+/* Lỗi thô của provider (JSON dài) — thu gọn, không tràn inspector. */
+.cw-error-raw {
+  margin-top: var(--sp-1);
+  color: var(--c-fg-muted);
+  font-size: var(--fs-xs);
+  overflow-wrap: anywhere;
+  max-height: 12rem;
+  overflow: auto;
+}
+.cw-error-raw summary {
+  cursor: pointer;
+}
 
 /* Tên chương bấm được → popover đổi series / số chương. */
 .cw-meta {

@@ -16,6 +16,8 @@ export const jobView = (j: Job) => ({
   provider_retries: j.providerRetries,
   error_class: j.errorClass,
   error: j.error,
+  /** Lần chạy sớm nhất (backoff sau lỗi AI) — UI báo "tự thử lại lúc …". */
+  run_after: j.runAfter,
   chapter_id: j.chapterId,
   page_id: j.pageId,
   result: j.result,

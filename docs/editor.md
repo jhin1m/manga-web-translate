@@ -127,7 +127,12 @@ nút đã mở khi đóng.
   làm") mở chương với drawer Xuất mở sẵn.
 - **Hoạt động** (`features/chapter/activity-drawer.tsx`): icon ở thanh trên màn chương, nút ở app shell, kèm số việc
   đang chạy. Upload của tab (mọi chương, thử lại file lỗi); ở màn chương thêm job của chương (trang đang xử lý/lỗi theo
-  `error_class`, "Chạy lại trang lỗi") và lượt xuất gần đây (tải lại, huỷ).
+  `error_class`, "Chạy lại trang lỗi", trang chờ AI tự thử lại) và lượt xuất gần đây (tải lại, huỷ).
+- **Lỗi job của trang** (`features/chapter/job-error.ts`): lỗi `provider` / `rate_limited` không làm job hỏng ngay —
+  queue requeue có backoff (≤ 20 lần, `apps/api/src/jobs/errors.ts`), trang vẫn "Đang xử lý". Màn chương đọc
+  `error_class` + `run_after` của job trong `/progress` → băng cảnh báo + rail ("chờ AI thử lại") + inspector ("tự thử
+  lại lúc HH:MM (lần n)"). Job hỏng/huỷ → câu lỗi + "Dịch lại trang này" / "Chạy lại trang lỗi"; lỗi thô trong "Chi
+  tiết kỹ thuật".
 
 ## Chưa đo
 

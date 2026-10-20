@@ -53,7 +53,11 @@ Toàn màn hình (ngoài app shell), `chapter-workspace.css`: thanh trên 52px (
   polite): "Đang tải ảnh 2/5", "Đang dịch 3/5", "Chờ duyệt · 2 cần xem", "Xong". Rail chỉ giữ trạng thái theo trang.
   Cạnh chip: chỉ báo nhỏ khoá + lưu (icon khoá + Đã lưu / Đang lưu…, hoặc "Chỉ xem"). Hoạt động và Phím tắt là icon nhỏ.
 - **Băng cảnh báo** (`LockBand`, `role="alert"`): chỉ hiện khi người dùng phải biết/làm — người khác giữ khoá (Thử
-  lại), lỗi khoá, mất khoá, khôi phục thay đổi từ phiên trước, lỗi lưu. Trạng thái bình thường không chiếm dải.
+  lại), lỗi khoá, mất khoá, khôi phục thay đổi từ phiên trước, lỗi lưu, trang đang chờ AI tự thử lại (provider lỗi
+  tạm / 429 hết hạn mức: "trang 1, 2 đang chờ, tự thử lại lúc HH:MM … muốn dừng thì bấm Huỷ xử lý"). Trạng thái bình
+  thường không chiếm dải.
+- **Lỗi job viết cho người** (`job-error.ts`): rail/inspector/Hoạt động nói loại lỗi + việc cần làm ("Dịch lại trang
+  này", "Chạy lại trang lỗi"); lỗi thô của provider (JSON dài) chỉ nằm trong "Chi tiết kỹ thuật" thu gọn ở inspector.
 - **Thông báo kết quả** (dịch lại, áp kiểu, lỗi thao tác): nổi trên canvas, không đẩy bố cục; info tự ẩn sau 6s.
   "Dịch chương" (bấm tay hoặc tự dịch khi upload xong) thành công không báo thêm; có ảnh bị loại → giữ thông báo tới
   khi chương xử lý xong; tự dịch lỗi → thông báo lỗi, chương ở lại nháp với nút "Dịch chương".
