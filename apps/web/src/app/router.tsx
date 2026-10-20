@@ -2,12 +2,13 @@
  * Cây route (TanStack Router, code-based, params type-safe). Component trong `features/*` nhận params qua
  * props — không import ngược router.
  *
- * Phase 5 (editor): thay `component` của `editorRoute` bằng màn editor. Route này nằm dưới `authedRoute` nhưng
- * NGOÀI `workspaceRoute` → editor chiếm toàn màn hình, không có thanh trên của workspace.
+ * Editor (`editorRoute`) nằm dưới `authedRoute` nhưng NGOÀI `workspaceRoute` → chiếm toàn màn hình, không có
+ * thanh trên của workspace.
  */
 import { QueryClient } from "@tanstack/react-query";
 import { createRootRouteWithContext, createRoute, createRouter, Link, Outlet, redirect } from "@tanstack/react-router";
 import { ChapterPage } from "../features/chapter/chapter-page.tsx";
+import { EditorPage } from "../features/editor/EditorPage.tsx";
 import { WorkspaceGlossaryPage } from "../features/glossary/glossary-editor.tsx";
 import { SeriesDetailPage, SeriesListPage } from "../features/series/series-list-page.tsx";
 import { SeriesSettingsPage } from "../features/series/series-settings-page.tsx";
@@ -118,21 +119,13 @@ const glossaryRoute = createRoute({
 
 const membersRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "members", component: MembersPage });
 
-/** Editor 1 trang (Phase 5 thay component). */
+/** Editor 1 trang (toàn màn hình). */
 export const editorRoute = createRoute({
   getParentRoute: () => authedRoute,
   path: "w/$ws/series/$seriesId/chapters/$chapterId/edit/$pageId",
-  component: function EditorPlaceholder() {
-    const { ws, seriesId, chapterId } = editorRoute.useParams();
-    return (
-      <main className="auth">
-        <h1>Editor</h1>
-        <p className="muted">Editor sẽ có ở Phase 5.</p>
-        <Link to="/w/$ws/series/$seriesId/chapters/$chapterId" params={{ ws, seriesId, chapterId }}>
-          Quay lại chương
-        </Link>
-      </main>
-    );
+  component: function EditorRoute() {
+    const p = editorRoute.useParams();
+    return <EditorPage ws={p.ws} seriesId={p.seriesId} chapterId={p.chapterId} pageId={p.pageId} />;
   },
 });
 
