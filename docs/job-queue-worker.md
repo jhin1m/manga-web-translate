@@ -46,10 +46,11 @@ enqueueOcrRegion(tx, ws, …))` trong `apps/api/src/jobs/enqueue.ts`. Ghi page s
 | Lệnh | Body chính | Ghi chú |
 |---|---|---|
 | `POST /claim` | `worker_id, capabilities, max ≤ 8, pipeline_version, dispatch_id` | 426 khi `< MIN_PIPELINE_VERSION`; 400 capability lạ/không được cấp. Token workspace → chỉ workspace đó, `worker_mode='mac'`; token nền tảng → `worker_mode='modal'`. Breaker bật → bỏ qua loại job cần LLM |
-| `POST /jobs/:id/heartbeat` | `lease_token, attempt, progress, stage, usage` | gia hạn lease 120s; `stop: "cancel"` khi người dùng huỷ |
+| `POST /jobs/:id/heartbeat` | `lease_token, attempt, progress, stage, usage` | gia hạn lease 120s; `stop: "cancel"` khi người dùng huỷ, `stop: "paused_budget"` khi vượt ngân sách (job tốn tiền, không tính attempt) |
 | `POST /jobs/:id/presign-outputs` | `names: ["clean"\|"mask"\|"page:<ord>"]` | URL PUT mới, cùng rev, TTL ≤ lease còn lại |
 | `POST /jobs/:id/complete` | `result, usage, pipeline_version` | lặp với cùng lease → no-op |
 | `POST /jobs/:id/fail` | `error_class, retry_after_s, message, usage, partial` | xem phân loại lỗi |
+| `POST /sessions/end` | `dispatch_id, lifetime_s, busy_s` | chỉ token nền tảng (Modal, mode drain) → ledger `gpu_idle_seconds`; gửi lại = no-op |
 
 Fencing: `lease_owner` = id token (không từ body); `{lease_token, attempt}` phải khớp và lease còn hạn, không thì 409
 và không ghi gì — worker bỏ job ngay. `attempt` = `attempts + provider_retries` (thứ tự claim, tăng đơn điệu). Output
@@ -84,8 +85,13 @@ Không overlap; `source_map` ghi slice gốc ↔ đoạn y của page. `mode: "p
 `chapter.export` (`worker/mtl_worker/export.py`) không cần model ONNX hay LLM (chạy được với `--no-llm`). Output
 `export` mang `headers` đã ký (content-type + tag lifecycle) — xem [export-and-batch-edit.md](./export-and-batch-edit.md).
 
+## Production (Phase 7)
+
+Kill-switch ngân sách ở claim/heartbeat, dispatcher Modal + bảng `dispatches`, `/healthz`, mode `drain`
+(`mtl-worker --mode drain --dispatch-id …`), guardrail token ra ≤ 2000/call: xem
+[deployment-guide.md](./deployment-guide.md).
+
 ## Còn hoãn
 
-- Kiểm ngân sách ở claim, `dispatches`/Modal, `/healthz` đọc `runner_heartbeat`: Phase 7.
 - Key ảnh ingest theo `ingest_rev` (không theo attempt): hai attempt cùng rev ghi đè nhau với nội dung tất định
   (cùng input + pipeline); DB chỉ nhận kết quả của attempt có lease hợp lệ.

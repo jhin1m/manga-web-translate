@@ -17,6 +17,10 @@ export type JobType = z.infer<typeof JobType>;
 
 /** Loại job gọi LLM — circuit breaker bỏ qua khi llm_paused. */
 export const LLM_JOB_TYPES: readonly JobType[] = ["page.prepare", "chapter.translate", "page.ocr_region"];
+/** Loại job tốn tiền — kill-switch ngân sách toàn cục chặn ở claim (hiện trùng LLM_JOB_TYPES). */
+export const PAID_JOB_TYPES: readonly JobType[] = LLM_JOB_TYPES;
+/** Vòng đời 1 lần gọi Modal /drain (bảng dispatches). */
+export const DISPATCH_STATUSES = ["pending", "active", "ended", "no_claim"] as const;
 
 export const JOB_STATUSES = ["queued", "running", "succeeded", "failed", "cancelled", "paused_budget"] as const;
 export const JobStatus = z.enum(JOB_STATUSES);

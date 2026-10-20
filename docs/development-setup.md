@@ -9,7 +9,7 @@ pnpm infra:up                     # Postgres 17 :5442, MinIO :9200 (nội bộ),
 pnpm db:migrate
 OWNER_PASSWORD='...' pnpm create-workspace --name "Nhóm dịch" --slug nhom-dich --owner-email you@example.com
 pnpm dev                          # API :8787, SPA :5180 (proxy /api → API)
-pnpm jobs                         # process nền: reaper lease hết hạn (tách khỏi API)
+pnpm jobs                         # process nền: reaper, kill-switch ngân sách (dispatcher Modal khi bật)
 ```
 
 Worker AI (Python, `worker/`) và token worker: xem [job-queue-worker.md](./job-queue-worker.md).
@@ -25,7 +25,7 @@ Mở http://localhost:5180 → đăng nhập owner → "Mời thành viên". MVP
 | `packages/db` | Drizzle schema, migration, `scoped(db, wsId)` |
 | `packages/shared` | zod: `PageState` (+ hợp đồng layout), `JobType/JobPayload/JobResult/ErrorClass`, giao thức worker, `input_rev`, storage keys; JSON Schema ở `packages/shared/json-schema/` cho worker |
 | `worker` | Python: `mtl_pipeline` (pipeline 2 giai đoạn), `mtl_worker` (vòng lặp claim/heartbeat/complete) |
-| `infra` | docker-compose dev, Caddy giả lập domain file riêng |
+| `infra` | docker-compose dev, Caddy giả lập domain file riêng; production: systemd, Caddy, compose prod, deploy/backup/restore/alert — xem [deployment-guide.md](./deployment-guide.md) |
 
 ## Quy ước bắt buộc
 

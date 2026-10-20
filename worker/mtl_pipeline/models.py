@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import os
 from pathlib import Path
 
@@ -49,6 +50,24 @@ def load_lock(lock_path: Path = DEFAULT_LOCK) -> ModelsLock:
 
 def models_dir() -> Path:
     return Path(os.environ.get("MTL_MODELS_DIR", DEFAULT_MODELS_DIR))
+
+
+def ort_providers() -> list[str]:
+    """Execution provider cho onnxruntime: MTL_ORT_PROVIDERS (phân tách dấu phẩy, VD
+    `CUDAExecutionProvider,CPUExecutionProvider` trên Modal GPU); mặc định CPU (Mac). Provider không có trong bản
+    onnxruntime đang cài bị bỏ qua, luôn còn CPU làm dự phòng."""
+    import onnxruntime as ort
+
+    wanted = [p.strip() for p in os.environ.get("MTL_ORT_PROVIDERS", "").split(",") if p.strip()]
+    available = set(ort.get_available_providers())
+    chosen = [p for p in wanted if p in available]
+    missing = [p for p in wanted if p not in available]
+    if missing:
+        # MTL_ORT_STRICT=1 (Modal GPU): thiếu CUDA = lỗi khởi động, không âm thầm chạy CPU trên máy GPU tính tiền.
+        if os.environ.get("MTL_ORT_STRICT") == "1":
+            raise RuntimeError(f"onnxruntime thiếu provider {missing} (có: {sorted(available)})")
+        logging.getLogger("mtl_pipeline").warning("onnxruntime thiếu provider %s → bỏ qua", missing)
+    return [*chosen, "CPUExecutionProvider"] if "CPUExecutionProvider" not in chosen else chosen
 
 
 def verify_all(lock_path: Path = DEFAULT_LOCK, root: Path | None = None) -> dict[str, Path]:

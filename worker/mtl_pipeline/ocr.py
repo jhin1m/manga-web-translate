@@ -80,7 +80,7 @@ def ocr_page(provider: LLMProvider, img: np.ndarray, regions: list[Region], page
         except ProviderError as e:
             usage.extend(e.usage)
             # Lỗi schema thử lại 1 lần trong cùng job; rate_limit/provider để hàng đợi (Phase 3) xử lý.
-            if e.error_class == "schema" and attempt == 0:
+            if e.error_class == "schema" and attempt == 0 and e.retry_in_job:
                 continue
             if e.error_class == "schema" and items is not None:
                 break  # lần 2 hỏng JSON → dùng kết quả lệch id của lần 1

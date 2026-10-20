@@ -29,7 +29,12 @@ export const auth = betterAuth({
   basePath: "/api/auth",
   trustedOrigins: [env.WEB_ORIGIN],
   database: drizzleAdapter(db, { provider: "pg" }),
-  advanced: { database: { generateId: "uuid" } },
+  advanced: {
+    database: { generateId: "uuid" },
+    // IP client cho rate limit: Caddy đặt X-Real-IP = {client_ip} (đã giải CF-Connecting-IP qua trusted_proxies
+    // Cloudflare) — không đọc X-Forwarded-For do client tự gửi được.
+    ipAddress: { ipAddressHeaders: ["x-real-ip"] },
+  },
   emailAndPassword: { enabled: true, minPasswordLength: 10 },
   telemetry: { enabled: false },
   databaseHooks: {

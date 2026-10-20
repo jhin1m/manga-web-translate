@@ -1,0 +1,17 @@
+{
+  "Rules": [
+    {
+      "ID": "expire-pg-dumps",
+      "Status": "Enabled",
+      "Filter": { "Prefix": "pg/" },
+      "Expiration": { "Days": 14 },
+      "NoncurrentVersionExpiration": { "NoncurrentDays": 1 }
+    },
+    {
+      "ID": "keep-deleted-objects-14d",
+      "Status": "Enabled",
+      "Filter": { "Prefix": "objects/" },
+      "NoncurrentVersionExpiration": { "NoncurrentDays": 14 }
+    }
+  ]
+}

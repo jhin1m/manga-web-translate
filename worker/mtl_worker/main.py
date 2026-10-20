@@ -1,6 +1,9 @@
-"""CLI worker: `uv run mtl-worker --api https://… [--no-llm] [--once]`. Token đọc từ MTL_TOKEN_FILE hoặc Keychain.
+"""CLI worker: `uv run mtl-worker --api https://… [--no-llm] [--once] [--mode drain]`. Token đọc từ
+MTL_TOKEN_FILE, MTL_TOKEN (container Modal, từ Modal secret) hoặc Keychain.
 
-Vòng lặp: claim → chạy job (model nạp 1 lần) → complete/fail → claim tiếp; không có job thì chờ tăng dần tới 30s.
+Mode loop (Mac): claim → chạy job (model nạp 1 lần) → complete/fail → claim tiếp; không có job thì chờ tăng dần
+tới 30s. Mode drain (Modal): claim kèm dispatch_id tới khi hàng đợi rỗng liên tục --drain-idle-s (20s) rồi thoát,
+báo `sessions/end {lifetime_s, busy_s}` → server ghi GPU rỗi.
 SIGTERM/SIGINT lần 1: ngừng claim, chờ job đang chạy tối đa MTL_SHUTDOWN_GRACE_S (mặc định 90s) rồi fail(internal);
 lần 2: thoát ngay (lease tự hết hạn, reaper đưa job về hàng đợi)."""
 
@@ -14,18 +17,20 @@ import socket
 import sys
 import threading
 import time
+from collections.abc import Callable
 from functools import cached_property
 from typing import Any
 
 from . import PIPELINE_VERSION
 from .client import AuthError, PipelineTooOld, WorkerClient
 from .handlers import HANDLERS, LLM_TYPES
-from .runner import run_job
+from .runner import Handler, run_job
 from .token import TokenError, load_token
 
 log = logging.getLogger("mtl_worker")
 
 IDLE_MIN_S, IDLE_MAX_S = 2.0, 30.0
+DRAIN_POLL_S = 2.0
 
 
 class RuntimeDeps:
@@ -61,6 +66,14 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
     ap.add_argument("--capabilities", help="giới hạn loại job, phân tách bằng dấu phẩy")
     ap.add_argument("--threads", type=int, default=0, help="số luồng onnxruntime (0 = mặc định)")
     ap.add_argument("--once", action="store_true", help="xử lý tối đa 1 job rồi thoát")
+    ap.add_argument(
+        "--mode",
+        choices=["loop", "drain"],
+        default=os.environ.get("MTL_MODE", "loop"),
+        help="loop = chạy mãi (Mac); drain = thoát khi hàng đợi rỗng --drain-idle-s (Modal)",
+    )
+    ap.add_argument("--dispatch-id", default=os.environ.get("MTL_DISPATCH_ID"), help="id dispatch (Modal)")
+    ap.add_argument("--drain-idle-s", type=float, default=float(os.environ.get("MTL_DRAIN_IDLE_S", "20")))
     ap.add_argument("-v", "--verbose", action="store_true")
     return ap.parse_args(argv)
 
@@ -81,6 +94,7 @@ def capabilities(args: argparse.Namespace) -> list[str]:
 
 
 def main(argv: list[str] | None = None) -> int:
+    started = time.monotonic()
     # Không bao giờ tải model ngầm từ HF khi chạy; weights đi theo models.lock.json (red team #15).
     os.environ["HF_HUB_OFFLINE"] = "1"
     args = parse_args(argv)
@@ -90,6 +104,9 @@ def main(argv: list[str] | None = None) -> int:
     )
     if not args.api:
         print("thiếu --api hoặc MTL_API_URL", file=sys.stderr)
+        return 2
+    if args.mode == "drain" and not args.dispatch_id:
+        print("--mode drain cần --dispatch-id hoặc MTL_DISPATCH_ID", file=sys.stderr)
         return 2
     try:
         token = load_token()
@@ -122,39 +139,98 @@ def main(argv: list[str] | None = None) -> int:
     def past_deadline() -> bool:
         return bool(stop_at) and time.monotonic() > stop_at[0]
 
-    client = WorkerClient(args.api, token, args.worker_id)
-    log.info("mtl-worker %s id=%s caps=%s", PIPELINE_VERSION, args.worker_id, ",".join(caps))
-    idle = IDLE_MIN_S
+    client = WorkerClient(args.api, token, args.worker_id, dispatch_id=args.dispatch_id)
+    log.info(
+        "mtl-worker %s id=%s mode=%s caps=%s", PIPELINE_VERSION, args.worker_id, args.mode, ",".join(caps)
+    )
+    busy = [0.0]
     try:
-        while not stopping.is_set():
-            try:
-                jobs = client.claim(caps, 1)
-            except PipelineTooOld as e:
-                log.error("API từ chối pipeline_version %s: %s — cập nhật worker", PIPELINE_VERSION, e)
-                return 3
-            except AuthError as e:
-                log.error("%s", e)
-                return 2
-            except Exception as e:  # API tạm không tới được → chờ rồi thử lại
-                log.warning("claim lỗi: %s", e)
-                stopping.wait(idle)
-                idle = min(IDLE_MAX_S, idle * 2)
-                continue
-            if not jobs:
-                if args.once:
-                    return 0
-                stopping.wait(idle)
-                idle = min(IDLE_MAX_S, idle * 1.5)
-                continue
-            idle = IDLE_MIN_S
-            for job in jobs:
-                t0 = time.monotonic()
-                outcome = run_job(client, job, HANDLERS, deps, past_deadline)
-                log.info("job %s %s → %s (%.1fs)", job["type"], job["id"], outcome, time.monotonic() - t0)
-            if args.once:
-                return 0
+        return work_loop(
+            client,
+            caps,
+            HANDLERS,
+            deps,
+            mode=args.mode,
+            once=args.once,
+            drain_idle_s=args.drain_idle_s,
+            stopping=stopping,
+            past_deadline=past_deadline,
+            busy=busy,
+        )
     finally:
+        if args.dispatch_id:
+            report_session_end(client, time.monotonic() - started, busy[0])
         client.close()
+
+
+def report_session_end(client: WorkerClient, lifetime_s: float, busy_s: float) -> None:
+    """Không báo được (mạng) → server ước lượng theo scaledown_window khi reaper quét; không chặn thoát."""
+    try:
+        client.sessions_end(lifetime_s, busy_s)
+        log.info("sessions/end lifetime=%.1fs busy=%.1fs", lifetime_s, busy_s)
+    except Exception as e:
+        log.warning("sessions/end lỗi: %s", e)
+
+
+def work_loop(
+    client: Any,
+    caps: list[str],
+    handlers: dict[str, Handler],
+    deps: Any,
+    *,
+    mode: str,
+    once: bool,
+    drain_idle_s: float,
+    stopping: threading.Event,
+    past_deadline: Callable[[], bool],
+    busy: list[float],
+    drain_poll_s: float = DRAIN_POLL_S,
+) -> int:
+    """→ exit code. `busy[0]` cộng dồn thời gian chạy job (GPU bận) cho sessions/end."""
+    idle = IDLE_MIN_S
+    last_work = time.monotonic()
+
+    def drained() -> bool:
+        if mode == "drain" and time.monotonic() - last_work >= drain_idle_s:
+            log.info("hàng đợi rỗng %.0fs → thoát (drain)", drain_idle_s)
+            return True
+        return False
+
+    while not stopping.is_set():
+        try:
+            jobs = client.claim(caps, 1)
+        except PipelineTooOld as e:
+            log.error("API từ chối pipeline_version %s: %s — cập nhật worker", PIPELINE_VERSION, e)
+            return 3
+        except AuthError as e:
+            log.error("%s", e)
+            return 2
+        except Exception as e:  # API tạm không tới được → chờ rồi thử lại
+            log.warning("claim lỗi: %s", e)
+            if drained():
+                return 0
+            stopping.wait(idle)
+            idle = min(IDLE_MAX_S, idle * 2)
+            continue
+        if not jobs:
+            if once or drained():
+                return 0
+            if mode == "drain":
+                stopping.wait(drain_poll_s)
+                continue
+            stopping.wait(idle)
+            idle = min(IDLE_MAX_S, idle * 1.5)
+            continue
+        idle = IDLE_MIN_S
+        for job in jobs:
+            t0 = time.monotonic()
+            outcome = run_job(client, job, handlers, deps, past_deadline)
+            dt = time.monotonic() - t0
+            busy[0] += dt
+            log.info("job %s %s → %s (%.1fs)", job["type"], job["id"], outcome, dt)
+        last_work = time.monotonic()
+        if once:
+            return 0
     return 0
 
 

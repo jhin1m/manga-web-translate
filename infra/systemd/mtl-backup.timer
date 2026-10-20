@@ -1,0 +1,11 @@
+[Unit]
+Description=mtl nightly backup
+
+[Timer]
+OnCalendar=*-*-* 03:30:00 UTC
+RandomizedDelaySec=10m
+# Máy tắt lúc tới giờ → chạy bù khi bật lại.
+Persistent=true
+
+[Install]
+WantedBy=timers.target

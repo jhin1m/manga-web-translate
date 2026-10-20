@@ -1,0 +1,16 @@
+# pg_dump + mc mirror bucket → đích ngoài VPS (xem infra/backup.sh). Lỗi → cảnh báo ntfy trong script.
+[Unit]
+Description=mtl nightly backup (Postgres + MinIO → offsite)
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=mtl
+Group=mtl
+EnvironmentFile=/srv/mtl/shared/.env
+ExecStart=/srv/mtl/current/infra/backup.sh
+Nice=10
+IOSchedulingClass=idle
+PrivateTmp=true
+NoNewPrivileges=true

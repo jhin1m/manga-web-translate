@@ -22,6 +22,13 @@
       "when": 1792495524555,
       "tag": "0002_glossary_term_unique",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1792497065185,
+      "tag": "0003_dispatches_budget",
+      "breakpoints": true
     }
   ]
 }

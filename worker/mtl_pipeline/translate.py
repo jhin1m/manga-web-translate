@@ -96,7 +96,7 @@ def _translate_once(
             res = provider.translate_batch(req)
         except ProviderError as e:
             usage.extend(e.usage)
-            if e.error_class == "schema" and attempt == 0:
+            if e.error_class == "schema" and attempt == 0 and e.retry_in_job:
                 continue
             if e.error_class == "schema" and have_result:
                 break  # lần 2 hỏng JSON → dùng kết quả lệch id của lần 1

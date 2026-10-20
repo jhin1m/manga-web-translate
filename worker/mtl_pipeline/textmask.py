@@ -82,10 +82,12 @@ class CtdMasker:
     def __init__(self, model_path: Path, threads: int = 0):
         import onnxruntime as ort
 
+        from .models import ort_providers
+
         so = ort.SessionOptions()
         if threads:
             so.intra_op_num_threads = threads
-        self.session = ort.InferenceSession(str(model_path), so, providers=["CPUExecutionProvider"])
+        self.session = ort.InferenceSession(str(model_path), so, providers=ort_providers())
 
     def predict(self, img_rgb: np.ndarray) -> np.ndarray:
         page_h, page_w = img_rgb.shape[:2]

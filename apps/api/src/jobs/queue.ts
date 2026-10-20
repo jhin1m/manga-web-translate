@@ -16,10 +16,12 @@ import {
   JOB_TYPES,
   type JobResult,
   LLM_JOB_TYPES,
+  PAID_JOB_TYPES,
   storageKeys,
 } from "@mtl/shared";
 import { and, asc, eq, inArray, lte, sql } from "drizzle-orm";
 import type { z } from "zod";
+import { budgetStatus, pauseQueuedPaidJobs } from "../billing/budget.ts";
 import { recordServerUsage, recordUsage, type WorkerKind } from "../billing/ledger.ts";
 import { db } from "../db.ts";
 import { env } from "../env.ts";
@@ -28,6 +30,7 @@ import type { WorkerIdentity } from "../lib/worker-token.ts";
 import { head } from "../storage.ts";
 import { isLlmPaused, recordProviderError } from "./breaker.ts";
 import { buildInputs, claimOutputNames, outputKey, type PresignedOutput, presignOutputs } from "./claim-inputs.ts";
+import { markDispatchClaimed } from "./dispatcher.ts";
 import { chapterHasUserEdits, createIngestedPages, refreshChapter } from "./enqueue.ts";
 import { decideFailure, JobHttpError, leaseLost } from "./errors.ts";
 import { writeAiState } from "./page-state-writer.ts";
@@ -75,7 +78,14 @@ export async function claim(w: WorkerIdentity, req: z.infer<typeof ClaimRequest>
   }
   return tx(async (t) => {
     const paused = await isLlmPaused(t);
-    const types = paused ? caps.filter((c) => !LLM_JOB_TYPES.includes(c)) : caps;
+    let types = paused ? caps.filter((c) => !LLM_JOB_TYPES.includes(c)) : caps;
+    // Kill-switch ngân sách: kiểm tại claim cho mọi worker (Mac lẫn Modal) — job tốn tiền chuyển paused_budget.
+    if (types.some((c) => PAID_JOB_TYPES.includes(c)) && (await budgetStatus(t)).exceeded) {
+      await pauseQueuedPaidJobs(t);
+      types = types.filter((c) => !PAID_JOB_TYPES.includes(c));
+    }
+    // Claim kèm dispatch_id (container Modal) → dispatch active; id lạ/không phải token nền tảng → bỏ qua.
+    const dispatchId = w.workspaceId || !req.dispatch_id ? null : await markDispatchClaimed(t, req.dispatch_id);
     if (types.length === 0) return [];
     // Token workspace → worker Mac của đúng workspace đó; token nền tảng → mọi workspace chế độ modal (red team #9).
     const picked = await t
@@ -120,7 +130,7 @@ export async function claim(w: WorkerIdentity, req: z.infer<typeof ClaimRequest>
           workerId: req.worker_id,
           outputRev,
           pipelineVersion: req.pipeline_version,
-          dispatchId: req.dispatch_id,
+          dispatchId,
           progress: 0,
           stage: null,
         })
@@ -193,6 +203,10 @@ export async function heartbeat(w: WorkerIdentity, jobId: string, req: z.infer<t
     await usage(t, w, job, req.attempt, req.usage);
     if (job.status === "cancelled")
       return { lease_expires_at: (job.leaseExpiresAt as Date).toISOString(), stop: "cancel" as const };
+    if (PAID_JOB_TYPES.includes(job.type) && (await budgetStatus(t)).exceeded) {
+      await pauseForBudget(t, job);
+      return { lease_expires_at: new Date().toISOString(), stop: "paused_budget" as const };
+    }
     const [u] = await t
       .update(jobs)
       .set({ leaseExpiresAt: sql`now() + make_interval(secs => ${LEASE_S})`, progress: req.progress, stage: req.stage })
@@ -455,6 +469,50 @@ export async function requeue(
       stage: null,
     })
     .where(eq(jobs.id, job.id));
+}
+
+/**
+ * Job đang chạy dừng vì hết ngân sách: về `paused_budget`, lease xoá (worker cũ gửi tiếp → 409), hoàn lượt
+ * attempt; page về trạng thái trước claim. Artifact đã ghi DB của attempt trước giữ nguyên.
+ */
+async function pauseForBudget(t: DbLike, job: Job) {
+  await t
+    .update(jobs)
+    .set({
+      status: "paused_budget",
+      runAfter: sql`now()`,
+      leaseOwner: null,
+      leaseToken: null,
+      leaseExpiresAt: null,
+      attempts: sql`greatest(${jobs.attempts} - 1, 0)`,
+      // Như refund của lỗi provider: số attempt trên dây (attempts + provider_retries) vẫn tăng → lần chạy lại
+      // không trùng khoá ledger (job, attempt, seq, kind) với lần bị dừng.
+      providerRetries: sql`${jobs.providerRetries} + 1`,
+      progress: 0,
+      stage: null,
+    })
+    .where(eq(jobs.id, job.id));
+  const p = job.payload;
+  if (p.type === "page.prepare") {
+    await t
+      .update(pages)
+      .set({ status: "pending" })
+      .where(and(eq(pages.id, p.page_id), eq(pages.status, "preparing")));
+  }
+  if (p.type === "chapter.translate") {
+    // Như lúc chờ claim: đã có bản AI (dịch lại) → ready, chưa có → prepared.
+    const affected = await t
+      .select({ id: pages.id, aiRev: pageStates.aiRev })
+      .from(pages)
+      .innerJoin(pageStates, eq(pageStates.pageId, pages.id))
+      .where(and(inArray(pages.id, p.page_ids), eq(pages.status, "translating")));
+    for (const [status, ids] of [
+      ["ready", affected.filter((r) => r.aiRev > 0).map((r) => r.id)],
+      ["prepared", affected.filter((r) => r.aiRev === 0).map((r) => r.id)],
+    ] as const) {
+      if (ids.length) await t.update(pages).set({ status }).where(inArray(pages.id, ids));
+    }
+  }
 }
 
 export async function fail(w: WorkerIdentity, jobId: string, req: z.infer<typeof FailRequest>) {

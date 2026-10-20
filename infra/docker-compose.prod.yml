@@ -1,0 +1,50 @@
+# Postgres + MinIO trên VPS, chỉ nghe 127.0.0.1 (API/Caddy cùng máy). Chạy:
+#   docker compose -f infra/docker-compose.prod.yml --env-file /srv/mtl/shared/.env -p mtl up -d --wait
+# Dữ liệu ở volume (backup bằng infra/backup.sh, không phải snapshot volume).
+name: mtl
+
+services:
+  postgres:
+    image: postgres:17
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${PG_USER:-mtl}
+      POSTGRES_PASSWORD: ${PG_PASSWORD:?PG_PASSWORD}
+      POSTGRES_DB: ${PG_DB:-mtl}
+    ports:
+      - "127.0.0.1:${PG_PORT:-5432}:5432"
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${PG_USER:-mtl} -d ${PG_DB:-mtl}"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  minio:
+    # Bản build cộng đồng pgsty (MinIO ngừng phát hành image chính thức), cùng bản với dev.
+    image: pgsty/minio:RELEASE.2026-08-04T00-00-00Z
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${S3_ACCESS_KEY:?S3_ACCESS_KEY}
+      MINIO_ROOT_PASSWORD: ${S3_SECRET_KEY:?S3_SECRET_KEY}
+      # Chỉ SPA được gọi presigned URL từ trình duyệt.
+      MINIO_API_CORS_ALLOW_ORIGIN: ${WEB_ORIGIN:?WEB_ORIGIN}
+      MINIO_BROWSER_REDIRECT: "off"
+      MC_HOST_local: http://${S3_ACCESS_KEY}:${S3_SECRET_KEY}@localhost:9000
+    ports:
+      - "127.0.0.1:${MINIO_PORT:-9000}:9000"
+      # Console chỉ qua SSH tunnel.
+      - "127.0.0.1:${MINIO_CONSOLE_PORT:-9001}:9001"
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+volumes:
+  pg-data:
+  minio-data:

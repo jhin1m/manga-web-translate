@@ -97,10 +97,12 @@ class LamaInpainter:
     def __init__(self, model_path: Path, threads: int = 0):
         import onnxruntime as ort
 
+        from .models import ort_providers
+
         so = ort.SessionOptions()
         if threads:
             so.intra_op_num_threads = threads
-        self.session = ort.InferenceSession(str(model_path), so, providers=["CPUExecutionProvider"])
+        self.session = ort.InferenceSession(str(model_path), so, providers=ort_providers())
 
     @staticmethod
     def crop_window(x: int, y: int, w: int, h: int, img_w: int, img_h: int) -> tuple[int, int, int, int]:

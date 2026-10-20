@@ -1,0 +1,14 @@
+# Kiểm từ ngoài process: healthz fail 2 lần liên tiếp, hàng đợi cũ > 15'. (Ngân sách 50/80/100% do mtl-jobs báo.)
+[Unit]
+Description=mtl alert check (healthz + queue age → ntfy)
+
+[Service]
+Type=oneshot
+User=mtl
+Group=mtl
+EnvironmentFile=/srv/mtl/shared/.env
+Environment=ALERT_STATE_DIR=/var/lib/mtl-alert
+StateDirectory=mtl-alert
+ExecStart=/srv/mtl/current/infra/alert.sh
+PrivateTmp=true
+NoNewPrivileges=true

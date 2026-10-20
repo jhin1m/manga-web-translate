@@ -10,7 +10,7 @@ import { and, eq, sql } from "drizzle-orm";
 import { GPU_USD_PER_S, llmPrice, MAX_INPUT_TOKENS_PER_CALL, MAX_OUTPUT_TOKENS_PER_CALL } from "./prices.ts";
 
 type Job = typeof jobs.$inferSelect;
-type Kind = "llm_tokens_in" | "llm_tokens_out" | "gpu_seconds" | "pages";
+type Kind = "llm_tokens_in" | "llm_tokens_out" | "gpu_seconds" | "pages" | "gpu_idle_seconds";
 export type WorkerKind = keyof typeof GPU_USD_PER_S;
 
 /** seq 0 dành cho dòng server tự ghi (VD số page khi ingest); worker dùng seq ≥ 1. */
@@ -79,6 +79,26 @@ export async function recordUsage(
 /** Dòng server tự ghi (không từ worker), VD `pages` khi ingest xong. */
 export function recordServerUsage(tx: DbLike, job: Job, attempt: number, kind: Kind, quantity: number) {
   return insertRows(tx, job, attempt, SERVER_SEQ, [{ kind, quantity, unit: 0 }]);
+}
+
+/**
+ * Chi phí nền tảng theo dispatch Modal (workspace_id + job_id null), VD GPU rỗi của container. Unique
+ * (dispatch_id, kind) → ghi tối đa 1 lần mỗi dispatch (báo lại / reaper ước lượng sau → bỏ qua). Trả true nếu ghi.
+ */
+export async function recordDispatchUsage(
+  tx: DbLike,
+  dispatchId: string,
+  kind: Kind,
+  quantity: number,
+  unit: number,
+): Promise<boolean> {
+  const q = Math.round(Math.max(0, quantity) * 1000) / 1000;
+  const inserted = await tx
+    .insert(usageLedger)
+    .values({ workspaceId: null, jobId: null, dispatchId, kind, quantity: q, unitCostUsd: unit, costUsd: q * unit })
+    .onConflictDoNothing()
+    .returning({ id: usageLedger.id });
+  return inserted.length > 0;
 }
 
 async function insertRows(

@@ -1,0 +1,10 @@
+{
+  "Rules": [
+    {
+      "ID": "expire-exports",
+      "Status": "Enabled",
+      "Filter": { "Tag": { "Key": "mtl-kind", "Value": "export" } },
+      "Expiration": { "Days": 7 }
+    }
+  ]
+}

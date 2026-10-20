@@ -3,10 +3,13 @@ import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { secureHeaders } from "hono/secure-headers";
 import { auth } from "./auth.ts";
+import { env } from "./env.ts";
+import { requestLog } from "./lib/request-log.ts";
 import { chapterRoutes } from "./routes/chapters.ts";
 import { exportRoutes } from "./routes/export.ts";
 import { findReplaceRoutes } from "./routes/find-replace.ts";
 import { glossaryRoutes } from "./routes/glossary.ts";
+import { healthRoutes } from "./routes/health.ts";
 import { jobRoutes } from "./routes/jobs.ts";
 import { pageStateRoutes } from "./routes/page-state.ts";
 import { pageRoutes } from "./routes/pages.ts";
@@ -18,7 +21,10 @@ import { workspaceRoutes } from "./routes/workspaces.ts";
 
 export function createApp() {
   const app = new Hono();
+  if (env.NODE_ENV === "production") app.use("*", requestLog);
   app.use("*", secureHeaders());
+
+  app.route("/", healthRoutes);
 
   app.on(["GET", "POST"], "/api/auth/*", (c) => auth.handler(c.req.raw));
 

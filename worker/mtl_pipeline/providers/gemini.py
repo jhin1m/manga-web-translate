@@ -16,6 +16,7 @@ from .base import (
     TRANSLATE_SCHEMA,
     ProviderError,
     classify_status,
+    guard_output_tokens,
     load_prompt,
     ocr_user_text,
     parse_ocr,
@@ -72,6 +73,7 @@ class GeminiProvider:
             # Token thinking tính tiền như output.
             output_tokens=((um.candidates_token_count or 0) + (um.thoughts_token_count or 0)) if um else 0,
         )
+        guard_output_tokens(usage)
         if not resp.text:
             raise ProviderError("schema", "gemini trả rỗng", usage=[usage])
         return resp.text, usage

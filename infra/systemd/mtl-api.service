@@ -1,0 +1,29 @@
+# API HTTP (Hono). Tách unit với mtl-jobs: restart API không dừng reaper/dispatcher và ngược lại.
+# Cài: sudo ln -sf /srv/mtl/current/infra/systemd/mtl-*.{service,timer} /etc/systemd/system/ && sudo systemctl daemon-reload
+[Unit]
+Description=mtl API
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=mtl
+Group=mtl
+# Symlink release hiện hành — resolve lúc start nên `systemctl restart` sau khi đổi symlink dùng bản mới.
+WorkingDirectory=/srv/mtl/current/apps/api
+Environment=NODE_ENV=production
+ExecStart=/srv/mtl/current/apps/api/node_modules/.bin/tsx src/index.ts
+Restart=always
+RestartSec=2
+TimeoutStopSec=30
+# stdout/stderr (log JSON) → journald: journalctl -u mtl-api -o cat
+StandardOutput=journal
+StandardError=journal
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadOnlyPaths=/srv/mtl
+
+[Install]
+WantedBy=multi-user.target
