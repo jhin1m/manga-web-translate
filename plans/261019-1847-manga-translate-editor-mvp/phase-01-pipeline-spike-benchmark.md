@@ -1,7 +1,7 @@
 ---
 phase: 1
 title: "Spike & benchmark pipeline (KO manhwa, 2 giai đoạn)"
-status: pending
+status: completed
 priority: P1
 effort: "5d"
 dependencies: []
