@@ -50,8 +50,11 @@ export type ChapterSummary = {
 /** Số page theo trạng thái (busy = mọi trạng thái chưa ready/failed). */
 export type PageCounts = { total: number; ready: number; failed: number; busy: number };
 
-/** Chương kèm thống kê (series detail, recent-chapters, latest_chapter). */
-export type ChapterRow = ChapterSummary & { page_counts?: PageCounts; exported?: boolean };
+/**
+ * Chương kèm thống kê (series detail, recent-chapters, latest_chapter). `exported` = đã xuất và chưa sửa gì sau
+ * đó; `reexport` = đã xuất nhưng sau đó có sửa tay / dịch lại → cần "Xuất lại".
+ */
+export type ChapterRow = ChapterSummary & { page_counts?: PageCounts; exported?: boolean; reexport?: boolean };
 
 export type SeriesListItem = Series & {
   chapter_count: number;

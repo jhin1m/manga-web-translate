@@ -19,7 +19,7 @@ import { parseJson } from "../lib/validate.ts";
 import { type AppEnv, requireWorkspace } from "../middleware/workspace.ts";
 import { head, MAX_POST_TTL_S, presignPost, readPrefix } from "../storage.ts";
 import { jobView } from "./jobs.ts";
-import { chapterStats, chapterSummary, exportedChapterIds } from "./series.ts";
+import { chapterStats, chapterSummary, exportStatus } from "./series.ts";
 
 /** Ảnh nhận upload → đuôi key. Content-Type nằm trong policy POST nên MinIO giữ đúng giá trị này. */
 export const CHAPTER_UPLOAD_TYPES = { "image/png": "png", "image/jpeg": "jpg", "image/webp": "webp" } as const;
@@ -97,7 +97,8 @@ export const chapterRoutes = new Hono<AppEnv>();
 /**
  * Chương gần đây của workspace cho "Việc cần làm" ở home. Path riêng (không `/chapters/recent`) để không đụng
  * `/chapters/:chapterId`. Thứ tự: chương mình đang giữ khoá trước, rồi `updated_at` mới nhất (heartbeat khoá cũng
- * bump cột này = "đang làm"). `open=1` bỏ chương đã xuất/xong; nháp upload dở vẫn có.
+ * bump cột này = "đang làm"). `open=1` bỏ chương đã xuất/xong (trừ chương sửa sau lần xuất cuối); nháp upload dở
+ * vẫn có.
  */
 chapterRoutes.get("/w/:ws/recent-chapters", requireWorkspace(), async (c) => {
   const q = RecentQuery.safeParse(c.req.query());
@@ -109,7 +110,8 @@ chapterRoutes.get("/w/:ws/recent-chapters", requireWorkspace(), async (c) => {
   const sdb = c.get("sdb");
   const me = c.get("user").id;
   const all = await sdb.select(chapters);
-  const exported = q.data.open === "1" ? await exportedChapterIds(sdb, all) : new Set<string>();
+  // open=1: bỏ chương đã xuất mà chưa sửa gì sau đó (chương cần "Xuất lại" vẫn còn trong danh sách).
+  const exported = q.data.open === "1" ? (await exportStatus(sdb, all)).exported : new Set<string>();
   const mine = (ch: (typeof all)[number]) => activeLockHolder(ch) === me;
   const picked = all
     .filter((ch) => !exported.has(ch.id))
@@ -128,6 +130,7 @@ chapterRoutes.get("/w/:ws/recent-chapters", requireWorkspace(), async (c) => {
       series_title: title.get(ch.seriesId) ?? "",
       page_counts: pickedStats.pageCounts(ch.id),
       exported: pickedStats.exported(ch.id),
+      reexport: pickedStats.reexport(ch.id),
       lock_holder_is_me: mine(ch),
     })),
   });

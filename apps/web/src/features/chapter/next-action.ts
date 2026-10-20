@@ -8,7 +8,7 @@ import type { Tone } from "./status.ts";
 /** Upload phía client của chương nháp (upload-manager; "incomplete" = tab cũ đóng giữa chừng). */
 export type UploadView = { phase: "uploading" | "uploaded" | "failed" | "incomplete"; done: number; total: number };
 
-export type NextActionKind = "progress" | "resume" | "translate" | "retry" | "edit" | "open";
+export type NextActionKind = "progress" | "resume" | "translate" | "retry" | "edit" | "reexport" | "open";
 
 export type NextAction = {
   kind: NextActionKind;
@@ -25,7 +25,10 @@ export type NextAction = {
 
 const ratio = (a: number, b: number) => (b > 0 ? Math.min(1, a / b) : 0);
 
-export function nextAction(ch: Pick<ChapterRow, "status" | "page_counts" | "exported">, upload?: UploadView | null) {
+export function nextAction(
+  ch: Pick<ChapterRow, "status" | "page_counts" | "exported" | "reexport">,
+  upload?: UploadView | null,
+) {
   const pc = ch.page_counts ?? { total: 0, ready: 0, failed: 0, busy: 0 };
   const a = (x: Omit<NextAction, "progress"> & { progress?: number }): NextAction => ({ progress: 0, ...x });
 
@@ -53,6 +56,17 @@ export function nextAction(ch: Pick<ChapterRow, "status" | "page_counts" | "expo
         progress: ratio(upload.done, upload.total),
       });
     }
+  }
+  // Đã xuất rồi sửa tay / dịch lại: khi chương ổn định (không còn trang lỗi) → bước tiếp là xuất lại.
+  if (ch.reexport && (ch.status === "review" || ch.status === "done")) {
+    return a({
+      kind: "reexport",
+      action: "Xuất lại",
+      state: "Sửa sau lần xuất",
+      detail: `Có thay đổi sau lần xuất cuối · ${pc.total} trang`,
+      tone: "warn",
+      progress: 1,
+    });
   }
   if (ch.exported && (ch.status === "review" || ch.status === "done")) {
     return a({ kind: "open", action: "Mở", state: "Đã xuất", detail: `${pc.total} trang`, tone: "ok", progress: 1 });
@@ -115,5 +129,6 @@ export function nextAction(ch: Pick<ChapterRow, "status" | "page_counts" | "expo
   }
 }
 
-/** Chương còn việc (bộ lọc "Cần làm"): chưa xuất. */
-export const needsWork = (ch: Pick<ChapterRow, "status" | "exported">) => ch.status !== "done" && !ch.exported;
+/** Chương còn việc (bộ lọc "Cần làm"): chưa xuất, hoặc có thay đổi sau lần xuất cuối. */
+export const needsWork = (ch: Pick<ChapterRow, "status" | "exported" | "reexport">) =>
+  !!ch.reexport || (ch.status !== "done" && !ch.exported);

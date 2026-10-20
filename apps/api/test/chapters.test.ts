@@ -2,7 +2,8 @@
  * Luồng chương qua API người dùng + worker giả lập (giao thức có fencing): upload → commit → ingest →
  * giai đoạn 1/2 → review; chạy lại trang lỗi; dịch lại 1 trang với glossary mới; huỷ; khoá chương.
  */
-import { chapters, jobs, scoped } from "@mtl/db";
+import { chapters, jobs, pageStates, pages, scoped } from "@mtl/db";
+import { emptyPageState, pageId } from "@mtl/shared";
 import { eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { INVITATION_HEADER, INVITATION_TOKEN_HEADER } from "../src/auth.ts";
@@ -342,6 +343,68 @@ describe("recent chapters", () => {
     const open = await get("?open=1");
     expect(open.chapters.map((c) => c.id)).toEqual([old.id, R.chapterId]);
     expect((await get("")).chapters.find((c) => c.id === fresh.id)?.exported).toBe(true);
+  });
+
+  it("an exported chapter edited or retranslated afterwards needs re-export", async () => {
+    const R = await seedWorkspace("reexport");
+    const sdb = scoped(db, R.workspaceId);
+    const at = (min: number) => new Date(Date.now() - min * 60_000);
+    const job = (chapterId: string, type: "chapter.export" | "chapter.translate", min: number) =>
+      sdb.insert(jobs, {
+        type,
+        status: "succeeded",
+        payload: { type } as never,
+        inputRev: "x",
+        idempotencyKey: uniq(type),
+        chapterId,
+        createdAt: at(min),
+      });
+    const withPage = async (number: string, editedMin: number) => {
+      const ch = await sdb.insert(chapters, { seriesId: R.seriesId, number, status: "review" });
+      const id = pageId(ch.id, 1, 0);
+      await sdb.insert(pages, {
+        id,
+        chapterId: ch.id,
+        ord: 0,
+        width: 10,
+        height: 10,
+        originalKey: `ws/${R.workspaceId}/ch/${ch.id}/ingest/1/0.png`,
+        originalSha256: "ab".repeat(32),
+      });
+      await sdb.insert(pageStates, { pageId: id, state: emptyPageState(10, 10), updatedAt: at(editedMin) });
+      return ch.id;
+    };
+    const clean = await withPage("2", 30); // sửa trước lần xuất
+    await job(clean, "chapter.export", 20);
+    const edited = await withPage("3", 5); // sửa sau lần xuất
+    await job(edited, "chapter.export", 20);
+    const retranslated = await withPage("4", 30);
+    await job(retranslated, "chapter.export", 20);
+    await job(retranslated, "chapter.translate", 10);
+
+    type Recent = { chapters: { id: string; exported: boolean; reexport: boolean }[] };
+    const open = await json<Recent>(
+      await call(`/api/w/${R.workspaceId}/recent-chapters?open=1`, { cookie: R.cookie }),
+      200,
+    );
+    const ids = open.chapters.map((c) => c.id);
+    expect(ids).not.toContain(clean);
+    expect(open.chapters.find((c) => c.id === edited)).toMatchObject({ exported: false, reexport: true });
+    expect(open.chapters.find((c) => c.id === retranslated)).toMatchObject({ exported: false, reexport: true });
+
+    // Xuất lại → hết cần làm.
+    await job(edited, "chapter.export", 0);
+    const again = await json<Recent>(
+      await call(`/api/w/${R.workspaceId}/recent-chapters?open=1`, { cookie: R.cookie }),
+      200,
+    );
+    expect(again.chapters.map((c) => c.id)).not.toContain(edited);
+    const d = await json<{ chapters: { id: string; exported: boolean; reexport: boolean }[] }>(
+      await call(`/api/w/${R.workspaceId}/series/${R.seriesId}`, { cookie: R.cookie }),
+      200,
+    );
+    expect(d.chapters.find((c) => c.id === clean)).toMatchObject({ exported: true, reexport: false });
+    expect(d.chapters.find((c) => c.id === retranslated)).toMatchObject({ exported: false, reexport: true });
   });
 
   it("series detail and list carry page_counts / exported / next_number", async () => {

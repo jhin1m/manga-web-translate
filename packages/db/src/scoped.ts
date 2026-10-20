@@ -36,6 +36,13 @@ export interface Scoped {
     by: C,
     where?: SQL,
   ): Promise<({ [K in keyof C]: C[K]["_"]["data"] } & { n: number })[]>;
+  /** Giá trị lớn nhất của `col` theo nhóm cột (GROUP BY trong SQL). */
+  maxBy<T extends WsTable, C extends Record<string, PgColumn>, M extends PgColumn>(
+    table: T,
+    by: C,
+    col: M,
+    where?: SQL,
+  ): Promise<({ [K in keyof C]: C[K]["_"]["data"] } & { max: M["_"]["data"] })[]>;
   /** Không thấy trong workspace (kể cả id thuộc workspace khác, id không phải uuid) → NotFoundError. */
   byId<T extends WsTableWithId>(table: T, id: string, what?: string): Promise<Row<T>>;
   insert<T extends WsTable>(table: T, values: Values<T>): Promise<Row<T>>;
@@ -76,6 +83,21 @@ export function scoped(db: DbLike, wsId: string): Scoped {
         .from(table as PgTable)
         .where(own(table, where))
         .groupBy(...Object.values(by)) as unknown as Promise<({ [K in keyof C]: C[K]["_"]["data"] } & { n: number })[]>;
+    },
+
+    maxBy<T extends WsTable, C extends Record<string, PgColumn>, M extends PgColumn>(
+      table: T,
+      by: C,
+      col: M,
+      where?: SQL,
+    ) {
+      return db
+        .select({ ...by, max: sql`max(${col})`.mapWith(col) })
+        .from(table as PgTable)
+        .where(own(table, where))
+        .groupBy(...Object.values(by)) as unknown as Promise<
+        ({ [K in keyof C]: C[K]["_"]["data"] } & { max: M["_"]["data"] })[]
+      >;
     },
 
     async byId<T extends WsTableWithId>(table: T, id: string, what?: string): Promise<Row<T>> {

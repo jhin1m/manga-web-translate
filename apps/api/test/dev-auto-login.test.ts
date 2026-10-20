@@ -4,7 +4,9 @@ import { createApp } from "../src/app.ts";
 import { devAutoLoginEnabled, env, parseEnv } from "../src/env.ts";
 import { PASSWORD, seedWorkspace } from "./helpers.ts";
 
-const base = { ...process.env, GLOBAL_DAILY_USD: "10", GLOBAL_MONTHLY_USD: "100" };
+// Bỏ DEV_AUTO_LOGIN_* thật (`.env` dev nạp vào process.env) → mỗi case chỉ thấy đúng biến nó đặt.
+const { DEV_AUTO_LOGIN_EMAIL: _email, DEV_AUTO_LOGIN_PASSWORD: _password, ...realEnv } = process.env;
+const base = { ...realEnv, GLOBAL_DAILY_USD: "10", GLOBAL_MONTHLY_USD: "100" };
 const dev = {
   ...env,
   NODE_ENV: "development" as const,
