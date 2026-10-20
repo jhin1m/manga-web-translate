@@ -25,12 +25,15 @@ Branch: `feat/redesign-p1-dev-login-shell` (chưa merge). Phase: `plans/261020-1
 - Worker `uv run pytest`: 132 passed, 2 skipped.
 - Smoke Playwright (tester, cổng 5181/8798, DB `mtl_test_e2e`): auto-login vào `/`, topbar + menu đúng, 4 redirect đúng, click series → `/w/<ws>/s/<s>`, 0 lỗi console; route 404 khi tắt env/NODE_ENV=test. Báo cáo: `tester-261020-redesign-p1-smoke-report.md`.
 - E2E typecheck ad-hoc sạch.
-- **E2E Playwright CHƯA chạy**: config cứng cổng 5180 trùng `pnpm dev` của owner → bỏ qua theo chỉ dẫn; controller chạy `pnpm --filter @mtl/web e2e` sau.
+- E2E Playwright: lượt đầu bỏ qua (cổng cứng 5180 trùng `pnpm dev` owner). Sau khi controller chốt → e2e chuyển cổng riêng (xem mục dưới), `pnpm --filter @mtl/web e2e` **7/7 xanh** (chapter-tools 3, editor, routes-redirect, typeset-parity, upload-chapter) trên Vite 5181 + API 8797; 5180/8787 owner không bị đụng.
 
 ## Review (code-reviewer, 0 critical)
 - Đã sửa: H1 đổi workspace tại `/` không render lại (→ store subscribe); M2 env e2e; M3 đăng xuất ở dev bị tự đăng nhập lại (→ cờ sessionStorage); L2 side effect trong render picker; L4 dead export `workspaceQuery`; L7 chặn cả PASSWORD ở prod.
 - Để lại: L1 `beforeLoad` ghi `mtl.ws` trước khi biết membership (resolve vẫn lọc; tệ nhất về picker); L3 home lỗi/0 workspace chưa có hướng dẫn (P2 làm home mới); L5 CSS `.topbar` trong `styles/tokens.css` thành dead code — file ngoài phạm vi P1, dọn ở P6; L6 dev route không check Origin (chỉ dev, localhost, tác động không đáng kể).
 - Fix H1 sau smoke chưa có e2e 2 workspace (seed e2e chỉ 1 ws).
 
-## Câu hỏi mở
-- Có muốn e2e chạy được trên cổng khác 5180 (cần CORS MinIO dev thêm origin) để agent tự chạy e2e song song dev?
+## E2E cổng riêng (controller chốt: CÓ)
+- `apps/web/e2e/env.ts`: `WEB_PORT` mặc định 5181 (`E2E_WEB_PORT`), `API_PORT` 8797 (`E2E_API_PORT`).
+- `infra/docker-compose.dev.yml`: `MINIO_API_CORS_ALLOW_ORIGIN` = `${WEB_ORIGIN:-…5180},${E2E_WEB_ORIGIN:-…5181}`; đã recreate chỉ `mtl-dev-minio-1` + `mtl-dev-files-proxy-1` (volume giữ nguyên, postgres không đụng). Preflight 9100 trả đúng ACAO cho cả 5180 và 5181.
+- Lưu ý: container mtl-dev trước đó dựng từ compose của worktree `p2`; chạy `pnpm infra:up` từ checkout chưa có thay đổi này (trước khi merge) sẽ đưa CORS về chỉ 5180.
+- Docs: `docs/development-setup.md` mục Test.

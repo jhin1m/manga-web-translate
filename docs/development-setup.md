@@ -54,7 +54,7 @@ Phiên better-auth sống 7 ngày, tự gia hạn khi dùng (tối đa 1 lần/n
 
 `pnpm test` cần `pnpm infra:up`. Mỗi package dùng DB riêng `<TEST_DATABASE_URL>_<pkg>`, được xoá + migrate lại từ đầu mỗi lần chạy.
 
-E2E web (Playwright, Chromium): `pnpm --filter @mtl/web e2e` — tự reset DB `mtl_test_e2e`, seed workspace/series/token worker, bật API :8797 + Vite :5180 (cổng 5180 khớp CORS MinIO dev nên phải trống), upload ZIP 10 trang qua UI; worker giả lập (`apps/web/e2e/fake-worker.ts`, chỉ dùng trong test) gọi đúng giao thức `/worker/v1`. Lần đầu: `pnpm --filter @mtl/web exec playwright install chromium`. Gate parity Konva ↔ render.py:
+E2E web (Playwright, Chromium): `pnpm --filter @mtl/web e2e` — tự reset DB `mtl_test_e2e`, seed workspace/series/token worker, bật API :8797 + Vite :5181 (cổng riêng → chạy song song được với `pnpm dev` 5180/8787; đổi qua `E2E_WEB_PORT`/`E2E_API_PORT`, origin SPA phải nằm trong `MINIO_API_CORS_ALLOW_ORIGIN` của `infra/docker-compose.dev.yml` = 5180 + 5181; sau khi đổi CORS: `docker compose -f infra/docker-compose.dev.yml up -d --wait minio files-proxy` để tạo lại container), upload ZIP 10 trang qua UI; worker giả lập (`apps/web/e2e/fake-worker.ts`, chỉ dùng trong test) gọi đúng giao thức `/worker/v1`. Lần đầu: `pnpm --filter @mtl/web exec playwright install chromium`. Gate parity Konva ↔ render.py:
 `pnpm --filter @mtl/web e2e typeset-parity` (CI chạy riêng spec này).
 
 ## Web (`apps/web`)

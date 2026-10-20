@@ -1,8 +1,11 @@
 import { fileURLToPath } from "node:url";
 
-/** API e2e chạy cổng riêng; SPA dùng cổng dev 5180 (khớp WEB_ORIGIN mà MinIO dev cho phép CORS). */
-export const API_PORT = 8797;
-export const WEB_PORT = 5180;
+/**
+ * Cổng riêng cho e2e, không đụng `pnpm dev` (5180/8787) → chạy song song được. SPA e2e phải là origin MinIO dev cho
+ * phép CORS (infra/docker-compose.dev.yml: 5180 + 5181). Đổi qua E2E_WEB_PORT / E2E_API_PORT.
+ */
+export const API_PORT = Number(process.env.E2E_API_PORT ?? 8797);
+export const WEB_PORT = Number(process.env.E2E_WEB_PORT ?? 5181);
 export const WEB_URL = `http://localhost:${WEB_PORT}`;
 export const API_URL = `http://localhost:${API_PORT}`;
 
