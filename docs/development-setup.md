@@ -40,3 +40,13 @@ Mở http://localhost:5180 → đăng nhập owner → "Mời thành viên". MVP
 ## Test
 
 `pnpm test` cần `pnpm infra:up`. Mỗi package dùng DB riêng `<TEST_DATABASE_URL>_<pkg>`, được xoá + migrate lại từ đầu mỗi lần chạy.
+
+E2E web (Playwright, Chromium): `pnpm --filter @mtl/web e2e` — tự reset DB `mtl_test_e2e`, seed workspace/series/token worker, bật API :8797 + Vite :5180 (cổng 5180 khớp CORS MinIO dev nên phải trống), upload ZIP 10 trang qua UI; worker giả lập (`apps/web/e2e/fake-worker.ts`, chỉ dùng trong test) gọi đúng giao thức `/worker/v1`. Lần đầu: `pnpm --filter @mtl/web exec playwright install chromium`.
+
+## Web (`apps/web`)
+
+- Router: `src/app/router.tsx` (TanStack Router, params type-safe); component ở `src/features/*` nhận params qua props. Route editor `/w/$ws/series/$seriesId/chapters/$chapterId/edit/$pageId` nằm ngoài layout workspace (toàn màn hình) — Phase 5 thay component.
+- Dữ liệu: TanStack Query; tiến độ chương poll `/progress` 2,5s cho tới khi chương ổn định (draft/review/partial_failed/done).
+- Upload: ảnh/ZIP giải nén trong Web Worker → presigned POST từng file (song song 4, thử lại 3 lần, ký lại khi thử lại) → `POST /chapters/:id/commit` (server kiểm HEAD + magic bytes).
+- Khoá chương khi mở editor: hook `useChapterLock` (`src/features/chapter/use-chapter-lock.ts`).
+- Giao diện: [design-guidelines.md](./design-guidelines.md).
