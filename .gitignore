@@ -21,3 +21,8 @@ worker/spikes/typeset-parity/out/
 worker/spikes/typeset-parity/test-results/
 worker/spikes/typeset-parity/playwright-report/
 >>>>>>> feat/p1-pipeline-spike-benchmark
+
+# Playwright e2e (apps/web)
+apps/web/e2e/.state.json
+apps/web/test-results/
+apps/web/playwright-report/
