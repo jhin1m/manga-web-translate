@@ -8,6 +8,7 @@ import { z } from "zod";
  * 3. stroke.width = bề rộng viền ra NGOÀI glyph. Pillow: stroke_width=w; Konva: strokeWidth=2w + fillAfterStrokeEnabled.
  * 4. Pillow bắt buộc raqm; không fallback basic layout.
  * 5. `lines[]` là kết quả ngắt dòng đã chốt; renderer chỉ vẽ, không ngắt lại (trừ box auto chưa có lines).
+ * Tên trường TextBox khớp docs/typeset-layout-contract.md và worker/mtl_pipeline/schema.py.
  */
 export const PAGE_STATE_SCHEMA_VERSION = 1;
 
@@ -55,9 +56,14 @@ export const TextBox = z.object({
   text: NfcText,
   /** Dòng đã ngắt (hợp đồng layout mục 5); rỗng khi box auto chưa qua typesetter/editor. */
   lines: z.array(NfcText),
-  font: z.string().min(1),
-  size: z.number().positive(),
+  /** font_id = tên file font không đuôi trong worker/fonts/ (khoá của fonts/manifest.json). */
+  font_family: z.string().min(1),
+  /** px theo em. */
+  font_size: z.number().positive(),
+  /** Hệ số nhân bước dòng (docs/typeset-layout-contract.md quy tắc 3). */
   line_height: z.number().positive(),
+  /** Lề trong (px), dùng cho baseline và toạ độ x. */
+  pad: z.number().nonnegative(),
   letter_spacing: z.number(),
   align: TextAlign,
   fill: HexColor,
@@ -89,15 +95,22 @@ export const PageState = z.object({
 export type PageState = z.infer<typeof PageState>;
 
 /** Kết quả OCR giai đoạn 1 (pages.ocr_result): chỉ chép chữ, chưa dịch. */
+export const OcrRegion = Region.omit({ source_text: true, translation: true, confidence: true, flags: true }).extend({
+  /** Bóng thoại chứa vùng chữ (chỉ text_bubble) — vùng typeset ở giai đoạn 2. */
+  bubble_id: z.string().min(1).nullable(),
+});
+export type OcrRegion = z.infer<typeof OcrRegion>;
 export const OcrItem = z.object({
   id: z.string().min(1),
   source: NfcText,
   is_sfx: z.boolean(),
   empty: z.boolean(),
   confidence: z.number().min(0).max(1),
+  /** OCR lệch id sau retry → người sửa phải soát lại. */
+  low_conf: z.boolean(),
 });
 export const OcrResult = z.object({
-  regions: z.array(Region.omit({ source_text: true, translation: true, confidence: true, flags: true })),
+  regions: z.array(OcrRegion),
   items: z.array(OcrItem),
 });
 export type OcrResult = z.infer<typeof OcrResult>;

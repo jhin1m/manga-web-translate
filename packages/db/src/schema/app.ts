@@ -14,6 +14,7 @@ import {
   type OcrResult,
   PAGE_STATUSES,
   type PageState,
+  type PreparePartial,
   USAGE_KINDS,
 } from "@mtl/shared";
 import { sql } from "drizzle-orm";
@@ -144,6 +145,8 @@ export const pages = pgTable(
     nextRev: integer("next_rev").notNull().default(1),
     ocrResult: jsonb("ocr_result").$type<OcrResult>(),
     prepareInputRev: text("prepare_input_rev"),
+    /** Artifact trước LLM của attempt lỗi provider (+ input_rev lúc đó) — lần prepare sau bỏ qua detect/inpaint. */
+    preparePartial: jsonb("prepare_partial").$type<PreparePartial & { input_rev: string }>(),
     sourceMap: jsonb("source_map").$type<unknown[]>().notNull().default([]),
     cutFlag: boolean("cut_flag").notNull().default(false),
     status: text("status").$type<PageStatus>().notNull().default("pending"),
@@ -264,6 +267,12 @@ export const jobs = pgTable(
     leaseOwner: uuid("lease_owner").references(() => workerTokens.id, { onDelete: "set null" }),
     leaseToken: text("lease_token"),
     leaseExpiresAt: timestamp("lease_expires_at", { withTimezone: true }),
+    /** Lúc claim attempt hiện tại — trần gpu_s khi clamp usage. */
+    claimedAt: timestamp("claimed_at", { withTimezone: true }),
+    /** worker_id tự khai của worker giữ lease (chỉ để hiển thị/log; fencing dùng lease_owner). */
+    workerId: text("worker_id"),
+    /** Rev output cấp lúc claim từ pages.next_rev (clean/mask); mỗi attempt một rev riêng. */
+    outputRev: integer("output_rev"),
     progress: real("progress").notNull().default(0),
     stage: text("stage"),
     errorClass: text("error_class").$type<(typeof ERROR_CLASSES)[number]>(),
@@ -285,6 +294,8 @@ export const jobs = pgTable(
     index("jobs_chapter_idx").on(t.chapterId),
     index("jobs_page_idx").on(t.pageId),
     index("jobs_lease_owner_idx").on(t.leaseOwner),
+    // Reaper quét lease hết hạn.
+    index("jobs_running_lease_idx").on(t.leaseExpiresAt).where(sql`${t.status} = 'running'`),
     foreignKey({ columns: [t.workspaceId, t.chapterId], foreignColumns: [chapters.workspaceId, chapters.id] }).onDelete(
       "cascade",
     ),

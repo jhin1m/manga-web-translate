@@ -167,17 +167,21 @@
               "type": "string"
             }
           },
-          "font": {
+          "font_family": {
             "type": "string",
             "minLength": 1
           },
-          "size": {
+          "font_size": {
             "type": "number",
             "exclusiveMinimum": 0
           },
           "line_height": {
             "type": "number",
             "exclusiveMinimum": 0
+          },
+          "pad": {
+            "type": "number",
+            "minimum": 0
           },
           "letter_spacing": {
             "type": "number"
@@ -236,9 +240,10 @@
           "rotation",
           "text",
           "lines",
-          "font",
-          "size",
+          "font_family",
+          "font_size",
           "line_height",
+          "pad",
           "letter_spacing",
           "align",
           "fill",

@@ -1,0 +1,35 @@
+{
+  "$id": "https://mtl.local/schema/inputs-page-ocr-region.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "original": {
+      "type": "string",
+      "format": "uri"
+    },
+    "context_lines": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "source": {
+            "type": "string"
+          },
+          "translation": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "source",
+          "translation"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "original",
+    "context_lines"
+  ],
+  "additionalProperties": false
+}
