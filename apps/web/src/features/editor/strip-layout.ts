@@ -112,5 +112,22 @@ export function clampView(v: View, strip: Size, box: Size, x0 = 0): View {
   return { scale: v.scale, x: l - x0 * v.scale, y };
 }
 
+/** Page cao hơn `PAGE_RATIO_MAX` × rộng (webtoon cắt dải) không vừa theo chiều cao — chữ sẽ quá nhỏ để đọc. */
+export const PAGE_RATIO_MAX = 2;
+
+/** Vừa theo chiều cao không thu page dưới mức này — khung thấp (bảng dưới mở) thì cuộn còn hơn chữ không đọc được. */
+export const FIT_HEIGHT_MIN = 0.5;
+
+/**
+ * Scale vừa khung: vừa bề ngang nội dung (`content`, gồm cả cột Gốc khi chia đôi), trọn chiều cao `page` nếu là page
+ * dạng tờ (không phải dải webtoon) nhưng không dưới `FIT_HEIGHT_MIN`, không phóng quá 100%; lề `EDGE` mỗi phía.
+ */
+export function fitScale(content: Size, page: Size | undefined, box: Size, min = 0.1): number {
+  let s = Math.min(1, (box.w - 2 * EDGE) / content.w);
+  if (page && page.h > 0 && page.h <= PAGE_RATIO_MAX * page.w)
+    s = Math.min(s, Math.max(FIT_HEIGHT_MIN, (box.h - 2 * EDGE) / page.h));
+  return Math.max(min, s);
+}
+
 /** Khung nhìn đưa đỉnh page (offset) lên gần mép trên khung, giữ scale. */
 export const viewAtOffset = (v: View, offset: number): View => ({ ...v, y: EDGE - offset * v.scale });

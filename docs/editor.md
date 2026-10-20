@@ -88,6 +88,12 @@ chữ (mặc định); Chia đôi = cột Gốc bên trái cột Dịch trên c�
 tác — bấm/kéo ở cột Gốc = kéo canvas; trần mount 2 page (mỗi page 2 ảnh). Giữ `O` = tạm xem Gốc, nhả = về chế độ
 trước (chia đôi: cột phải cũng hiện gốc, bố cục giữ nguyên). `editorStore.showOriginal` suy ra từ chế độ đang hiện.
 
+Khung nhìn mở chương (và khi bật/tắt Chia đôi): `strip-layout.fitScale` — vừa bề ngang nội dung, trọn chiều cao 1
+page dạng tờ (cao ≤ 2× rộng; dải webtoon chỉ vừa bề ngang), trần 100%. Khung đổi cỡ trước khi người dùng động vào
+khung nhìn → vừa lại; đã tự zoom → Chia đôi giữ zoom. Hàng công cụ nằm cố định trên canvas (không đè ảnh); góc dưới
+"Trang i/N" theo page ở giữa khung. Page chưa `ready` (`pageLevel` busy/todo): cột Dịch hiện ảnh gốc + lớp mờ +
+"Đang dịch…"/"Chờ dịch", không vẽ chữ; ảnh sạch vẫn tải ngầm để đổi ngay khi xong. Chế độ Gốc không đổi.
+
 ## Phím tắt
 
 Bảng duy nhất ở `apps/web/src/features/editor/shortcuts.ts` (thuần, có test), 1 listener `use-shortcuts.ts` chỉ gắn

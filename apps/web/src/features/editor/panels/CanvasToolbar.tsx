@@ -1,5 +1,5 @@
 /**
- * Thanh công cụ nổi trên canvas màn chương: công cụ (V/T/B/E/R), hoàn tác/làm lại, về bản AI của page đang sửa.
+ * Hàng công cụ cố định phía trên canvas màn chương (không đè ảnh): công cụ (V/T/B/E/R), hoàn tác/làm lại, về bản AI của page đang sửa.
  * Phía dưới canvas: trang đang ở giữa khung + mức zoom.
  */
 import { resetToAI } from "../actions.ts";

@@ -20,7 +20,7 @@ import { errorMessage } from "../../lib/api.ts";
 import { deleteBox, setStyleMany } from "../editor/actions.ts";
 import { ChapterCanvas } from "../editor/canvas/ChapterCanvas.tsx";
 import { type PageRect, useOcrRegion } from "../editor/canvas/OcrSelect.tsx";
-import type { SlotImages } from "../editor/canvas/PageSlot.tsx";
+import type { SlotImages, SlotProcessing } from "../editor/canvas/PageSlot.tsx";
 import { chapterStore, focusPage, revealRect, useChapterStore } from "../editor/chapter-store.ts";
 import { CanvasStatus, CanvasToolbar } from "../editor/panels/CanvasToolbar.tsx";
 import type { ShortcutAction } from "../editor/shortcuts.ts";
@@ -40,7 +40,7 @@ import { isExportActive, useExports } from "./export-panel.tsx";
 import { FindReplacePanel } from "./FindReplace.tsx";
 import { Inspector } from "./inspector.tsx";
 import { PageRail } from "./page-rail.tsx";
-import { needsReview } from "./page-status.ts";
+import { needsReview, pageLevel } from "./page-status.ts";
 import { type ChapterCommand, primaryAction } from "./primary-action.ts";
 import { ShortcutHelp } from "./shortcut-help.tsx";
 import { SourcePreview } from "./source-preview.tsx";
@@ -319,6 +319,18 @@ export function ChapterWorkspace({ ws, seriesId, chapterId, page: searchPage, dr
       m.set(id, { original: p.images.original, clean: p.images.clean, cleanRev: p.clean_rev });
     return m;
   }, [data.images]);
+  // Page chưa xong → canvas hiện ảnh gốc + nhãn; khoá theo chữ ký để lần poll tiến độ không đổi gì thì không vẽ lại.
+  const processingSig = pages
+    .map((p) => {
+      const level = pageLevel(p.status);
+      return level === "busy" || level === "todo" ? `${p.id}=${level}` : "";
+    })
+    .filter(Boolean)
+    .join(",");
+  const processing = useMemo(
+    () => new Map(processingSig ? processingSig.split(",").map((e) => e.split("=") as [string, SlotProcessing]) : []),
+    [processingSig],
+  );
   const idx = pages.findIndex((p) => p.id === activeId);
   const activeMeta = pages[idx];
   const defaultFont = kit?.manifest.defaults[0] ?? "PatrickHand-Regular";
@@ -474,10 +486,12 @@ export function ChapterWorkspace({ ws, seriesId, chapterId, page: searchPage, dr
           </div>
         ) : (
           <div className="cw-canvas">
+            <CanvasToolbar />
             {kit ? (
               <ChapterCanvas
                 kit={kit}
                 images={slotImages}
+                processing={processing}
                 defaultFont={defaultFont}
                 initialPageId={initialPage.current}
                 ocrPending={ocr.pending}
@@ -490,7 +504,6 @@ export function ChapterWorkspace({ ws, seriesId, chapterId, page: searchPage, dr
                 <span className="muted">Đang tải…</span>
               </div>
             )}
-            <CanvasToolbar />
             <CanvasStatus />
           </div>
         )}

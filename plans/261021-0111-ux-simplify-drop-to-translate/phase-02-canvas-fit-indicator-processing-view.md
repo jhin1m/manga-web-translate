@@ -1,6 +1,6 @@
 # Phase 2 — Canvas: vừa 1 trang, chỉ báo trang, toolbar không đè, ảnh gốc khi đang dịch
 
-Status: Pending · Branch: `feat/ux-p2-canvas` · Context: [plan.md](./plan.md), [docs/editor.md](../../docs/editor.md)
+Status: Done · Branch: `feat/ux-p2-canvas` · Context: [plan.md](./plan.md), [docs/editor.md](../../docs/editor.md)
 
 ## Vấn đề
 1. Mở chương: fit theo bề ngang, trần 100% (`apps/web/src/features/editor/canvas/ChapterCanvas.tsx:111-121`) → trang 954×1500 trong khung ~1170×580 không thấy trọn 1 trang. Torii mở ở mức trọn trang.
