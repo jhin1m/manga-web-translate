@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<title>Drawer Xuất và Hoạt động</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#1f4fd1}a:hover{color:#163a9e}
+</style>
+</helmet>
+<div style="width: 1000px; height: 1080px; background: #9a9a9a; color: #1a1a1a; font-family: 'Be Vietnam Pro', Inter, system-ui, sans-serif; font-size: 14px; display: flex; justify-content: flex-end; gap: 24px; padding: 0; box-sizing: border-box">
+
+  <section aria-label="Xuất chương" style="width: 460px; height: 1080px; background: #fff; border-left: 1px solid #c9c9c9; display: flex; flex-direction: column">
+    <div style="height: 56px; border-bottom: 1px solid #e3e3e3; display: flex; align-items: center; padding: 0 20px; gap: 12px">
+      <div style="font-weight: 600; font-size: 16px">Xuất Chương 12</div>
+      <div style="flex: 1"></div>
+      <a href="Chapter.dc.html" aria-label="Đóng" style="width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; color: #3d3d3d">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </a>
+    </div>
+    <div style="padding: 20px; display: flex; flex-direction: column; gap: 22px; flex: 1">
+      <fieldset style="border: 0; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 10px">
+        <legend style="font-size: 12px; font-weight: 600; color: #5c5c5c; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 10px">Phạm vi</legend>
+        <label style="display: flex; gap: 8px; align-items: center"><input type="radio" name="scope" checked>Cả chương (54 trang)</label>
+        <label style="display: flex; gap: 8px; align-items: center"><input type="radio" name="scope">Trang đang chọn trong rail (3)</label>
+      </fieldset>
+      <fieldset style="border: 0; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 10px">
+        <legend style="font-size: 12px; font-weight: 600; color: #5c5c5c; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 10px">Định dạng</legend>
+        <div role="radiogroup" aria-label="Định dạng" style="display: flex; border: 1px solid #c9c9c9; border-radius: 4px; overflow: hidden">
+          <button type="button" role="radio" aria-checked="false" style="flex: 1; height: 36px; border: 0; background: #fff; font: inherit">ZIP PNG</button>
+          <button type="button" role="radio" aria-checked="true" style="flex: 1; height: 36px; border: 0; border-left: 1px solid #c9c9c9; background: #1f4fd1; color: #fff; font: inherit">CBZ</button>
+          <button type="button" role="radio" aria-checked="false" style="flex: 1; height: 36px; border: 0; border-left: 1px solid #c9c9c9; background: #fff; font: inherit">PNG từng trang</button>
+        </div>
+        <label style="display: flex; gap: 8px; align-items: center; font-size: 13px"><input type="checkbox">Cắt lại theo slice gốc (khớp ảnh đã tải lên)</label>
+      </fieldset>
+      <div style="border: 1px solid #e8c48a; background: #fdf6ea; border-radius: 4px; padding: 12px 14px; display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: #6b4300">
+        <div style="font-weight: 600">Trước khi xuất</div>
+        <div>2 khối tràn khung · 1 khối có bản AI mới chưa áp · trang 7 lỗi xử lý</div>
+        <a href="Chapter.dc.html" style="color: #1f4fd1; font-size: 13px">Xem các khối này trong bảng văn bản</a>
+      </div>
+      <div style="font-size: 13px; color: #5c5c5c">Tên file: [Series A]_ch12.cbz · link tải hiệu lực 5 phút, file giữ 7 ngày.</div>
+      <div style="flex: 1"></div>
+      <div style="display: flex; gap: 10px; justify-content: flex-end">
+        <a href="Chapter.dc.html" style="height: 38px; padding: 0 16px; border: 1px solid #c9c9c9; border-radius: 4px; display: flex; align-items: center; text-decoration: none; color: #1a1a1a">Huỷ</a>
+        <button type="button" style="height: 38px; padding: 0 20px; background: #1f4fd1; color: #fff; border: 0; border-radius: 4px; font: inherit; font-weight: 500">Xuất CBZ</button>
+      </div>
+    </div>
+  </section>
+
+  <section aria-label="Hoạt động" style="width: 420px; height: 1080px; background: #fff; border-left: 1px solid #c9c9c9; display: flex; flex-direction: column">
+    <div style="height: 56px; border-bottom: 1px solid #e3e3e3; display: flex; align-items: center; padding: 0 20px">
+      <div style="font-weight: 600; font-size: 16px">Hoạt động</div>
+    </div>
+    <div style="display: flex; flex-direction: column">
+      <sc-for list="{{jobs}}" as="j" hint-placeholder-count="4">
+        <div style="padding: 14px 20px; border-bottom: 1px solid #ececec; display: flex; flex-direction: column; gap: 8px">
+          <div style="display: flex; align-items: center; gap: 8px">
+            <span style="{{j.dot}}"></span>
+            <span style="font-weight: 600">{{j.title}}</span>
+            <span style="flex: 1"></span>
+            <span style="font-size: 12px; color: #5c5c5c">{{j.when}}</span>
+          </div>
+          <div style="font-size: 13px; color: #5c5c5c">{{j.detail}}</div>
+          <sc-if value="{{j.running}}" hint-placeholder-val="{{ true }}">
+            <div style="height: 3px; background: #ececec"><div style="{{j.bar}}"></div></div>
+          </sc-if>
+          <sc-if value="{{j.download}}" hint-placeholder-val="{{ false }}">
+            <button type="button" style="align-self: flex-start; height: 30px; padding: 0 12px; border: 1px solid #c9c9c9; background: #fff; border-radius: 4px; font: inherit; font-size: 13px">Tải xuống</button>
+          </sc-if>
+          <sc-if value="{{j.retry}}" hint-placeholder-val="{{ false }}">
+            <button type="button" style="align-self: flex-start; height: 30px; padding: 0 12px; border: 1px solid #c9c9c9; background: #fff; border-radius: 4px; font: inherit; font-size: 13px">Chạy lại trang lỗi</button>
+          </sc-if>
+        </div>
+      </sc-for>
+    </div>
+  </section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1000,"height":1080}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const dot = (c) => 'width: 8px; height: 8px; border-radius: 50%; background: ' + c;
+    const bar = (p) => 'height: 3px; width: ' + p + '%; background: #1f4fd1';
+    return {
+      jobs: [
+        { title: 'Xuất Ch.12 · CBZ', detail: 'Đang render 33/54 trang', when: 'vừa xong', dot: dot('#1f4fd1'), running: true, bar: bar(60), download: false, retry: false },
+        { title: 'Dịch Ch.11', detail: 'GĐ2 · đang dịch theo lô · 24/52 trang', when: '2 phút', dot: dot('#1f4fd1'), running: true, bar: bar(45), download: false, retry: false },
+        { title: 'Xuất Ch.11 · ZIP PNG', detail: 'Xong · link hiệu lực còn 4 phút', when: '6 phút', dot: dot('#1e7a3a'), running: false, bar: '', download: true, retry: false },
+        { title: 'Dịch Ch.10', detail: 'Lỗi 1 trang (trang 7) · OCR không đọc được', when: 'hôm qua', dot: dot('#b3261e'), running: false, bar: '', download: false, retry: true }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

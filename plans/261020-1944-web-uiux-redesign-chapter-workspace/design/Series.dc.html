@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<title>Series</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#1f4fd1}a:hover{color:#163a9e}
+</style>
+</helmet>
+<div style="width: 100%; min-height: 1000px; background: #ffffff; color: #1a1a1a; font-family: 'Be Vietnam Pro', Inter, system-ui, sans-serif; font-size: 14px; display: flex; flex-direction: column">
+  <header style="height: 48px; border-bottom: 1px solid #e3e3e3; display: flex; align-items: center; gap: 16px; padding: 0 24px; flex-wrap: wrap">
+    <a href="Main.dc.html" style="font-weight: 600; font-size: 15px; letter-spacing: 0.02em; color: #1a1a1a; text-decoration: none">MTL</a>
+    <nav aria-label="Vị trí" style="color: #5c5c5c; display: flex; gap: 8px"><a href="Main.dc.html" style="color: #5c5c5c; text-decoration: none">Trang chủ</a><span>/</span><span style="color: #1a1a1a; font-weight: 500">[Series A]</span></nav>
+    <div style="flex: 1"></div>
+    <button type="button" style="height: 32px; border: 1px solid #c9c9c9; background: #fff; border-radius: 4px; padding: 0 12px; font: inherit">Đang chạy · 2</button>
+    <div aria-label="Tài khoản" style="width: 32px; height: 32px; border-radius: 50%; background: #e8edfb; color: #1f4fd1; display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 13px">ĐA</div>
+  </header>
+
+  <div style="max-width: 1440px; width: 100%; margin: 0 auto; padding: 24px; box-sizing: border-box; display: flex; gap: 24px; flex-wrap: wrap; align-items: flex-start">
+
+    <main style="flex: 999 1 640px; min-width: 0; display: flex; flex-direction: column; gap: 18px">
+      <div style="display: flex; align-items: center; gap: 16px; flex-wrap: wrap">
+        <div style="width: 48px; height: 64px; background: #ececec"></div>
+        <div style="display: flex; flex-direction: column; gap: 2px">
+          <h1 style="margin: 0; font-size: 22px; font-weight: 600">[Series A]</h1>
+          <span style="color: #5c5c5c">Hàn → Việt · 12 chương · 10 đã xuất</span>
+        </div>
+      </div>
+
+      <section aria-label="Thêm chương tiếp theo" style="border: 1.5px dashed #8a8a8a; border-radius: 6px; background: #f7f8fb; padding: 16px 20px; display: flex; align-items: center; gap: 16px; flex-wrap: wrap">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#1f4fd1" stroke-width="1.6" aria-hidden="true"><path d="M12 16V4M6 10l6-6 6 6M4 20h16"/></svg>
+        <div style="flex: 1; min-width: 240px; display: flex; flex-direction: column; gap: 2px">
+          <div style="font-weight: 600; font-size: 15px">Thả strip của Chương 13 vào đây</div>
+          <div style="color: #5c5c5c; font-size: 13px">Số chương tự tăng; thả nhiều file = nhiều chương liên tiếp.</div>
+        </div>
+        <button type="button" style="height: 38px; padding: 0 16px; background: #1f4fd1; color: #fff; border: 0; border-radius: 4px; font: inherit; font-weight: 500">Chọn file…</button>
+      </section>
+
+      <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap">
+        <div role="group" aria-label="Lọc chương" style="display: flex; gap: 6px">
+          <button type="button" aria-pressed="true" style="height: 30px; padding: 0 12px; border: 1px solid #1f4fd1; background: #e8edfb; color: #1f4fd1; border-radius: 15px; font: inherit; font-size: 13px">Cần làm · 3</button>
+          <button type="button" aria-pressed="false" style="height: 30px; padding: 0 12px; border: 1px solid #c9c9c9; background: #fff; border-radius: 15px; font: inherit; font-size: 13px">Đã xuất · 10</button>
+          <button type="button" aria-pressed="false" style="height: 30px; padding: 0 12px; border: 1px solid #c9c9c9; background: #fff; border-radius: 15px; font: inherit; font-size: 13px">Tất cả · 13</button>
+        </div>
+      </div>
+
+      <div style="border: 1px solid #e3e3e3; border-radius: 6px">
+        <sc-for list="{{rows}}" as="r" hint-placeholder-count="4">
+          <div style="{{r.rowStyle}}">
+            <div style="width: 84px; font-weight: 600; font-size: 15px">{{r.ch}}</div>
+            <div style="flex: 1; min-width: 260px; display: flex; flex-direction: column; gap: 6px">
+              <div style="display: flex; align-items: center; gap: 8px"><span style="{{r.dot}}"></span><span style="font-weight: 500">{{r.state}}</span><span style="color: #5c5c5c; font-size: 13px">· {{r.when}}</span></div>
+              <div style="display: flex; align-items: center; gap: 10px">
+                <div style="width: 200px; height: 4px; background: #ececec; border-radius: 2px"><div style="{{r.bar}}"></div></div>
+                <span style="color: #5c5c5c; font-size: 13px">{{r.prog}}</span>
+              </div>
+            </div>
+            <a href="Chapter.dc.html" style="{{r.btn}}">{{r.action}}</a>
+            <a href="Chapter.dc.html" style="height: 36px; padding: 0 12px; display: flex; align-items: center; color: #5c5c5c; font-size: 13px">Mở</a>
+          </div>
+        </sc-for>
+      </div>
+      <div style="color: #5c5c5c; font-size: 13px">10 chương đã xuất ẩn trong bộ lọc "Đã xuất".</div>
+    </main>
+
+    <aside aria-label="Cài đặt dịch của series" style="flex: 1 1 340px; max-width: 400px; display: flex; flex-direction: column; gap: 16px">
+      <section style="border: 1px solid #e3e3e3; border-radius: 6px; padding: 16px; display: flex; flex-direction: column; gap: 12px">
+        <div style="display: flex; align-items: center"><h2 style="margin: 0; font-size: 15px; font-weight: 600">Cài đặt dịch</h2><div style="flex: 1"></div><button type="button" style="border: 0; background: none; color: #1f4fd1; font: inherit; font-size: 13px; padding: 0">Sửa</button></div>
+        <dl style="margin: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 12px; font-size: 13px">
+          <dt style="color: #5c5c5c">Font thoại</dt><dd style="margin: 0">Comic Neue VN</dd>
+          <dt style="color: #5c5c5c">Font SFX</dt><dd style="margin: 0">Bangers VN</dd>
+          <dt style="color: #5c5c5c">Xưng hô chính</dt><dd style="margin: 0">tôi – cậu</dd>
+          <dt style="color: #5c5c5c">Giọng văn</dt><dd style="margin: 0">tự nhiên, trẻ</dd>
+        </dl>
+        <div style="font-size: 12px; color: #5c5c5c">Áp cho mọi chương dịch sau khi lưu; chương đã sửa tay không bị đổi.</div>
+      </section>
+
+      <section style="border: 1px solid #e3e3e3; border-radius: 6px; padding: 16px; display: flex; flex-direction: column; gap: 12px">
+        <div style="display: flex; align-items: center"><h2 style="margin: 0; font-size: 15px; font-weight: 600">Glossary · 84 từ</h2><div style="flex: 1"></div><button type="button" style="border: 0; background: none; color: #1f4fd1; font: inherit; font-size: 13px; padding: 0">Xem tất cả</button></div>
+        <div style="display: flex; gap: 6px">
+          <label style="flex: 1"><span style="position: absolute; left: -9999px">Từ gốc</span><input type="text" placeholder="Từ gốc (KO)" style="width: 100%; box-sizing: border-box; height: 32px; border: 1px solid #c9c9c9; border-radius: 4px; padding: 0 8px; font: inherit; font-size: 13px"></label>
+          <label style="flex: 1"><span style="position: absolute; left: -9999px">Bản dịch</span><input type="text" placeholder="Dịch (VI)" style="width: 100%; box-sizing: border-box; height: 32px; border: 1px solid #c9c9c9; border-radius: 4px; padding: 0 8px; font: inherit; font-size: 13px"></label>
+          <button type="button" style="height: 32px; padding: 0 10px; border: 1px solid #c9c9c9; background: #fff; border-radius: 4px; font: inherit; font-size: 13px">Thêm</button>
+        </div>
+        <table style="width: 100%; border-collapse: collapse; font-size: 13px">
+          <tbody>
+            <sc-for list="{{terms}}" as="g" hint-placeholder-count="4">
+              <tr style="border-top: 1px solid #ececec"><td style="padding: 6px 0">{{g.ko}}</td><td style="padding: 6px 0">{{g.vi}}</td></tr>
+            </sc-for>
+          </tbody>
+        </table>
+      </section>
+    </aside>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1600,"height":1000}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const dot = (c) => 'width: 10px; height: 10px; border-radius: 50%; background: ' + c;
+    const bar = (p, c) => 'height: 4px; border-radius: 2px; width: ' + p + '%; background: ' + c;
+    const primary = 'height: 36px; min-width: 160px; justify-content: center; padding: 0 14px; background: #1f4fd1; color: #fff; border-radius: 4px; display: flex; align-items: center; text-decoration: none; font-weight: 500; font-size: 13px';
+    const secondary = 'height: 36px; min-width: 160px; justify-content: center; padding: 0 14px; border: 1px solid #c9c9c9; color: #1a1a1a; border-radius: 4px; display: flex; align-items: center; text-decoration: none; font-size: 13px';
+    const rows = [
+      { ch: 'Ch.12', state: 'Chờ sửa · 3 khối cần xem', when: 'bạn sửa 20 phút trước', p: 70, c: '#b26a00', prog: 'Đã xem 38/54 trang', action: 'Tiếp tục sửa', main: true },
+      { ch: 'Ch.11', state: 'Đang dịch', when: 'bắt đầu 6 phút trước', p: 45, c: '#1f4fd1', prog: 'GĐ2 · 24/52 trang', action: 'Xem tiến độ', main: false },
+      { ch: 'Ch.10', state: 'Lỗi 1 trang', when: 'hôm qua', p: 98, c: '#b3261e', prog: 'Trang 7 lỗi OCR · 47/48 xong', action: 'Chạy lại trang lỗi', main: false }
+    ].map((r, i) => ({
+      ...r, dot: dot(r.c), bar: bar(r.p, r.c), btn: r.main ? primary : secondary,
+      rowStyle: 'display: flex; align-items: center; gap: 16px; padding: 14px 16px; flex-wrap: wrap;' + (i ? ' border-top: 1px solid #ececec' : '')
+    }));
+    const terms = [
+      { ko: '김준', vi: 'Kim Jun' },
+      { ko: '헌터 협회', vi: 'Hiệp hội Thợ săn' },
+      { ko: '각성자', vi: 'người thức tỉnh' },
+      { ko: '던전', vi: 'hầm ngục' }
+    ];
+    return { rows, terms };
+  }
+}
+</script>
+</body>
+</html>

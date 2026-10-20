@@ -26,7 +26,7 @@ full-flow.spec.ts
  ─ click dòng trang 2 ─ fill Dịch ─ "Đã lưu" ─ API GET page khớp
  ─ click "Xuất" (primary) ─ drawer: không cảnh báo ─ Xuất ─ "Tải xuống" 302
 click-budget.spec.ts
- "/" → click "Mở" ở thẻ Tiếp tục (1)            → màn chương có canvas
+ "/" → click "Tiếp tục sửa" ở Việc cần làm (1)            → màn chương có canvas
  "/" → click thẻ series (1) → click "Mở" hàng chương (2) → màn chương có canvas
 routes-redirect.spec.ts (gom case redirect P1–P3)
 ```
@@ -60,7 +60,7 @@ Delete (xác nhận lại đã xoá ở P2–P5, nếu sót thì xoá ở đây)
 
 ## Success Criteria
 - `full-flow.spec.ts` xanh: chương tạo từ 1 file ở home; URL màn chương có trước khi upload xong; nút primary lần lượt có nhãn "Dịch chương" → (disabled) "Đang dịch" → "Xuất"; 3 trang "xong"; bản dịch sửa có trong `GET /api/w/:ws/pages/:id`; drawer Xuất không có dòng cảnh báo; link tải trả 302; 0 `pageerror`.
-- `click-budget.spec.ts` xanh: đường "Tiếp tục" = 1 click, đường series = 2 click (≤ 3).
+- `click-budget.spec.ts` xanh: đường "Việc cần làm" = 1 click, đường series = 2 click (≤ 3).
 - `routes-redirect.spec.ts` xanh cho 6 path cũ trong `plan.md` (Sitemap).
 - `rg -n "series/\\\$seriesId/upload|chapters/\\\$chapterId/edit" apps/web/src` chỉ còn trong định nghĩa route redirect của `router.tsx`.
 - Mọi e2e cũ (`upload-chapter`, `editor`, `chapter-tools`, `typeset-parity`) xanh; `pnpm typecheck`, `pnpm lint`, `pnpm test` xanh.

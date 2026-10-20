@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<title>Trang chủ</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#1f4fd1}a:hover{color:#163a9e}
+</style>
+</helmet>
+<div style="width: 100%; min-height: 1000px; background: #ffffff; color: #1a1a1a; font-family: 'Be Vietnam Pro', Inter, system-ui, sans-serif; font-size: 14px; display: flex; flex-direction: column">
+  <header style="height: 48px; border-bottom: 1px solid #e3e3e3; display: flex; align-items: center; gap: 16px; padding: 0 24px; flex-wrap: wrap">
+    <div style="font-weight: 600; font-size: 15px; letter-spacing: 0.02em">MTL</div>
+    <div style="color: #5c5c5c">Nhóm dịch</div>
+    <div style="flex: 1"></div>
+    <button type="button" style="height: 32px; border: 1px solid #c9c9c9; background: #fff; border-radius: 4px; padding: 0 12px; font: inherit; display: flex; align-items: center; gap: 8px">
+      <span style="width: 8px; height: 8px; border-radius: 50%; background: #1f4fd1"></span>Đang chạy · 2
+    </button>
+    <div aria-label="Tài khoản" style="width: 32px; height: 32px; border-radius: 50%; background: #e8edfb; color: #1f4fd1; display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 13px">ĐA</div>
+  </header>
+
+  <main style="max-width: 1280px; width: 100%; margin: 0 auto; padding: 28px 24px 40px; box-sizing: border-box; display: flex; flex-direction: column; gap: 28px">
+
+    <section aria-label="Tạo chương mới" style="border: 1.5px dashed #8a8a8a; border-radius: 6px; background: #f7f8fb; padding: 22px 24px; display: flex; align-items: center; gap: 24px; flex-wrap: wrap">
+      <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#1f4fd1" stroke-width="1.6" aria-hidden="true"><path d="M12 16V4M6 10l6-6 6 6M4 20h16"/></svg>
+      <div style="display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 280px">
+        <div style="font-weight: 600; font-size: 17px">Thả strip hoặc ZIP của chương mới vào đây</div>
+        <div style="color: #5c5c5c">App tự nhận series và số chương từ tên file, cắt strip thành trang rồi mở thẳng màn chương.</div>
+      </div>
+      <button type="button" style="height: 40px; padding: 0 18px; background: #1f4fd1; color: #fff; border: 0; border-radius: 4px; font: inherit; font-weight: 500">Chọn file…</button>
+    </section>
+
+    <section aria-label="Sau khi thả file" style="border: 1px solid #c9c9c9; border-radius: 6px; padding: 16px 20px; display: flex; align-items: flex-end; gap: 16px; flex-wrap: wrap; margin-top: -14px">
+      <div style="display: flex; flex-direction: column; gap: 4px; min-width: 220px">
+        <div style="font-size: 12px; color: #5c5c5c">Vừa thả</div>
+        <div style="font-weight: 600">seriesA_ch13.png · 1 ảnh 800×38.400px</div>
+      </div>
+      <label style="display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: #5c5c5c">Series (đoán từ tên file)
+        <select style="height: 36px; min-width: 220px; border: 1px solid #c9c9c9; border-radius: 4px; font: inherit; font-size: 14px; background: #fff; color: #1a1a1a"><option>[Series A]</option><option>[Series B]</option><option>+ Series mới…</option></select>
+      </label>
+      <label style="display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: #5c5c5c">Chương số
+        <input type="text" value="13" style="height: 36px; width: 90px; box-sizing: border-box; border: 1px solid #c9c9c9; border-radius: 4px; padding: 0 10px; font: inherit; font-size: 14px">
+      </label>
+      <div style="flex: 1"></div>
+      <button type="button" style="height: 36px; padding: 0 14px; border: 1px solid #c9c9c9; background: #fff; border-radius: 4px; font: inherit">Bỏ</button>
+      <a href="Chapter.dc.html" style="height: 36px; padding: 0 18px; background: #1f4fd1; color: #fff; border-radius: 4px; display: flex; align-items: center; text-decoration: none; font-weight: 500">Tạo và mở chương</a>
+    </section>
+
+    <section aria-label="Việc cần làm" style="display: flex; flex-direction: column; gap: 10px">
+      <div style="display: flex; align-items: baseline; gap: 10px">
+        <h2 style="margin: 0; font-size: 16px; font-weight: 600">Việc cần làm</h2>
+        <span style="color: #5c5c5c; font-size: 13px">mỗi chương một bước tiếp theo, bấm là làm</span>
+      </div>
+      <div style="border: 1px solid #e3e3e3; border-radius: 6px">
+        <sc-for list="{{todo}}" as="t" hint-placeholder-count="4">
+          <div style="{{t.rowStyle}}">
+            <span style="{{t.dot}}"></span>
+            <div style="display: flex; flex-direction: column; gap: 2px; width: 240px">
+              <span style="font-weight: 600">{{t.title}}</span>
+              <span style="font-size: 12px; color: #5c5c5c">{{t.series}}</span>
+            </div>
+            <div style="flex: 1; min-width: 200px; color: #3d3d3d">{{t.what}}</div>
+            <a href="{{t.href}}" style="{{t.btn}}">{{t.action}}</a>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+
+    <section aria-label="Series" style="display: flex; flex-direction: column; gap: 10px">
+      <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap">
+        <h2 style="margin: 0; font-size: 16px; font-weight: 600">Series</h2>
+        <div style="flex: 1"></div>
+        <label style="display: flex">
+          <span style="position: absolute; left: -9999px">Tìm series</span>
+          <input type="search" placeholder="Tìm series…" style="width: 240px; height: 32px; border: 1px solid #c9c9c9; border-radius: 4px; padding: 0 10px; font: inherit">
+        </label>
+        <button type="button" style="height: 32px; border: 1px solid #c9c9c9; background: #fff; border-radius: 4px; padding: 0 12px; font: inherit">+ Series mới</button>
+      </div>
+      <div style="border: 1px solid #e3e3e3; border-radius: 6px">
+        <sc-for list="{{series}}" as="s" hint-placeholder-count="4">
+          <div style="{{s.rowStyle}}">
+            <div style="width: 36px; height: 48px; background: #ececec; flex-shrink: 0"></div>
+            <a href="Series.dc.html" style="width: 220px; font-weight: 600; color: #1a1a1a; text-decoration: none">{{s.name}}</a>
+            <div style="width: 160px; color: #5c5c5c; font-size: 13px">{{s.count}}</div>
+            <div style="flex: 1; display: flex; align-items: center; gap: 6px; font-size: 13px"><span style="{{s.dot}}"></span>{{s.state}}</div>
+            <button type="button" style="height: 32px; padding: 0 12px; border: 1px dashed #8a8a8a; background: #fff; border-radius: 4px; font: inherit; font-size: 13px">+ Ch.{{s.next}}</button>
+            <a href="Series.dc.html" style="height: 32px; padding: 0 12px; border: 1px solid #c9c9c9; border-radius: 4px; display: flex; align-items: center; text-decoration: none; color: #1a1a1a; font-size: 13px">Mở series</a>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1600,"height":1000}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const dot = (c) => 'width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; background: ' + c;
+    const row = (i) => 'display: flex; align-items: center; gap: 16px; padding: 12px 16px; flex-wrap: wrap;' + (i ? ' border-top: 1px solid #ececec' : '');
+    const primary = 'height: 34px; min-width: 150px; justify-content: center; padding: 0 14px; background: #1f4fd1; color: #fff; border-radius: 4px; display: flex; align-items: center; text-decoration: none; font-weight: 500; font-size: 13px';
+    const secondary = 'height: 34px; min-width: 150px; justify-content: center; padding: 0 14px; border: 1px solid #c9c9c9; color: #1a1a1a; border-radius: 4px; display: flex; align-items: center; text-decoration: none; font-size: 13px';
+    const todo = [
+      { title: 'Chương 12', series: '[Series A]', what: 'AI xong · còn 3 khối cần xem (2 tràn khung, 1 bản AI mới)', action: 'Tiếp tục sửa', href: 'Chapter.dc.html', c: '#b26a00', p: true },
+      { title: 'Chương 3', series: '[Series D]', what: 'Trang 7 lỗi OCR · các trang khác đã dịch', action: 'Chạy lại trang lỗi', href: 'Chapter.dc.html', c: '#b3261e', p: false },
+      { title: 'Chương 46', series: '[Series B]', what: 'Đã tải 52 trang · chưa dịch', action: 'Dịch chương', href: 'Chapter.dc.html', c: '#8a8a8a', p: false },
+      { title: 'Chương 11', series: '[Series A]', what: 'Đang dịch · GĐ2 · 24/52 trang', action: 'Xem tiến độ', href: 'Chapter.dc.html', c: '#1f4fd1', p: false }
+    ].map((t, i) => ({ ...t, dot: dot(t.c), rowStyle: row(i), btn: t.p ? primary : secondary }));
+    const series = [
+      { name: '[Series A]', count: '12 chương · 10 đã xuất', state: 'Ch.12 chờ sửa', next: 13, c: '#b26a00' },
+      { name: '[Series B]', count: '45 chương · 44 đã xuất', state: 'Ch.46 chưa dịch', next: 47, c: '#8a8a8a' },
+      { name: '[Series C]', count: '30 chương · 30 đã xuất', state: 'Không có việc', next: 31, c: '#1e7a3a' },
+      { name: '[Series D]', count: '3 chương · 2 đã xuất', state: 'Ch.3 lỗi 1 trang', next: 4, c: '#b3261e' }
+    ].map((s, i) => ({ ...s, dot: dot(s.c), rowStyle: row(i) }));
+    return { todo, series };
+  }
+}
+</script>
+</body>
+</html>

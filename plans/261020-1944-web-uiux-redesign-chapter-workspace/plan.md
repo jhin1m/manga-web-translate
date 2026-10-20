@@ -3,7 +3,7 @@ title: "Redesign UI/UX web: chương là editor gộp"
 description: "Bỏ trang upload riêng và editor route-per-page; 3 màn (home, series, chương = editor gộp cuộn liên tục cả strip) + 2 drawer (Xuất, Hoạt động), dev auto-login."
 status: pending
 priority: P1
-effort: 15.5d
+effort: 16.5d
 branch: main
 tags: [web, ux, editor, konva, router, redesign]
 created: 2026-10-20
@@ -28,7 +28,7 @@ Owner chê UI "rất kém, khó dùng, không hình dung được workflow". Lu�
 ## Sitemap đích
 ```
 /login                                  (dev: tự đăng nhập nếu bật)
-/                                       Home: workspace hiện tại · "Tiếp tục" chương gần nhất · lưới series · vùng thả ZIP/ảnh
+/                                       Home: vùng thả lớn + dòng xác nhận inline · "Việc cần làm" (mọi chương mở, 1 nút bước tiếp) · danh sách series dạng hàng
 /w/:ws/s/:series[?tab=chapters|glossary|settings]   Lưới chương + trạng thái; thả file vào hàng/ô "Chương mới"
 /w/:ws/s/:series/c/:chapter[?page=<pageId>]          CHƯƠNG = editor gộp (rail | canvas | inspector / bảng văn bản)
    ├ drawer Xuất          (state cục bộ, không đổi route)
@@ -38,7 +38,7 @@ Redirect: /w/:ws → /, /w/:ws/series → /, /w/:ws/series/:s[/settings] → /w/
           /w/:ws/series/:s/upload → /w/:ws/s/:s, /w/:ws/series/:s/chapters/:c → /w/:ws/s/:s/c/:c,
           /w/:ws/series/:s/chapters/:c/edit/:p → /w/:ws/s/:s/c/:c?page=:p
 ```
-Home → Series → Chương = 2 click (1 click qua "Tiếp tục").
+Home → Series → Chương = 2 click (1 click qua nút ở "Việc cần làm").
 
 ## Quyết định kiến trúc chính (tech lead)
 | Vấn đề | Chọn | Lý do |
@@ -65,7 +65,7 @@ sửa (canvas | bảng | inspector) → editorStore.apply → Saver (IndexedDB �
 | # | Phase | Ưu tiên | Effort | Phụ thuộc | Status |
 |---|---|---|---|---|---|
 | 1 | [Nền: dev auto-login, app shell, router mới + redirect](./phase-01-dev-login-app-shell-router.md) | P1 | 1.5d | — | Pending |
-| 2 | [Home + series + upload inline](./phase-02-home-series-inline-upload.md) | P1 | 2.5d | 1 | Pending |
+| 2 | [Home + series + upload inline](./phase-02-home-series-inline-upload.md) | P1 | 3.5d | 1 | Pending |
 | 3 | [Màn chương gộp: layout, rail, canvas cuộn liên tục](./phase-03-chapter-workspace-continuous-canvas.md) | P1 | 4.5d | 2 | Pending |
 | 4 | [Bảng văn bản + inspector + đồng bộ](./phase-04-text-table-inspector-sync.md) | P1 | 3d | 3 | Pending |
 | 5 | [Drawer Xuất/Hoạt động, chế độ xem, phím tắt](./phase-05-drawers-view-modes-shortcuts.md) | P1 | 2.5d | 4 | Pending |
@@ -97,5 +97,5 @@ Mỗi phase 1 PR. API chỉ thêm route đọc (xoá route = rollback, không mi
 
 ## Câu hỏi mở
 1. Sau khi upload xong có tự "Dịch chương" luôn (bớt 1 click) không? Mặc định plan: **không**, chờ bấm (đúng chuỗi nút owner chốt).
-2. "Tiếp tục chương gần nhất": theo chương cập nhật gần nhất của workspace (server) — có cần riêng theo người dùng không? Mặc định: workspace (1 người làm).
+2. (Đã chốt) "Việc cần làm" tính theo workspace, chương mình giữ khoá đứng đầu; design Home/Series owner duyệt 20/10/2026.
 3. Bỏ sắp xếp tay thứ tự file khi upload (chỉ natural sort) — owner có cần giữ không? Mặc định: bỏ (đầu vào 1 strip).
