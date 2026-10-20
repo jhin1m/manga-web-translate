@@ -19,7 +19,7 @@ export function SeriesListPage({ ws }: { ws: string }) {
     onSuccess: (s) => {
       setTitle("");
       void qc.invalidateQueries({ queryKey: seriesKeys.list(ws) });
-      void navigate({ to: "/w/$ws/series/$seriesId/settings", params: { ws, seriesId: s.id } });
+      void navigate({ to: "/w/$ws/s/$seriesId", params: { ws, seriesId: s.id }, search: { tab: "settings" } });
     },
   });
   const submit = (e: FormEvent) => {
@@ -63,7 +63,7 @@ export function SeriesListPage({ ws }: { ws: string }) {
             {q.data.series.map((s) => (
               <tr key={s.id}>
                 <td>
-                  <Link to="/w/$ws/series/$seriesId" params={{ ws, seriesId: s.id }} style={{ fontWeight: 500 }}>
+                  <Link to="/w/$ws/s/$seriesId" params={{ ws, seriesId: s.id }} style={{ fontWeight: 500 }}>
                     {s.title}
                   </Link>
                 </td>
@@ -78,7 +78,7 @@ export function SeriesListPage({ ws }: { ws: string }) {
                     Upload
                   </Link>
                   {" · "}
-                  <Link to="/w/$ws/series/$seriesId/settings" params={{ ws, seriesId: s.id }}>
+                  <Link to="/w/$ws/s/$seriesId" params={{ ws, seriesId: s.id }} search={{ tab: "settings" }}>
                     Cài đặt
                   </Link>
                 </td>
@@ -104,14 +104,12 @@ export function SeriesDetailPage({ ws, seriesId }: { ws: string; seriesId: strin
   return (
     <div className="page">
       <div className="crumbs">
-        <Link to="/w/$ws/series" params={{ ws }}>
-          Series
-        </Link>
+        <Link to="/">Series</Link>
       </div>
       <div className="page-head">
         <h1>{s?.title ?? "…"}</h1>
         <span className="spacer" />
-        <Link className="btn" to="/w/$ws/series/$seriesId/settings" params={{ ws, seriesId }}>
+        <Link className="btn" to="/w/$ws/s/$seriesId" params={{ ws, seriesId }} search={{ tab: "settings" }}>
           Cài đặt &amp; glossary
         </Link>
         <Link className="btn btn-primary" to="/w/$ws/series/$seriesId/upload" params={{ ws, seriesId }}>
@@ -138,7 +136,7 @@ export function SeriesDetailPage({ ws, seriesId }: { ws: string; seriesId: strin
                 <tr key={c.id}>
                   <td className="num">
                     <Link
-                      to="/w/$ws/series/$seriesId/chapters/$chapterId"
+                      to="/w/$ws/s/$seriesId/c/$chapterId"
                       params={{ ws, seriesId, chapterId: c.id }}
                       style={{ fontWeight: 500 }}
                     >

@@ -50,14 +50,35 @@ const Env = z.object({
   MODAL_MAX_LIFETIME_S: blank(z.coerce.number().int().positive().default(3600)),
   /** Kênh cảnh báo duy nhất: topic ntfy (VD https://ntfy.sh/<topic-bí-mật>). Không đặt → chỉ log. */
   ALERT_NTFY_URL: blank(z.string().url().optional()),
+  /** Chỉ dev: tài khoản SPA tự đăng nhập (POST /api/dev/auto-login). Đặt ở production → API không khởi động. */
+  DEV_AUTO_LOGIN_EMAIL: blank(z.string().email().optional()),
+  DEV_AUTO_LOGIN_PASSWORD: blank(z.string().min(10).optional()),
 });
 export type Env = z.infer<typeof Env>;
 
-export const env: Env = Env.superRefine((e, ctx) => {
-  if (e.NODE_ENV === "production" && (e.GLOBAL_DAILY_USD === undefined || e.GLOBAL_MONTHLY_USD === undefined)) {
-    ctx.addIssue({ code: "custom", message: "production cần GLOBAL_DAILY_USD và GLOBAL_MONTHLY_USD" });
-  }
-  if (e.DISPATCHER_ENABLED && (!e.MODAL_DRAIN_URL || !e.MODAL_DRAIN_SECRET)) {
-    ctx.addIssue({ code: "custom", message: "DISPATCHER_ENABLED cần MODAL_DRAIN_URL và MODAL_DRAIN_SECRET" });
-  }
-}).parse(process.env);
+/** Parse + kiểm chéo biến môi trường (thuần, test gọi trực tiếp). */
+export function parseEnv(raw: Record<string, string | undefined>): Env {
+  return Env.superRefine((e, ctx) => {
+    if (e.NODE_ENV === "production" && (e.GLOBAL_DAILY_USD === undefined || e.GLOBAL_MONTHLY_USD === undefined)) {
+      ctx.addIssue({ code: "custom", message: "production cần GLOBAL_DAILY_USD và GLOBAL_MONTHLY_USD" });
+    }
+    if (e.DISPATCHER_ENABLED && (!e.MODAL_DRAIN_URL || !e.MODAL_DRAIN_SECRET)) {
+      ctx.addIssue({ code: "custom", message: "DISPATCHER_ENABLED cần MODAL_DRAIN_URL và MODAL_DRAIN_SECRET" });
+    }
+    if (e.NODE_ENV === "production" && (e.DEV_AUTO_LOGIN_EMAIL || e.DEV_AUTO_LOGIN_PASSWORD)) {
+      ctx.addIssue({ code: "custom", message: "DEV_AUTO_LOGIN_* chỉ dùng ở dev — bỏ khỏi môi trường production" });
+    }
+  }).parse(raw);
+}
+
+export const env: Env = parseEnv(process.env);
+
+/**
+ * Dev auto-login bật khi và chỉ khi: NODE_ENV=development (mặc định khi không đặt, nên thêm guard host) + đủ
+ * email/mật khẩu + BETTER_AUTH_URL trỏ localhost.
+ */
+export const devAutoLoginEnabled = (e: Env): boolean =>
+  e.NODE_ENV === "development" &&
+  !!e.DEV_AUTO_LOGIN_EMAIL &&
+  !!e.DEV_AUTO_LOGIN_PASSWORD &&
+  ["localhost", "127.0.0.1"].includes(new URL(e.BETTER_AUTH_URL).hostname);

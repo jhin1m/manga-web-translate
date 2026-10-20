@@ -129,7 +129,7 @@ export function UploadPage({ ws, seriesId }: { ws: string; seriesId: string }) {
         setPhase("rejected");
         return;
       }
-      void navigate({ to: "/w/$ws/series/$seriesId/chapters/$chapterId", params: { ws, seriesId, chapterId: ch.id } });
+      void navigate({ to: "/w/$ws/s/$seriesId/c/$chapterId", params: { ws, seriesId, chapterId: ch.id } });
     } catch (e) {
       if (e instanceof ApiError && Array.isArray(e.body.rejected)) {
         setRejected(describeRejected(e.body.rejected as Rejected[]));
@@ -155,11 +155,8 @@ export function UploadPage({ ws, seriesId }: { ws: string; seriesId: string }) {
   return (
     <div className="page page-narrow">
       <div className="crumbs">
-        <Link to="/w/$ws/series" params={{ ws }}>
-          Series
-        </Link>{" "}
-        /{" "}
-        <Link to="/w/$ws/series/$seriesId" params={{ ws, seriesId }}>
+        <Link to="/">Series</Link> /{" "}
+        <Link to="/w/$ws/s/$seriesId" params={{ ws, seriesId }}>
           {seriesQ.data?.title ?? "…"}
         </Link>
       </div>
@@ -288,7 +285,7 @@ export function UploadPage({ ws, seriesId }: { ws: string; seriesId: string }) {
             {phase === "rejected" && chapter.current && (
               <Link
                 className="btn btn-primary"
-                to="/w/$ws/series/$seriesId/chapters/$chapterId"
+                to="/w/$ws/s/$seriesId/c/$chapterId"
                 params={{ ws, seriesId, chapterId: chapter.current.id }}
               >
                 Mở chương

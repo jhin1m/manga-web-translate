@@ -42,11 +42,8 @@ export function SeriesSettingsPage({ ws, seriesId }: { ws: string; seriesId: str
   return (
     <div className="page page-narrow">
       <div className="crumbs">
-        <Link to="/w/$ws/series" params={{ ws }}>
-          Series
-        </Link>{" "}
-        /{" "}
-        <Link to="/w/$ws/series/$seriesId" params={{ ws, seriesId }}>
+        <Link to="/">Series</Link> /{" "}
+        <Link to="/w/$ws/s/$seriesId" params={{ ws, seriesId }}>
           {q.data?.title ?? "…"}
         </Link>
       </div>

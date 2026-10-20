@@ -223,7 +223,7 @@ export function EditorPage({ ws, seriesId, chapterId, pageId }: Props) {
   );
   const back = async () => {
     await saver.flush();
-    void navigate({ to: "/w/$ws/series/$seriesId/chapters/$chapterId", params: { ws, seriesId, chapterId } });
+    void navigate({ to: "/w/$ws/s/$seriesId/c/$chapterId", params: { ws, seriesId, chapterId } });
   };
   const prev = () => void goTo(pages[idx - 1]?.id);
   const next = () => void goTo(pages[idx + 1]?.id);

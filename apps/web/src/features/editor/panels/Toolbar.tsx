@@ -38,7 +38,7 @@ export function Toolbar(props: {
   return (
     <header className="ed-top">
       <Link
-        to="/w/$ws/series/$seriesId/chapters/$chapterId"
+        to="/w/$ws/s/$seriesId/c/$chapterId"
         params={{ ws: props.ws, seriesId: props.seriesId, chapterId: props.chapterId }}
         className="btn btn-ghost"
         onClick={(e) => {

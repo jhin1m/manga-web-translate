@@ -25,7 +25,8 @@ services:
     environment:
       MINIO_ROOT_USER: ${S3_ACCESS_KEY:-mtl-dev}
       MINIO_ROOT_PASSWORD: ${S3_SECRET_KEY:-mtl-dev-secret}
-      MINIO_API_CORS_ALLOW_ORIGIN: ${WEB_ORIGIN:-http://localhost:5180}
+      # SPA dev (5180) + SPA e2e (5181, apps/web/e2e/env.ts) — e2e chạy song song được với `pnpm dev`.
+      MINIO_API_CORS_ALLOW_ORIGIN: ${WEB_ORIGIN:-http://localhost:5180},${E2E_WEB_ORIGIN:-http://localhost:5181}
       # alias "local" cho healthcheck `mc ready local`
       MC_HOST_local: http://${S3_ACCESS_KEY:-mtl-dev}:${S3_SECRET_KEY:-mtl-dev-secret}@localhost:9000
     ports:

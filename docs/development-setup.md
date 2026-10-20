@@ -16,6 +16,19 @@ Worker AI (Python, `worker/`) và token worker: xem [job-queue-worker.md](./job-
 
 Mở http://localhost:5180 → đăng nhập owner → "Mời thành viên". MVP chưa gửi mail: link mời (có token đăng ký HMAC) hiện trên UI cho owner/admin và trong log API (`[invite] …`). Người được mời mở `/accept-invite?id=…&token=…` để đăng ký.
 
+## Dev auto-login
+
+Đặt trong `.env` (chỉ máy dev, `.env` đã gitignore) tài khoản đã tồn tại (VD owner tạo bằng `pnpm create-workspace`):
+
+```bash
+DEV_AUTO_LOGIN_EMAIL=you@example.com
+DEV_AUTO_LOGIN_PASSWORD=...        # ≥ 10 ký tự
+```
+
+Khi chưa có phiên, SPA (chỉ bundle dev, `import.meta.env.DEV`) gọi `POST /api/dev/auto-login` đúng 1 lần/tab rồi vào thẳng app; không bật/thất bại → màn đăng nhập. Bấm "Đăng xuất" → tab đó không tự đăng nhập lại (cờ `sessionStorage`), tab mới thì có. API chỉ mount route khi đủ: `NODE_ENV=development` + 2 biến trên + `BETTER_AUTH_URL` host `localhost`/`127.0.0.1` (log `[dev] auto-login enabled for …` lúc khởi động). `NODE_ENV=production` mà có `DEV_AUTO_LOGIN_EMAIL`/`DEV_AUTO_LOGIN_PASSWORD` → API không khởi động. Bỏ biến = tắt.
+
+Phiên better-auth sống 7 ngày, tự gia hạn khi dùng (tối đa 1 lần/ngày) — cấu hình tường minh ở `apps/api/src/auth.ts`.
+
 ## Monorepo
 
 | Thư mục | Vai trò |
@@ -41,12 +54,13 @@ Mở http://localhost:5180 → đăng nhập owner → "Mời thành viên". MVP
 
 `pnpm test` cần `pnpm infra:up`. Mỗi package dùng DB riêng `<TEST_DATABASE_URL>_<pkg>`, được xoá + migrate lại từ đầu mỗi lần chạy.
 
-E2E web (Playwright, Chromium): `pnpm --filter @mtl/web e2e` — tự reset DB `mtl_test_e2e`, seed workspace/series/token worker, bật API :8797 + Vite :5180 (cổng 5180 khớp CORS MinIO dev nên phải trống), upload ZIP 10 trang qua UI; worker giả lập (`apps/web/e2e/fake-worker.ts`, chỉ dùng trong test) gọi đúng giao thức `/worker/v1`. Lần đầu: `pnpm --filter @mtl/web exec playwright install chromium`. Gate parity Konva ↔ render.py:
+E2E web (Playwright, Chromium): `pnpm --filter @mtl/web e2e` — tự reset DB `mtl_test_e2e`, seed workspace/series/token worker, bật API :8797 + Vite :5181 (cổng riêng → chạy song song được với `pnpm dev` 5180/8787; đổi qua `E2E_WEB_PORT`/`E2E_API_PORT`, origin SPA phải nằm trong `MINIO_API_CORS_ALLOW_ORIGIN` của `infra/docker-compose.dev.yml` = 5180 + 5181; sau khi đổi CORS: `docker compose -f infra/docker-compose.dev.yml up -d --wait minio files-proxy` để tạo lại container), upload ZIP 10 trang qua UI; worker giả lập (`apps/web/e2e/fake-worker.ts`, chỉ dùng trong test) gọi đúng giao thức `/worker/v1`. Lần đầu: `pnpm --filter @mtl/web exec playwright install chromium`. Gate parity Konva ↔ render.py:
 `pnpm --filter @mtl/web e2e typeset-parity` (CI chạy riêng spec này).
 
 ## Web (`apps/web`)
 
-- Router: `src/app/router.tsx` (TanStack Router, params type-safe); component ở `src/features/*` nhận params qua props. Route editor `/w/$ws/series/$seriesId/chapters/$chapterId/edit/$pageId` nằm ngoài layout workspace (toàn màn hình) — xem [editor.md](./editor.md).
+- Router: `src/app/router.tsx` (TanStack Router, params type-safe); component ở `src/features/*` nhận params qua props. Cây route: `/` = home của workspace hiện tại (`src/lib/current-workspace.ts`: localStorage `mtl.ws` nếu còn là thành viên → workspace duy nhất → `/workspaces` để chọn), `/w/$ws/s/$seriesId[?tab=chapters|glossary|settings]`, `/w/$ws/s/$seriesId/c/$chapterId[?page=]`, `/w/$ws/glossary`, `/w/$ws/members`. Path cũ `/w/$ws[/series[/$s[/settings|/chapters/$c]]]` redirect sang path mới; `.../series/$s/upload` và editor `/w/$ws/series/$seriesId/chapters/$chapterId/edit/$pageId` còn giữ (editor nằm ngoài app shell, toàn màn hình — xem [editor.md](./editor.md)).
+- App shell: `src/app/app-shell.tsx` (brand → `/`, đổi workspace khi > 1, menu tài khoản: Glossary chung / Thành viên / Đăng xuất).
 - Dữ liệu: TanStack Query; tiến độ chương poll `/progress` 2,5s cho tới khi chương ổn định (draft/review/partial_failed/done).
 - Upload: ảnh/ZIP giải nén trong Web Worker → presigned POST từng file (song song 4, thử lại 3 lần, ký lại khi thử lại) → `POST /chapters/:id/commit` (server kiểm HEAD + magic bytes).
 - Khoá chương khi mở editor: hook `useChapterLock` (`src/features/chapter/use-chapter-lock.ts`).
