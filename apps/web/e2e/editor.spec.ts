@@ -2,22 +2,13 @@
  * Editor: sửa bản dịch → autosave → reload còn nguyên; mất kết nối lưu rồi đóng tab giữa chừng → mở lại đề nghị
  * khôi phục từ IndexedDB → khôi phục → lưu lên server. Chương 1 trang tạo qua API + worker giả.
  */
-import { readFileSync } from "node:fs";
 import { expect, type Page, test } from "@playwright/test";
-import { type E2EState, STATE_FILE, WEB_URL } from "./env.ts";
+import { WEB_URL } from "./env.ts";
 import { PNG_1PX, runFakeWorker } from "./fake-worker.ts";
+import { login, state } from "./helpers.ts";
 
-const state = JSON.parse(readFileSync(STATE_FILE, "utf8")) as E2EState;
 const ws = state.workspaceId;
 const headers = { origin: WEB_URL };
-
-async function login(page: Page) {
-  await page.goto("/login");
-  await page.getByLabel("Email").fill(state.email);
-  await page.getByLabel("Mật khẩu").fill(state.password);
-  await page.getByRole("button", { name: "Đăng nhập" }).click();
-  await expect(page.getByRole("heading", { name: "Series", exact: true })).toBeVisible();
-}
 
 /** Chương 1 trang đã dịch (worker giả) → id chương + page. */
 async function readyChapter(page: Page) {
@@ -114,7 +105,7 @@ test("edit translation → autosave → reload keeps it; crash mid-edit → rest
   });
   await page.getByLabel("Bản dịch vùng 1").fill("Rời ngay");
   await page.getByRole("link", { name: "← Chương" }).click();
-  await expect(page).toHaveURL(new RegExp(`/chapters/${chapterId}$`));
+  await expect(page).toHaveURL(new RegExp(`/w/${ws}/s/${state.seriesId}/c/${chapterId}$`));
   await expect
     .poll(async () => {
       const r = (await (await page.request.get(`/api/w/${ws}/pages/${pageId}`)).json()) as typeof saved;

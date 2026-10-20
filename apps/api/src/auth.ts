@@ -36,6 +36,8 @@ export const auth = betterAuth({
     ipAddress: { ipAddressHeaders: ["x-real-ip"] },
   },
   emailAndPassword: { enabled: true, minPasswordLength: 10 },
+  // Phiên sống 7 ngày, tự gia hạn khi dùng (mỗi ngày tối đa 1 lần) — đúng mặc định better-auth, ghi tường minh.
+  session: { expiresIn: 7 * 24 * 3600, updateAge: 24 * 3600 },
   telemetry: { enabled: false },
   databaseHooks: {
     user: {

@@ -14,6 +14,9 @@ export const E2E_ENV = {
   API_PORT: String(API_PORT),
   BETTER_AUTH_URL: WEB_URL,
   WEB_ORIGIN: WEB_URL,
+  // Không để DEV_AUTO_LOGIN_* của .env dev lọt vào API e2e (loadRootEnv chỉ nạp biến chưa đặt).
+  DEV_AUTO_LOGIN_EMAIL: "",
+  DEV_AUTO_LOGIN_PASSWORD: "",
 };
 
 export const STATE_FILE = fileURLToPath(new URL("./.state.json", import.meta.url));

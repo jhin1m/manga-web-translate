@@ -3,26 +3,17 @@
  * hoàn tác), xuất chương (job chapter.export qua worker giả → nút tải → 302 tới presigned GET). Mỗi test dựng một
  * chương 1 trang đã dịch riêng (worker giả) để không phụ thuộc thứ tự test.
  */
-import { readFileSync } from "node:fs";
 import { type APIRequestContext, expect, type Page, test } from "@playwright/test";
-import { type E2EState, STATE_FILE, WEB_URL } from "./env.ts";
+import { WEB_URL } from "./env.ts";
 import { PNG_1PX, runFakeWorker } from "./fake-worker.ts";
+import { login, state } from "./helpers.ts";
 
-const state = JSON.parse(readFileSync(STATE_FILE, "utf8")) as E2EState;
 const ws = state.workspaceId;
 const headers = { origin: WEB_URL };
 
 /** Bản dịch fake worker gán cho vùng t0 (xem fake-worker.ts aiState). */
 const FAKE_TRANSLATION = "Xin chào";
 const SOURCE_TERM = "안녕하세요";
-
-async function login(page: Page) {
-  await page.goto("/login");
-  await page.getByLabel("Email").fill(state.email);
-  await page.getByLabel("Mật khẩu").fill(state.password);
-  await page.getByRole("button", { name: "Đăng nhập" }).click();
-  await expect(page.getByRole("heading", { name: "Series", exact: true })).toBeVisible();
-}
 
 /** Số chương tăng dần (tái lập được, không đụng dải số ngẫu nhiên của editor.spec). */
 let chapterSeq = 3000;
@@ -71,7 +62,7 @@ async function readyChapter(page: Page) {
 }
 
 async function openChapter(page: Page, chapterId: string) {
-  await page.goto(`/w/${ws}/series/${state.seriesId}/chapters/${chapterId}`);
+  await page.goto(`/w/${ws}/s/${state.seriesId}/c/${chapterId}`);
   await expect(page.getByRole("heading", { name: /^Chương / })).toBeVisible();
   // Nút công cụ chỉ hiện khi chương ở trạng thái review/done và có trang.
   await expect(page.getByRole("button", { name: "Tìm & thay", exact: true })).toBeVisible({ timeout: 15_000 });

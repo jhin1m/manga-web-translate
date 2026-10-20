@@ -98,11 +98,8 @@ export function ChapterPage({ ws, seriesId, chapterId }: { ws: string; seriesId:
   return (
     <div className="page">
       <div className="crumbs">
-        <Link to="/w/$ws/series" params={{ ws }}>
-          Series
-        </Link>{" "}
-        /{" "}
-        <Link to="/w/$ws/series/$seriesId" params={{ ws, seriesId }}>
+        <Link to="/">Series</Link> /{" "}
+        <Link to="/w/$ws/s/$seriesId" params={{ ws, seriesId }}>
           {ch?.series.title ?? "…"}
         </Link>
       </div>

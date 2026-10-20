@@ -2,21 +2,36 @@
  * Cây route (TanStack Router, code-based, params type-safe). Component trong `features/*` nhận params qua
  * props — không import ngược router.
  *
+ * Đích: `/` (home workspace hiện tại), `/w/$ws/s/$seriesId[?tab]`, `/w/$ws/s/$seriesId/c/$chapterId[?page]`.
+ * Path cũ `/w/$ws/series/...` redirect sang path mới; riêng `.../upload` và editor `.../edit/$pageId` còn giữ tới
+ * khi màn thay thế có.
+ *
  * Editor (`editorRoute`) nằm dưới `authedRoute` nhưng NGOÀI `workspaceRoute` → chiếm toàn màn hình, không có
- * thanh trên của workspace.
+ * thanh trên của app shell.
  */
 import { QueryClient } from "@tanstack/react-query";
-import { createRootRouteWithContext, createRoute, createRouter, Link, Outlet, redirect } from "@tanstack/react-router";
+import {
+  createRootRouteWithContext,
+  createRoute,
+  createRouter,
+  Link,
+  Navigate,
+  Outlet,
+  redirect,
+} from "@tanstack/react-router";
 import { lazy, Suspense } from "react";
 import { ChapterPage } from "../features/chapter/chapter-page.tsx";
 import { WorkspaceGlossaryPage } from "../features/glossary/glossary-editor.tsx";
 import { SeriesDetailPage, SeriesListPage } from "../features/series/series-list-page.tsx";
 import { SeriesSettingsPage } from "../features/series/series-settings-page.tsx";
 import { UploadPage } from "../features/upload/upload-page.tsx";
+import { errorMessage } from "../lib/api.ts";
+import { setCurrentWs, useCurrentWorkspace } from "../lib/current-workspace.ts";
 import { AcceptInvitePage } from "../routes/accept-invite.tsx";
 import { LoginPage } from "../routes/login.tsx";
 import { MembersPage, WorkspacePickerPage } from "../routes/workspaces.tsx";
-import { AuthGate, WorkspaceLayout } from "./layout.tsx";
+import { AppShell } from "./app-shell.tsx";
+import { AuthGate } from "./layout.tsx";
 
 // Chunk riêng (konva + immer + zustand…): chỉ tải khi mở editor.
 const EditorPage = lazy(() => import("../features/editor/EditorPage.tsx").then((m) => ({ default: m.EditorPage })));
@@ -47,14 +62,41 @@ const acceptInviteRoute = createRoute({
 /** Mọi route cần đăng nhập. */
 export const authedRoute = createRoute({ getParentRoute: () => rootRoute, id: "authed", component: AuthGate });
 
-const pickerRoute = createRoute({ getParentRoute: () => authedRoute, path: "/", component: WorkspacePickerPage });
+/** Home của workspace hiện tại (nội dung tạm: danh sách series); chưa xác định được → picker. */
+const homeRoute = createRoute({
+  getParentRoute: () => authedRoute,
+  path: "/",
+  component: function HomeRoute() {
+    const { current, error } = useCurrentWorkspace();
+    if (error) {
+      return (
+        <main className="auth">
+          <p className="error">{errorMessage(error)}</p>
+        </main>
+      );
+    }
+    if (!current) return null;
+    if (!("ws" in current)) return <Navigate to="/workspaces" replace />;
+    return (
+      <AppShell ws={current.ws}>
+        <SeriesListPage ws={current.ws} />
+      </AppShell>
+    );
+  },
+});
+
+const pickerRoute = createRoute({
+  getParentRoute: () => authedRoute,
+  path: "workspaces",
+  component: WorkspacePickerPage,
+});
 
 export const workspaceRoute = createRoute({
   getParentRoute: () => authedRoute,
   path: "w/$ws",
   component: function WorkspaceRouteComponent() {
     const { ws } = workspaceRoute.useParams();
-    return <WorkspaceLayout ws={ws} />;
+    return <AppShell ws={ws} />;
   },
 });
 
@@ -62,34 +104,37 @@ const workspaceIndexRoute = createRoute({
   getParentRoute: () => workspaceRoute,
   path: "/",
   beforeLoad: ({ params }) => {
-    throw redirect({ to: "/w/$ws/series", params: { ws: params.ws } });
+    setCurrentWs(params.ws);
+    throw redirect({ to: "/", replace: true });
   },
 });
 
-const seriesListRoute = createRoute({
-  getParentRoute: () => workspaceRoute,
-  path: "series",
-  component: function SeriesListRoute() {
-    const { ws } = seriesListRoute.useParams();
-    return <SeriesListPage ws={ws} />;
-  },
-});
+const SERIES_TABS = ["chapters", "glossary", "settings"] as const;
+export type SeriesTab = (typeof SERIES_TABS)[number];
+const isSeriesTab = (v: unknown): v is SeriesTab => SERIES_TABS.includes(v as SeriesTab);
 
-const seriesDetailRoute = createRoute({
+export const seriesRoute = createRoute({
   getParentRoute: () => workspaceRoute,
-  path: "series/$seriesId",
-  component: function SeriesDetailRoute() {
-    const { ws, seriesId } = seriesDetailRoute.useParams();
+  path: "s/$seriesId",
+  validateSearch: (search: Record<string, unknown>): { tab?: SeriesTab } =>
+    isSeriesTab(search.tab) ? { tab: search.tab } : {},
+  component: function SeriesRoute() {
+    const { ws, seriesId } = seriesRoute.useParams();
+    const { tab } = seriesRoute.useSearch();
+    // Tạm tới khi màn series mới có tab: glossary nằm chung trang cài đặt.
+    if (tab === "settings" || tab === "glossary") return <SeriesSettingsPage ws={ws} seriesId={seriesId} />;
     return <SeriesDetailPage ws={ws} seriesId={seriesId} />;
   },
 });
 
-const seriesSettingsRoute = createRoute({
+export const chapterRoute = createRoute({
   getParentRoute: () => workspaceRoute,
-  path: "series/$seriesId/settings",
-  component: function SeriesSettingsRoute() {
-    const { ws, seriesId } = seriesSettingsRoute.useParams();
-    return <SeriesSettingsPage ws={ws} seriesId={seriesId} />;
+  path: "s/$seriesId/c/$chapterId",
+  validateSearch: (search: Record<string, unknown>): { page?: string } =>
+    typeof search.page === "string" ? { page: search.page } : {},
+  component: function ChapterRoute() {
+    const { ws, seriesId, chapterId } = chapterRoute.useParams();
+    return <ChapterPage ws={ws} seriesId={seriesId} chapterId={chapterId} />;
   },
 });
 
@@ -99,15 +144,6 @@ const uploadRoute = createRoute({
   component: function UploadRoute() {
     const { ws, seriesId } = uploadRoute.useParams();
     return <UploadPage ws={ws} seriesId={seriesId} />;
-  },
-});
-
-export const chapterRoute = createRoute({
-  getParentRoute: () => workspaceRoute,
-  path: "series/$seriesId/chapters/$chapterId",
-  component: function ChapterRoute() {
-    const { ws, seriesId, chapterId } = chapterRoute.useParams();
-    return <ChapterPage ws={ws} seriesId={seriesId} chapterId={chapterId} />;
   },
 });
 
@@ -121,6 +157,40 @@ const glossaryRoute = createRoute({
 });
 
 const membersRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "members", component: MembersPage });
+
+// ---- Path cũ → path mới (giữ bookmark/link cũ). ----
+const legacySeriesListRoute = createRoute({
+  getParentRoute: () => workspaceRoute,
+  path: "series",
+  beforeLoad: ({ params }) => {
+    setCurrentWs(params.ws);
+    throw redirect({ to: "/", replace: true });
+  },
+});
+
+const legacySeriesRoute = createRoute({
+  getParentRoute: () => workspaceRoute,
+  path: "series/$seriesId",
+  beforeLoad: ({ params }) => {
+    throw redirect({ to: "/w/$ws/s/$seriesId", params, replace: true });
+  },
+});
+
+const legacySeriesSettingsRoute = createRoute({
+  getParentRoute: () => workspaceRoute,
+  path: "series/$seriesId/settings",
+  beforeLoad: ({ params }) => {
+    throw redirect({ to: "/w/$ws/s/$seriesId", params, search: { tab: "settings" }, replace: true });
+  },
+});
+
+const legacyChapterRoute = createRoute({
+  getParentRoute: () => workspaceRoute,
+  path: "series/$seriesId/chapters/$chapterId",
+  beforeLoad: ({ params }) => {
+    throw redirect({ to: "/w/$ws/s/$seriesId/c/$chapterId", params, replace: true });
+  },
+});
 
 /** Editor 1 trang (toàn màn hình). */
 export const editorRoute = createRoute({
@@ -146,16 +216,19 @@ export const routeTree = rootRoute.addChildren([
   loginRoute,
   acceptInviteRoute,
   authedRoute.addChildren([
+    homeRoute,
     pickerRoute,
     workspaceRoute.addChildren([
       workspaceIndexRoute,
-      seriesListRoute,
-      seriesDetailRoute,
-      seriesSettingsRoute,
-      uploadRoute,
+      seriesRoute,
       chapterRoute,
+      uploadRoute,
       glossaryRoute,
       membersRoute,
+      legacySeriesListRoute,
+      legacySeriesRoute,
+      legacySeriesSettingsRoute,
+      legacyChapterRoute,
     ]),
     editorRoute,
   ]),

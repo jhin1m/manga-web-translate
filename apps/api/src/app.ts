@@ -3,9 +3,10 @@ import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { secureHeaders } from "hono/secure-headers";
 import { auth } from "./auth.ts";
-import { env } from "./env.ts";
+import { devAutoLoginEnabled, env } from "./env.ts";
 import { requestLog } from "./lib/request-log.ts";
 import { chapterRoutes } from "./routes/chapters.ts";
+import { type DevLogin, devAuthRoutes } from "./routes/dev-auth.ts";
 import { exportRoutes } from "./routes/export.ts";
 import { findReplaceRoutes } from "./routes/find-replace.ts";
 import { glossaryRoutes } from "./routes/glossary.ts";
@@ -19,7 +20,13 @@ import { uploadRoutes } from "./routes/uploads.ts";
 import { workerRoutes } from "./routes/worker.ts";
 import { workspaceRoutes } from "./routes/workspaces.ts";
 
-export function createApp() {
+const envDevLogin = (): DevLogin | false =>
+  devAutoLoginEnabled(env)
+    ? { email: env.DEV_AUTO_LOGIN_EMAIL ?? "", password: env.DEV_AUTO_LOGIN_PASSWORD ?? "" }
+    : false;
+
+/** `devAutoLogin`: tài khoản cho POST /api/dev/auto-login; false = không mount route (mặc định theo env). */
+export function createApp({ devAutoLogin = envDevLogin() }: { devAutoLogin?: DevLogin | false } = {}) {
   const app = new Hono();
   if (env.NODE_ENV === "production") app.use("*", requestLog);
   app.use("*", secureHeaders());
@@ -27,6 +34,7 @@ export function createApp() {
   app.route("/", healthRoutes);
 
   app.on(["GET", "POST"], "/api/auth/*", (c) => auth.handler(c.req.raw));
+  if (devAutoLogin) app.route("/api", devAuthRoutes(devAutoLogin));
 
   // Route người dùng: /api/me/* và /api/w/:ws/* (workspace trên URL).
   app.route("/api", workspaceRoutes);

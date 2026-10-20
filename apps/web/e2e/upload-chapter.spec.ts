@@ -1,11 +1,8 @@
 /** Luồng chính: upload ZIP 10 trang (tên xáo trộn) → thứ tự tự nhiên → commit → worker giả → 10 trang "Sẵn sàng". */
-import { readFileSync } from "node:fs";
 import { expect, test } from "@playwright/test";
 import { zipSync } from "fflate";
-import { type E2EState, STATE_FILE } from "./env.ts";
 import { PNG_1PX, runFakeWorker } from "./fake-worker.ts";
-
-const state = JSON.parse(readFileSync(STATE_FILE, "utf8")) as E2EState;
+import { login, state } from "./helpers.ts";
 
 test("upload a 10-page ZIP and see 10 ready pages", async ({ page }) => {
   const names = ["10.png", "2.png", "1.png", "9.png", "3.png", "8.png", "4.png", "7.png", "5.png", "6.png"];
@@ -16,11 +13,7 @@ test("upload a 10-page ZIP and see 10 ready pages", async ({ page }) => {
     ]),
   );
 
-  await page.goto("/login");
-  await page.getByLabel("Email").fill(state.email);
-  await page.getByLabel("Mật khẩu").fill(state.password);
-  await page.getByRole("button", { name: "Đăng nhập" }).click();
-  await expect(page.getByRole("heading", { name: "Series", exact: true })).toBeVisible();
+  await login(page);
 
   await page.goto(`/w/${state.workspaceId}/series/${state.seriesId}/upload`);
   await page.locator('input[type="file"]').setInputFiles({
@@ -33,7 +26,7 @@ test("upload a 10-page ZIP and see 10 ready pages", async ({ page }) => {
   expect(order).toEqual(Array.from({ length: 10 }, (_, i) => `chuong-1/${i + 1}.png`));
 
   await page.getByRole("button", { name: "Upload và xử lý" }).click();
-  await expect(page).toHaveURL(/\/chapters\/[0-9a-f-]{36}$/, { timeout: 30_000 });
+  await expect(page).toHaveURL(/\/s\/[0-9a-f-]{36}\/c\/[0-9a-f-]{36}$/, { timeout: 30_000 });
 
   let ready = false;
   const worker = runFakeWorker(state.token, () => ready);

@@ -1,18 +1,16 @@
-import { useQuery } from "@tanstack/react-query";
 import { Link, Navigate } from "@tanstack/react-router";
 import { type FormEvent, useState } from "react";
-import { useWorkspace } from "../app/layout.tsx";
-import { api, authClient, errorMessage, type WorkspaceSummary } from "../lib/api.ts";
+import { signOut, useWorkspace } from "../app/app-shell.tsx";
+import { api, authClient, errorMessage } from "../lib/api.ts";
+import { setCurrentWs, useMyWorkspaces } from "../lib/current-workspace.ts";
 
-/** Chọn workspace; chỉ 1 workspace thì vào thẳng. */
+/** Chọn/đổi workspace hiện tại rồi về home; chỉ 1 workspace thì vào thẳng. */
 export function WorkspacePickerPage() {
-  const q = useQuery({
-    queryKey: ["me", "workspaces"],
-    queryFn: () => api<{ workspaces: WorkspaceSummary[] }>("/api/me/workspaces"),
-  });
+  const q = useMyWorkspaces();
   const list = q.data?.workspaces;
   const only = list?.length === 1 ? list[0] : undefined;
-  if (only) return <Navigate to="/w/$ws/series" params={{ ws: only.id }} replace />;
+  // Home tự chọn workspace duy nhất.
+  if (only) return <Navigate to="/" replace />;
 
   return (
     <main className="auth">
@@ -24,7 +22,7 @@ export function WorkspacePickerPage() {
           {list?.map((w) => (
             <tr key={w.id}>
               <td>
-                <Link to="/w/$ws/series" params={{ ws: w.id }}>
+                <Link to="/" onClick={() => setCurrentWs(w.id)}>
                   {w.name}
                 </Link>
               </td>
@@ -34,11 +32,7 @@ export function WorkspacePickerPage() {
         </tbody>
       </table>
       <p>
-        <button
-          type="button"
-          className="link"
-          onClick={() => authClient.signOut().then(() => location.assign("/login"))}
-        >
+        <button type="button" className="link" onClick={() => void signOut()}>
           Đăng xuất
         </button>
       </p>
