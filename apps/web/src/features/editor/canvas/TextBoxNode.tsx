@@ -22,8 +22,11 @@ type Props = {
 
 /** Vẽ chữ của box vào context gốc = góc trái-trên box (chưa xoay). Dùng chung cho Shape và test parity. */
 export function drawBoxText(ctx: Konva.Context, box: TextBox, kit: FontKit) {
-  const lines = linePlacements(box, kit.metrics(box.font_family), kit.measure);
-  ctx.setAttr("font", canvasFont(box.font_family, box.font_size));
+  // Box auto chưa có lines (chưa qua editor): wrap bằng typesetter rồi vẽ — chỉ hiển thị, không ghi state;
+  // worker export làm y hệt (docs/typeset-layout-contract.md).
+  const drawn = box.lines.length === 0 && box.text.trim() !== "" ? { ...box, ...kit.layout(box) } : box;
+  const lines = linePlacements(drawn, kit.metrics(box.font_family), kit.measure);
+  ctx.setAttr("font", canvasFont(box.font_family, drawn.font_size));
   ctx.setAttr("textBaseline", "alphabetic");
   ctx.setAttr("textAlign", "left");
   const sw = box.stroke && box.stroke.width > 0 ? box.stroke.width : 0;

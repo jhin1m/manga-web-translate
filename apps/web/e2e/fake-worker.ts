@@ -2,6 +2,7 @@
  * Worker giả lập CHỈ cho e2e: gọi đúng giao thức /worker/v1 (claim → presign-outputs/PUT → complete với
  * lease_token + attempt) nhưng không chạy AI — mỗi slice = 1 page, OCR/dịch cố định.
  */
+import { zipSync } from "fflate";
 import { emptyPageState, type PageState } from "../../../packages/shared/src/index.ts";
 import { API_URL } from "./env.ts";
 
@@ -19,7 +20,7 @@ type Claimed = {
   attempt: number;
   lease_token: string;
   inputs: Record<string, unknown>;
-  outputs: Record<string, { put: string; rev: number | null }>;
+  outputs: Record<string, { key: string; put: string; rev: number | null; headers?: Record<string, string> }>;
 };
 
 async function call<T>(token: string, path: string, body: unknown): Promise<T> {
@@ -35,6 +36,12 @@ async function call<T>(token: string, path: string, body: unknown): Promise<T> {
 async function put(url: string) {
   const res = await fetch(url, { method: "PUT", body: PNG_1PX, headers: { "content-type": "image/png" } });
   if (!res.ok) throw new Error(`PUT ${res.status}`);
+}
+
+/** PUT đúng header đã ký (content-type, x-amz-tagging…) — file export có MIME/tag theo format. */
+async function putWith(out: { put: string; headers?: Record<string, string> }, body: Uint8Array<ArrayBuffer>) {
+  const res = await fetch(out.put, { method: "PUT", body, headers: out.headers });
+  if (!res.ok) throw new Error(`PUT ${res.status} ${await res.text()}`);
 }
 
 const fence = (j: Claimed) => ({ lease_token: j.lease_token, attempt: j.attempt });
@@ -100,6 +107,14 @@ async function handle(token: string, j: Claimed) {
       pages: pages.map((p) => ({ page_id: p.page_id, ai_state: aiState(p.width, p.height) })),
     });
   }
+  if (j.type === "chapter.export") {
+    // Nội dung giả (zip 1 ảnh) — server chỉ kiểm key và đo bytes từ object thật.
+    const out = j.outputs.export;
+    if (!out) throw new Error("fake worker: export output missing");
+    const body = new Uint8Array(zipSync({ "1.png": new Uint8Array(PNG_1PX) }));
+    await putWith(out, body);
+    return complete(token, j, { type: "chapter.export", key: out.key, bytes: body.byteLength });
+  }
   throw new Error(`fake worker: unsupported ${j.type}`);
 }
 
@@ -109,7 +124,7 @@ export async function runFakeWorker(token: string, until: () => boolean, timeout
   while (!until() && Date.now() < deadline) {
     const { jobs } = await call<{ jobs: Claimed[] }>(token, "/claim", {
       worker_id: "e2e-fake",
-      capabilities: ["chapter.ingest", "page.prepare", "chapter.translate"],
+      capabilities: ["chapter.ingest", "page.prepare", "chapter.translate", "chapter.export"],
       max: 8,
       pipeline_version: VERSION,
       dispatch_id: null,

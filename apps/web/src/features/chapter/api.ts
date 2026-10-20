@@ -87,3 +87,73 @@ export const REJECT_REASON: Record<Rejected["reason"], string> = {
   too_large: "vượt 30MB",
   type_mismatch: "nội dung không phải ảnh khớp đuôi file",
 };
+
+// ---- Export ----
+export type ExportFormat = "png_zip" | "cbz";
+export type ExportLayout = "original_slices" | "pages";
+export type ExportStatus = "queued" | "running" | "succeeded" | "failed" | "cancelled" | "paused_budget";
+export type ExportView = {
+  id: string;
+  status: ExportStatus;
+  progress: number;
+  stage: string | null;
+  error: string | null;
+  format: ExportFormat;
+  layout: ExportLayout;
+  quality: number;
+  include_untranslated: boolean;
+  bytes: number | null;
+  created_at: string;
+  expires_at: string | null;
+  download_url: string | null;
+};
+export type ExportRequest = {
+  format: ExportFormat;
+  layout: ExportLayout;
+  quality?: number;
+  include_untranslated?: boolean;
+};
+
+export const exportKeys = {
+  list: (ws: string, ch: string) => ["chapter", ws, ch, "exports"] as const,
+};
+export const createExport = (ws: string, ch: string, body: ExportRequest) =>
+  api<{ job: ExportView; created: boolean }>(base(ws, ch, "/export"), { method: "POST", body });
+export const fetchExports = (ws: string, ch: string) => api<{ exports: ExportView[] }>(base(ws, ch, "/exports"));
+export const cancelJob = (ws: string, jobId: string) =>
+  api<unknown>(wsPath(ws, `/jobs/${jobId}/cancel`), { method: "POST" });
+
+// ---- Find/replace + áp lại glossary (cùng dạng preview/apply/undo) ----
+export type MatchTarget = "box" | "region";
+export type FindMatch = {
+  page_id: string;
+  ord: number;
+  target: MatchTarget;
+  id: string;
+  before: string;
+  after: string;
+  count: number;
+  /** Chỉ có ở áp glossary: chỉ số rule trong request. */
+  rule?: number;
+};
+export type PreviewResult = {
+  matches: FindMatch[];
+  total: number;
+  truncated: boolean;
+  versions: Record<string, number>;
+};
+export type ApplyResult = { batch_id: string; pages: number; replaced: number };
+
+export type FindReplaceInput = { find: string; replace: string; case_sensitive: boolean };
+export type GlossaryRule = { source_term: string; from: string };
+
+export const previewFindReplace = (ws: string, ch: string, body: FindReplaceInput) =>
+  api<PreviewResult>(base(ws, ch, "/find-replace/preview"), { method: "POST", body });
+export const applyFindReplace = (ws: string, ch: string, body: FindReplaceInput, versions: Record<string, number>) =>
+  api<ApplyResult>(base(ws, ch, "/find-replace/apply"), { method: "POST", body: { ...body, versions } });
+export const undoBatch = (ws: string, ch: string, batchId: string) =>
+  api<{ pages: number }>(base(ws, ch, "/find-replace/undo"), { method: "POST", body: { batch_id: batchId } });
+export const previewGlossaryApply = (ws: string, ch: string, rules: GlossaryRule[]) =>
+  api<PreviewResult>(base(ws, ch, "/glossary-apply/preview"), { method: "POST", body: { rules } });
+export const applyGlossaryRules = (ws: string, ch: string, rules: GlossaryRule[], versions: Record<string, number>) =>
+  api<ApplyResult>(base(ws, ch, "/glossary-apply/apply"), { method: "POST", body: { rules, versions } });

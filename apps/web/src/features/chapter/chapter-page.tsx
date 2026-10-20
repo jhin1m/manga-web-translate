@@ -6,6 +6,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { useRef, useState } from "react";
 import { errorMessage } from "../../lib/api.ts";
+import { ApplyGlossaryDialog } from "../glossary/ApplyGlossary.tsx";
 import { seriesKeys } from "../series/api.ts";
 import {
   cancelChapter,
@@ -20,6 +21,8 @@ import {
   retranslate,
   retryFailed,
 } from "./api.ts";
+import { ExportDialog } from "./ExportDialog.tsx";
+import { FindReplaceDialog } from "./FindReplace.tsx";
 import { CHAPTER_STATUS, isChapterSettled, PAGE_STATUS } from "./status.ts";
 
 export const PROGRESS_POLL_MS = 2500;
@@ -28,6 +31,7 @@ const LOCK_POLL_MS = 15_000;
 export function ChapterPage({ ws, seriesId, chapterId }: { ws: string; seriesId: string; chapterId: string }) {
   const qc = useQueryClient();
   const [notice, setNotice] = useState<{ tone: "info" | "danger"; text: string } | null>(null);
+  const [dialog, setDialog] = useState<"export" | "find" | "glossary" | null>(null);
 
   const detailQ = useQuery({
     queryKey: chapterKeys.detail(ws, chapterId),
@@ -138,6 +142,21 @@ export function ChapterPage({ ws, seriesId, chapterId }: { ws: string; seriesId:
             Dịch lại cả chương
           </button>
         )}
+        {pages.length > 0 && !busy && (
+          <button type="button" onClick={() => setDialog("export")}>
+            Xuất chương
+          </button>
+        )}
+        {(status === "review" || status === "partial_failed" || status === "done") && pages.length > 0 && (
+          <>
+            <button type="button" onClick={() => setDialog("find")}>
+              Tìm &amp; thay
+            </button>
+            <button type="button" onClick={() => setDialog("glossary")}>
+              Áp glossary
+            </button>
+          </>
+        )}
         {busy && (
           <button
             type="button"
@@ -189,6 +208,13 @@ export function ChapterPage({ ws, seriesId, chapterId }: { ws: string; seriesId:
           <PageCard key={p.id} ws={ws} seriesId={seriesId} chapterId={chapterId} page={p} image={images.get(p.id)} />
         ))}
       </div>
+      {dialog === "export" && <ExportDialog ws={ws} chapterId={chapterId} onClose={() => setDialog(null)} />}
+      {dialog === "find" && (
+        <FindReplaceDialog ws={ws} seriesId={seriesId} chapterId={chapterId} onClose={() => setDialog(null)} />
+      )}
+      {dialog === "glossary" && (
+        <ApplyGlossaryDialog ws={ws} seriesId={seriesId} chapterId={chapterId} onClose={() => setDialog(null)} />
+      )}
     </div>
   );
 }
