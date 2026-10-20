@@ -119,31 +119,6 @@ label.ed-check {
   margin-top: var(--sp-3);
 }
 
-table.ed-regions {
-  font-size: var(--fs-sm);
-}
-table.ed-regions td {
-  vertical-align: top;
-}
-table.ed-regions tr.on td {
-  background: var(--c-accent-weak);
-}
-table.ed-regions textarea {
-  min-height: 0;
-  padding: 4px 6px;
-}
-.ed-src {
-  max-width: 110px;
-  overflow-wrap: anywhere;
-}
-.ed-flags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--sp-1);
-  margin-top: 2px;
-  font-size: var(--fs-xs);
-}
-
 .ed-ai-head {
   display: flex;
   flex-wrap: wrap;

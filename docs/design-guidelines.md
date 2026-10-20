@@ -1,11 +1,11 @@
 # Design guidelines (web)
 
-Áp cho mọi màn của `apps/web` (Phase 4 dựng nền, Phase 5 editor dùng lại). Token nằm ở
+Áp cho mọi màn của `apps/web` (màn chương gộp dùng lại cùng token). Token nằm ở
 `apps/web/src/styles/tokens.css` — không hard-code màu/khoảng cách trong component nếu token đã có.
 
 ## Hướng thiết kế
 
-Đã cân nhắc 3 hướng; **chọn A** cho MVP. Owner chưa duyệt — xem "Việc còn mở".
+Đã cân nhắc 3 hướng; **chọn A** cho MVP (owner đã duyệt 20/10/2026 — xem "Việc còn mở").
 
 | Hướng | Mô tả | Hợp | Không hợp |
 |---|---|---|---|
@@ -13,7 +13,7 @@
 | B. Tài liệu thoáng | Cột giữa 720px, chữ 15–16px, nhiều khoảng trắng, thẻ thay bảng | Người mới, ít dữ liệu | Lưới 150 trang + glossary vài trăm dòng phải cuộn rất dài |
 | C. Tối kiểu IDE | Nền tối `#16161a`, panel chia cột, phím tắt nổi bật | Editor (Phase 5) làm việc lâu với ảnh | Màn quản lý (series, glossary) khó đọc bảng dày; ảnh manhwa nền trắng chói trên nền tối |
 
-Phase 5 có thể đổi riêng vùng canvas của editor sang nền xám trung tính để nhìn ảnh, nhưng giữ cùng token chữ/nhấn.
+Vùng canvas của màn chương dùng nền xám trung tính để nhìn ảnh, giữ cùng token chữ/nhấn.
 
 Ảnh chụp dữ liệu thật của hướng A: chạy `pnpm --filter @mtl/web e2e` (series, upload 10 trang, chương "Chờ duyệt").
 
@@ -43,6 +43,25 @@ Phase 5 có thể đổi riêng vùng canvas của editor sang nền xám trung 
 
 Font UI tự host qua `@fontsource/be-vietnam-pro` (400/500/600) — không gọi Google Fonts lúc chạy.
 
+## Màn chương
+
+Toàn màn hình (ngoài app shell), `chapter-workspace.css`: thanh trên 52px + băng khoá 30px, rồi 4 vùng.
+
+| Vùng | Nội dung |
+|---|---|
+| Rail trái (196px) | Danh sách trang + trạng thái từng trang |
+| Giữa | Strip canvas liên tục, nền xám trung tính; chế độ Gốc / Dịch / Chia đôi |
+| Inspector phải (320px) | Thuộc tính khối/vùng của trang đang sửa |
+| Bảng dưới | Tab Bản dịch (bảng văn bản cả chương) / Tìm / Thay / Áp glossary; kéo cao, thu gọn (mặc định thu gọn khi < 1600px) |
+
+- **Nút chính** (1 nút, theo trạng thái chương, `primary-action.ts`): Tải ảnh → Dịch chương (= commit; upload xong
+  không tự dịch) → (disabled) "Đang cắt trang…" / "Đang dịch x/y" → Xuất. Chương có trang lỗi: "Chạy lại trang lỗi";
+  "Dịch lại cả chương" nằm trong menu phụ.
+- **Drawer phải 420px** (`app/drawer.tsx`): Xuất (cảnh báo "Trước khi xuất", định dạng, tải) và Hoạt động (upload +
+  job chương + lượt xuất). Không dùng modal cho thao tác chính. Chi tiết: [editor.md](./editor.md).
+- **Home** (`/`): vùng thả file lớn → dòng xác nhận "Sau khi thả file" → "Việc cần làm" (chương chưa xong của
+  workspace, mỗi chương 1 nút bước kế tiếp) → hàng series. **Series**: hàng chương + vùng thả cho chương kế.
+
 ## Thành phần
 
 - **Nút**: `button` (viền), `.btn-primary` (1 nút chính mỗi vùng), `.btn-ghost` (thao tác phụ trong bảng), `.btn-danger` (chữ đỏ, không nền đỏ). Link dạng nút: `<Link className="btn">`.
@@ -60,4 +79,6 @@ Font UI tự host qua `@fontsource/be-vietnam-pro` (400/500/600) — không gọ
 
 ## Việc còn mở
 
-- Owner duyệt hướng A (hoặc chọn B/C) trước khi Phase 5 làm editor.
+- Đã chốt: ngày 20/10/2026 owner duyệt giữ hướng A và bản thiết kế
+  `plans/261020-1944-web-uiux-redesign-chapter-workspace/design/` (Main, Series, Chapter, Drawers).
+- Ngoài phạm vi: thumbnail do server sinh; sắp xếp tay thứ tự file khi upload (file tự xếp theo tên, natural sort).

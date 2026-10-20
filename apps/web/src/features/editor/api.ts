@@ -27,8 +27,6 @@ export type JobWithResult = JobView & { result: unknown };
 
 const page = (ws: string, id: string, path = "") => wsPath(ws, `/pages/${id}${path}`);
 
-export const editorKeys = { page: (ws: string, id: string) => ["editor", ws, id] as const };
-
 export const fetchPageDetail = (ws: string, id: string) => api<PageDetail>(page(ws, id));
 
 export const putPageState = (ws: string, id: string, state: PageState, version: number) =>

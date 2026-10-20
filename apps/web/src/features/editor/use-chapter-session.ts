@@ -285,6 +285,9 @@ function useFontKit() {
 
 export type RecoveryItem = PendingRecord & { ord: number };
 
+/** Saver của phiên đang mở (store dùng chung cả tab → tối đa 1 phiên sống). */
+let activeSaver: Saver | null = null;
+
 /**
  * Hook React quanh `ChapterSession`. `settled` = chương ổn định (không còn job), `pageIds` theo ord,
  * `refetchProgress` trả trạng thái chương mới.
@@ -297,8 +300,10 @@ export function useChapterSession(opts: {
   refetchProgress(): Promise<boolean | undefined>;
 }) {
   const { ws, chapterId, settled, pageIds } = opts;
-  // Store dùng chung cả tab: phiên mới bắt đầu sạch (chạy trước mọi effect con).
+  // Store dùng chung cả tab: phiên mới bắt đầu sạch (chạy trước mọi effect con). Đổi thẳng từ chương khác
+  // (back/forward) thì phiên cũ chưa kịp cleanup → giao sửa chưa lưu của nó cho Saver cũ lưu trước khi reset.
   useState(() => {
+    activeSaver?.flushDetached();
     editorStore.getState().reset();
     chapterStore.getState().reset(chapterId);
   });
@@ -338,6 +343,7 @@ export function useChapterSession(opts: {
   // Mọi thay đổi doc → lưu nháp IndexedDB + autosave. Phải khai báo TRƯỚC useChapterLock (thứ tự cleanup).
   useEffect(() => {
     saver.start();
+    activeSaver = saver;
     const unsub = editorStore.subscribe((s, prev) => {
       if (s.doc !== prev.doc && s.doc !== s.base && s.pageId === prev.pageId) saver.schedule();
     });
@@ -359,6 +365,7 @@ export function useChapterSession(opts: {
       document.removeEventListener("visibilitychange", onVisibility);
       removeEventListener("beforeunload", onBeforeUnload);
       saver.dispose();
+      if (activeSaver === saver) activeSaver = null;
       // Cleanup này chạy TRƯỚC cleanup của useChapterLock (khai báo trước) → lượt lưu cuối vào chuỗi khoá trước
       // lệnh nhả khoá.
       void serial(() => finalSave(saver, editorStore, () => lockChapter(ws, chapterId)));
@@ -483,5 +490,3 @@ export function useChapterSession(opts: {
     runAi,
   };
 }
-
-export type ChapterSessionApi = ReturnType<typeof useChapterSession>;

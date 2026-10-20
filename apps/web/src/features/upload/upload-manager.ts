@@ -221,8 +221,6 @@ export function createUploadManager(deps: UploadDeps) {
   };
 }
 
-export type UploadManager = ReturnType<typeof createUploadManager>;
-
 const safeStorage = (): KV | null => {
   try {
     return typeof localStorage === "undefined" ? null : localStorage;

@@ -47,7 +47,6 @@
   --sp-6: 32px;
 
   --radius: 4px;
-  --topbar-h: 44px;
 }
 
 *,
@@ -303,48 +302,6 @@ table.data th.num {
   display: block;
   height: 100%;
   background: var(--c-accent);
-}
-
-/* ---- Thanh trên của workspace ---- */
-.topbar {
-  position: sticky;
-  top: 0;
-  z-index: 10;
-  height: var(--topbar-h);
-  display: flex;
-  align-items: center;
-  gap: var(--sp-4);
-  padding: 0 var(--sp-5);
-  border-bottom: 1px solid var(--c-line);
-  background: var(--c-bg);
-}
-.topbar .brand {
-  font-weight: 600;
-  color: var(--c-fg);
-}
-.topbar nav {
-  display: flex;
-  gap: var(--sp-1);
-  height: 100%;
-}
-.topbar nav a {
-  display: flex;
-  align-items: center;
-  padding: 0 var(--sp-2);
-  color: var(--c-fg-muted);
-  border-bottom: 2px solid transparent;
-  font-size: var(--fs-sm);
-}
-.topbar nav a:hover {
-  color: var(--c-fg);
-  text-decoration: none;
-}
-.topbar nav a[data-status="active"] {
-  color: var(--c-fg);
-  border-bottom-color: var(--c-accent);
-}
-.topbar .spacer {
-  flex: 1;
 }
 
 /* ---- Màn xác thực (login / mời) ---- */

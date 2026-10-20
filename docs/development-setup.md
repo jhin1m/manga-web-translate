@@ -52,18 +52,28 @@ Phiên better-auth sống 7 ngày, tự gia hạn khi dùng (tối đa 1 lần/n
 
 ## Test
 
-`pnpm test` cần `pnpm infra:up`. Mỗi package dùng DB riêng `<TEST_DATABASE_URL>_<pkg>`, được xoá + migrate lại từ đầu mỗi lần chạy.
+`pnpm test` cần `pnpm infra:up`. Mỗi package **và mỗi checkout** dùng DB riêng `<TEST_DATABASE_URL>_<pkg>_<8 hex sha1 của đường dẫn checkout>` (`packages/db/src/testing.ts`), được xoá + migrate lại từ đầu mỗi lần chạy → các git worktree chạy `pnpm test` song song được. DB cũ `mtl_test_api` / `mtl_test_db` (không hậu tố) không còn dùng, có thể `DROP`.
 
-E2E web (Playwright, Chromium): `pnpm --filter @mtl/web e2e` — tự reset DB `mtl_test_e2e`, seed workspace/series/token worker, bật API :8797 + Vite :5181 (cổng riêng → chạy song song được với `pnpm dev` 5180/8787; đổi qua `E2E_WEB_PORT`/`E2E_API_PORT`, origin SPA phải nằm trong `MINIO_API_CORS_ALLOW_ORIGIN` của `infra/docker-compose.dev.yml` = 5180 + 5181; sau khi đổi CORS: `docker compose -f infra/docker-compose.dev.yml up -d --wait minio files-proxy` để tạo lại container), upload ZIP 10 trang qua UI; worker giả lập (`apps/web/e2e/fake-worker.ts`, chỉ dùng trong test) gọi đúng giao thức `/worker/v1`. Lần đầu: `pnpm --filter @mtl/web exec playwright install chromium`. Gate parity Konva ↔ render.py:
+E2E web (Playwright, Chromium): `pnpm --filter @mtl/web e2e` — tự reset DB `mtl_test_e2e`, seed workspace/series/token worker, bật API :8797 + Vite :5181 (cổng riêng → chạy song song được với `pnpm dev` 5180/8787; đổi qua `E2E_WEB_PORT`/`E2E_API_PORT`, origin SPA phải nằm trong `MINIO_API_CORS_ALLOW_ORIGIN` của `infra/docker-compose.dev.yml` = 5180 + 5181; sau khi đổi CORS: `docker compose -f infra/docker-compose.dev.yml up -d --wait minio files-proxy` để tạo lại container), upload ZIP 10 trang qua UI (thả vào home → "Dịch chương" → sửa → xuất); worker giả lập (`apps/web/e2e/fake-worker.ts`, chỉ dùng trong test) gọi đúng giao thức `/worker/v1`. Lần đầu: `pnpm --filter @mtl/web exec playwright install chromium`.
+
+- API e2e bật dev auto-login cho owner seed (`E2E_OWNER` trong `apps/web/e2e/env.ts`); viewport 1920×1080 (`playwright.config.ts`, để bố cục mặc định của màn chương hiện đủ 4 vùng).
+- Helper `apps/web/e2e/helpers.ts`: `login()` = mở `/` (auto-login), `loginWithForm()` = đăng nhập qua `/login`.
+- Spec: `full-flow` (thả strip ở home → dịch → sửa → xuất), `click-budget` (số thao tác từ home tới editor), `routes-redirect` (URL cũ → mới), `upload-chapter`, `editor`, `chapter-tools`, `typeset-parity`.
+- DB e2e `mtl_test_e2e` **dùng chung mọi checkout** và cổng cố định (5181/8797) → không chạy e2e từ 2 worktree cùng lúc. Gate parity Konva ↔ render.py:
 `pnpm --filter @mtl/web e2e typeset-parity` (CI chạy riêng spec này).
 
 ## Web (`apps/web`)
 
-- Router: `src/app/router.tsx` (TanStack Router, params type-safe); component ở `src/features/*` nhận params qua props. Cây route: `/` = home của workspace hiện tại (`src/lib/current-workspace.ts`: localStorage `mtl.ws` nếu còn là thành viên → workspace duy nhất → `/workspaces` để chọn), `/w/$ws/s/$seriesId[?tab=chapters|glossary|settings]`, `/w/$ws/s/$seriesId/c/$chapterId[?page=]`, `/w/$ws/glossary`, `/w/$ws/members`. Path cũ `/w/$ws[/series[/$s[/settings|/chapters/$c]]]` redirect sang path mới; `.../series/$s/upload` và editor `/w/$ws/series/$seriesId/chapters/$chapterId/edit/$pageId` còn giữ (editor nằm ngoài app shell, toàn màn hình — xem [editor.md](./editor.md)).
+- Router: `src/app/router.tsx` (TanStack Router, params type-safe); component ở `src/features/*` nhận params qua props. Cây route:
+  - `/` = **Home** của workspace hiện tại (`src/lib/current-workspace.ts`: localStorage `mtl.ws` nếu còn là thành viên → workspace duy nhất → `/workspaces` để chọn): vùng thả file lớn, dòng xác nhận "Sau khi thả file", "Việc cần làm" (chương chưa xong của workspace), hàng series.
+  - `/w/$ws/s/$seriesId[?tab=chapters|glossary|settings]` = **Series** (hàng chương + thả file cho chương kế).
+  - `/w/$ws/s/$seriesId/c/$chapterId[?page=<pageId>][&drawer=export]` = **Chương** (editor gộp, toàn màn hình ngoài app shell — xem [editor.md](./editor.md)).
+  - `/w/$ws/glossary`, `/w/$ws/members`, `/workspaces`.
+  - Mọi path cũ redirect: `/w/$ws[/series[/$s[/settings]]]`, `.../series/$s/upload` (→ series), `.../chapters/$c` (→ chương), `.../chapters/$c/edit/$pageId` (→ chương `?page=`).
 - App shell: `src/app/app-shell.tsx` (brand → `/`, đổi workspace khi > 1, menu tài khoản: Glossary chung / Thành viên / Đăng xuất).
 - Dữ liệu: TanStack Query; tiến độ chương poll `/progress` 2,5s cho tới khi chương ổn định (draft/review/partial_failed/done).
-- Upload: ảnh/ZIP giải nén trong Web Worker → presigned POST từng file (song song 4, thử lại 3 lần, ký lại khi thử lại) → `POST /chapters/:id/commit` (server kiểm HEAD + magic bytes).
-- Khoá chương khi mở editor: hook `useChapterLock` (`src/features/chapter/use-chapter-lock.ts`).
-- Màn chương: xuất PNG/ZIP/CBZ, tìm & thay, áp glossary — xem [export-and-batch-edit.md](./export-and-batch-edit.md).
-- Route editor tải lazy (chunk riêng) — màn danh sách/chương không kéo theo Konva.
+- Upload (`features/upload/`): ảnh/ZIP giải nén trong Web Worker, file xếp theo tên (natural sort, không sắp tay) → presigned POST từng file (song song 4, thử lại 3 lần, ký lại khi thử lại) → `POST /chapters/:id/commit` (server kiểm HEAD + magic bytes). `upload-manager` chạy ngoài cây route nên upload tiếp tục khi chuyển màn. Upload xong **không** tự dịch: bấm "Dịch chương" (= commit).
+- Khoá chương: hook `useChapterLock` (`src/features/chapter/use-chapter-lock.ts`), chỉ giữ khi chương ổn định — xem [editor.md](./editor.md).
+- Màn chương: xuất (drawer), tìm & thay, áp glossary (tab bảng dưới) — xem [export-and-batch-edit.md](./export-and-batch-edit.md).
+- Màn chương tải lazy (chunk riêng chứa Konva) — home/series không kéo theo Konva.
 - Giao diện: [design-guidelines.md](./design-guidelines.md).

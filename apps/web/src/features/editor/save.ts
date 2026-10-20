@@ -91,15 +91,48 @@ export class Saver {
     clearTimeout(this.persistTimer);
   }
 
+  /**
+   * Lượt lưu cuối từ ảnh chụp store NGAY LÚC GỌI — khi phiên khác sắp `reset()` store dùng chung (đổi thẳng sang
+   * chương khác bằng back/forward: phiên mới reset lúc render, trước cleanup của phiên này). Ghi IndexedDB trước,
+   * PUT thành công thì xoá. 409 (autosave đang bay lúc chụp đã lưu một phần) → rebase phần sửa lên bản server, PUT
+   * lại 1 lần. Lỗi khác / xung đột thật → để lại bản nháp, lần mở sau đề nghị khôi phục.
+   */
+  flushDetached(): Promise<void> {
+    const s = this.store.getState();
+    if (!s.pageId || !s.doc || !s.base || s.readOnly || s.doc === s.base) return this.chain;
+    const snap = { pageId: s.pageId, baseVersion: s.baseVersion, base: s.base, doc: s.doc };
+    clearTimeout(this.saveTimer);
+    this.chain = this.chain
+      .then(async () => {
+        await this.persistSnapshot(snap);
+        try {
+          await this.api.put(snap.pageId, snap.doc, snap.baseVersion);
+        } catch (e) {
+          if (statusOf(e) !== 409) throw e;
+          const server = await this.api.get(snap.pageId);
+          const r = rebase(server.state, diffStates(snap.base, snap.doc));
+          if (r.conflicts.length) throw new Error(`${r.conflicts.length} xung đột`);
+          await this.api.put(snap.pageId, r.state, server.version);
+        }
+        await this.queue.delete(snap.pageId);
+      })
+      .catch((e: unknown) => console.warn("[editor] lượt lưu cuối khi đổi chương lỗi — giữ bản nháp IndexedDB", e));
+    return this.chain;
+  }
+
   /** Ghi diff base → doc hiện tại vào IndexedDB (rỗng → xoá bản ghi). Lỗi IndexedDB không chặn việc lưu. */
   async persist() {
     const s = this.store.getState();
     if (!s.pageId || !s.base || !s.doc) return;
+    await this.persistSnapshot({ pageId: s.pageId, baseVersion: s.baseVersion, base: s.base, doc: s.doc });
+  }
+
+  private async persistSnapshot(snap: { pageId: string; baseVersion: number; base: PageState; doc: PageState }) {
     try {
       await this.queue.put({
-        pageId: s.pageId,
-        baseVersion: s.baseVersion,
-        ops: diffStates(s.base, s.doc),
+        pageId: snap.pageId,
+        baseVersion: snap.baseVersion,
+        ops: diffStates(snap.base, snap.doc),
         updatedAt: Date.now(),
       });
     } catch (e) {
