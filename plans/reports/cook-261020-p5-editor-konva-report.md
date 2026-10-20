@@ -40,15 +40,22 @@ Branch `feat/p5-editor-konva` (worktree p5), 8 commit trên `9d2e564`, chưa mer
   `apps/web/package.json` + lockfile (konva, react-konva, zustand, immer, @mtl/shared, fake-indexeddb).
 
 ## Chưa xác minh / còn lại
-- Không đo được local: mở <2s & ≥50fps page 800×12k/20k trên M1, Safari 18, reinpaint ≤15s với worker Mac,
-  owner làm trọn chương KO 40 slice. Lưu ý iOS: bitmap nguồn 800×20000 (~64MB) gần trần giải mã.
+- **Chờ owner kiểm thủ công trên Mac** (controller chốt: không chặn merge, đo lại ở P7): mở <2s & ≥50fps page
+  800×12k/20k trên M1, Safari 18, reinpaint ≤15s với worker Mac, owner làm trọn chương KO 40 slice.
+  Lưu ý iOS: bitmap nguồn 800×20000 (~64MB) gần trần giải mã.
 - Reinpaint/OCR vùng chỉ test ở API (fake worker e2e không hỗ trợ 2 job này); panel AI chưa có e2e.
-- Đóng tab: yêu cầu nhả khoá của hook đi trước PUT cuối → dựa vào khôi phục IndexedDB (đã e2e).
+- Đóng tab: keepalive DELETE của hook bắn đồng bộ trong pagehide, không đi qua `serial`, pagehide không chờ được
+  promise → không sửa được thứ tự bằng chuỗi khoá; giữ cơ chế khôi phục IndexedDB (đã e2e).
 - Còn mở từ review (thấp): xung đột chưa xử lý chỉ ở bộ nhớ (mất khi đổi trang/crash); `pruneHistory` đọc ≤51 state
-  mỗi lần lưu; IndexedDB khoá theo page (2 tab cùng page ghi đè nhau); unlock/lock của `finalSave` không qua chuỗi
-  `serial` của hook (hook thuộc P4, chỉ gọi); bút mask chép mảng điểm mỗi lần move; bundle 907kB (chưa tách chunk).
+  mỗi lần lưu; IndexedDB khoá theo page (2 tab cùng page ghi đè nhau); bút mask chép mảng điểm mỗi lần move; bundle 907kB (chưa tách chunk).
+
+## Bổ sung sau quyết định controller
+- `use-chapter-lock.ts`: chỉ thêm `export` cho `serial` (+1 dòng comment).
+- `finalSave` chuyển vào `save.ts` (tiêm `relock`), chạy trong `serial(...)`; effect autosave khai báo trước
+  `useChapterLock` → lượt lưu cuối xếp trước lệnh nhả khoá khi unmount. Không còn tự unlock trong finalSave.
+- Test: `save.test.ts` (thứ tự trong chuỗi: 1 PUT, khoá nhả sau; lấy lại khoá sau 423; không lấy được → còn
+  IndexedDB); e2e bấm "← Chương" ngay sau sửa → không PUT nào 423, server có bản mới.
+- Tách chunk route editor: để P6.
 
 ## Câu hỏi mở
-- Tiêu chí hiệu năng/Safari/reinpaint/40 slice: kiểm thủ công trên Mac hay chuyển gate sang Phase 7?
-- Cho phép export `serial` từ `use-chapter-lock.ts` (P4) để `finalSave` đi chung chuỗi khoá?
-- Tách chunk route editor (lazy) ngay hay để Phase 6 polish?
+Không.

@@ -12,8 +12,10 @@ workspace). Code ở `apps/web/src/features/editor/`, API ở `apps/api/src/rout
   `state_origin = 'user'`, `ai_update_available` giữ nguyên.
 - Autosave (`save.ts`): debounce 2s, lưu ngay khi chuyển page/ẩn tab/bấm "← Chương". Lượt lưu tuần tự: ghi
   IndexedDB → PUT → 200 xoá bản ghi | 409 tải state server + rebase | 423 chỉ xem (bản ghi giữ lại) và thử lấy lại
-  khoá ngay. Rời editor: nếu khoá đã nhả trước PUT cuối → lấy lại khoá, lưu, nhả. Đóng tab: thay đổi sau lần lưu
-  cuối nằm trong IndexedDB (khôi phục lần mở sau).
+  khoá ngay. Rời editor: lượt lưu cuối chạy trong chuỗi `serial` của `use-chapter-lock.ts`, xếp trước lệnh nhả khoá
+  (effect autosave khai báo trước `useChapterLock` → cleanup chạy trước); khoá đã mất từ trước → lấy lại, lưu.
+  Đóng tab: pagehide không chờ được promise nên không đổi thứ tự được — thay đổi sau lần lưu cuối nằm trong
+  IndexedDB (khôi phục lần mở sau).
 - Thay đổi chưa lưu (`pending-queue.ts`, DB `mtl-editor`, store `pending`, khoá `pageId`): ghi 300ms sau mỗi thay đổi
   dạng op theo id (`rebase.ts`), không phải immer patch (patch theo chỉ số mảng lệch khi server thêm/xoá box).
   Mở lại page còn bản ghi → banner "Khôi phục / Bỏ"; trong lúc chờ quyết, editor chỉ xem.
