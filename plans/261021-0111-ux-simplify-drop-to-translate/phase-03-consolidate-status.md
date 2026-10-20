@@ -22,3 +22,5 @@ Trạng thái chương hiện ở 5 nơi cùng lúc: chip cạnh tên chương (
 
 ## Ghi chú thêm (từ phase 1)
 - e2e đang có lỗi console setState-in-render ở `LockBand` (có từ trước) — sửa trong phase này vì đụng LockBand.
+- Thông báo "Đã xếp dịch lại…" (và mọi banner kết quả hành động) chèn phía trên canvas làm canvas nhảy — chuyển sang dạng không chiếm chỗ (toast nổi tự ẩn hoặc chip topbar).
+- Nhãn "Đang dịch…" trên page (PageSlot) chưa có nền riêng — thêm nền nhẹ cho dễ đọc nếu tiện.
