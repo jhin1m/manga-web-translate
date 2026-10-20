@@ -22,6 +22,7 @@ export function Toolbar(props: {
   total: number;
   onPrev(): void;
   onNext(): void;
+  onBack(): void;
 }) {
   const tool = useEditor((s) => s.tool);
   const canUndo = useEditor((s) => s.history.past.length > 0);
@@ -36,7 +37,17 @@ export function Toolbar(props: {
 
   return (
     <header className="ed-top">
-      <Link to="/w/$ws/series/$seriesId/chapters/$chapterId" params={props} className="btn btn-ghost">
+      <Link
+        to="/w/$ws/series/$seriesId/chapters/$chapterId"
+        params={{ ws: props.ws, seriesId: props.seriesId, chapterId: props.chapterId }}
+        className="btn btn-ghost"
+        onClick={(e) => {
+          // Lưu xong rồi mới rời (giữ href cho mở tab mới).
+          if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
+          e.preventDefault();
+          props.onBack();
+        }}
+      >
         ← Chương
       </Link>
       <div className="ed-group">

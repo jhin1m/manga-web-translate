@@ -4,9 +4,14 @@
  * Không canvas/bitmap tile nào vượt 2048px/cạnh; Stage chỉ to bằng khung nhìn (giới hạn canvas Safari/iOS).
  */
 import { useEffect, useMemo, useReducer, useRef, useState } from "react";
-import { Image as KImage, Layer } from "react-konva";
+import { Group, Image as KImage } from "react-konva";
 
 export const TILE = 2048;
+
+function closeAll(map: Map<string, ImageBitmap | "pending">) {
+  for (const v of map.values()) if (v !== "pending") v.close();
+  map.clear();
+}
 
 type Tile = { key: string; x: number; y: number; w: number; h: number };
 type Rect = { x: number; y: number; w: number; h: number };
@@ -59,6 +64,8 @@ export function TileLayer(props: {
   revKey: string;
   page: { w: number; h: number };
   viewport: Rect;
+  /** false: giữ tile đã cắt nhưng không vẽ (layer ảnh gốc giữ lại sau lần so sánh đầu, không tải lại). */
+  visible?: boolean;
   onError?: (msg: string | null) => void;
 }) {
   const { bitmap, error } = useBitmap(props.url, props.revKey);
@@ -66,8 +73,20 @@ export function TileLayer(props: {
   useEffect(() => onError?.(error), [error, onError]);
   const tiles = visibleTiles(props.page, props.viewport);
   const wanted = tiles.map((t) => t.key).join(",");
-  /** key → bitmap tile (hoặc "pending" khi đang cắt). Map mới mỗi lần đổi bitmap nguồn. */
-  const cache = useRef(new Map<string, ImageBitmap | "pending">());
+  /**
+   * key → bitmap tile (hoặc "pending" khi đang cắt), gắn với bitmap nguồn. Đổi nguồn (rev mới) → đổi map NGAY
+   * trong lần render đó (node Konva không còn trỏ tile cũ), tile cũ đóng sau khi canvas đã vẽ lại — đóng sớm
+   * thì Konva có thể vẽ một ImageBitmap đã close (InvalidStateError).
+   */
+  const cache = useRef<{ src: ImageBitmap | null; map: Map<string, ImageBitmap | "pending"> }>({
+    src: null,
+    map: new Map(),
+  });
+  if (cache.current.src !== bitmap) {
+    const old = cache.current.map;
+    cache.current = { src: bitmap, map: new Map() };
+    setTimeout(() => closeAll(old), 1000);
+  }
   const [, bump] = useReducer((n: number) => n + 1, 0);
 
   // Ảnh có thể khác kích thước page (VD ảnh giả 1×1 trong test) → cắt theo tỉ lệ.
@@ -76,19 +95,12 @@ export function TileLayer(props: {
     [bitmap, props.page.w, props.page.h],
   );
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: bitmap nguồn đổi (rev mới) → bỏ toàn bộ tile cũ.
-  useEffect(
-    () => () => {
-      for (const v of cache.current.values()) if (v !== "pending") v.close();
-      cache.current = new Map();
-    },
-    [bitmap],
-  );
+  useEffect(() => () => closeAll(cache.current.map), []);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: `wanted` là chữ ký của tập tile hiển thị.
   useEffect(() => {
     if (!bitmap || !scale) return;
-    const map = cache.current;
+    const map = cache.current.map;
     const keep = new Set(wanted.split(","));
     for (const [k, v] of map) {
       if (keep.has(k)) continue;
@@ -108,7 +120,7 @@ export function TileLayer(props: {
         resize,
       )
         .then((b) => {
-          if (map !== cache.current || map.get(t.key) !== "pending") return b.close();
+          if (map !== cache.current.map || map.get(t.key) !== "pending") return b.close();
           map.set(t.key, b);
           bump();
         })
@@ -117,13 +129,13 @@ export function TileLayer(props: {
   }, [bitmap, scale, wanted]);
 
   return (
-    <Layer listening={false}>
+    <Group visible={props.visible ?? true}>
       {tiles.map((t) => {
-        const img = cache.current.get(t.key);
+        const img = cache.current.map.get(t.key);
         return img && img !== "pending" ? (
           <KImage key={t.key} image={img} x={t.x} y={t.y} width={t.w} height={t.h} />
         ) : null;
       })}
-    </Layer>
+    </Group>
   );
 }

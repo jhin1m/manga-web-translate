@@ -85,7 +85,7 @@ export function EditorStage(props: {
     const isField = (t: EventTarget | null) =>
       t instanceof HTMLElement && t.closest("input, textarea, select, [contenteditable]");
     const down = (e: KeyboardEvent) => {
-      if (e.code === "Space" && !isField(e.target)) {
+      if (e.code === "Space" && !isField(e.target) && !(e.target instanceof HTMLButtonElement)) {
         e.preventDefault();
         setSpace(true);
       }
@@ -129,7 +129,7 @@ export function EditorStage(props: {
       if (e.target === stage || e.target.getLayer()?.listening() === false) s.select(null);
       return;
     }
-    if (s.readOnly && tool !== "ocr") return;
+    if (s.readOnly) return;
     if (tool === "brush" || tool === "eraser") {
       gesture.current = { kind: "paint", ...base };
       const stroke = {
@@ -181,6 +181,10 @@ export function EditorStage(props: {
 
   const viewport = { x: -view.x / view.scale, y: -view.y / view.scale, w: size.w / view.scale, h: size.h / view.scale };
   const showClean = !showOriginal && props.images.clean;
+  // Layer ảnh gốc: chỉ tải khi so sánh lần đầu, sau đó giữ (bật/tắt không tải + giải mã lại cả page).
+  const [originalFor, setOriginalFor] = useState<string | null>(null);
+  if (!showClean && pageId && originalFor !== pageId) setOriginalFor(pageId);
+  const originalSeen = originalFor === pageId;
   const cursor = space ? "grab" : tool === "select" ? "default" : "crosshair";
 
   return (
@@ -201,14 +205,27 @@ export function EditorStage(props: {
         >
           <Layer listening={false}>
             <Rect x={0} y={0} width={page.w} height={page.h} fill="#ffffff" />
+            {props.images.clean && (
+              <TileLayer
+                url={props.images.clean}
+                revKey={`clean:${pageId}:${props.images.cleanRev}`}
+                page={page}
+                viewport={viewport}
+                visible={!!showClean}
+                onError={props.onImageError}
+              />
+            )}
+            {(!showClean || originalSeen) && (
+              <TileLayer
+                url={props.images.original}
+                revKey={`original:${pageId}`}
+                page={page}
+                viewport={viewport}
+                visible={!showClean}
+                onError={props.onImageError}
+              />
+            )}
           </Layer>
-          <TileLayer
-            url={showClean ? props.images.clean : props.images.original}
-            revKey={showClean ? `clean:${pageId}:${props.images.cleanRev}` : `original:${pageId}`}
-            page={page}
-            viewport={viewport}
-            onError={props.onImageError}
-          />
           {!showOriginal && <TextLayer kit={kit} viewport={viewport} />}
           <MaskLayer />
           <OcrOverlay draft={draft} pending={props.ocrPending} />

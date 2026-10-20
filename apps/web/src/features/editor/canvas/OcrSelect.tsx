@@ -13,7 +13,7 @@ import { editorStore } from "../store.ts";
 export type PageRect = { x: number; y: number; w: number; h: number };
 type Pending = PageRect & { id: string };
 
-export function useOcrRegion(ws: string, pageId: string, defaultFont: string) {
+export function useOcrRegion(ws: string, pageId: string, defaultFont: string, page: { w: number; h: number }) {
   const [pending, setPending] = useState<Pending[]>([]);
   const [error, setError] = useState<string | null>(null);
   const abort = useRef(new AbortController());
@@ -34,12 +34,12 @@ export function useOcrRegion(ws: string, pageId: string, defaultFont: string) {
       setPending((p) => [...p, { ...r, id }]);
       setError(null);
       try {
-        const bbox: [number, number, number, number] = [
-          Math.round(r.x),
-          Math.round(r.y),
-          Math.round(r.w),
-          Math.round(r.h),
-        ];
+        // Kẹp vào page sau khi làm tròn (làm tròn riêng x và w có thể vượt mép → server 400).
+        const x0 = Math.max(0, Math.floor(r.x));
+        const y0 = Math.max(0, Math.floor(r.y));
+        const x1 = Math.min(page.w, Math.ceil(r.x + r.w));
+        const y1 = Math.min(page.h, Math.ceil(r.y + r.h));
+        const bbox: [number, number, number, number] = [x0, y0, x1 - x0, y1 - y0];
         const { job } = await startOcrRegion(ws, pageId, bbox);
         const done = await waitJob(ws, job.id, signal);
         if (done.status !== "succeeded") throw new Error(done.error ?? "OCR vùng thất bại");
@@ -56,7 +56,7 @@ export function useOcrRegion(ws: string, pageId: string, defaultFont: string) {
         if (!signal.aborted) setPending((p) => p.filter((x) => x.id !== id));
       }
     },
-    [ws, pageId, defaultFont],
+    [ws, pageId, defaultFont, page.w, page.h],
   );
 
   return { pending, error, start };

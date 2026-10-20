@@ -68,6 +68,8 @@ test("edit translation → autosave → reload keeps it; crash mid-edit → rest
   page,
   context,
 }) => {
+  const pageErrors: string[] = [];
+  page.on("pageerror", (e) => pageErrors.push(e.message));
   await login(page);
   const { chapterId, pageId } = await readyChapter(page);
 
@@ -89,12 +91,36 @@ test("edit translation → autosave → reload keeps it; crash mid-edit → rest
   expect(saved.state.regions[0]?.translation).toBe("Chào cậu, ệ ẫ ữ");
   expect(saved.state_origin).toBe("user");
 
+  // So sánh ảnh gốc ↔ bản dịch (đổi layer ảnh, tile cũ không bị vẽ sau khi close).
+  await page.locator(".ed-canvas").click({ position: { x: 5, y: 5 } });
+  for (const label of ["Đang xem: ảnh gốc", "Đang xem: bản dịch", "Đang xem: ảnh gốc", "Đang xem: bản dịch"]) {
+    await page.keyboard.press("\\");
+    await expect(page.getByRole("button", { name: label })).toBeVisible();
+    await page.waitForTimeout(150);
+  }
+  expect(pageErrors).toEqual([]);
+
   // Undo/redo bằng phím tắt.
   await page.getByLabel("Bản dịch vùng 1").fill("Tạm");
   await page.locator(".ed-canvas").click({ position: { x: 5, y: 5 } });
   await page.keyboard.press("ControlOrMeta+z");
   await expect(page.getByLabel("Bản dịch vùng 1")).toHaveValue("Chào cậu, ệ ẫ ữ");
   await expect(page.locator(".status", { hasText: "Đã lưu" })).toBeVisible({ timeout: 10_000 });
+
+  // Rời editor ngay sau khi sửa (trước debounce 2s) → vẫn lưu trước khi nhả khoá.
+  await page.getByLabel("Bản dịch vùng 1").fill("Rời ngay");
+  await page.getByRole("link", { name: "← Chương" }).click();
+  await expect(page).toHaveURL(new RegExp(`/chapters/${chapterId}$`));
+  await expect
+    .poll(async () => {
+      const r = (await (await page.request.get(`/api/w/${ws}/pages/${pageId}`)).json()) as typeof saved;
+      return r.state.regions[0]?.translation;
+    })
+    .toBe("Rời ngay");
+  await page.goto(editorUrl(chapterId, pageId));
+  await page.getByLabel("Bản dịch vùng 1").fill("Chào cậu, ệ ẫ ữ");
+  await expect(page.locator(".status", { hasText: "Đã lưu" })).toBeVisible({ timeout: 10_000 });
+  const beforeCrash = (await (await page.request.get(`/api/w/${ws}/pages/${pageId}`)).json()) as typeof saved;
 
   // "Crash": PUT không tới server, đóng tab khi đang có thay đổi chưa lưu.
   await page.route("**/state", (route) => route.abort());
@@ -111,5 +137,5 @@ test("edit translation → autosave → reload keeps it; crash mid-edit → rest
   await expect(again.locator(".status", { hasText: "Đã lưu" })).toBeVisible({ timeout: 10_000 });
   const after = (await (await again.request.get(`/api/w/${ws}/pages/${pageId}`)).json()) as typeof saved;
   expect(after.state.regions[0]?.translation).toBe("Chưa kịp lưu");
-  expect(after.version).toBeGreaterThan(saved.version);
+  expect(after.version).toBeGreaterThan(beforeCrash.version);
 });

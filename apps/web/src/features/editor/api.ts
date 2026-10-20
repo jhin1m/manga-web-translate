@@ -63,18 +63,19 @@ const DONE = new Set(["succeeded", "failed", "cancelled"]);
 /** Poll job tới khi kết thúc (hoặc `signal` huỷ). */
 export async function waitJob(ws: string, jobId: string, signal?: AbortSignal, everyMs = 1500): Promise<JobWithResult> {
   for (;;) {
+    signal?.throwIfAborted();
     const j = await fetchJob(ws, jobId);
     if (DONE.has(j.status)) return j;
     await new Promise<void>((resolve, reject) => {
-      const t = setTimeout(resolve, everyMs);
-      signal?.addEventListener(
-        "abort",
-        () => {
-          clearTimeout(t);
-          reject(new DOMException("aborted", "AbortError"));
-        },
-        { once: true },
-      );
+      const onAbort = () => {
+        clearTimeout(t);
+        reject(new DOMException("aborted", "AbortError"));
+      };
+      const t = setTimeout(() => {
+        signal?.removeEventListener("abort", onAbort);
+        resolve();
+      }, everyMs);
+      signal?.addEventListener("abort", onAbort, { once: true });
     });
   }
 }

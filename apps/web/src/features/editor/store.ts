@@ -9,7 +9,7 @@ import { useStore } from "zustand";
 import { createStore } from "zustand/vanilla";
 import type { Layout } from "./actions.ts";
 import { change, emptyHistory, type History, record, redo, undo } from "./history.ts";
-import { type Conflict, restoreConflict } from "./rebase.ts";
+import { type Conflict, restoreConflict, same } from "./rebase.ts";
 
 export type Tool = "select" | "text" | "brush" | "eraser" | "ocr";
 export type SaveStatus = "saved" | "dirty" | "saving" | "error";
@@ -65,6 +65,8 @@ export type EditorActions = {
   /** Sau 409/khôi phục: base = server, doc = kết quả rebase; lịch sử undo cũ (patch theo chỉ số) bị bỏ. */
   rebased(server: PageState, version: number, doc: PageState, conflicts: Conflict[]): void;
   resolveConflict(key: string, restore: boolean): void;
+  /** Về trạng thái ban đầu (mở editor mới — store dùng chung cả tab). */
+  reset(): void;
   setView(v: View): void;
   setEditing(id: string | null): void;
   setMask(m: Partial<EditorState["mask"]>): void;
@@ -159,19 +161,21 @@ export function createEditorStore() {
           base: server,
           baseVersion: version,
           doc,
-          history: emptyHistory(),
+          // Server chỉ tăng version (VD job AI ghi ai_state) mà nội dung không đổi → patch undo vẫn khớp, giữ lịch sử.
+          history: s.base && same(server, s.base) ? s.history : emptyHistory(),
           conflicts: [...s.conflicts.filter((c) => !keys.has(c.key)), ...conflicts],
           save: { status: doc === server ? "saved" : "dirty", error: null },
         };
       }),
 
+    reset: () => set(initial()),
     setView: (view) => set({ view }),
     setEditing: (editing) => set({ editing }),
     setMask: (m) => set((s) => ({ mask: { ...s.mask, ...m } })),
 
     resolveConflict: (key, restore) => {
       const c = get().conflicts.find((x) => x.key === key);
-      if (!c) return;
+      if (!c || (restore && get().readOnly)) return;
       if (restore) get().apply(restoreConflict(c) as Recipe);
       set((s) => ({ conflicts: s.conflicts.filter((x) => x.key !== key) }));
     },

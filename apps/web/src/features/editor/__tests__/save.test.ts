@@ -91,4 +91,54 @@ describe("Saver", () => {
     store.getState().apply(moveBox("t0", 8, 8));
     expect(store.getState().doc?.text_boxes[0]?.x).toBe(7);
   });
+
+  it("409 then failing reload → error status (not stuck in saving), retries later", async () => {
+    const { store, srv, saver } = setup();
+    srv.version = 9;
+    const failing = new Saver(
+      store,
+      {
+        put: async () => {
+          throw new HttpError(409);
+        },
+        get: async () => {
+          throw new Error("mạng lỗi");
+        },
+      },
+      new PendingQueue(new IDBFactory()),
+      { debounceMs: 10_000, persistMs: 10_000, retryMs: 60_000 },
+    );
+    store.getState().apply(moveBox("t0", 1, 1));
+    await failing.flush();
+    expect(store.getState().save).toEqual({ status: "error", error: "mạng lỗi" });
+    failing.dispose();
+    saver.dispose();
+  });
+
+  it("keeps undo history when the server only bumped the version", async () => {
+    const { store, srv, saver } = setup();
+    srv.version = 4;
+    store.getState().apply(moveBox("t0", 3, 3));
+    await saver.flush();
+    expect(srv.version).toBe(5);
+    expect(store.getState().history.past).toHaveLength(1);
+    store.getState().undo();
+    expect(store.getState().doc?.text_boxes[0]?.x).toBe(10);
+  });
+});
+
+describe("store", () => {
+  it("undoes 100 store-level edits back to the loaded state", () => {
+    const store = createEditorStore();
+    store.getState().load({ pageId: "p", state: doc(2), version: 1, ai: { state: null, rev: 0, available: false } });
+    store.getState().setReadOnly(null);
+    for (let i = 0; i < 100; i++) {
+      store.getState().apply(i % 2 ? moveBox("t0", i, i) : editText("t1", `Lần ${i}`, layout));
+    }
+    expect(store.getState().history.past).toHaveLength(100);
+    for (let i = 0; i < 100; i++) store.getState().undo();
+    expect(store.getState().doc).toEqual(doc(2));
+    for (let i = 0; i < 100; i++) store.getState().redo();
+    expect(store.getState().doc?.text_boxes[1]?.text).toBe("Lần 98");
+  });
 });

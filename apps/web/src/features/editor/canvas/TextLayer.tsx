@@ -35,7 +35,8 @@ export function TextLayer({ kit, viewport }: { kit: FontKit; viewport: { y: numb
   useEffect(() => {
     const tr = trRef.current;
     if (!tr) return;
-    const node = selection && editable ? layerRef.current?.findOne<Konva.Group>(`#${CSS.escape(selection)}`) : null;
+    const node =
+      selection && editable ? layerRef.current?.findOne<Konva.Group>((n: Konva.Node) => n.id() === selection) : null;
     tr.nodes(node ? [node] : []);
     tr.getLayer()?.batchDraw();
   });

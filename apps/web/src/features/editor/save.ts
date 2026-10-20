@@ -12,7 +12,7 @@
 import type { PageState } from "@mtl/shared";
 import type { PendingQueue } from "./pending-queue.ts";
 import { diffStates, rebase } from "./rebase.ts";
-import type { EditorStore } from "./store.ts";
+import type { AiInfo, EditorStore } from "./store.ts";
 
 export const SAVE_DEBOUNCE_MS = 2000;
 export const PERSIST_MS = 300;
@@ -21,16 +21,18 @@ const MAX_REBASE_ROUNDS = 3;
 
 export type SaveApi = {
   put(pageId: string, state: PageState, version: number): Promise<{ version: number }>;
-  get(pageId: string): Promise<{ state: PageState; version: number }>;
+  get(pageId: string): Promise<{ state: PageState; version: number; ai?: AiInfo }>;
 };
 
 const statusOf = (e: unknown) =>
   e && typeof e === "object" && "status" in e && typeof e.status === "number" ? e.status : 0;
+const messageOf = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 export class Saver {
   private saveTimer: ReturnType<typeof setTimeout> | undefined;
   private persistTimer: ReturnType<typeof setTimeout> | undefined;
   private chain: Promise<void> = Promise.resolve();
+  private disposed = false;
 
   constructor(
     private readonly store: EditorStore,
@@ -41,34 +43,52 @@ export class Saver {
 
   /** Gọi sau mỗi thay đổi doc. */
   schedule() {
+    if (this.disposed) return;
     clearTimeout(this.persistTimer);
     this.persistTimer = setTimeout(() => void this.persist(), this.opts.persistMs);
     clearTimeout(this.saveTimer);
     this.saveTimer = setTimeout(() => void this.flush(), this.opts.debounceMs);
   }
 
-  /** Lưu ngay (đợi lượt đang chạy). */
+  /** Lưu ngay (đợi lượt đang chạy). Vẫn chạy được sau dispose (lượt lưu cuối khi rời editor). */
   flush(): Promise<void> {
     clearTimeout(this.saveTimer);
     this.chain = this.chain.then(() => this.saveOnce()).catch(() => undefined);
     return this.chain;
   }
 
+  /** Bật lại sau dispose (StrictMode chạy cleanup + setup effect 2 lần ở dev). */
+  start() {
+    this.disposed = false;
+  }
+
+  /** Dừng hẹn giờ/thử lại; không tự lưu nữa (editor đã rời đi). */
   dispose() {
+    this.disposed = true;
     clearTimeout(this.saveTimer);
     clearTimeout(this.persistTimer);
   }
 
-  /** Ghi diff base → doc hiện tại vào IndexedDB (rỗng → xoá bản ghi). */
+  /** Ghi diff base → doc hiện tại vào IndexedDB (rỗng → xoá bản ghi). Lỗi IndexedDB không chặn việc lưu. */
   async persist() {
     const s = this.store.getState();
     if (!s.pageId || !s.base || !s.doc) return;
-    await this.queue.put({
-      pageId: s.pageId,
-      baseVersion: s.baseVersion,
-      ops: diffStates(s.base, s.doc),
-      updatedAt: Date.now(),
-    });
+    try {
+      await this.queue.put({
+        pageId: s.pageId,
+        baseVersion: s.baseVersion,
+        ops: diffStates(s.base, s.doc),
+        updatedAt: Date.now(),
+      });
+    } catch (e) {
+      console.warn("[editor] không ghi được bản nháp IndexedDB", e);
+    }
+  }
+
+  private retryLater(e: unknown) {
+    this.store.getState().setSave("error", messageOf(e));
+    clearTimeout(this.saveTimer);
+    if (!this.disposed) this.saveTimer = setTimeout(() => void this.flush(), this.opts.retryMs);
   }
 
   private async saveOnce(round = 0): Promise<void> {
@@ -89,12 +109,18 @@ export class Saver {
       if (this.store.getState().pageId !== pageId) return;
       const status = statusOf(e);
       if (status === 409 && round < MAX_REBASE_ROUNDS) {
-        const server = await this.api.get(pageId);
+        let server: Awaited<ReturnType<SaveApi["get"]>>;
+        try {
+          server = await this.api.get(pageId);
+        } catch (err) {
+          return this.retryLater(err);
+        }
         const cur = this.store.getState();
         if (cur.pageId !== pageId || !cur.base || !cur.doc) return;
         // Tính op từ doc tại thời điểm này (gồm cả sửa trong lúc PUT đang bay).
         const r = rebase(server.state, diffStates(cur.base, cur.doc));
         cur.rebased(server.state, server.version, r.state, r.conflicts);
+        if (server.ai) cur.setAi(server.ai);
         await this.persist();
         return this.saveOnce(round + 1);
       }
@@ -103,9 +129,7 @@ export class Saver {
         this.store.getState().setSave("error", "Mất khoá chương — thay đổi chưa lưu vẫn giữ trên máy này.");
         return;
       }
-      this.store.getState().setSave("error", e instanceof Error ? e.message : String(e));
-      clearTimeout(this.saveTimer);
-      this.saveTimer = setTimeout(() => void this.flush(), this.opts.retryMs);
+      this.retryLater(e);
     }
   }
 }
