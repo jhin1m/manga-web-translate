@@ -129,7 +129,7 @@ export class ChapterSession {
     });
     chapter.getState().setActive(pageId);
     this.applyDeferred(pageId);
-    // ai_state không có trong cache (GET /states không trả) → lấy nền cho "Về bản AI"/bảng AI có bản mới.
+    // ai_state không có trong cache (GET /states không trả) → lấy nền cho "Bỏ chỉnh sửa tay"/bảng AI có bản mới.
     if (!fresh) void this.refreshAi(pageId);
   }
 

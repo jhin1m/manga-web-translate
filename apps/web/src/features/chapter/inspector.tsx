@@ -2,11 +2,13 @@
  * Inspector bên phải màn chương, 2 tab:
  * - "Khối chữ": khối đang chọn (bảng hoặc canvas) — Gốc (OCR, read-only) + "OCR lại", Bản dịch (cùng nguồn với
  *   bảng), cảnh báo tràn khung, thuộc tính box, "Áp kiểu này cho khối cùng loại trong chương". Không chọn khối →
- *   thông tin trang (trạng thái, cờ, lỗi job). Luôn có "Dịch lại trang này", AI có bản mới, xung đột khi lưu.
+ *   thông tin trang (trạng thái, cờ, lỗi job) + "Bỏ chỉnh sửa tay" khi trang khác bản AI. Luôn có "Dịch lại trang
+ *   này", AI có bản mới, xung đột khi lưu.
  * - "Xoá chữ": brush/tẩy mask + xoá chữ lại (MaskPanel). Chọn tab = đổi công cụ và ngược lại.
  */
 import type { TextBox } from "@mtl/shared";
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import { resetToAI } from "../editor/actions.ts";
 import type { FontKit } from "../editor/fonts.ts";
 import { boxOverflow, MIN_SIZE } from "../editor/measure.ts";
 import { AiUpdatePanel } from "../editor/panels/AiUpdatePanel.tsx";
@@ -52,6 +54,15 @@ export function Inspector(props: InspectorProps) {
   const maskTab = tool === "brush" || tool === "eraser";
   // Áp kiểu cả chương ghi thẳng các trang khác (không hoàn tác được) → hỏi lại 1 bước, gắn với khối đang chọn.
   const [confirmKind, setConfirmKind] = useState<string | null>(null);
+  const [confirmReset, setConfirmReset] = useState<string | null>(null);
+  const doc = useEditor((s) => s.doc);
+  const ai = useEditor((s) => s.ai.state);
+  // Trang khác bản AI (chữ/khung/kiểu) → mới có gì để bỏ. Immer giữ tham chiếu khi không sửa → chỉ so lại khi đổi.
+  const edited = useMemo(
+    () =>
+      !!doc && !!ai && JSON.stringify([doc.regions, doc.text_boxes]) !== JSON.stringify([ai.regions, ai.text_boxes]),
+    [doc, ai],
+  );
   if (!page) return <p className="muted small ed-pad cw-pad">Chưa có trang để sửa.</p>;
 
   const setTab = (mask: boolean) => {
@@ -184,6 +195,42 @@ export function Inspector(props: InspectorProps) {
               </dl>
               <p className="muted small">Chọn một khối trên canvas hoặc trong bảng văn bản để sửa.</p>
               <div className="row">{retranslate}</div>
+              {edited &&
+                ai &&
+                (confirmReset === page.id ? (
+                  <>
+                    <p className="notice" role="status">
+                      Bỏ mọi chỉnh sửa tay trên trang {page.ord + 1} (bản dịch, khung, kiểu chữ) và dùng lại bản AI
+                      dịch? Hoàn tác được bằng Ctrl/Cmd+Z.
+                    </p>
+                    <div className="row">
+                      <button
+                        type="button"
+                        className="btn-primary"
+                        disabled={readOnly}
+                        onClick={() => {
+                          setConfirmReset(null);
+                          editorStore.getState().apply(resetToAI(ai));
+                        }}
+                      >
+                        Bỏ chỉnh sửa
+                      </button>
+                      <button type="button" className="btn-ghost" onClick={() => setConfirmReset(null)}>
+                        Huỷ
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  <button
+                    type="button"
+                    className="btn-link"
+                    disabled={readOnly}
+                    title="Thay chỉnh sửa tay của trang này bằng bản AI dịch"
+                    onClick={() => setConfirmReset(page.id)}
+                  >
+                    Bỏ chỉnh sửa tay, dùng lại bản AI
+                  </button>
+                ))}
             </section>
           )}
           {row && (

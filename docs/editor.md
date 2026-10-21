@@ -51,7 +51,7 @@ bình thường không có băng (chỉ báo nhỏ icon khoá + "Đã lưu" ở 
 ## Undo/redo
 
 `history.ts`: immer `produceWithPatches`, giữ 200 bước/page; thao tác liên tục cùng key (gõ trong ô, đổi số) trong
-1s gộp 1 bước; kéo/đổi khung ghi khi thả. Mọi thao tác (kể cả áp kết quả AI, về bản AI, chèn OCR) đi qua
+1s gộp 1 bước; kéo/đổi khung ghi khi thả. Mọi thao tác (kể cả áp kết quả AI, "Bỏ chỉnh sửa tay" ở inspector, chèn OCR) đi qua
 `store.apply(recipe)`.
 
 ## Vẽ chữ (hợp đồng layout)

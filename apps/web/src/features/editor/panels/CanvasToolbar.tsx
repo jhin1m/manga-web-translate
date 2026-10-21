@@ -1,8 +1,7 @@
 /**
- * Hàng công cụ cố định phía trên canvas màn chương (không đè ảnh): công cụ (V/T/B/E/R), hoàn tác/làm lại, về bản AI của page đang sửa.
+ * Hàng công cụ cố định phía trên canvas màn chương (không đè ảnh): công cụ (V/T/B/E/R), hoàn tác/làm lại.
  * Phía dưới canvas: trang đang ở giữa khung + mức zoom.
  */
-import { resetToAI } from "../actions.ts";
 import { useChapterStore } from "../chapter-store.ts";
 import { editorStore, type Tool, useEditor } from "../store.ts";
 
@@ -19,7 +18,6 @@ export function CanvasToolbar() {
   const canUndo = useEditor((s) => s.history.past.length > 0);
   const canRedo = useEditor((s) => s.history.future.length > 0);
   const readOnly = useEditor((s) => s.readOnly);
-  const ai = useEditor((s) => s.ai.state);
   const st = editorStore.getState();
   return (
     <div className="cw-tools" role="toolbar" aria-label="Công cụ">
@@ -42,15 +40,6 @@ export function CanvasToolbar() {
       </button>
       <button type="button" onClick={st.redo} disabled={!canRedo || !!readOnly} title="Làm lại (Ctrl/Cmd+Shift+Z)">
         Làm lại
-      </button>
-      <span className="cw-sep" />
-      <button
-        type="button"
-        disabled={!ai || !!readOnly}
-        onClick={() => ai && st.apply(resetToAI(ai))}
-        title="Thay toàn bộ chỉnh sửa trang này bằng kết quả AI (hoàn tác được)"
-      >
-        Về bản AI
       </button>
     </div>
   );
