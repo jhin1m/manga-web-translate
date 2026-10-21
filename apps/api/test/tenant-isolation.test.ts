@@ -30,6 +30,9 @@ const jobOf: Record<string, string> = {};
 const entryOf: Record<string, string> = {};
 /** Page mẫu (route editor /pages/:pageId). */
 const pageOf: Record<string, string> = {};
+/** Series + chương riêng cho route xoá (đối chứng "own" xoá thật, không đụng tài nguyên mẫu). */
+const spareSeriesOf: Record<string, string> = {};
+const spareChapterOf: Record<string, string> = {};
 let sourceFileA = "";
 
 beforeAll(async () => {
@@ -52,6 +55,11 @@ beforeAll(async () => {
     jobOf[s.workspaceId] = j.id;
     const e = await scoped(db, s.workspaceId).insert(glossaryEntries, { sourceTerm: "검", targetTerm: "kiếm" });
     entryOf[s.workspaceId] = e.id;
+    const spare = await scoped(db, s.workspaceId).insert(series, { title: "Series dự phòng" });
+    spareSeriesOf[s.workspaceId] = spare.id;
+    spareChapterOf[s.workspaceId] = (
+      await scoped(db, s.workspaceId).insert(chapters, { seriesId: s.seriesId, number: "99" })
+    ).id;
     const pid = pageId(s.chapterId, 1, 0);
     await scoped(db, s.workspaceId).insert(pages, {
       id: pid,
@@ -160,6 +168,8 @@ const RESOURCE_CASES: Record<string, (b: Seed) => Record<string, string>> = {
   "POST /api/w/:ws/chapters/:chapterId/glossary-apply/preview": (b) => ({ chapterId: b.chapterId }),
   "POST /api/w/:ws/chapters/:chapterId/glossary-apply/apply": (b) => ({ chapterId: b.chapterId }),
   "GET /api/w/:ws/chapters/:chapterId/states": (b) => ({ chapterId: b.chapterId }),
+  "DELETE /api/w/:ws/chapters/:chapterId": (b) => ({ chapterId: spareChapterOf[b.workspaceId] ?? "" }),
+  "DELETE /api/w/:ws/series/:seriesId": (b) => ({ seriesId: spareSeriesOf[b.workspaceId] ?? "" }),
 };
 
 /** Mọi (method, path) người dùng dưới /api/w/:ws — lấy từ router thật, không liệt kê tay. */

@@ -2,11 +2,12 @@
  * Luồng chương qua API người dùng + worker giả lập (giao thức có fencing): upload → commit → ingest →
  * giai đoạn 1/2 → review; chạy lại trang lỗi; dịch lại 1 trang với glossary mới; huỷ; khoá chương.
  */
-import { chapters, jobs, pageStates, pages, scoped, series } from "@mtl/db";
+import { chapters, glossaryEntries, jobs, pageStates, pages, scoped, series, sourceFiles } from "@mtl/db";
 import { emptyPageState, pageId } from "@mtl/shared";
 import { eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { INVITATION_HEADER, INVITATION_TOKEN_HEADER } from "../src/auth.ts";
+import { deletePrefix, head } from "../src/storage.ts";
 import { call, cookieFrom, db, invite, PASSWORD, seedWorkspace, uniq } from "./helpers.ts";
 import {
   type Claimed,
@@ -487,5 +488,53 @@ describe("edit chapter number / series", () => {
     expect((await patch({ number: "abc" })).status).toBe(400);
     const [row] = await sdb.select(chapters, eq(chapters.id, R.chapterId));
     expect(row).toMatchObject({ seriesId: other.id, number: "8" });
+  });
+});
+
+describe("delete chapter / series", () => {
+  it("removes a processed chapter with its jobs, pages and stored files; refuses while someone else edits", async () => {
+    const ch = await uploadChapter(2, "601");
+    await ingestAndPrepare(ch);
+    const [src] = await db.select().from(sourceFiles).where(eq(sourceFiles.chapterId, ch));
+    const pageIds = (await db.select().from(pages).where(eq(pages.chapterId, ch))).map((p) => p.id);
+    expect(pageIds).toHaveLength(2);
+    expect(await head(src?.storageKey ?? "")).not.toBeNull();
+
+    await json(await api(`/chapters/${ch}/lock`, { method: "POST", cookie: memberCookie }), 200);
+    const locked = await json<{ holder_name: string }>(await api(`/chapters/${ch}`, { method: "DELETE" }), 423);
+    expect(locked.holder_name).toBe("Lan");
+    expect((await api(`/chapters/${ch}/lock`, { method: "DELETE", cookie: memberCookie })).status).toBe(204);
+
+    expect((await api(`/chapters/${ch}`, { method: "DELETE" })).status).toBe(204);
+    expect((await api(`/chapters/${ch}`)).status).toBe(404);
+    expect(await db.select().from(jobs).where(eq(jobs.chapterId, ch))).toEqual([]);
+    expect(await db.select().from(pages).where(eq(pages.chapterId, ch))).toEqual([]);
+    expect(await head(src?.storageKey ?? "")).toBeNull();
+    // Không còn object nào dưới prefix của chương / page (deletePrefix đếm lại = 0).
+    for (const p of [`ws/${A.workspaceId}/ch/${ch}/`, ...pageIds.map((id) => `ws/${A.workspaceId}/pg/${id}/`)]) {
+      expect(await deletePrefix(p)).toBe(0);
+    }
+    expect((await api(`/chapters/${ch}`, { method: "DELETE" })).status).toBe(404);
+  });
+
+  it("deletes a series with its chapters and glossary (admin only, own workspace only)", async () => {
+    const O = await seedWorkspace("del-other");
+    const sdb = scoped(db, A.workspaceId);
+    const s = await sdb.insert(series, { title: "Series xoá" });
+    const ch = await sdb.insert(chapters, { seriesId: s.id, number: "1" });
+    await sdb.insert(glossaryEntries, { seriesId: s.id, sourceTerm: "검", targetTerm: "kiếm" });
+
+    expect((await api(`/series/${s.id}`, { method: "DELETE", cookie: memberCookie })).status).toBe(403);
+    expect((await call(`/api/w/${O.workspaceId}/series/${s.id}`, { method: "DELETE", cookie: O.cookie })).status).toBe(
+      404,
+    );
+    expect(
+      (await call(`/api/w/${O.workspaceId}/chapters/${ch.id}`, { method: "DELETE", cookie: O.cookie })).status,
+    ).toBe(404);
+
+    expect((await api(`/series/${s.id}`, { method: "DELETE" })).status).toBe(204);
+    expect((await api(`/series/${s.id}`)).status).toBe(404);
+    expect(await db.select().from(chapters).where(eq(chapters.seriesId, s.id))).toEqual([]);
+    expect(await db.select().from(glossaryEntries).where(eq(glossaryEntries.seriesId, s.id))).toEqual([]);
   });
 });
