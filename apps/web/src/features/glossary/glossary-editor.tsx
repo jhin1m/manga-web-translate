@@ -89,35 +89,84 @@ export function GlossaryEditor({ ws, seriesId }: { ws: string; seriesId: string 
   const overridden = new Set(q.data?.entries.map((e) => e.source_term));
   const inherited = (q.data?.inherited ?? []).filter(match);
 
+  const total = (q.data?.entries.length ?? 0) + (q.data?.inherited.length ?? 0);
+
   return (
-    <div>
-      <div className="row" style={{ marginBottom: 8 }}>
+    <div className="glossary">
+      <form className="glossary-add" onSubmit={submit} aria-label="Thêm từ vào glossary">
+        <div>
+          <label htmlFor="g-src">Từ gốc</label>
+          <input
+            id="g-src"
+            aria-label="Từ gốc mới"
+            placeholder="VD: 검"
+            value={draft.source_term}
+            onChange={(e) => setDraft({ ...draft, source_term: e.target.value })}
+          />
+        </div>
+        <div>
+          <label htmlFor="g-tgt">Bản dịch</label>
+          <input
+            id="g-tgt"
+            aria-label="Bản dịch mới"
+            placeholder="VD: kiếm"
+            value={draft.target_term}
+            onChange={(e) => setDraft({ ...draft, target_term: e.target.value })}
+          />
+        </div>
+        <div className="grow">
+          <label htmlFor="g-note">Ghi chú (tuỳ chọn)</label>
+          <input
+            id="g-note"
+            aria-label="Ghi chú mới"
+            value={draft.note}
+            onChange={(e) => setDraft({ ...draft, note: e.target.value })}
+          />
+        </div>
+        <label className="check">
+          <input
+            type="checkbox"
+            checked={draft.case_sensitive}
+            onChange={(e) => setDraft({ ...draft, case_sensitive: e.target.checked })}
+          />
+          Phân biệt hoa/thường
+        </label>
+        <button
+          type="submit"
+          className="btn-primary"
+          disabled={add.isPending || !draft.source_term.trim() || !draft.target_term.trim()}
+        >
+          Thêm
+        </button>
+      </form>
+
+      <div className="glossary-tools">
         <input
+          type="search"
           aria-label="Lọc glossary"
-          placeholder="Lọc…"
+          placeholder="Lọc từ…"
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
-          style={{ width: 200 }}
         />
-        <span className="spacer" style={{ flex: 1 }} />
+        <span className="spacer" />
         <a className="btn" href={exportCsvUrl(ws, seriesId)} download>
           Xuất CSV
         </a>
         <select
           aria-label="Chế độ nhập"
+          className="import-mode"
           value={mode}
           onChange={(e) => setMode(e.target.value as "merge" | "replace")}
-          style={{ width: "auto" }}
+          title="CSV: cột source_term, target_term, note, case_sensitive (UTF-8)"
         >
           <option value="merge">Nhập: gộp theo từ gốc</option>
           <option value="replace">Nhập: thay toàn bộ</option>
         </select>
-        <label className="btn" style={{ margin: 0, color: "inherit" }}>
+        <label className="btn file-pick" title="CSV: cột source_term, target_term, note, case_sensitive (UTF-8)">
           Nhập CSV…
           <input
             type="file"
             accept=".csv,text/csv"
-            style={{ display: "none" }}
             onChange={(e) => {
               const f = e.target.files?.[0];
               // "Thay toàn bộ" xoá mọi mục hiện có → hỏi lại trước khi gửi.
@@ -128,9 +177,6 @@ export function GlossaryEditor({ ws, seriesId }: { ws: string; seriesId: string 
           />
         </label>
       </div>
-      <p className="muted small" style={{ margin: "0 0 8px" }}>
-        CSV: cột <span className="mono">source_term,target_term,note,case_sensitive</span> (UTF-8).
-      </p>
       {pendingReplace && (
         <div className="notice danger row">
           <span>
@@ -155,58 +201,22 @@ export function GlossaryEditor({ ws, seriesId }: { ws: string; seriesId: string 
       {message && <p className={`notice ${message.tone}`}>{message.text}</p>}
       {q.error && <p className="notice danger">{errorMessage(q.error)}</p>}
 
-      <form onSubmit={submit}>
+      {q.data && total === 0 ? (
+        <div className="rows-empty rows">
+          Chưa có từ nào. Thêm ở trên, hoặc nhập file CSV (cột <span className="mono">source_term,target_term</span>).
+        </div>
+      ) : (
         <table className="data">
           <thead>
             <tr>
               <th>Từ gốc</th>
               <th>Bản dịch</th>
               <th>Ghi chú</th>
-              <th title="Phân biệt hoa thường">Aa</th>
+              <th>Hoa/thường</th>
               <th />
             </tr>
           </thead>
           <tbody>
-            <tr>
-              <td>
-                <input
-                  aria-label="Từ gốc mới"
-                  value={draft.source_term}
-                  onChange={(e) => setDraft({ ...draft, source_term: e.target.value })}
-                />
-              </td>
-              <td>
-                <input
-                  aria-label="Bản dịch mới"
-                  value={draft.target_term}
-                  onChange={(e) => setDraft({ ...draft, target_term: e.target.value })}
-                />
-              </td>
-              <td>
-                <input
-                  aria-label="Ghi chú mới"
-                  value={draft.note}
-                  onChange={(e) => setDraft({ ...draft, note: e.target.value })}
-                />
-              </td>
-              <td>
-                <input
-                  type="checkbox"
-                  aria-label="Phân biệt hoa thường"
-                  checked={draft.case_sensitive}
-                  onChange={(e) => setDraft({ ...draft, case_sensitive: e.target.checked })}
-                />
-              </td>
-              <td style={{ textAlign: "right" }}>
-                <button
-                  type="submit"
-                  className="btn-primary"
-                  disabled={add.isPending || !draft.source_term.trim() || !draft.target_term.trim()}
-                >
-                  Thêm
-                </button>
-              </td>
-            </tr>
             {entries.map((e) =>
               editing?.id === e.id ? (
                 <tr key={e.id}>
@@ -253,7 +263,7 @@ export function GlossaryEditor({ ws, seriesId }: { ws: string; seriesId: string 
                   <td>{e.source_term}</td>
                   <td>{e.target_term}</td>
                   <td className="muted">{e.note}</td>
-                  <td>{e.case_sensitive ? "✓" : ""}</td>
+                  <td>{e.case_sensitive ? "Có" : ""}</td>
                   <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
                     <button
                       type="button"
@@ -284,16 +294,22 @@ export function GlossaryEditor({ ws, seriesId }: { ws: string; seriesId: string 
                 <td>{e.source_term}</td>
                 <td>{e.target_term}</td>
                 <td>{e.note}</td>
-                <td>{e.case_sensitive ? "✓" : ""}</td>
+                <td>{e.case_sensitive ? "Có" : ""}</td>
                 <td className="small" style={{ textAlign: "right" }}>
                   {overridden.has(e.source_term) ? "bị series ghi đè" : "từ glossary chung"}
                 </td>
               </tr>
             ))}
+            {q.data && entries.length + inherited.length === 0 && (
+              <tr>
+                <td colSpan={5} className="muted">
+                  Không có từ nào khớp “{filter}”.
+                </td>
+              </tr>
+            )}
           </tbody>
         </table>
-      </form>
-      {q.data && entries.length + inherited.length === 0 && <p className="muted small">Chưa có mục nào.</p>}
+      )}
     </div>
   );
 }

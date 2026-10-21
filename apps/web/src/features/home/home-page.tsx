@@ -1,7 +1,7 @@
 /**
- * Home của workspace (design Main 20/10/2026), từ trên xuống: vùng thả lớn (thả bất kỳ đâu trên trang cũng được;
- * đoán được series → tạo chương + tự dịch + mở màn chương, không thì dòng xác nhận inline) → "Việc cần làm" → danh
- * sách series dạng hàng gọn (tìm, "+ Series mới", "+ Ch.{next}").
+ * Home của workspace, từ trên xuống: vùng thả lớn (thả bất kỳ đâu trên trang cũng được; đoán được series → tạo
+ * chương + tự dịch + mở màn chương, không thì dòng xác nhận inline) → danh sách series (tìm, "+ Series mới"; bấm cả
+ * hàng để mở series).
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
@@ -9,11 +9,10 @@ import { type FormEvent, useState } from "react";
 import { errorMessage } from "../../lib/api.ts";
 import { needsWork, nextAction } from "../chapter/next-action.ts";
 import { createSeries, fetchSeriesList, type SeriesListItem, seriesKeys } from "../series/api.ts";
-import { DropZone, FilePickButton, usePageDrop } from "../upload/drop-zone.tsx";
+import { DropZone, usePageDrop } from "../upload/drop-zone.tsx";
 import { normalizeName } from "../upload/parse-chapter-filename.ts";
 import { useDropToTranslate } from "./drop-to-translate.ts";
 import { NewChapterConfirmRow } from "./new-chapter-confirm-row.tsx";
-import { TodoList } from "./todo-list.tsx";
 import "./home.css";
 
 type Pending = { files: File[]; seriesId?: string; seq: number };
@@ -56,18 +55,12 @@ export function HomePage({ ws }: { ws: string }) {
           onCreated={() => setPending(null)}
         />
       )}
-      <TodoList ws={ws} />
-      <SeriesRows ws={ws} series={series} error={seriesQ.error} onAddChapter={(s, files) => drop(files, s.id)} />
+      <SeriesRows ws={ws} series={series} error={seriesQ.error} />
     </main>
   );
 }
 
-function SeriesRows(props: {
-  ws: string;
-  series: SeriesListItem[] | undefined;
-  error: unknown;
-  onAddChapter: (s: SeriesListItem, files: File[]) => void;
-}) {
+function SeriesRows(props: { ws: string; series: SeriesListItem[] | undefined; error: unknown }) {
   const { ws } = props;
   const qc = useQueryClient();
   const navigate = useNavigate();
@@ -94,6 +87,7 @@ function SeriesRows(props: {
     <section aria-label="Series" className="block">
       <div className="block-head">
         <h2>Series</h2>
+        {props.series && <span className="muted small">{props.series.length}</span>}
         <span className="spacer" />
         <input
           type="search"
@@ -130,41 +124,57 @@ function SeriesRows(props: {
       {(props.error || create.error) && <p className="notice danger">{errorMessage(props.error ?? create.error)}</p>}
       <div className="rows">
         {props.series && list.length === 0 && (
-          <div className="rows-empty">{search ? "Không có series nào khớp." : "Chưa có series nào."}</div>
+          <div className="rows-empty">
+            {search
+              ? "Không có series nào khớp."
+              : "Chưa có series nào — bấm “+ Series mới”, hoặc thả ảnh ở trên rồi chọn series."}
+          </div>
         )}
         {list.map((s) => (
-          <SeriesRow key={s.id} ws={ws} s={s} onAddChapter={(files) => props.onAddChapter(s, files)} />
+          <SeriesRow key={s.id} ws={ws} s={s} />
         ))}
       </div>
     </section>
   );
 }
 
-function SeriesRow({ ws, s, onAddChapter }: { ws: string; s: SeriesListItem; onAddChapter: (f: File[]) => void }) {
+function SeriesRow({ ws, s }: { ws: string; s: SeriesListItem }) {
   const latest = s.latest_chapter;
   const a = latest ? nextAction(latest) : null;
   const state =
-    !latest || !a ? "Chưa có chương" : needsWork(latest) ? `Ch.${latest.number} · ${a.state}` : "Không có việc";
+    !latest || !a ? "Chưa có chương" : needsWork(latest) ? `Ch.${latest.number} · ${a.state}` : "Đã xuất hết";
   const tone = !latest || !a ? "idle" : needsWork(latest) ? a.tone : "ok";
   return (
-    <div className="row-item">
-      <div className="cover" />
-      <Link to="/w/$ws/s/$seriesId" params={{ ws, seriesId: s.id }} className="row-title" style={{ fontWeight: 600 }}>
-        {s.title}
-      </Link>
-      <div className="small muted" style={{ width: 160 }}>
-        {s.chapter_count} chương · {s.exported_count ?? 0} đã xuất
-      </div>
-      <div className="grow row small">
+    <Link className="row-item row-link" to="/w/$ws/s/$seriesId" params={{ ws, seriesId: s.id }}>
+      <span className="cover" aria-hidden="true">
+        {s.title.trim().charAt(0).toUpperCase()}
+      </span>
+      <span className="row-title">
+        <span className="row-name">{s.title}</span>
+        <span className="row-sub">
+          {s.chapter_count} chương · {s.exported_count ?? 0} đã xuất
+        </span>
+      </span>
+      <span className="grow row small">
         <span className="dot" data-tone={tone} />
         {state}
-      </div>
-      <FilePickButton className="dashed" onFiles={onAddChapter}>
-        + Ch.{s.next_number ?? "1"}
-      </FilePickButton>
-      <Link className="btn" to="/w/$ws/s/$seriesId" params={{ ws, seriesId: s.id }}>
-        Mở series
-      </Link>
-    </div>
+      </span>
+      <Chevron />
+    </Link>
   );
 }
+
+const Chevron = () => (
+  <svg
+    className="row-chevron"
+    width="16"
+    height="16"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    aria-hidden="true"
+  >
+    <path d="m9 6 6 6-6 6" />
+  </svg>
+);

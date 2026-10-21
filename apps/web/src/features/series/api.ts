@@ -66,7 +66,7 @@ export type SeriesListItem = Series & {
 };
 export type SeriesDetail = Series & { chapters: ChapterRow[] };
 
-/** "Việc cần làm" ở home: chương mở của workspace, chương mình giữ khoá trước rồi updated_at mới nhất. */
+/** Chương mở của workspace (drawer Hoạt động): chương mình giữ khoá trước rồi updated_at mới nhất. */
 export type RecentChapter = ChapterRow & { series_title: string; lock_holder_is_me: boolean };
 
 export const seriesKeys = {
@@ -83,6 +83,10 @@ export const createSeries = (ws: string, body: { title: string } & Partial<Serie
   api<Series>(wsPath(ws, "/series"), { method: "POST", body });
 export const patchSeries = (ws: string, id: string, body: Partial<SeriesSettings> & { title?: string }) =>
   api<Series>(wsPath(ws, `/series/${id}`), { method: "PATCH", body });
+/** Xoá series cùng mọi chương + glossary riêng (admin trở lên). */
+export const deleteSeries = (ws: string, id: string) => api<void>(wsPath(ws, `/series/${id}`), { method: "DELETE" });
+/** Xoá hẳn chương (ảnh, bản dịch, lịch sử). Người khác đang mở sửa → 423 kèm `holder_name`. */
+export const deleteChapter = (ws: string, id: string) => api<void>(wsPath(ws, `/chapters/${id}`), { method: "DELETE" });
 
 /** Số chương gợi ý cho lần upload tiếp theo: lớn nhất + 1. */
 export function nextChapterNumber(chapters: Pick<ChapterSummary, "number">[]): string {

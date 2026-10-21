@@ -1,6 +1,6 @@
-/* Home + Series (design Main/Series 20/10/2026): vùng thả, dòng xác nhận inline, danh sách hàng gọn. */
+/* Home + Series: vùng thả, dòng xác nhận inline, danh sách hàng gọn, tab của series. */
 .home {
-  max-width: 1280px;
+  max-width: 1080px;
   margin: 0 auto;
   padding: 28px var(--sp-5) 40px;
   display: flex;
@@ -256,25 +256,47 @@ label.file-pick input {
   font-size: var(--fs-xs);
   color: var(--c-fg-muted);
 }
-.row-item .act {
-  height: 34px;
-  min-width: 150px;
-  justify-content: center;
-}
 .row-error {
   flex-basis: 100%;
   font-size: var(--fs-sm);
   color: var(--c-danger);
 }
+/* Ô chữ cái đầu của series (chưa có ảnh bìa). */
 .cover {
   width: 36px;
   height: 48px;
   background: var(--c-surface-2);
+  border-radius: var(--radius);
   flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  font-weight: 600;
+  color: var(--c-fg-muted);
 }
 .cover.lg {
   width: 48px;
   height: 64px;
+  font-size: 20px;
+}
+
+/* Cả hàng là link (series ở home). */
+.row-link {
+  color: inherit;
+  cursor: pointer;
+}
+.row-link:hover {
+  background: var(--c-surface);
+  text-decoration: none;
+}
+.row-name {
+  font-weight: 600;
+}
+.row-link:hover .row-name {
+  color: var(--c-accent);
+}
+.row-chevron {
+  color: var(--c-fg-subtle);
+  flex-shrink: 0;
 }
 
 /* Chấm trạng thái 10px. */
@@ -300,7 +322,7 @@ label.file-pick input {
 
 /* ---- Series: 2 cột (cột phải xuống dưới khi hẹp) ---- */
 .series-layout {
-  max-width: 1440px;
+  max-width: 1280px;
   margin: 0 auto;
   padding: var(--sp-5);
   display: flex;
@@ -350,10 +372,31 @@ label.file-pick input {
   background: var(--c-accent-weak);
   color: var(--c-accent);
 }
+/* Hàng chương: phần số + trạng thái là link mở chương (bấm cả vùng). */
+.ch-open {
+  flex: 1;
+  min-width: 260px;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  color: inherit;
+  margin: calc(-1 * var(--sp-2)) 0;
+  padding: var(--sp-2) 0;
+  border-radius: var(--radius);
+}
+.ch-open:hover {
+  text-decoration: none;
+}
+.row-item:has(> .ch-open:hover) {
+  background: var(--c-surface);
+}
 .ch-num {
   width: 84px;
   font-weight: 600;
   font-size: 15px;
+}
+.ch-open:hover .ch-num {
+  color: var(--c-accent);
 }
 .ch-body {
   flex: 1;
@@ -383,6 +426,188 @@ label.file-pick input {
 }
 .ch-line .bar > span[data-tone="idle"] {
   background: var(--c-fg-subtle);
+}
+
+/* Nút chỉ có icon (xoá chương…): vùng bấm 34px. */
+.icon-btn {
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  justify-content: center;
+  border-color: transparent;
+  background: none;
+  color: var(--c-fg-subtle);
+}
+.icon-btn:hover {
+  color: var(--c-accent);
+  background: var(--c-surface-2);
+}
+.icon-btn[data-danger]:hover {
+  color: var(--c-danger);
+}
+.btn-danger-solid {
+  background: var(--c-danger);
+  border-color: var(--c-danger);
+  color: #fff;
+}
+.btn-danger-solid:hover {
+  background: var(--c-danger);
+  filter: brightness(0.92);
+}
+.delete-confirm {
+  gap: var(--sp-2);
+}
+
+/* ---- Tab của series (Chương / Glossary / Cài đặt) ---- */
+.tabs {
+  display: flex;
+  gap: var(--sp-1);
+  border-bottom: 1px solid var(--c-line);
+  overflow-x: auto;
+}
+.tabs a {
+  padding: var(--sp-2) var(--sp-3);
+  margin-bottom: -1px;
+  border-bottom: 2px solid transparent;
+  color: var(--c-fg-muted);
+  font-weight: 500;
+  white-space: nowrap;
+}
+.tabs a:hover {
+  color: var(--c-fg);
+  text-decoration: none;
+}
+.tabs a[aria-current="page"] {
+  color: var(--c-accent);
+  border-bottom-color: var(--c-accent);
+}
+.tab-panel {
+  max-width: 880px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-5);
+}
+
+/* ---- Cài đặt series ---- */
+.hint {
+  font-size: var(--fs-xs);
+  color: var(--c-fg-muted);
+}
+.settings-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+.settings-group {
+  border: 1px solid var(--c-line);
+  border-radius: 6px;
+  margin: 0;
+  padding: var(--sp-2) var(--sp-4) var(--sp-4);
+  min-width: 0;
+}
+.settings-group legend {
+  padding: 0 var(--sp-1);
+  font-weight: 600;
+}
+.settings-group > .hint {
+  display: block;
+  margin-top: var(--sp-1);
+}
+.settings-group table.data {
+  margin: var(--sp-3) 0 0;
+}
+.add-rule {
+  margin-top: var(--sp-3);
+}
+/* 4 ô chọn → 2×2 trên màn rộng, 1 cột trên điện thoại. */
+.grid-pairs {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
+  gap: 0 var(--sp-4);
+}
+.grid-3 {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0 var(--sp-4);
+}
+.settings-save {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+}
+.settings-save .btn-primary {
+  height: 36px;
+  padding: 0 18px;
+}
+.danger-zone {
+  border: 1px solid var(--c-danger);
+  border-radius: 6px;
+  padding: var(--sp-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+.danger-zone h2 {
+  font-size: 15px;
+  color: var(--c-danger);
+}
+.danger-zone p,
+.danger-zone label {
+  margin: 0;
+}
+
+/* ---- Glossary ---- */
+.glossary {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+.glossary-add {
+  border: 1px solid var(--c-line);
+  border-radius: 6px;
+  padding: var(--sp-3) var(--sp-4);
+  display: flex;
+  align-items: flex-end;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+}
+.glossary-add > div {
+  width: 160px;
+}
+.glossary-add > div.grow {
+  flex: 1;
+  min-width: 160px;
+}
+.glossary-add label {
+  margin-top: 0;
+}
+.glossary-add label.check {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  height: 34px;
+  color: var(--c-fg);
+  white-space: nowrap;
+}
+.glossary-add button {
+  height: 34px;
+}
+.glossary-tools {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+}
+.glossary-tools .spacer {
+  flex: 1;
+}
+.glossary-tools input[type="search"] {
+  width: 220px;
+}
+.import-mode {
+  width: auto;
 }
 
 /* Trạng thái upload trong màn chương. */

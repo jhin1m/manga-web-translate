@@ -430,10 +430,7 @@ test("back/forward straight to another chapter still saves the last edit of the 
   await page.goto(chapterUrl(b));
   await expect(page.locator(".ed-canvas canvas").first()).toBeVisible();
   await page.getByRole("link", { name: "Series e2e" }).click();
-  await page
-    .locator(".row-item", { has: page.locator(".ch-num", { hasText: "Ch.8101" }) })
-    .getByRole("link", { name: "Mở", exact: true })
-    .click();
+  await page.getByRole("link", { name: "Mở chương 8101", exact: true }).click();
   await expect(page.getByRole("heading", { name: /^Chương 8101/ })).toBeVisible();
   await openTable(page);
   await expect(cell(page)).toHaveValue("Xin chào");
