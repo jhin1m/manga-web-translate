@@ -5,10 +5,12 @@
  *   chữ ký SigV4 gắn với host nên URL phải ký đúng host trình duyệt sẽ gọi.
  */
 import {
+  DeleteObjectsCommand,
   GetObjectCommand,
   GetObjectTaggingCommand,
   HeadBucketCommand,
   HeadObjectCommand,
+  ListObjectsV2Command,
   NoSuchKey,
   NotFound,
   PutObjectCommand,
@@ -112,6 +114,23 @@ export async function readPrefix(key: string, n: number): Promise<Uint8Array> {
   const r = await internal.send(new GetObjectCommand({ Bucket, Key: key, Range: `bytes=0-${n - 1}` }));
   const bytes = await r.Body?.transformToByteArray();
   return bytes ?? new Uint8Array();
+}
+
+/** Xoá mọi object dưới `prefix` (theo trang 1000 key — trần của ListObjectsV2/DeleteObjects). Trả số key đã xoá. */
+export async function deletePrefix(prefix: string): Promise<number> {
+  if (!prefix.endsWith("/")) throw new RangeError("prefix must end with /");
+  let deleted = 0;
+  let token: string | undefined;
+  do {
+    const page = await internal.send(new ListObjectsV2Command({ Bucket, Prefix: prefix, ContinuationToken: token }));
+    const keys = (page.Contents ?? []).flatMap((o) => (o.Key ? [{ Key: o.Key }] : []));
+    if (keys.length > 0) {
+      await internal.send(new DeleteObjectsCommand({ Bucket, Delete: { Objects: keys, Quiet: true } }));
+      deleted += keys.length;
+    }
+    token = page.IsTruncated ? page.NextContinuationToken : undefined;
+  } while (token);
+  return deleted;
 }
 
 /** healthz: bucket tới được bằng credential của API. */

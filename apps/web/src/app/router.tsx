@@ -28,7 +28,7 @@ import { setCurrentWs, useCurrentWorkspace } from "../lib/current-workspace.ts";
 import { AcceptInvitePage } from "../routes/accept-invite.tsx";
 import { LoginPage } from "../routes/login.tsx";
 import { MembersPage, WorkspacePickerPage } from "../routes/workspaces.tsx";
-import { AppShell } from "./app-shell.tsx";
+import { AppShell, useWorkspace } from "./app-shell.tsx";
 import { AuthGate } from "./layout.tsx";
 
 // Chunk riêng (konva + immer + zustand…): chỉ tải khi mở màn chương.
@@ -127,7 +127,8 @@ export const seriesRoute = createRoute({
   component: function SeriesRoute() {
     const { ws, seriesId } = seriesRoute.useParams();
     const { tab } = seriesRoute.useSearch();
-    return <SeriesPage ws={ws} seriesId={seriesId} tab={tab} />;
+    const { role } = useWorkspace();
+    return <SeriesPage ws={ws} seriesId={seriesId} tab={tab} canDeleteSeries={role !== "member"} />;
   },
 });
 

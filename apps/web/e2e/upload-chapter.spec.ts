@@ -81,13 +81,11 @@ test("drop a 10-page ZIP on home, open the chapter while uploading, then it tran
   // Thumbnail là ảnh sạch ký qua FILES_DOMAIN.
   await expect(rail.locator("img").first()).toHaveAttribute("src", /localhost:9100\/.*\/clean\//);
 
-  // Home: chương vừa dịch nằm trong "Việc cần làm" với bước tiếp theo "Tiếp tục sửa".
+  // Màn series: hàng chương vừa dịch báo "Chờ sửa", icon Sửa mở lại màn chương.
   await page.getByRole("link", { name: "Series e2e" }).click();
-  await page.getByRole("link", { name: "MTL" }).click();
-  const todo = page.getByRole("region", { name: "Việc cần làm" });
-  await expect(
-    todo.locator(".row-item", { hasText: "Chương 501" }).getByRole("link", { name: "Tiếp tục sửa" }),
-  ).toBeVisible();
+  await expect(page.getByRole("link", { name: "Mở chương 501", exact: true })).toContainText("Chờ sửa");
+  await page.getByRole("link", { name: "Sửa chương 501", exact: true }).click();
+  await expect(page.getByRole("heading", { name: /^Chương 501/ })).toBeVisible();
 });
 
 test("series page: 3 loose images = 1 chapter that translates itself; fix its number/series in the header", async ({

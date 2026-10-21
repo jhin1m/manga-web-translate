@@ -75,13 +75,15 @@ Toàn màn hình (ngoài app shell), `chapter-workspace.css`: thanh trên 52px (
 - **Drawer phải 420px** (`app/drawer.tsx`): Xuất (cảnh báo "Trước khi xuất", định dạng, tải) và Hoạt động (upload +
   job chương + lượt xuất). Không dùng modal cho thao tác chính. Chi tiết: [editor.md](./editor.md).
 - **Home** (`/`): vùng thả file lớn ("thả là dịch": đoán được series → tạo chương + tự dịch + mở màn chương; không
-  đoán được / file lỗi → dòng xác nhận "Sau khi thả file") → "Việc cần làm" (chương chưa xong của workspace, mỗi
-  chương 1 nút bước kế tiếp) → hàng series. **Series**: hàng chương + vùng thả cho chương kế (series cố định, cũng
-  tự tạo + tự dịch).
+  đoán được / file lỗi → dòng xác nhận "Sau khi thả file") → hàng series (bấm cả hàng để mở). **Series**: đầu trang +
+  tab Chương / Glossary / Cài đặt dịch (`?tab=`) dùng chung; tab Chương = vùng thả cho chương kế (series cố định, cũng
+  tự tạo + tự dịch) + hàng chương (bấm cả hàng hoặc icon Sửa để mở, icon Xoá xác nhận tại chỗ). Hàng danh sách không
+  có nút "bước tiếp theo" — dịch / xuất / chạy lại làm trong màn chương. Xoá series ở cuối tab Cài đặt (gõ tên để
+  xác nhận, chỉ admin/owner).
 
 ## Thành phần
 
-- **Nút**: `button` (viền), `.btn-primary` (1 nút chính mỗi vùng), `.btn-ghost` (thao tác phụ trong bảng), `.btn-danger` (chữ đỏ, không nền đỏ). Link dạng nút: `<Link className="btn">`.
+- **Nút**: `button` (viền), `.btn-primary` (1 nút chính mỗi vùng), `.btn-ghost` (thao tác phụ trong bảng), `.btn-danger` (chữ đỏ, không nền đỏ); `.btn-danger-solid` (nền đỏ) chỉ cho nút xác nhận xoá. Nút chỉ có icon: `.icon-btn` (34px, bắt buộc `aria-label`). Link dạng nút: `<Link className="btn">`.
 - **Bảng**: `table.data`; số căn phải `.num` (tabular-nums). Sửa tại chỗ thay vì modal khi được.
 - **Trạng thái**: `<span class="status" data-tone="ok|busy|warn|danger|idle">` — chấm màu + chữ. Nhãn chương/page ở `features/chapter/status.ts`.
 - **Thông báo**: `.notice` (+ `.info`, `.danger`) — viền trái màu, nền surface. Lỗi API hiện message server.

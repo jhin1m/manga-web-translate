@@ -4,16 +4,16 @@
  * MinIO theo policy giới hạn (red team #12), server kiểm lại khi commit.
  */
 
-import { chapters, jobs, pages, scoped, series, sourceFiles } from "@mtl/db";
-import { ACTIVE_JOB_STATUSES, storageKeys } from "@mtl/shared";
+import { chapters, pages, scoped, series, sourceFiles } from "@mtl/db";
+import { storageKeys } from "@mtl/shared";
 import { and, eq, inArray } from "drizzle-orm";
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { v7 as uuidv7 } from "uuid";
 import { z } from "zod";
 import { enqueueIngest, inJobTx, retranslate, retryFailedPages } from "../jobs/enqueue.ts";
-import { cancelJob } from "../jobs/queue.ts";
 import { acquireChapterLock, activeLockHolder, LOCK_TTL_MS, releaseChapterLock } from "../lib/chapter-lock.ts";
+import { cancelChapterJobs, removeChapters } from "../lib/chapter-removal.ts";
 import { memberNames } from "../lib/member-names.ts";
 import { parseJson } from "../lib/validate.ts";
 import { type AppEnv, requireWorkspace } from "../middleware/workspace.ts";
@@ -316,29 +316,23 @@ chapterRoutes.post("/w/:ws/chapters/:chapterId/translate", requireWorkspace(), a
   return c.json({ job: jobView(job), created }, 202);
 });
 
-/**
- * Huỷ mọi job đang hoạt động của chương. Huỷ page.prepare cuối có thể nối sang chapter.translate cho page đã
- * prepare (queue.terminal) → lặp tới khi không còn job active (có trần vòng lặp).
- */
+/** Huỷ mọi job đang hoạt động của chương. */
 chapterRoutes.post("/w/:ws/chapters/:chapterId/cancel", requireWorkspace(), async (c) => {
   const sdb = c.get("sdb");
-  const ws = c.get("workspaceId");
   const ch = await sdb.byId(chapters, c.req.param("chapterId"), "chapter");
-  let cancelled = 0;
-  for (let round = 0; round < 5; round++) {
-    const active = await sdb.select(
-      jobs,
-      and(eq(jobs.chapterId, ch.id), inArray(jobs.status, [...ACTIVE_JOB_STATUSES])),
-    );
-    if (active.length === 0) break;
-    active.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
-    for (const j of active) {
-      const after = await cancelJob(ws, j.id);
-      if (after?.status === "cancelled") cancelled++;
-    }
-  }
+  const cancelled = await cancelChapterJobs(sdb, c.get("workspaceId"), ch.id);
   const after = await sdb.byId(chapters, ch.id, "chapter");
   return c.json({ cancelled, chapter: chapterSummary(after) });
+});
+
+/** Xoá hẳn chương (mọi trạng thái): huỷ job, xoá dữ liệu + file. Người khác đang giữ khoá → 423. */
+chapterRoutes.delete("/w/:ws/chapters/:chapterId", requireWorkspace(), async (c) => {
+  const sdb = c.get("sdb");
+  const ch = await sdb.byId(chapters, c.req.param("chapterId"), "chapter");
+  await removeChapters(sdb, c.get("workspaceId"), c.get("user").id, [ch], async () => {
+    await sdb.delete(chapters, eq(chapters.id, ch.id));
+  });
+  return c.body(null, 204);
 });
 
 /** Lấy/gia hạn khoá (heartbeat từ editor). Người khác giữ → 423 kèm tên người giữ. */

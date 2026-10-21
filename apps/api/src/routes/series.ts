@@ -8,6 +8,7 @@ import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { z } from "zod";
 import { activeLockHolder } from "../lib/chapter-lock.ts";
+import { chaptersOf, removeChapters } from "../lib/chapter-removal.ts";
 import { parseJson } from "../lib/validate.ts";
 import { type AppEnv, requireWorkspace } from "../middleware/workspace.ts";
 
@@ -296,4 +297,14 @@ seriesRoutes.patch("/w/:ws/series/:seriesId", requireWorkspace(), async (c) => {
     return row;
   });
   return c.json(seriesView(updated));
+});
+
+/** Xoá series cùng mọi chương + glossary riêng của nó (admin trở lên). Chương đang bị người khác giữ khoá → 423. */
+seriesRoutes.delete("/w/:ws/series/:seriesId", requireWorkspace("admin"), async (c) => {
+  const sdb = c.get("sdb");
+  const s = await sdb.byId(series, c.req.param("seriesId"), "series");
+  await removeChapters(sdb, c.get("workspaceId"), c.get("user").id, await chaptersOf(sdb, s.id), async () => {
+    await sdb.delete(series, eq(series.id, s.id));
+  });
+  return c.body(null, 204);
 });

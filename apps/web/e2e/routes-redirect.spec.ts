@@ -34,7 +34,9 @@ test("old workspace/series/upload/chapter/editor URLs redirect to the new routes
   await expect(page).toHaveURL(`${WEB_URL}/w/${ws}/s/${s}`);
   await page.goto(`/w/${ws}/series/${s}/settings`);
   await expect(page).toHaveURL(`${WEB_URL}/w/${ws}/s/${s}?tab=settings`);
-  await expect(page.getByRole("heading", { name: "Cài đặt series" })).toBeVisible();
+  await expect(
+    page.getByRole("navigation", { name: "Mục của series" }).getByRole("link", { name: "Cài đặt dịch" }),
+  ).toHaveAttribute("aria-current", "page");
 
   // Trang upload riêng đã bỏ: về màn series (vùng thả chương tiếp theo).
   await page.goto(`/w/${ws}/series/${s}/upload`);
