@@ -14,6 +14,7 @@ from mtl_pipeline.typeset import (
     PAD,
     STROKE_BUBBLE,
     block_height,
+    bubble_siblings,
     fit_text,
     inscribed_rect,
     typeset_region,
@@ -118,6 +119,70 @@ def test_typeset_region_uses_bubble_interior_and_renders():
     assert (out != clean).any()
     for bb in line_ink_bboxes(tb):
         assert bb is not None and bb[0] >= 20 and bb[2] <= 380
+
+
+def _overlap(a: TextBox, b: TextBox) -> bool:
+    return a.x < b.x + b.w and b.x < a.x + a.w and a.y < b.y + b.h and b.y < a.y + a.h
+
+
+def _typeset_bubble(clean: np.ndarray, regions: list[Region]) -> dict[str, TextBox]:
+    by_id = {r.id: r for r in regions}
+    return {
+        r.id: typeset_region(
+            clean, r, by_id[r.bubble_id], "Ừ, tớ hiểu rồi mà.", FONT, bubble_siblings(r, regions)
+        )
+        for r in regions
+        if r.bubble_id
+    }
+
+
+def test_two_text_regions_in_merged_bubble_get_separate_lobes():
+    # Hai bóng dính nhau (hình số 8), mỗi thuỳ một vùng chữ: lòng bóng là một vùng liền nên trước đây cả hai vùng
+    # chữ nhận cùng hình chữ nhật quanh điểm xa biên nhất → hai box chồng lên nhau.
+    clean = np.full((460, 400, 3), 120, np.uint8)
+    lobes = (((200, 130), (170, 110)), ((200, 330), (170, 110)))
+    for c, (ax, ay) in lobes:
+        cv2.ellipse(clean, c, (ax + 3, ay + 3), 0, 0, 360, (0, 0, 0), -1)
+    for c, axes in lobes:
+        cv2.ellipse(clean, c, axes, 0, 0, 360, (255, 255, 255), -1)
+    regions = [
+        Region(id="b", kind="bubble", bbox=BBox(x=27, y=17, w=346, h=426), score=1.0),
+        Region(id="t1", kind="text_bubble", bbox=BBox(x=120, y=100, w=160, h=60), score=1.0, bubble_id="b"),
+        Region(id="t2", kind="text_bubble", bbox=BBox(x=110, y=300, w=180, h=60), score=1.0, bubble_id="b"),
+    ]
+    boxes = _typeset_bubble(clean, regions)
+    top, bottom = boxes["t1"], boxes["t2"]
+    assert not _overlap(top, bottom)
+    assert top.y + top.h / 2 < 230 < bottom.y + bottom.h / 2
+    for tb in (top, bottom):
+        assert all(clean[int(tb.y), int(tb.x) : int(tb.x + tb.w)].min(axis=1) == 255)
+
+
+def test_stacked_text_regions_in_one_bubble_do_not_overlap():
+    # Một bóng elip, vùng chữ mảnh ở trên + vùng chữ chính ở giữa.
+    clean = np.full((400, 400, 3), 120, np.uint8)
+    cv2.ellipse(clean, (200, 200), (180, 150), 0, 0, 360, (255, 255, 255), -1)
+    cv2.ellipse(clean, (200, 200), (180, 150), 0, 0, 360, (0, 0, 0), 3)
+    regions = [
+        Region(id="b", kind="bubble", bbox=BBox(x=20, y=50, w=360, h=300), score=1.0),
+        Region(id="t1", kind="text_bubble", bbox=BBox(x=120, y=90, w=160, h=20), score=1.0, bubble_id="b"),
+        Region(id="t2", kind="text_bubble", bbox=BBox(x=100, y=170, w=200, h=70), score=1.0, bubble_id="b"),
+    ]
+    boxes = _typeset_bubble(clean, regions)
+    assert not _overlap(boxes["t1"], boxes["t2"])
+    assert boxes["t1"].y < boxes["t2"].y
+
+
+def test_bubble_siblings_are_other_text_regions_of_same_bubble():
+    regions = [
+        Region(id="b", kind="bubble", bbox=BBox(x=0, y=0, w=10, h=10), score=1.0),
+        Region(id="t1", kind="text_bubble", bbox=BBox(x=1, y=1, w=2, h=2), score=1.0, bubble_id="b"),
+        Region(id="t2", kind="text_bubble", bbox=BBox(x=5, y=5, w=2, h=2), score=1.0, bubble_id="b"),
+        Region(id="t3", kind="text_bubble", bbox=BBox(x=5, y=5, w=2, h=2), score=1.0, bubble_id="other"),
+        Region(id="f", kind="text_free", bbox=BBox(x=5, y=5, w=2, h=2), score=1.0),
+    ]
+    assert [s.id for s in bubble_siblings(regions[1], regions)] == ["t2"]
+    assert bubble_siblings(regions[4], regions) == []
 
 
 def test_text_free_gets_contrast_stroke():

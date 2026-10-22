@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 
 import cv2
@@ -16,6 +17,8 @@ MAX_SIZE = 64
 LINE_HEIGHT = 1.15
 PAD = 4.0
 INTERIOR_TOL = 18
+# Khe (px, theo hiệu khoảng cách) giữa phần lòng bóng của các vùng chữ chung bóng.
+SPLIT_GAP = 8
 # Bề rộng viền / cỡ chữ.
 STROKE_BUBBLE = 0.1
 STROKE_FREE = 0.12
@@ -70,11 +73,45 @@ def bubble_interior(clean_rgb: np.ndarray, bubble: BBox, seed: tuple[int, int]) 
     return cv2.erode(interior, np.ones((3, 3), np.uint8), iterations=3)
 
 
-def available_rect(clean_rgb: np.ndarray, region: Region, bubble: Region | None) -> Rect:
+def _bbox_distance(shape: tuple[int, int], origin: BBox, b: BBox) -> np.ndarray:
+    """Khoảng cách từ mỗi pixel của khung `origin` tới hộp `b` (0 bên trong hộp)."""
+    xs = np.arange(origin.x, origin.x + shape[1])[None, :]
+    ys = np.arange(origin.y, origin.y + shape[0])[:, None]
+    dx = np.maximum(np.maximum(b.x - xs, xs - b.x2), 0)
+    dy = np.maximum(np.maximum(b.y - ys, ys - b.y2), 0)
+    return np.hypot(dx, dy)
+
+
+def own_share(interior: np.ndarray, bubble: BBox, own: BBox, others: Sequence[BBox]) -> np.ndarray:
+    """Phần lòng bóng gần vùng chữ `own` hơn mọi vùng chữ khác cùng bóng (chia Voronoi theo khoảng cách tới bbox).
+
+    Lòng bóng là một vùng liền (bóng dính nhau, nhiều cụm chữ trong một bóng): không chia thì mọi vùng chữ nhận cùng
+    hình chữ nhật quanh điểm xa biên nhất → box chồng nhau. Pixel cách đều hai vùng (±SPLIT_GAP/2) bỏ trống làm khe.
+    """
+    d_own = _bbox_distance(interior.shape, bubble, own)
+    keep = interior > 0
+    for o in others:
+        keep &= d_own + SPLIT_GAP < _bbox_distance(interior.shape, bubble, o)
+    return keep.astype(np.uint8)
+
+
+def bubble_siblings(region: Region, regions: Sequence[Region]) -> list[Region]:
+    """Các vùng chữ khác nằm chung bóng với `region`."""
+    if not region.bubble_id:
+        return []
+    return [r for r in regions if r.bubble_id == region.bubble_id and r.id != region.id]
+
+
+def available_rect(
+    clean_rgb: np.ndarray, region: Region, bubble: Region | None, siblings: Sequence[Region] = ()
+) -> Rect:
     b = region.bbox
     if bubble is not None:
         seed = (b.x + b.w // 2, b.y + b.h // 2)
-        r = inscribed_rect(bubble_interior(clean_rgb, bubble.bbox, seed))
+        interior = bubble_interior(clean_rgb, bubble.bbox, seed)
+        if siblings:
+            interior = own_share(interior, bubble.bbox, region.bbox, [s.bbox for s in siblings])
+        r = inscribed_rect(interior)
         # Lòng bóng nhỏ hơn vùng chữ gốc (bóng không kín, art) → dùng box chữ gốc.
         if r is not None and r.w * r.h >= b.area():
             return Rect(bubble.bbox.x + r.x, bubble.bbox.y + r.y, r.w, r.h)
@@ -147,9 +184,14 @@ def style_for(region: Region, size: float) -> tuple[str, Stroke]:
 
 
 def typeset_region(
-    clean_rgb: np.ndarray, region: Region, bubble: Region | None, text: str, font_id: str
+    clean_rgb: np.ndarray,
+    region: Region,
+    bubble: Region | None,
+    text: str,
+    font_id: str,
+    siblings: Sequence[Region] = (),
 ) -> TextBox:
-    rect = available_rect(clean_rgb, region, bubble)
+    rect = available_rect(clean_rgb, region, bubble, siblings)
     size, lines = fit_text(text, font_id, rect.w, rect.h)
     text_h = block_height(font_id, size, len(lines)) + 2 * PAD
     # Căn giữa theo chiều dọc: box ôm khối chữ, đặt giữa vùng khả dụng.

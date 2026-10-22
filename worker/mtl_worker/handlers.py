@@ -23,7 +23,7 @@ from mtl_pipeline.schema import (
 )
 from mtl_pipeline.textmask import estimate_polarity
 from mtl_pipeline.translate import SeriesSettings, qualified_id, translate_chapter
-from mtl_pipeline.typeset import typeset_region
+from mtl_pipeline.typeset import bubble_siblings, typeset_region
 
 from . import PIPELINE_VERSION
 from .export import handle_export
@@ -236,6 +236,12 @@ def handle_translate(ctx: JobContext, deps: Deps) -> dict[str, Any]:
         translations: dict[str, tuple[str, bool]] = {}
         boxes: list[TextBox] = []
         clean = open_rgb(ctx.download(pg["clean"])) if page_items else None
+        # Vùng chữ được đặt chữ: chỉ chúng chia nhau lòng bóng (vùng OCR rỗng không giữ chỗ).
+        texted = [
+            r
+            for r in regions
+            if (t := page_items.get(qualified_id(pg["ord"], r.id))) and t.translation.strip()
+        ]
         for r in regions:
             it = page_items.get(qualified_id(pg["ord"], r.id))
             if it is None:
@@ -243,7 +249,9 @@ def handle_translate(ctx: JobContext, deps: Deps) -> dict[str, Any]:
             translations[r.id] = (it.translation, it.low_conf)
             if clean is not None and it.translation.strip():
                 bubble = by_id.get(r.bubble_id) if r.bubble_id else None
-                boxes.append(typeset_region(clean, r, bubble, it.translation, font))
+                boxes.append(
+                    typeset_region(clean, r, bubble, it.translation, font, bubble_siblings(r, texted))
+                )
         state = build_page_state(pg["width"], pg["height"], regions, items, translations, boxes, meta)
         out.append({"page_id": pg["page_id"], "ai_state": state})
     return {"type": "chapter.translate", "pages": out}

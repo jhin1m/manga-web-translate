@@ -26,7 +26,7 @@ from .render import render_page, require_raqm
 from .schema import ContextMode, OcrResult, PageAiState, PageText, Region, RegionText
 from .textmask import CtdMasker, build_text_mask
 from .translate import SeriesSettings, qualified_id, translate_chapter
-from .typeset import typeset_region
+from .typeset import bubble_siblings, typeset_region
 
 IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".webp"}
 
@@ -210,13 +210,21 @@ def translate_dir(
         clean = open_rgb(d / "clean.png")
         page_items = result.items.get(str(meta["page_ord"]), {})
         translations, boxes = [], []
+        # Vùng chữ được đặt chữ: chỉ chúng chia nhau lòng bóng (vùng OCR rỗng không giữ chỗ).
+        texted = [
+            r
+            for r in regions
+            if (t := page_items.get(qualified_id(meta["page_ord"], r.id))) and t.translation.strip()
+        ]
         for r in regions:
             it = page_items.get(qualified_id(meta["page_ord"], r.id))
             if it is None or not it.translation.strip():
                 continue
             translations.append(it.model_copy(update={"id": r.id}))
             bubble = by_id.get(r.bubble_id) if r.bubble_id else None
-            boxes.append(typeset_region(clean, r, bubble, it.translation, font_id))
+            boxes.append(
+                typeset_region(clean, r, bubble, it.translation, font_id, bubble_siblings(r, texted))
+            )
         state = PageAiState(
             page_ord=meta["page_ord"],
             width=meta["width"],
