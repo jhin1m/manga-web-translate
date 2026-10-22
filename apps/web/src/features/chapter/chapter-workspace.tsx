@@ -1,17 +1,17 @@
 /**
- * Màn chương = editor gộp (`/w/:ws/s/:s/c/:c?page=`): thanh trên (+ băng cảnh báo khi có) | rail trang · canvas cuộn liên tục
- * cả chương · inspector | bảng dưới (Bản dịch cả chương / Tìm–Thay / Áp glossary). Chương nháp: canvas là tiến
- * độ upload + vùng thả để tải tiếp + ảnh gốc xem trước (cả lúc đang cắt trang).
+ * Màn chương = editor gộp (`/w/:ws/s/:s/c/:c?page=`): thanh trên (+ băng cảnh báo khi có) | rail trang · canvas từng
+ * trang · inspector | bảng dưới (Bản dịch cả chương / Tìm–Thay / Áp glossary). Chương nháp: canvas là tiến độ upload
+ * + vùng thả để tải tiếp + ảnh gốc xem trước (cả lúc đang cắt trang). Upload xong không tự chạy: "Bước 1" = cắt trang
+ * + xoá chữ + OCR, xong dừng ở "Chờ dịch" (xem ảnh sạch, sửa mask) tới khi bấm "Bước 2 · Dịch".
  *
  * Trạng thái chương chỉ ở chip thanh trên (+ rail theo trang). Kết quả thao tác (dịch lại, áp kiểu…) là thông báo nổi
- * trên canvas, tự ẩn; Dịch chương (bấm tay hoặc tự dịch khi upload xong) thành công không báo gì thêm (chip đã đổi),
- * chỉ báo khi có ảnh bị loại; tự dịch lỗi → báo lỗi, chương ở lại nháp với nút "Dịch chương".
+ * trên canvas, tự ẩn; Bước 1 / Bước 2 thành công không báo gì thêm (chip đã đổi), Bước 1 chỉ báo khi có ảnh bị loại.
  *
  * Drawer phải: Xuất (nút "Xuất" hoặc `?drawer=export` từ "Xuất lại" ở home), Hoạt động, Phím tắt (`?`). Chế độ xem
  * Gốc / Dịch / Chia đôi + giữ `O` (chapterStore.viewMode). Phím tắt: `editor/shortcuts.ts` (1 listener).
  *
- * Page đang sửa (active) đổi khi bấm vào page trên canvas, chọn ở rail, phím ←/→/A/D, focus 1 dòng của bảng hoặc
- * `?page=` đổi từ ngoài; cuộn chỉ cập nhật `?page=` (page ở giữa khung, replace, gộp 400ms). Khối đang chọn
+ * Page đang sửa (active) = page canvas đang hiện; đổi khi chọn ở rail, nút ‹ › dưới canvas, phím ←/→/A/D, focus 1
+ * dòng của bảng hoặc `?page=` đổi từ ngoài; page active ghi lại vào `?page=` (replace, gộp 400ms). Khối đang chọn
  * (`current`, khoá dòng bảng) đồng bộ 2 chiều giữa bảng, canvas và inspector.
  */
 import "../editor/editor.css";
@@ -25,7 +25,7 @@ import { deleteBox, setStyleMany } from "../editor/actions.ts";
 import { ChapterCanvas } from "../editor/canvas/ChapterCanvas.tsx";
 import { type PageRect, useOcrRegion } from "../editor/canvas/OcrSelect.tsx";
 import type { SlotImages, SlotProcessing } from "../editor/canvas/PageSlot.tsx";
-import { chapterStore, focusPage, revealRect, useChapterStore } from "../editor/chapter-store.ts";
+import { chapterStore, revealRect } from "../editor/chapter-store.ts";
 import { CanvasStatus, CanvasToolbar } from "../editor/panels/CanvasToolbar.tsx";
 import type { ShortcutAction } from "../editor/shortcuts.ts";
 import { editorStore, useEditor } from "../editor/store.ts";
@@ -44,6 +44,7 @@ import {
   type Rejected,
   retranslate,
   retryFailed,
+  translatePrepared,
 } from "./api.ts";
 import { BottomPanel, type TabRequest } from "./bottom-panel.tsx";
 import { ChapterTopbar, type EditAccess, LockBand } from "./chapter-topbar.tsx";
@@ -142,7 +143,6 @@ function Workspace({ ws, seriesId, chapterId, page: searchPage, drawer: searchDr
     (id: string | undefined) => {
       if (!id) return;
       activate(id);
-      focusPage(id);
     },
     [activate],
   );
@@ -170,21 +170,21 @@ function Workspace({ ws, seriesId, chapterId, page: searchPage, drawer: searchDr
       replace: true,
     });
   }, [searchDrawer, searchPage, navigate, ws, seriesId, chapterId]);
-  // Cuộn → `?page=` = page ở giữa khung (replace, gộp).
-  const centerId = useChapterStore((s) => s.centerPageId);
+  // Đổi trang → `?page=` = page active (replace, gộp). URL chưa có `?page=` = đang ở trang đầu → mở chương không
+  // ghi thêm gì.
   useEffect(() => {
-    if (!centerId || centerId === lastUrlPage.current) return;
+    if (!activeId || activeId === (lastUrlPage.current ?? firstId)) return;
     const t = setTimeout(() => {
-      lastUrlPage.current = centerId;
+      lastUrlPage.current = activeId;
       void navigate({
         to: "/w/$ws/s/$seriesId/c/$chapterId",
         params: { ws, seriesId, chapterId },
-        search: { page: centerId },
+        search: { page: activeId },
         replace: true,
       });
     }, URL_SYNC_MS);
     return () => clearTimeout(t);
-  }, [centerId, navigate, ws, seriesId, chapterId]);
+  }, [activeId, firstId, navigate, ws, seriesId, chapterId]);
 
   // ---- Bảng văn bản ↔ canvas ↔ inspector ----
   const allRows = useChapterRows(kit);
@@ -246,11 +246,20 @@ function Workspace({ ws, seriesId, chapterId, page: searchPage, drawer: searchDr
         upload,
         pages: pages.length,
         ready,
+        failed: counts.failed ?? 0,
       })
     : null;
   const review = pages.filter((p) => needsReview(p, overflowPages.has(p.id))).length;
   const chip = status
-    ? chapterChip({ status, pages: pages.length, ready, failed: counts.failed ?? 0, review, upload })
+    ? chapterChip({
+        status,
+        pages: pages.length,
+        ready,
+        failed: counts.failed ?? 0,
+        review,
+        preparing: (counts.pending ?? 0) + (counts.preparing ?? 0),
+        upload,
+      })
     : null;
   const access: EditAccess = {
     lock: session.lock.state,
@@ -279,7 +288,7 @@ function Workspace({ ws, seriesId, chapterId, page: searchPage, drawer: searchDr
   const { runAi } = session;
   const action = useMutation({
     mutationFn: async (
-      kind: "retry" | "retranslate" | "retranslate-page" | "cancel" | "commit",
+      kind: "retry" | "retranslate" | "retranslate-page" | "cancel" | "commit" | "translate",
     ): Promise<Notice | null> => {
       const info = (text: string): Notice => ({ tone: "info", text });
       if (kind === "cancel") return info(`Đã huỷ ${(await cancelChapter(ws, chapterId)).cancelled} job.`);
@@ -294,11 +303,16 @@ function Workspace({ ws, seriesId, chapterId, page: searchPage, drawer: searchDr
         await runAi(() => retranslate(ws, chapterId, [id]));
         return info(`Đã xếp dịch lại trang ${ord + 1} (chỉnh sửa tay được giữ nguyên).`);
       }
+      if (kind === "translate") {
+        // Bước 2: chip đã đổi sang "Đang dịch" — không báo thêm.
+        await runAi(() => translatePrepared(ws, chapterId));
+        return null;
+      }
       if (kind === "retranslate") {
         await runAi(() => retranslate(ws, chapterId));
         return info("Đã xếp dịch lại cả chương (chỉnh sửa tay được giữ nguyên).");
       }
-      // Thành công: chip trạng thái đã nói "Đang cắt trang/Đang dịch" — chỉ báo khi có ảnh bị loại.
+      // Bước 1 thành công: chip đã nói "Bước 1 · …" — chỉ báo khi có ảnh bị loại.
       const r = await commitChapter(ws, chapterId);
       return r.rejected.length ? rejectedNotice(r.accepted, r.rejected) : null;
     },
@@ -361,19 +375,6 @@ function Workspace({ ws, seriesId, chapterId, page: searchPage, drawer: searchDr
     onError: (e) => notify({ tone: "danger", text: errorMessage(e) }),
   });
 
-  // Tự dịch khi upload xong (upload-manager): chỉ báo lúc kết quả vừa đổi, không báo lại khi mở lại chương.
-  const autoCommit = useChapterUpload(chapterId)?.autoCommit ?? null;
-  const seenAuto = useRef(autoCommit);
-  useEffect(() => {
-    if (autoCommit === seenAuto.current) return;
-    seenAuto.current = autoCommit;
-    if (autoCommit?.status === "failed") {
-      notify({ tone: "danger", text: `Không tự dịch được: ${autoCommit.error}. Bấm "Dịch chương" để thử lại.` });
-    } else if (autoCommit?.status === "done" && autoCommit.rejected.length) {
-      notify(rejectedNotice(autoCommit.accepted, autoCommit.rejected));
-    }
-  }, [autoCommit, notify]);
-
   const onCommand = (cmd: ChapterCommand) => {
     if (cmd === "export") return setDrawer("export");
     if (cmd === "upload") return;
@@ -398,11 +399,11 @@ function Workspace({ ws, seriesId, chapterId, page: searchPage, drawer: searchDr
       m.set(id, { original: p.images.original, clean: p.images.clean, cleanRev: p.clean_rev });
     return m;
   }, [data.images]);
-  // Page chưa xong → canvas hiện ảnh gốc + nhãn; khoá theo chữ ký để lần poll tiến độ không đổi gì thì không vẽ lại.
+  // Page đang chạy AI → canvas hiện ảnh gốc + nhãn (page chờ dịch hiện ảnh sạch để soát); khoá theo chữ ký để lần poll tiến độ không đổi gì thì không vẽ lại.
   const processingSig = pages
     .map((p) => {
       const level = pageLevel(p.status);
-      return level === "busy" || level === "todo" ? `${p.id}=${level}` : "";
+      return level === "busy" ? `${p.id}=${level}` : "";
     })
     .filter(Boolean)
     .join(",");
@@ -576,10 +577,8 @@ function Workspace({ ws, seriesId, chapterId, page: searchPage, drawer: searchDr
                 images={slotImages}
                 processing={processing}
                 defaultFont={defaultFont}
-                initialPageId={initialPage.current}
                 ocrPending={ocr.pending}
                 onOcr={onOcr}
-                onActivate={activate}
                 onImageError={setImageError}
               />
             ) : (
@@ -587,7 +586,7 @@ function Workspace({ ws, seriesId, chapterId, page: searchPage, drawer: searchDr
                 <span className="muted">Đang tải…</span>
               </div>
             )}
-            <CanvasStatus />
+            <CanvasStatus onStep={(dir) => go(pages[idx + dir]?.id)} />
           </div>
         )}
       </main>

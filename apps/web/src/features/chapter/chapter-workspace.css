@@ -291,6 +291,18 @@
   border-radius: var(--radius);
   padding: 4px 8px;
 }
+.cw-canvas-foot > .cw-pager {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: 2px 4px;
+  pointer-events: auto;
+}
+.cw-pager > button {
+  min-width: 24px;
+  padding: 0 6px;
+  line-height: 20px;
+}
 .cw-empty {
   flex: 1;
   display: flex;

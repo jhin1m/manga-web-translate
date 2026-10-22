@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { primaryAction } from "./primary-action.ts";
 
-const base = { sourceFiles: 3, upload: null, pages: 10, ready: 4 };
+const base = { sourceFiles: 3, upload: null, pages: 10, ready: 4, failed: 0 };
 
 describe("primary action", () => {
   it("draft without (all) files → Tải ảnh", () => {
@@ -14,45 +14,37 @@ describe("primary action", () => {
     expect(primaryAction({ ...base, status: "draft", upload: incomplete, pages: 0 }).command).toBe("upload");
   });
 
-  it("draft while uploading → Dịch chương disabled", () => {
+  it("draft while uploading → Bước 1 disabled until every file is up", () => {
     const uploading = { phase: "uploading" as const, done: 1, total: 3 };
     expect(primaryAction({ ...base, status: "draft", upload: uploading, pages: 0 })).toMatchObject({
       command: "commit",
       disabled: true,
+      title: "Chờ tải xong ảnh (1/3)",
     });
   });
 
-  it("auto translate: disabled while waiting or starting, enabled again when it failed", () => {
-    const waiting = { phase: "uploading" as const, done: 1, total: 3, autoCommit: "waiting" as const };
-    expect(primaryAction({ ...base, status: "draft", upload: waiting, pages: 0 })).toMatchObject({
-      disabled: true,
-      title: "Tự dịch khi tải xong ảnh (1/3)",
-    });
-    for (const autoCommit of ["running", "done"] as const) {
-      const upload = { phase: "uploaded" as const, done: 3, total: 3, autoCommit };
-      expect(primaryAction({ ...base, status: "draft", upload, pages: 0 })).toMatchObject({
-        command: "commit",
-        disabled: true,
-      });
-    }
-    const failed = { phase: "uploaded" as const, done: 3, total: 3, autoCommit: "failed" as const };
-    expect(primaryAction({ ...base, status: "draft", upload: failed, pages: 0 })).toMatchObject({
-      command: "commit",
-      label: "Dịch chương",
-      disabled: false,
-    });
-  });
-
-  it("draft with every file → Dịch chương", () => {
+  it("draft with every file → Bước 1 (cut + clean + OCR), never automatic", () => {
     const uploaded = { phase: "uploaded" as const, done: 3, total: 3 };
     for (const upload of [uploaded, null]) {
       expect(primaryAction({ ...base, status: "draft", upload, pages: 0 })).toMatchObject({
         command: "commit",
-        label: "Dịch chương",
+        label: "Bước 1 · Xoá chữ + OCR",
         disabled: false,
         menu: [],
       });
     }
+  });
+
+  it("prepared → Bước 2 · Dịch; failed pages can be re-run from the menu", () => {
+    expect(primaryAction({ ...base, status: "prepared", ready: 0 })).toMatchObject({
+      command: "translate",
+      label: "Bước 2 · Dịch",
+      disabled: false,
+      menu: [],
+    });
+    expect(primaryAction({ ...base, status: "prepared", ready: 0, failed: 2 }).menu).toEqual([
+      { command: "retry", label: "Chạy lại trang lỗi" },
+    ]);
   });
 
   it("ingesting / processing → Xuất disabled (progress lives in the status chip), cancel in the menu", () => {
@@ -71,9 +63,9 @@ describe("primary action", () => {
     expect(p.menu.map((m) => m.command)).toEqual(["export", "retranslate"]);
   });
 
-  it("partial_failed without pages (ingest failed) → Chạy lại cắt trang (commit lại), not the no-op retry", () => {
+  it("partial_failed without pages (ingest failed) → Chạy lại bước 1 (commit lại), not the no-op retry", () => {
     const p = primaryAction({ ...base, status: "partial_failed", pages: 0, ready: 0, sourceFiles: 3 });
-    expect(p).toMatchObject({ command: "commit", label: "Chạy lại cắt trang", disabled: false, menu: [] });
+    expect(p).toMatchObject({ command: "commit", label: "Chạy lại bước 1", disabled: false, menu: [] });
     const none = primaryAction({ ...base, status: "partial_failed", pages: 0, ready: 0, sourceFiles: 0 });
     expect(none).toMatchObject({ command: "upload", label: "Tải ảnh" });
   });

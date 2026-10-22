@@ -1,6 +1,6 @@
 /**
- * Ngân sách click từ home tới editor chương (≤ 3): hàng series → hàng chương = 2 click. Chỉ đếm click có điều hướng. Chương mới: thả ảnh ở home = 1 thao tác
- * duy nhất tới khi chương đang dịch (không dòng xác nhận, không bấm "Dịch chương").
+ * Ngân sách click từ home tới editor chương (≤ 3): hàng series → hàng chương = 2 click. Chỉ đếm click có điều hướng. Chương mới: thả ảnh ở home
+ * (không dòng xác nhận) → màn chương, upload xong đúng 1 click "Bước 1" là chương bắt đầu xử lý (không tự chạy).
  */
 import { expect, type Locator, type Page, test } from "@playwright/test";
 import { WEB_URL } from "./env.ts";
@@ -32,7 +32,7 @@ test("home → chapter editor within the click budget", async ({ page }) => {
   const viaSeries = { n: 0 };
   await navClick(
     page,
-    page.getByRole("region", { name: "Series" }).getByRole("link", { name: "Series e2e" }),
+    page.getByRole("region", { name: "Series" }).getByRole("link", { name: /^Series e2e/ }),
     viaSeries,
   );
   await navClick(page, page.getByRole("link", { name: `Mở chương ${NUMBER}`, exact: true }), viaSeries);
@@ -40,7 +40,7 @@ test("home → chapter editor within the click budget", async ({ page }) => {
   expect(viaSeries.n).toBe(2);
 });
 
-test("drop 5 images on home → translating chapter with no further action", async ({ page }) => {
+test("drop 5 images on home → chapter screen; one click on Bước 1 starts it, nothing runs before", async ({ page }) => {
   await login(page);
   const clicks = { n: 0 };
   // Đếm mọi click trong trang (SPA: cùng document suốt luồng).
@@ -49,7 +49,7 @@ test("drop 5 images on home → translating chapter with no further action", asy
     document.addEventListener("click", () => (window as unknown as { countClick: () => void }).countClick(), true),
   );
 
-  // Lần thả = thao tác duy nhất.
+  // Thả ảnh: không có dòng xác nhận.
   await page
     .getByRole("region", { name: "Tạo chương mới" })
     .locator('input[type="file"]')
@@ -61,10 +61,15 @@ test("drop 5 images on home → translating chapter with no further action", asy
       })),
     );
   await expect(page).toHaveURL(/\/w\/.+\/s\/.+\/c\/[0-9a-f-]{36}$/, { timeout: 30_000 });
-  await expect(page.getByRole("status", { name: "Trạng thái chương" })).toHaveText(/^Đang (cắt trang|dịch)/, {
-    timeout: 30_000,
-  });
+  const chip = page.getByRole("status", { name: "Trạng thái chương" });
+  const step1 = page.getByRole("button", { name: "Bước 1 · Xoá chữ + OCR" });
+  await expect(step1).toBeEnabled({ timeout: 30_000 });
+  // Upload xong mà chưa bấm → chương vẫn nháp, không job nào chạy.
+  await expect(chip).toHaveText("Nháp");
   expect(clicks.n).toBe(0);
+  await step1.click();
+  await expect(chip).toHaveText(/^Bước 1/, { timeout: 30_000 });
+  expect(clicks.n).toBe(1);
 
   // Dọn: không để job ingest treo cho spec sau (worker giả claim mọi job của workspace).
   const chapterId = page.url().split("/").pop() ?? "";

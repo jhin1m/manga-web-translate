@@ -123,7 +123,6 @@ export function useDropToTranslate(ws: string, onFallback: (files: File[], serie
           seriesId,
           number: numbers[i] ?? "1",
           pages: g.pages,
-          autoCommit: true,
         });
         first ??= chapterId;
       }

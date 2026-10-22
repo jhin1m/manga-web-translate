@@ -124,7 +124,6 @@ export function NewChapterConfirmRow(props: {
           seriesId: sid,
           number: num,
           pages: g,
-          autoCommit: true,
         });
         made.current.chapters.set(i, chapterId);
       }

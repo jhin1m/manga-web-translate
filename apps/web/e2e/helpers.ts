@@ -26,7 +26,16 @@ export async function loginWithForm(page: Page) {
   await expectHome(page);
 }
 
-/** Chương 1 ảnh nguồn tạo + upload + commit qua API rồi chạy worker giả tới khi mọi page "ready" → id chương. */
+/** Chương xong bước 1 (`prepared`) → bấm bước 2 "Dịch" qua API để worker giả dịch tiếp. */
+export async function translateIfPrepared(page: Page, chapterId: string, status: string) {
+  if (status !== "prepared") return;
+  const r = await page.request.post(`/api/w/${state.workspaceId}/chapters/${chapterId}/translate-prepared`, {
+    headers: { origin: WEB_URL },
+  });
+  expect(r.status()).toBe(202);
+}
+
+/** Chương 1 ảnh nguồn tạo + upload + bước 1 (commit) qua API rồi chạy worker giả (+ bước 2) tới khi mọi page "ready". */
 export async function apiReadyChapter(page: Page, number: string, opts: FakeWorkerOptions = {}) {
   const ws = state.workspaceId;
   const headers = { origin: WEB_URL };
@@ -59,8 +68,10 @@ export async function apiReadyChapter(page: Page, number: string, opts: FakeWork
   const deadline = Date.now() + 30_000;
   while (!ready && Date.now() < deadline) {
     const p = (await (await page.request.get(`/api/w/${ws}/chapters/${chapter.id}/progress`)).json()) as {
+      chapter: { status: string };
       pages: { status: string }[];
     };
+    await translateIfPrepared(page, chapter.id, p.chapter.status);
     ready = p.pages.length > 0 && p.pages.every((x) => x.status === "ready");
     if (!ready) await page.waitForTimeout(300);
   }

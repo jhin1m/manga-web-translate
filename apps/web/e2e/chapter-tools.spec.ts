@@ -8,7 +8,7 @@
 import { type APIRequestContext, expect, type Page, test } from "@playwright/test";
 import { WEB_URL } from "./env.ts";
 import { PNG_1PX, runFakeWorker } from "./fake-worker.ts";
-import { login, state } from "./helpers.ts";
+import { login, state, translateIfPrepared } from "./helpers.ts";
 
 const ws = state.workspaceId;
 const headers = { origin: WEB_URL };
@@ -52,8 +52,10 @@ async function readyChapter(page: Page) {
   const worker = runFakeWorker(state.token, () => done, 30_000);
   while (!pageId && Date.now() < deadline) {
     const p = (await (await page.request.get(`/api/w/${ws}/chapters/${chapter.id}/progress`)).json()) as {
+      chapter: { status: string };
       pages: { id: string; status: string }[];
     };
+    await translateIfPrepared(page, chapter.id, p.chapter.status);
     if (p.pages.length && p.pages.every((x) => x.status === "ready")) pageId = p.pages[0]?.id ?? null;
     else await page.waitForTimeout(300);
   }

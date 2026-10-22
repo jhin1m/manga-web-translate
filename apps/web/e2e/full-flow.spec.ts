@@ -1,8 +1,8 @@
 /**
  * Luồng chính trọn vẹn: thả 1 strip ở home → màn chương mở ngay (trước khi upload xong, không qua dòng xác nhận)
- * → upload xong tự dịch (không bấm gì) → (đang dịch, nút khoá) → worker giả cắt 3 trang + dịch → sửa bản dịch
- * trang 2 trong bảng → lưu lên server → nút chính "Xuất" → drawer Xuất không cảnh báo → tải xuống 302. Không lỗi JS
- * nào trong cả luồng.
+ * → upload xong không tự chạy → "Bước 1" (worker giả cắt 3 trang + xoá chữ + OCR) → dừng ở "chờ dịch" → "Bước 2 ·
+ * Dịch" → sửa bản dịch trang 2 trong bảng → lưu lên server → nút chính "Xuất" → drawer Xuất không cảnh báo → tải
+ * xuống 302. Không lỗi JS nào trong cả luồng.
  */
 import { expect, type Route, test } from "@playwright/test";
 import { WEB_URL } from "./env.ts";
@@ -41,20 +41,28 @@ test("drop a strip on home → translate → edit → export", async ({ page }) 
   const chapterId = page.url().split("/").pop() ?? "";
   await expect(page.getByRole("heading", { name: /^Chương 7001/ })).toBeVisible();
   await expect.poll(() => held.length).toBeGreaterThan(0);
-  await expect(page.getByRole("button", { name: "Dịch chương" })).toBeDisabled();
-  await expect(page.getByRole("button", { name: "Dịch chương" })).toHaveAttribute("title", /^Tự dịch khi tải xong/);
+  const step1 = page.getByRole("button", { name: "Bước 1 · Xoá chữ + OCR" });
+  await expect(step1).toBeDisabled();
+  await expect(step1).toHaveAttribute("title", /^Chờ tải xong ảnh/);
   hold = false;
   for (const r of held.splice(0)) await r.continue();
 
-  // Upload xong → tự dịch: (Xuất bị khoá, chip "Đang cắt trang/Đang dịch") → Xuất. Thành công không thêm banner.
+  // Upload xong không tự chạy: chương vẫn nháp tới khi bấm Bước 1. Thành công không thêm banner.
   const chip = page.getByRole("status", { name: "Trạng thái chương" });
-  await expect(chip).toHaveText(/^Đang (cắt trang|dịch)/, { timeout: 30_000 });
+  await expect(step1).toBeEnabled({ timeout: 30_000 });
+  await expect(chip).toHaveText("Nháp");
+  await step1.click();
+  await expect(chip).toHaveText(/^Bước 1/, { timeout: 30_000 });
   await expect(page.getByRole("button", { name: "Xuất", exact: true })).toBeDisabled();
   await expect(page.getByText(/Bắt đầu dịch|Đang dịch \d+ ảnh/)).toHaveCount(0);
 
   let ready = false;
   const worker = runFakeWorker(state.token, () => ready, 60_000, { pagesPerSource: 3 });
   const rail = page.getByRole("complementary", { name: "Danh sách trang" });
+  // Xong bước 1 dừng lại: 3 trang "Chờ dịch", chưa có job dịch → bấm Bước 2.
+  await expect(chip).toHaveText("Xong bước 1 · chờ dịch", { timeout: 30_000 });
+  await expect(rail.locator(".status", { hasText: "Chờ dịch" })).toHaveCount(3);
+  await page.getByRole("button", { name: "Bước 2 · Dịch" }).click();
   await expect(rail.locator(".status", { hasText: "Xong" })).toHaveCount(3, { timeout: 30_000 });
   const primary = page.getByRole("button", { name: "Xuất", exact: true });
   await expect(primary).toBeEnabled({ timeout: 15_000 });

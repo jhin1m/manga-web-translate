@@ -1,60 +1,30 @@
 import { describe, expect, it } from "vitest";
-import {
-  clampView,
-  contentBox,
-  FIT_EDGE,
-  FIT_HEIGHT_MIN,
-  fitScale,
-  MAX_MOUNTED,
-  pageAt,
-  pageOffsets,
-  SPLIT_GAP,
-  stripToPage,
-  visiblePages,
-} from "../strip-layout.ts";
+import { clampView, contentBox, FIT_EDGE, FIT_HEIGHT_MIN, fitScale, pageStartView, SPLIT_GAP } from "../page-layout.ts";
 
-describe("strip layout", () => {
-  const heights = [1000, 2000, 500];
-  const offsets = pageOffsets(heights);
-
-  it("stacks pages by height", () => {
-    expect(offsets).toEqual([0, 1000, 3000]);
+describe("page layout", () => {
+  it("opens a page centered and fitted to that page, not to the widest page of the chapter", () => {
+    // Chương có 1 trang credit rộng 4036px: trang 800px vẫn hiện 100%, nằm giữa khung.
+    const v = pageStartView({ w: 800, h: 4500 }, false, { w: 1532, h: 700 });
+    expect(v.scale).toBe(1);
+    expect(v.x).toBe((1532 - 800) / 2);
+    expect(v.y).toBe(FIT_EDGE);
   });
 
-  it("finds the page under a strip y", () => {
-    expect(pageAt(0, offsets)).toBe(0);
-    expect(pageAt(999, offsets)).toBe(0);
-    expect(pageAt(1000, offsets)).toBe(1);
-    expect(pageAt(2999, offsets)).toBe(1);
-    expect(pageAt(3200, offsets)).toBe(2);
-    expect(pageAt(99_999, offsets)).toBe(2);
-    expect(pageAt(-5, offsets)).toBe(0);
-    expect(pageAt(10, [])).toBe(-1);
+  it("keeps the user's zoom when asked, still centered and at the top of the page", () => {
+    const v = pageStartView({ w: 800, h: 4500 }, false, { w: 1532, h: 700 }, 0.5);
+    expect(v.scale).toBe(0.5);
+    expect(v.x).toBe((1532 - 400) / 2);
+    expect(v.y).toBe(FIT_EDGE);
   });
 
-  it("mounts pages in the viewport (± overscan)", () => {
-    expect(visiblePages(offsets, heights, { y: 900, h: 300 })).toEqual([0, 1]);
-    expect(visiblePages(offsets, heights, { y: 900, h: 300 }, 0)).toEqual([0, 1]);
-    expect(visiblePages(offsets, heights, { y: 1500, h: 300 }, 0)).toEqual([1]);
+  it("split view opens with both columns centered", () => {
+    const page = { w: 800, h: 4500 };
+    const c = contentBox(page, true);
+    const v = pageStartView(page, true, { w: 2000, h: 700 });
+    expect(v.x + c.x * v.scale).toBeCloseTo((2000 - c.w * v.scale) / 2);
   });
 
-  it("never mounts more than 4 pages, keeping those nearest the center", () => {
-    const hs = Array.from({ length: 20 }, () => 200);
-    const os = pageOffsets(hs);
-    for (let y = 0; y < 4000; y += 137) {
-      const v = visiblePages(os, hs, { y, h: 900 });
-      expect(v.length).toBeLessThanOrEqual(MAX_MOUNTED);
-      expect(v).toEqual([...v].sort((a, b) => a - b));
-    }
-    // Vùng nhìn y=1000..1900 chạm page 5–9, tâm 1450 thuộc page 7 → bỏ page 9 (xa tâm nhất).
-    expect(visiblePages(os, hs, { y: 1000, h: 900 }, 0)).toEqual([5, 6, 7, 8]);
-  });
-
-  it("converts strip to page coordinates", () => {
-    expect(stripToPage({ x: 5, y: 1200 }, 1000)).toEqual({ x: 5, y: 200 });
-  });
-
-  it("clamps the view to the strip (narrow strip centered)", () => {
+  it("clamps the view to the page (narrow page centered)", () => {
     const v = clampView({ scale: 1, x: 999, y: -99_999 }, { w: 800, h: 12_000 }, { w: 1200, h: 800 });
     expect(v.x).toBe(200);
     expect(v.y).toBe(800 - 12_000 - 40);

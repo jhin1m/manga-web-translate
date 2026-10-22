@@ -96,6 +96,9 @@ export const patchChapter = (ws: string, ch: string, body: { number?: string; se
   api<ChapterSummary>(base(ws, ch), { method: "PATCH", body });
 export const commitChapter = (ws: string, ch: string) =>
   api<{ job: JobView; accepted: number; rejected: Rejected[] }>(base(ws, ch, "/commit"), { method: "POST", body: {} });
+/** Bước 2 "Dịch": chương xong bước 1 → dịch + chèn chữ các page đã OCR. */
+export const translatePrepared = (ws: string, ch: string) =>
+  api<{ job: JobView }>(base(ws, ch, "/translate-prepared"), { method: "POST" });
 export const retryFailed = (ws: string, ch: string) =>
   api<{ jobs: JobView[] }>(base(ws, ch, "/retry-failed"), { method: "POST" });
 export const retranslate = (ws: string, ch: string, pageIds?: string[]) =>

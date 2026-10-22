@@ -9,7 +9,7 @@
 import { expect, type Page, test } from "@playwright/test";
 import { WEB_URL } from "./env.ts";
 import { type FakeWorkerOptions, PNG_1PX, runFakeWorker } from "./fake-worker.ts";
-import { apiReadyChapter, login, state } from "./helpers.ts";
+import { apiReadyChapter, login, state, translateIfPrepared } from "./helpers.ts";
 
 const ws = state.workspaceId;
 const headers = { origin: WEB_URL };
@@ -46,7 +46,7 @@ async function committedChapter(page: Page) {
 const progressOf = async (page: Page, chapterId: string) =>
   (await (await page.request.get(`/api/w/${ws}/chapters/${chapterId}/progress`)).json()) as ProgressBody;
 
-/** Chạy worker giả tới khi `done(progress)` đúng → danh sách page. */
+/** Chạy worker giả (xong bước 1 thì bấm bước 2 "Dịch") tới khi `done(progress)` đúng → danh sách page. */
 async function runUntil(
   page: Page,
   chapterId: string,
@@ -58,6 +58,7 @@ async function runUntil(
   const deadline = Date.now() + 30_000;
   let p = await progressOf(page, chapterId);
   while (!done(p) && Date.now() < deadline) {
+    await translateIfPrepared(page, chapterId, p.chapter.status);
     await page.waitForTimeout(300);
     p = await progressOf(page, chapterId);
   }
@@ -197,9 +198,7 @@ test("edit translation → autosave → reload keeps it; crash mid-edit → rest
   expect(after.version).toBeGreaterThan(beforeCrash.version);
 });
 
-test("3-page strip: scroll to the end updates ?page=; rail click shows that page in the inspector", async ({
-  page,
-}) => {
+test("3 pages shown one at a time: pager and rail stay in sync with ?page= and the inspector", async ({ page }) => {
   const pageErrors: string[] = [];
   page.on("pageerror", (e) => pageErrors.push(e.message));
   await login(page);
@@ -213,17 +212,20 @@ test("3-page strip: scroll to the end updates ?page=; rail click shows that page
   await expect(cell(page)).toHaveValue("Xin chào");
   await expect(page.getByRole("heading", { name: "Trang 1", exact: true })).toBeVisible();
 
-  const box = await canvas.boundingBox();
-  if (!box) throw new Error("no canvas");
-  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
-  for (let i = 0; i < 8; i++) {
-    await page.mouse.wheel(0, 800);
-    await page.waitForTimeout(50);
-  }
-  await expect(page).toHaveURL(new RegExp(`\\?page=${pageIds[2]}$`));
-  await expect(page.locator(".cw-canvas-foot")).toContainText("Trang 3/3");
-
+  // Nút ‹ › dưới canvas đổi trang: rail, inspector và `?page=` cùng theo.
+  const foot = page.locator(".cw-canvas-foot");
   const rail = page.getByRole("complementary", { name: "Danh sách trang" });
+  await expect(foot).toContainText("Trang 1/3");
+  await expect(foot.getByRole("button", { name: "Trang trước" })).toBeDisabled();
+  await foot.getByRole("button", { name: "Trang sau" }).click();
+  await expect(foot).toContainText("Trang 2/3");
+  await foot.getByRole("button", { name: "Trang sau" }).click();
+  await expect(foot).toContainText("Trang 3/3");
+  await expect(foot.getByRole("button", { name: "Trang sau" })).toBeDisabled();
+  await expect(page.getByRole("heading", { name: "Trang 3", exact: true })).toBeVisible();
+  await expect(rail.getByRole("button", { name: /Trang 3/ })).toHaveAttribute("aria-current", "page");
+  await expect(page).toHaveURL(new RegExp(`\\?page=${pageIds[2]}$`));
+
   await rail.getByRole("button", { name: /Trang 2/ }).click();
   await expect(page.getByRole("heading", { name: "Trang 2", exact: true })).toBeVisible();
   await expect(rail.getByRole("button", { name: /Trang 2/ })).toHaveAttribute("aria-current", "page");
@@ -247,10 +249,11 @@ test("3-page strip: scroll to the end updates ?page=; rail click shows that page
 test("opening a chapter while it translates does not hold the lock; the AI translation shows up", async ({ page }) => {
   await login(page);
   const chapterId = await committedChapter(page);
-  // Chỉ ingest + prepare: chương dừng ở "processing" (job dịch chờ trong hàng).
-  await runUntil(page, chapterId, (p) => p.pages.length > 0 && p.pages.every((x) => x.status === "prepared"), {
+  // Chỉ bước 1 (ingest + prepare) rồi bấm bước 2: chương "processing" với job dịch chờ trong hàng.
+  await runUntil(page, chapterId, (p) => p.chapter.status === "prepared", {
     capabilities: ["chapter.ingest", "page.prepare"],
   });
+  await translateIfPrepared(page, chapterId, "prepared");
 
   await page.goto(chapterUrl(chapterId));
   await openTable(page);

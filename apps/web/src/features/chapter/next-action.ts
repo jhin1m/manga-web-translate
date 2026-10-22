@@ -10,13 +10,7 @@ export type UploadView = {
   phase: "uploading" | "uploaded" | "failed" | "incomplete";
   done: number;
   total: number;
-  /** Tự dịch khi upload xong (thả file ở home/series); undefined = không bật. */
-  autoCommit?: "waiting" | "running" | "done" | "failed";
 };
-
-/** Upload xong và đang/đã tự commit — chương sắp rời nháp (chờ lần tải trạng thái kế tiếp). */
-export const autoCommitStarting = (u: UploadView | null | undefined) =>
-  u?.autoCommit === "running" || u?.autoCommit === "done";
 
 export type NextActionKind = "progress" | "resume" | "translate" | "retry" | "edit" | "reexport" | "open";
 
@@ -43,21 +37,12 @@ export function nextAction(
   const a = (x: Omit<NextAction, "progress"> & { progress?: number }): NextAction => ({ progress: 0, ...x });
 
   if (ch.status === "draft" && upload) {
-    if (autoCommitStarting(upload)) {
-      return a({
-        kind: "progress",
-        action: "Xem tiến độ",
-        state: "Bắt đầu dịch",
-        detail: `Đã tải ${upload.total} ảnh · đang bắt đầu dịch`,
-        tone: "busy",
-      });
-    }
     if (upload.phase === "uploading") {
       return a({
         kind: "progress",
         action: "Xem tiến độ",
         state: "Đang tải ảnh",
-        detail: `Đang tải ${upload.done}/${upload.total} ảnh${upload.autoCommit === "waiting" ? " · tự dịch khi xong" : ""}`,
+        detail: `Đang tải ${upload.done}/${upload.total} ảnh`,
         tone: "busy",
         progress: ratio(upload.done, upload.total),
       });
@@ -94,9 +79,9 @@ export function nextAction(
     case "draft":
       return a({
         kind: "translate",
-        action: "Dịch chương",
-        state: "Chưa dịch",
-        detail: upload?.total ? `Đã tải ${upload.total} ảnh · chưa dịch` : "Đã tải ảnh · chưa dịch",
+        action: "Bước 1",
+        state: "Chưa xử lý",
+        detail: upload?.total ? `Đã tải ${upload.total} ảnh · chưa xử lý` : "Đã tải ảnh · chưa xử lý",
         tone: "idle",
       });
     case "ingesting":
@@ -104,14 +89,22 @@ export function nextAction(
         kind: "progress",
         action: "Xem tiến độ",
         state: "Đang cắt trang",
-        detail: "Đang ghép strip và cắt thành trang",
+        detail: "Bước 1 · đang ghép strip và cắt thành trang",
         tone: "busy",
+      });
+    case "prepared":
+      return a({
+        kind: "translate",
+        action: "Bước 2 · Dịch",
+        state: "Chờ dịch",
+        detail: `Xong bước 1 · ${pc.total} trang đã OCR${pc.failed ? ` · ${pc.failed} lỗi` : ""}`,
+        tone: "idle",
       });
     case "processing":
       return a({
         kind: "progress",
         action: "Xem tiến độ",
-        state: "Đang dịch",
+        state: "Đang xử lý",
         detail: `${pc.ready}/${pc.total} trang xong`,
         tone: "busy",
         progress: ratio(pc.ready, pc.total),
@@ -120,9 +113,9 @@ export function nextAction(
       if (pc.total === 0) {
         return a({
           kind: "translate",
-          action: "Dịch chương",
+          action: "Chạy lại bước 1",
           state: "Cắt trang lỗi",
-          detail: "Chưa cắt được trang · dịch lại từ ảnh đã tải",
+          detail: "Chưa cắt được trang · cắt lại từ ảnh đã tải",
           tone: "danger",
         });
       }

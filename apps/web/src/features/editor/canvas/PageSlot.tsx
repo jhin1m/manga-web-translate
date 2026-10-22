@@ -1,18 +1,18 @@
 /**
- * Ảnh 1 page trên strip chương: nền trắng + TileLayer (ảnh sạch / ảnh gốc) đặt tại (`x`, `offset`), vùng nhìn đổi
- * sang toạ độ page. Chia đôi: mỗi page vẽ 2 lần (cột Gốc bên trái, cột Dịch tại x = 0). Chỉ mount cho page trong tầm nhìn (≤ 4, xem strip-layout.visiblePages) — unmount thì TileLayer
- * `close()` mọi bitmap.
+ * Ảnh page đang hiện: nền trắng + TileLayer (ảnh sạch / ảnh gốc) đặt tại cột `x`. Chia đôi: page vẽ 2 lần (cột Gốc
+ * bên trái, cột Dịch tại x = 0). Đổi trang = unmount → TileLayer `close()` mọi bitmap.
  *
- * Page chưa dịch xong (`processing`): cột Dịch hiện ảnh gốc + lớp mờ và nhãn trạng thái thay vì ảnh sạch (bóng thoại
+ * Page đang chạy AI (`processing`): cột Dịch hiện ảnh gốc + lớp mờ và nhãn trạng thái thay vì ảnh sạch (bóng thoại
  * trống trông như lỗi); ảnh sạch vẫn tải ngầm để đổi ngay khi page xong.
  */
-import { Group, Line, Rect, Text } from "react-konva";
+import { Group, Rect, Text } from "react-konva";
 import { TileLayer } from "./TileLayer.tsx";
 
 export type SlotImages = { original: string; clean: string | null; cleanRev: number | null };
-export type SlotProcessing = "busy" | "todo";
+/** Page đang chạy AI (bước 1 hoặc 2): cột Dịch hiện ảnh gốc + lớp mờ + nhãn. Page chờ dịch hiện ảnh sạch như thường. */
+export type SlotProcessing = "busy";
 
-const PROCESSING_LABEL: Record<SlotProcessing, string> = { busy: "Đang dịch…", todo: "Chờ dịch" };
+const PROCESSING_LABEL: Record<SlotProcessing, string> = { busy: "Đang xử lý…" };
 /** Cỡ nhãn trạng thái (px màn hình). */
 const LABEL_PX = 15;
 type Rect4 = { x: number; y: number; w: number; h: number };
@@ -20,7 +20,6 @@ type Rect4 = { x: number; y: number; w: number; h: number };
 export function PageSlot(props: {
   pageId: string;
   size: { w: number; h: number };
-  offset: number;
   /** Cột (toạ độ strip) — 0 trừ cột Gốc khi chia đôi. */
   x?: number;
   images: SlotImages | undefined;
@@ -39,7 +38,7 @@ export function PageSlot(props: {
   const veil = !props.showOriginal && props.processing ? props.processing : null;
   const showClean = !props.showOriginal && !veil && !!images?.clean;
   return (
-    <Group x={props.x ?? 0} y={props.offset}>
+    <Group x={props.x ?? 0}>
       <Rect x={0} y={0} width={size.w} height={size.h} fill="#ffffff" />
       {images?.clean && (
         <TileLayer
@@ -62,9 +61,6 @@ export function PageSlot(props: {
         />
       )}
       {veil && <ProcessingVeil kind={veil} size={size} viewport={props.viewport} scale={props.scale} />}
-      {props.offset > 0 && (
-        <Line points={[0, 0, size.w, 0]} stroke="#9a9a96" strokeWidth={1} strokeScaleEnabled={false} />
-      )}
     </Group>
   );
 }

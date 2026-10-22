@@ -29,15 +29,17 @@ MTL_TOKEN_FILE=~/.config/mtl/worker.token uv run mtl-worker --api http://localho
 ## Luồng 2 giai đoạn
 
 ```
-commit (Phase 4) → enqueueIngest → chapter.ingest
+Bước 1 "Xoá chữ + OCR" = commit (Phase 4) → enqueueIngest → chapter.ingest
   complete [tx]: pages (uuid v5) + page_states rỗng + page.prepare × N, chapter → processing
 page.prepare (song song): detect → mask → inpaint → OCR LLM (cuối cùng) → clean/{rev}, mask/{rev}, ocr_result
-  complete [tx, khoá dòng chapter]: mọi page hết pending/preparing → chapter.translate cho page `prepared`
+  complete [tx, khoá dòng chapter]: mọi page hết pending/preparing → chapter → prepared (KHÔNG tự dịch)
+Bước 2 "Dịch" = POST /chapters/:id/translate-prepared → translatePrepared [tx]: chapter.translate cho page `prepared`
+  (cả chương prepared → rolling, có page lỗi bước 1 → neighbors)
 chapter.translate (tuần tự, lô ≤ 4 trang): dịch + typeset → ai_state theo luật AI-không-ghi-đè
   → page ready/failed; chapter → review | partial_failed
 ```
 
-Gọi từ route (Phase 4–6): `inJobTx(tx => enqueueIngest | retranslate | retryFailedPages | enqueueReinpaint |
+Gọi từ route (Phase 4–6): `inJobTx(tx => enqueueIngest | translatePrepared | retranslate | retryFailedPages | enqueueReinpaint |
 enqueueOcrRegion(tx, ws, …))` trong `apps/api/src/jobs/enqueue.ts`. Ghi page state từ người dùng: giữ khoá chương qua
 `apps/api/src/lib/chapter-lock.ts` (`assertChapterLock` → 423).
 

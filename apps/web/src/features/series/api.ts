@@ -35,7 +35,7 @@ export type Series = SeriesSettings & {
   updated_at: string;
 };
 
-export type ChapterStatus = "draft" | "ingesting" | "processing" | "review" | "partial_failed" | "done";
+export type ChapterStatus = "draft" | "ingesting" | "processing" | "prepared" | "review" | "partial_failed" | "done";
 
 export type ChapterSummary = {
   id: string;

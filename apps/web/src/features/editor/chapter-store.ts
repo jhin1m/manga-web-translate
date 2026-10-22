@@ -1,14 +1,14 @@
 /**
- * Dữ liệu cả chương cho màn sửa gộp (1 store/tab, reset khi đổi chương): meta page + offset trên strip, cache
- * state (chỉ đọc) của mọi page, page đang sửa (active) và page ở giữa khung nhìn. Page active được sửa qua
- * `editorStore`; cache của nó chỉ cập nhật khi rời page (từ `editorStore.base`) hoặc khi server có version mới.
+ * Dữ liệu cả chương cho màn sửa gộp (1 store/tab, reset khi đổi chương): meta page, cache state (chỉ đọc) của mọi
+ * page, page đang sửa (active — cũng là page duy nhất canvas hiện). Page active được sửa qua `editorStore`; cache
+ * của nó chỉ cập nhật khi rời page (từ `editorStore.base`) hoặc khi server có version mới.
  */
 import type { PageState } from "@mtl/shared";
 import { useStore } from "zustand";
 import { createStore } from "zustand/vanilla";
 import type { PageStatus } from "../chapter/status.ts";
+import { clampView, contentBox, pageStartView, type Size, viewAtY } from "./page-layout.ts";
 import { editorStore } from "./store.ts";
-import { clampView, contentBox, pageOffsets, type Size, stripSize, viewAtOffset } from "./strip-layout.ts";
 
 export type PageMeta = {
   id: string;
@@ -35,12 +35,12 @@ export type ViewMode = "original" | "translated" | "split";
 export type ChapterState = {
   chapterId: string | null;
   pages: PageMeta[];
-  offsets: number[];
   cache: Record<string, CachedState>;
   activePageId: string | null;
-  centerPageId: string | null;
-  /** Kích thước khung canvas (px màn hình) — để kẹp khung nhìn khi cuộn tới page từ ngoài canvas. */
+  /** Kích thước khung canvas (px màn hình) — để đặt khung nhìn khi đổi page / cuộn tới khối từ ngoài canvas. */
   box: Size;
+  /** Người dùng đã tự zoom → đổi page giữ zoom; chưa → mỗi page vừa khung theo chính nó. */
+  zoomed: boolean;
   viewMode: ViewMode;
   /** Đang giữ `O`: tạm xem ảnh gốc, nhả = về `viewMode`. */
   holdOriginal: boolean;
@@ -52,9 +52,10 @@ export type ChapterActions = {
   /** Ghi state từ server; bỏ qua bản có version cũ hơn bản đang cache (VD request về muộn). */
   setStates(rows: ({ page_id: string } & CachedState)[]): void;
   setCached(pageId: string, entry: Partial<CachedState> & { version: number }): void;
+  /** Đổi page active; page khác page cũ → khung nhìn về đầu page mới (vừa khung, căn giữa). */
   setActive(pageId: string | null): void;
-  setCenter(pageId: string | null): void;
   setBox(box: Size): void;
+  setZoomed(zoomed: boolean): void;
   setViewMode(mode: ViewMode): void;
   setHoldOriginal(hold: boolean): void;
 };
@@ -62,11 +63,10 @@ export type ChapterActions = {
 const initial = (chapterId: string | null): ChapterState => ({
   chapterId,
   pages: [],
-  offsets: [],
   cache: {},
   activePageId: null,
-  centerPageId: null,
   box: { w: 0, h: 0 },
+  zoomed: false,
   viewMode: "translated",
   holdOriginal: false,
 });
@@ -96,7 +96,7 @@ export function createChapterStore() {
     reset: (chapterId) => set(initial(chapterId)),
     setPages: (pages) => {
       if (samePages(get().pages, pages)) return;
-      set({ pages, offsets: pageOffsets(pages.map((p) => p.height)) });
+      set({ pages });
     },
     setStates: (rows) =>
       set((s) => {
@@ -130,9 +130,20 @@ export function createChapterStore() {
         };
         return { cache: { ...s.cache, [pageId]: next } };
       }),
-    setActive: (activePageId) => set({ activePageId }),
-    setCenter: (centerPageId) => set({ centerPageId }),
+    setActive: (activePageId) => {
+      const s = get();
+      if (s.activePageId === activePageId) return;
+      set({ activePageId });
+      const p = s.pages.find((x) => x.id === activePageId);
+      // Khung chưa đo (canvas chưa mount) → canvas tự vừa khung lần đầu.
+      if (!p || s.box.w === 0) return;
+      const e = editorStore.getState();
+      e.setView(
+        pageStartView({ w: p.width, h: p.height }, s.viewMode === "split", s.box, s.zoomed ? e.view.scale : undefined),
+      );
+    },
     setBox: (box) => set({ box }),
+    setZoomed: (zoomed) => set({ zoomed }),
     setViewMode: (viewMode) => set({ viewMode }),
     setHoldOriginal: (holdOriginal) => {
       if (get().holdOriginal !== holdOriginal) set({ holdOriginal });
@@ -155,32 +166,16 @@ export function useChapterStore<T>(selector: (s: ChapterState & ChapterActions) 
   return useStore(chapterStore, selector);
 }
 
-/** Offset trên strip của page đang sửa (0 khi chưa có). */
-export function activeOffset(s: ChapterState = chapterStore.getState()): number {
-  const i = s.pages.findIndex((p) => p.id === s.activePageId);
-  return i >= 0 ? (s.offsets[i] ?? 0) : 0;
-}
-
-/** Cuộn khung nhìn để điểm `y` (toạ độ page) của page nằm gần mép trên khung (`margin` px màn hình). */
-export function focusPage(pageId: string, y = 0, margin = 0) {
-  const s = chapterStore.getState();
-  const i = s.pages.findIndex((p) => p.id === pageId);
-  if (i < 0) return;
-  const e = editorStore.getState();
-  const v = viewAtOffset(e.view, (s.offsets[i] ?? 0) + y);
-  const c = contentBox(stripSize(s.pages.map((p) => ({ w: p.width, h: p.height }))), s.viewMode === "split");
-  e.setView(clampView({ ...v, y: v.y + margin }, c, s.box, c.x));
-}
-
-/** Cuộn canvas tới khối (toạ độ page) chỉ khi khối đang nằm ngoài khung nhìn theo chiều dọc. */
+/** Cuộn canvas tới khối (toạ độ page active) chỉ khi khối đang nằm ngoài khung nhìn theo chiều dọc. */
 export function revealRect(pageId: string, rect: { y: number; h: number }, margin = 80) {
   const s = chapterStore.getState();
-  const i = s.pages.findIndex((p) => p.id === pageId);
-  if (i < 0) return;
-  const { view } = editorStore.getState();
-  const top = (s.offsets[i] ?? 0) + rect.y;
-  const vTop = -view.y / view.scale;
-  const vBottom = vTop + s.box.h / view.scale;
-  if (s.box.h > 0 && top >= vTop && top + rect.h <= vBottom) return;
-  focusPage(pageId, rect.y, margin);
+  const p = s.pages.find((x) => x.id === pageId);
+  if (!p || s.activePageId !== pageId) return;
+  const e = editorStore.getState();
+  const vTop = -e.view.y / e.view.scale;
+  const vBottom = vTop + s.box.h / e.view.scale;
+  if (s.box.h > 0 && rect.y >= vTop && rect.y + rect.h <= vBottom) return;
+  const v = viewAtY(e.view, rect.y);
+  const c = contentBox({ w: p.width, h: p.height }, s.viewMode === "split");
+  e.setView(clampView({ ...v, y: v.y + margin }, c, s.box, c.x));
 }

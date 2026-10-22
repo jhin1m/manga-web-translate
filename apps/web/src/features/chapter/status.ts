@@ -1,6 +1,6 @@
 /** Nhãn + tông màu trạng thái chương/page (CSS .status[data-tone]). */
 import type { ChapterStatus } from "../series/api.ts";
-import { autoCommitStarting, type UploadView } from "./next-action.ts";
+import type { UploadView } from "./next-action.ts";
 
 export type Tone = "ok" | "busy" | "warn" | "danger" | "idle";
 
@@ -8,6 +8,7 @@ export const CHAPTER_STATUS: Record<ChapterStatus, { label: string; tone: Tone }
   draft: { label: "Nháp (chưa commit)", tone: "idle" },
   ingesting: { label: "Đang cắt trang", tone: "busy" },
   processing: { label: "Đang xử lý", tone: "busy" },
+  prepared: { label: "Chờ dịch", tone: "idle" },
   review: { label: "Chờ duyệt", tone: "ok" },
   partial_failed: { label: "Có trang lỗi", tone: "danger" },
   done: { label: "Xong", tone: "ok" },
@@ -17,7 +18,7 @@ export type PageStatus = "pending" | "preparing" | "prepared" | "translating" | 
 
 /** Trạng thái không còn thay đổi nếu không có thao tác người dùng → dừng polling. */
 export const isChapterSettled = (s: ChapterStatus | undefined) =>
-  s === "draft" || s === "review" || s === "partial_failed" || s === "done";
+  s === "draft" || s === "prepared" || s === "review" || s === "partial_failed" || s === "done";
 
 /**
  * Chip trạng thái ở thanh trên màn chương — chỗ duy nhất nói chương đang ở đâu ("Đang dịch 3/5", "Chờ duyệt · 2
@@ -30,21 +31,28 @@ export function chapterChip(input: {
   failed: number;
   /** Trang cần xem (page-status.needsReview). */
   review: number;
+  /** Trang chưa xong bước 1 (chờ / đang xoá chữ + OCR). */
+  preparing: number;
   upload: UploadView | null;
 }): { label: string; tone: Tone } {
   const { status, pages, upload } = input;
   const review = input.review ? ` · ${input.review} cần xem` : "";
   switch (status) {
     case "draft":
-      if (autoCommitStarting(upload)) return { label: "Đang bắt đầu dịch", tone: "busy" };
       if (upload?.phase === "uploading") return { label: `Đang tải ảnh ${upload.done}/${upload.total}`, tone: "busy" };
       if (upload?.phase === "failed" || upload?.phase === "incomplete")
         return { label: `Tải dở ${upload.done}/${upload.total} ảnh`, tone: "warn" };
       return { label: "Nháp", tone: "idle" };
     case "ingesting":
-      return { label: "Đang cắt trang", tone: "busy" };
+      return { label: "Bước 1 · đang cắt trang", tone: "busy" };
     case "processing":
+      if (input.preparing > 0) return { label: `Bước 1 · OCR ${pages - input.preparing}/${pages}`, tone: "busy" };
       return { label: pages ? `Đang dịch ${input.ready}/${pages}` : "Đang dịch", tone: "busy" };
+    case "prepared":
+      return {
+        label: `Xong bước 1 · chờ dịch${input.failed ? ` · lỗi ${input.failed} trang` : ""}`,
+        tone: input.failed ? "warn" : "idle",
+      };
     case "partial_failed":
       return pages
         ? { label: `Lỗi ${input.failed} trang${review}`, tone: "danger" }

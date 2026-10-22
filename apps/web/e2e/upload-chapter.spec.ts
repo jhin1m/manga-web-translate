@@ -1,7 +1,7 @@
 /**
  * Luồng chính: thả ZIP 10 trang ở home → mở thẳng màn chương (series duy nhất, số chương từ tên ZIP) trong khi ảnh
- * còn đang upload → upload xong tự dịch → worker giả → 10 trang "Xong" trên rail. Thêm: drawer Hoạt động ở home khi
- * đang upload; màn series (3 ảnh lẻ = 1 chương số kế tiếp, tự dịch) + đổi số chương / series trên thanh trên +
+ * còn đang upload → upload xong bấm "Bước 1" → worker giả → "Bước 2 · Dịch" → 10 trang "Xong" trên rail. Thêm: drawer
+ * Hoạt động ở home khi đang upload; màn series (3 ảnh lẻ = 1 chương nháp số kế tiếp) + đổi số chương / series trên thanh trên +
  * glossary thêm nhanh; file lỗi → dòng xác nhận cũ báo lỗi. Test đầu đăng nhập bằng form `/login` (các spec khác
  * dùng dev auto-login).
  */
@@ -14,7 +14,9 @@ import { login, loginWithForm, state } from "./helpers.ts";
 const ws = state.workspaceId;
 const s = state.seriesId;
 
-test("drop a 10-page ZIP on home, open the chapter while uploading, then it translates itself", async ({ page }) => {
+test("drop a 10-page ZIP on home, open the chapter while uploading, then Bước 1 → Bước 2 translate it", async ({
+  page,
+}) => {
   const names = ["10.png", "2.png", "1.png", "9.png", "3.png", "8.png", "4.png", "7.png", "5.png", "6.png"];
   const zip = zipSync(
     Object.fromEntries([
@@ -44,7 +46,7 @@ test("drop a 10-page ZIP on home, open the chapter while uploading, then it tran
   await expect(page).toHaveURL(/\/w\/.+\/s\/.+\/c\/[0-9a-f-]{36}$/, { timeout: 30_000 });
   await expect(page.getByRole("heading", { name: /^Chương 501/ })).toBeVisible();
   await expect(page.getByRole("status", { name: "Tiến độ tải ảnh" })).toContainText("Đang tải ảnh");
-  await expect(page.getByRole("button", { name: "Dịch chương" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Bước 1 · Xoá chữ + OCR" })).toBeDisabled();
   await expect.poll(() => held.length).toBeGreaterThan(0);
   // Chưa file nào lên storage nhưng ảnh xem trước đã hiện từ file local, đúng thứ tự tên tự nhiên.
   const preview = page.getByRole("list", { name: "Ảnh gốc đã tải" });
@@ -66,13 +68,15 @@ test("drop a 10-page ZIP on home, open the chapter while uploading, then it tran
   hold = false;
   for (const r of held.splice(0)) await r.continue();
 
-  // Upload xong → tự dịch, không bấm "Dịch chương".
-  await expect(page.getByRole("status", { name: "Trạng thái chương" })).toHaveText(/^Đang (cắt trang|dịch)/, {
-    timeout: 30_000,
-  });
+  // Upload xong → bấm Bước 1 → xong bước 1 chờ bấm Bước 2.
+  const step1 = page.getByRole("button", { name: "Bước 1 · Xoá chữ + OCR" });
+  await expect(step1).toBeEnabled({ timeout: 30_000 });
+  await step1.click();
 
   let ready = false;
   const worker = runFakeWorker(state.token, () => ready);
+  await expect(page.getByRole("status", { name: "Trạng thái chương" })).toHaveText(/chờ dịch$/, { timeout: 30_000 });
+  await page.getByRole("button", { name: "Bước 2 · Dịch" }).click();
   await expect(page.getByRole("status", { name: "Trạng thái chương" })).toHaveText(/^Chờ duyệt/, { timeout: 30_000 });
   ready = true;
   await worker;
@@ -88,7 +92,7 @@ test("drop a 10-page ZIP on home, open the chapter while uploading, then it tran
   await expect(page.getByRole("heading", { name: /^Chương 501/ })).toBeVisible();
 });
 
-test("series page: 3 loose images = 1 chapter that translates itself; fix its number/series in the header", async ({
+test("series page: 3 loose images = 1 draft chapter waiting for Bước 1; fix its number/series in the header", async ({
   page,
 }) => {
   await login(page);
@@ -107,12 +111,11 @@ test("series page: 3 loose images = 1 chapter that translates itself; fix its nu
   await zone
     .locator('input[type="file"]')
     .setInputFiles(["p1.png", "p2.png", "p3.png"].map((name) => ({ name, mimeType: "image/png", buffer: PNG_1PX })));
-  // Ảnh lẻ 1 chương, số kế tiếp (tên ảnh là số trang) → mở thẳng màn chương, tự dịch khi tải xong.
+  // Ảnh lẻ 1 chương, số kế tiếp (tên ảnh là số trang) → mở thẳng màn chương; tải xong vẫn nháp, chờ Bước 1.
   await expect(page).toHaveURL(new RegExp(`/s/${s}/c/[0-9a-f-]{36}$`), { timeout: 30_000 });
   await expect(page.getByRole("heading", { name: new RegExp(`^Chương ${next}$`) })).toBeVisible();
-  await expect(page.getByRole("status", { name: "Trạng thái chương" })).toHaveText(/^Đang (bắt đầu dịch|cắt trang)/, {
-    timeout: 30_000,
-  });
+  await expect(page.getByRole("button", { name: "Bước 1 · Xoá chữ + OCR" })).toBeEnabled({ timeout: 30_000 });
+  await expect(page.getByRole("status", { name: "Trạng thái chương" })).toHaveText("Nháp");
 
   // Số trùng chương có sẵn → báo lỗi, không đổi; số mới + series khác → URL theo series mới.
   const title = page.getByRole("button", { name: `Chương ${next}`, exact: true });

@@ -5,7 +5,8 @@ import type { PageStatus } from "./status.ts";
 describe("page level", () => {
   it("maps the 6 page statuses to 4 levels", () => {
     const all: PageStatus[] = ["pending", "preparing", "prepared", "translating", "ready", "failed"];
-    expect(all.map(pageLevel)).toEqual(["todo", "busy", "busy", "busy", "done", "error"]);
+    // pending = đã xếp hàng bước 1 (đang chạy); prepared = xong bước 1, chờ người dùng bấm Dịch.
+    expect(all.map(pageLevel)).toEqual(["busy", "busy", "todo", "busy", "done", "error"]);
   });
 
   it("flags failed pages and pending AI updates for review", () => {

@@ -22,7 +22,6 @@ import { lazy, Suspense, useEffect } from "react";
 import { WorkspaceGlossaryPage } from "../features/glossary/glossary-editor.tsx";
 import { HomePage } from "../features/home/home-page.tsx";
 import { SeriesPage } from "../features/series/series-page.tsx";
-import { uploadManager } from "../features/upload/upload-manager.ts";
 import { errorMessage } from "../lib/api.ts";
 import { setCurrentWs, useCurrentWorkspace } from "../lib/current-workspace.ts";
 import { AcceptInvitePage } from "../routes/accept-invite.tsx";
@@ -38,12 +37,6 @@ const ChapterWorkspace = lazy(() =>
 
 export const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: true, staleTime: 5_000 } },
-});
-
-// Tự dịch khi upload xong chạy ngoài cây React → làm mới chương + danh sách (home, series, "Việc cần làm").
-uploadManager.onCommitted((ws, chapterId) => {
-  void queryClient.invalidateQueries({ queryKey: ["chapter", ws, chapterId] });
-  void queryClient.invalidateQueries({ queryKey: ["series", ws] });
 });
 
 export type RouterContext = { queryClient: QueryClient };

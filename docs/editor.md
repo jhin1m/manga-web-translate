@@ -21,9 +21,9 @@ nháp, lần mở sau đề nghị khôi phục) — xem `use-chapter-session.ts
 
 ## Khoá chương theo trạng thái
 
-Khoá chỉ giữ khi chương **ổn định** (`review` / `partial_failed` / `done`, đã có page; `isChapterSettled` +
+Khoá chỉ giữ khi chương **ổn định** (`prepared` / `review` / `partial_failed` / `done`, đã có page; `isChapterSettled` +
 `pageIds.length > 0`, `lockEnabled` trong `use-chapter-session.ts`). Chương đang cắt/dịch → không giữ khoá, chỉ xem.
-"Dịch chương" / "Dịch lại" / "Chạy lại trang lỗi" đi qua `runAi`: lưu hết (`saver.flush`) → tạm dừng giữ khoá →
+"Bước 2 · Dịch" / "Dịch lại" / "Chạy lại trang lỗi" đi qua `runAi`: lưu hết (`saver.flush`) → tạm dừng giữ khoá →
 nhả khoá (cùng chuỗi `serial` với lock) → gọi API; khoá được lấy lại khi chương ổn định trở lại. Người khác đang giữ
 khoá → băng cảnh báo báo tên + "Thử lại", chỉ báo cạnh chip đổi thành "Chỉ xem", editor chỉ xem. Đang giữ khoá
 bình thường không có băng (chỉ báo nhỏ icon khoá + "Đã lưu" ở thanh trên).
@@ -84,16 +84,21 @@ người đã chỉnh). "Đã xem" → `POST /pages/:id/ai-update/ack {ai_rev}` 
 
 ## Chế độ xem (Gốc / Dịch / Chia đôi)
 
+Canvas hiện **từng trang một** (page active); đổi trang ở rail, nút ‹ › góc dưới canvas hoặc ←/→/A/D — rail,
+inspector và `?page=` luôn theo page active (URL không có `?page=` = trang đầu).
+
 Thanh trên màn chương: `[Gốc | Dịch | Chia đôi]` (`chapterStore.viewMode`). Gốc = ảnh gốc, ẩn chữ; Dịch = ảnh sạch +
 chữ (mặc định); Chia đôi = cột Gốc bên trái cột Dịch trên cùng 1 Stage (cuộn/zoom đồng bộ), chỉ cột Dịch nhận thao
-tác — bấm/kéo ở cột Gốc = kéo canvas; trần mount 2 page (mỗi page 2 ảnh). Giữ `O` = tạm xem Gốc, nhả = về chế độ
+tác — bấm/kéo ở cột Gốc = kéo canvas. Giữ `O` = tạm xem Gốc, nhả = về chế độ
 trước (chia đôi: cột phải cũng hiện gốc, bố cục giữ nguyên). `editorStore.showOriginal` suy ra từ chế độ đang hiện.
 
-Khung nhìn mở chương (và khi bật/tắt Chia đôi): `strip-layout.fitScale` — vừa bề ngang nội dung, trọn chiều cao 1
-page dạng tờ (cao ≤ 2× rộng; dải webtoon chỉ vừa bề ngang), trần 100%. Khung đổi cỡ trước khi người dùng động vào
-khung nhìn → vừa lại; đã tự zoom → Chia đôi giữ zoom. Hàng công cụ nằm cố định trên canvas (không đè ảnh); góc dưới
-"Trang i/N" theo page ở giữa khung. Page chưa `ready` (`pageLevel` busy/todo): cột Dịch hiện ảnh gốc + lớp mờ +
-"Đang dịch…"/"Chờ dịch", không vẽ chữ; ảnh sạch vẫn tải ngầm để đổi ngay khi xong. Chế độ Gốc không đổi.
+Khung nhìn mở chương / đổi trang / bật-tắt Chia đôi: `page-layout.pageStartView` + `fitScale` theo **chính page đang
+hiện** (không theo page rộng nhất chương) — vừa bề ngang nội dung, trọn chiều cao page dạng tờ (cao ≤ 2× rộng; dải
+webtoon chỉ vừa bề ngang), trần 100%, căn giữa ngang, đầu page sát mép trên. Khung đổi cỡ trước khi người dùng động
+vào khung nhìn → vừa lại; đã tự zoom (Ctrl/Cmd+cuộn, `chapterStore.zoomed`) → đổi trang / Chia đôi giữ zoom. Hàng
+công cụ nằm cố định trên canvas (không đè ảnh); góc dưới "‹ Trang i/N ›" + zoom. Page đang chạy AI (`pageLevel`
+busy): cột Dịch hiện ảnh gốc + lớp mờ + "Đang xử lý…", không vẽ chữ; ảnh sạch vẫn tải ngầm để đổi ngay khi xong.
+Page xong bước 1, chờ dịch (`prepared`, "Chờ dịch"): hiện ảnh sạch như thường để soát, sửa mask trước khi bấm Dịch. Chế độ Gốc không đổi.
 
 ## Phím tắt
 

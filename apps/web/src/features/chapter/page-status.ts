@@ -7,16 +7,16 @@ import type { PageStatus, Tone } from "./status.ts";
 export type PageLevel = "todo" | "busy" | "done" | "error";
 
 export const PAGE_LEVEL: Record<PageLevel, { label: string; tone: Tone }> = {
-  todo: { label: "Chưa xử lý", tone: "idle" },
+  todo: { label: "Chờ dịch", tone: "idle" },
   busy: { label: "Đang xử lý", tone: "busy" },
   done: { label: "Xong", tone: "ok" },
   error: { label: "Lỗi", tone: "danger" },
 };
 
 const LEVEL: Record<PageStatus, PageLevel> = {
-  pending: "todo",
+  pending: "busy",
   preparing: "busy",
-  prepared: "busy",
+  prepared: "todo",
   translating: "busy",
   ready: "done",
   failed: "error",

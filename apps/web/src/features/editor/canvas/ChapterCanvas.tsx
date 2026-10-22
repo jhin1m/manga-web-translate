@@ -1,48 +1,33 @@
 /**
- * Canvas cả chương: 1 Stage bằng khung nhìn (không bao giờ bằng strip — giới hạn canvas Safari), các page xếp dọc
- * theo `offsets` và vẽ qua transform `view` (toạ độ strip). Chỉ ≤ 4 page trong tầm nhìn mount ảnh (PageSlot).
- * Page đang sửa (active) có lớp chữ/mask/OCR sửa được; page khác chỉ vẽ chữ từ cache.
+ * Canvas màn chương: hiện từng trang một — chỉ page đang sửa (active), vẽ qua transform `view` (toạ độ page) trên 1
+ * Stage bằng khung nhìn (không bao giờ bằng page — giới hạn canvas Safari). Đổi trang ở rail / phím ←/→.
  *
  * Chế độ xem (chapterStore): Gốc = ảnh gốc, ẩn chữ; Dịch = ảnh sạch + chữ; Chia đôi = thêm cột Gốc bên trái cùng
- * Stage (cuộn/zoom đồng bộ tự nhiên), chỉ cột Dịch nhận thao tác — bấm/kéo ở cột Gốc = kéo canvas; trần mount
- * tính theo cặp (2 page).
+ * Stage (cuộn/zoom đồng bộ tự nhiên), chỉ cột Dịch nhận thao tác — bấm/kéo ở cột Gốc = kéo canvas.
  *
- * Mở chương / bật-tắt chia đôi: vừa khung (`fitScale` — trọn 1 page dạng tờ, trần 100%); đã tự zoom thì giữ zoom.
- * Page chưa dịch xong (`processing`) hiện ảnh gốc + nhãn trạng thái, không vẽ chữ.
+ * Mở chương / đổi trang / bật-tắt chia đôi: vừa khung theo chính page đó (`fitScale` — trọn page dạng tờ, trần
+ * 100%), căn giữa ngang; đã tự zoom thì giữ zoom. Page đang chạy AI (`processing`) hiện ảnh gốc + nhãn trạng thái,
+ * không vẽ chữ.
  *
- * Cuộn = cuộn strip; Ctrl/Cmd+cuộn = zoom quanh con trỏ; Space giữ (hoặc chuột giữa) + kéo = kéo canvas.
- * Bấm vào page không active chỉ kích hoạt page đó (không bắt đầu công cụ). Sửa chữ = textarea HTML phủ lên box.
+ * Cuộn = cuộn trong page; Ctrl/Cmd+cuộn = zoom quanh con trỏ; Space giữ (hoặc chuột giữa) + kéo = kéo canvas.
+ * Sửa chữ = textarea HTML phủ lên box.
  */
-import type { TextBox } from "@mtl/shared";
 import type Konva from "konva";
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { Stage as KStage, Layer } from "react-konva";
 import { addBox, editText, newTextBox } from "../actions.ts";
-import { activeOffset, chapterStore, effectiveMode, useChapterStore } from "../chapter-store.ts";
+import { chapterStore, effectiveMode, useChapterStore } from "../chapter-store.ts";
 import type { FontKit } from "../fonts.ts";
 import { lineStep } from "../measure.ts";
+import { clampView, contentBox, fitScale, pageStartView, screenToPage } from "../page-layout.ts";
 import { editorStore, useEditor, type View } from "../store.ts";
-import {
-  clampView,
-  contentBox,
-  fitScale,
-  MAX_MOUNTED,
-  pageAt,
-  screenToStrip,
-  stripSize,
-  stripToPage,
-  viewAtOffset,
-  visiblePages,
-} from "../strip-layout.ts";
 import { MaskLayer } from "./MaskLayer.tsx";
 import { OcrOverlay, type PageRect } from "./OcrSelect.tsx";
 import { PageSlot, type SlotImages, type SlotProcessing } from "./PageSlot.tsx";
-import { StaticTextLayer } from "./StaticTextLayer.tsx";
 import { TextLayer } from "./TextLayer.tsx";
 
 const MIN_SCALE = 0.1;
 const MAX_SCALE = 4;
-const NO_BOXES: TextBox[] = [];
 
 const normRect = (a: { x: number; y: number }, b: { x: number; y: number }): PageRect => ({
   x: Math.min(a.x, b.x),
@@ -61,22 +46,17 @@ const clipRect = (r: PageRect, page: { w: number; h: number }): PageRect => {
 export const ChapterCanvas = memo(function ChapterCanvas(props: {
   kit: FontKit;
   images: Map<string, SlotImages>;
-  /** Page chưa dịch xong theo tiến độ chương (page vắng mặt = xong hoặc lỗi). */
+  /** Page đang chạy AI theo tiến độ chương (vắng mặt = chờ dịch, xong hoặc lỗi). */
   processing: ReadonlyMap<string, SlotProcessing>;
   defaultFont: string;
-  /** Page đưa lên đầu khung khi mở chương (từ `?page=`); không có → đầu strip. */
-  initialPageId: string | null;
   ocrPending: PageRect[];
   onOcr(r: PageRect): void;
-  onActivate(pageId: string): void;
   onImageError(msg: string | null): void;
 }) {
   const { kit } = props;
   const wrapRef = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ w: 0, h: 0 });
   const pages = useChapterStore((s) => s.pages);
-  const offsets = useChapterStore((s) => s.offsets);
-  const cache = useChapterStore((s) => s.cache);
   const view = useEditor((s) => s.view);
   const tool = useEditor((s) => s.tool);
   const showOriginal = useChapterStore((s) => effectiveMode(s) === "original");
@@ -91,18 +71,15 @@ export const ChapterCanvas = memo(function ChapterCanvas(props: {
     start: View;
     from: { x: number; y: number };
   } | null>(null);
-  // State (không phải ref): chỉ báo trang cần chạy lại khi vừa khung xong, kể cả khi page ở giữa không đổi.
   const [fitted, setFitted] = useState(false);
-  /** Người dùng đã tự zoom → bật/tắt chia đôi giữ zoom. */
-  const userZoomed = useRef(false);
-  /** Khung nhìn do lần vừa khung gần nhất đặt; khung nhìn hiện tại khác nó = người dùng đã cuộn/zoom/nhảy page. */
+  /** Khung nhìn do lần vừa khung gần nhất đặt; khung nhìn hiện tại khác nó = người dùng đã cuộn/zoom/đổi trang. */
   const lastFit = useRef<View | null>(null);
 
-  const strip = useMemo(() => stripSize(pages.map((p) => ({ w: p.width, h: p.height }))), [pages]);
-  const content = contentBox(strip, split);
-  const activeIdx = pages.findIndex((p) => p.id === activeId);
-  const active = activeIdx >= 0 ? pages[activeIdx] : undefined;
-  const activeOff = activeIdx >= 0 ? (offsets[activeIdx] ?? 0) : 0;
+  const active = pages.find((p) => p.id === activeId);
+  const pw = active?.width ?? 0;
+  const ph = active?.height ?? 0;
+  const page = useMemo(() => ({ w: pw, h: ph }), [pw, ph]);
+  const content = contentBox(page, split);
 
   useEffect(() => {
     const el = wrapRef.current;
@@ -117,46 +94,29 @@ export const ChapterCanvas = memo(function ChapterCanvas(props: {
     return () => ro.disconnect();
   }, []);
 
-  // Mở chương: vừa khung theo page từ `?page=` (hoặc page đầu), đưa page đó lên trên. Khung đổi cỡ khi chưa ai
-  // động vào khung nhìn (bảng dưới mở/thu sau lần đo đầu) → vừa lại.
-  const { initialPageId } = props;
+  // Lần đầu có page active + khung đã đo: vừa khung theo page đó. Khung đổi cỡ khi chưa ai động vào khung nhìn
+  // (bảng dưới mở/thu sau lần đo đầu) → vừa lại. Đổi trang sau đó do chapterStore.setActive đặt khung nhìn.
   useEffect(() => {
-    if (size.w === 0 || pages.length === 0) return;
+    if (size.w === 0 || page.w === 0) return;
     if (fitted && editorStore.getState().view !== lastFit.current) return;
-    const s = chapterStore.getState();
-    const c = contentBox(strip, s.viewMode === "split");
-    const found = initialPageId ? s.pages.findIndex((p) => p.id === initialPageId) : -1;
-    const i = Math.max(0, found);
-    const p = s.pages[i];
-    const scale = fitScale(c, p && { w: p.width, h: p.height }, size, MIN_SCALE);
-    const v = clampView(viewAtOffset({ scale, x: 0, y: 0 }, s.offsets[i] ?? 0), c, size, c.x);
+    const v = pageStartView(page, chapterStore.getState().viewMode === "split", size);
     lastFit.current = v;
     editorStore.getState().setView(v);
     setFitted(true);
-  }, [fitted, size, pages.length, strip, initialPageId]);
+  }, [fitted, size, page]);
 
-  // Bật/tắt chia đôi: vừa lại theo nội dung mới (trừ khi đã tự zoom), giữ điểm strip đang ở giữa khung.
+  // Bật/tắt chia đôi: vừa lại theo nội dung mới (trừ khi đã tự zoom), giữ điểm page đang ở giữa khung.
   const lastSplit = useRef(split);
   useEffect(() => {
     if (lastSplit.current === split) return;
     lastSplit.current = split;
-    if (!fitted || size.w === 0) return;
+    if (!fitted || size.w === 0 || page.w === 0) return;
     const v = editorStore.getState().view;
-    const c = contentBox(strip, split);
+    const c = contentBox(page, split);
     const midY = (size.h / 2 - v.y) / v.scale;
-    const s = chapterStore.getState();
-    const p = s.pages[pageAt(midY, s.offsets)];
-    const scale = userZoomed.current ? v.scale : fitScale(c, p && { w: p.width, h: p.height }, size, MIN_SCALE);
+    const scale = chapterStore.getState().zoomed ? v.scale : fitScale(c, page, size, MIN_SCALE);
     editorStore.getState().setView(clampView({ scale, x: 0, y: size.h / 2 - midY * scale }, c, size, c.x));
-  }, [fitted, split, strip, size]);
-
-  // Page ở giữa khung nhìn (để ghi `?page=`).
-  const centerY = (size.h / 2 - view.y) / view.scale;
-  const centerIdx = pageAt(centerY, offsets);
-  const centerId = centerIdx >= 0 ? (pages[centerIdx]?.id ?? null) : null;
-  useEffect(() => {
-    if (fitted && chapterStore.getState().centerPageId !== centerId) chapterStore.getState().setCenter(centerId);
-  }, [fitted, centerId]);
+  }, [fitted, split, size, page]);
 
   useEffect(() => {
     const isField = (t: EventTarget | null) =>
@@ -178,16 +138,16 @@ export const ChapterCanvas = memo(function ChapterCanvas(props: {
 
   const setView = (v: View) => editorStore.getState().setView(clampView(v, content, size, content.x));
   /** Toạ độ màn hình → toạ độ trong page active. */
-  const toPage = (p: { x: number; y: number }) => stripToPage(screenToStrip(p, view), activeOff);
+  const toPage = (p: { x: number; y: number }) => screenToPage(p, view);
 
   const onWheel = (e: Konva.KonvaEventObject<WheelEvent>) => {
     e.evt.preventDefault();
     const { deltaX, deltaY, ctrlKey, metaKey, shiftKey } = e.evt;
     if (ctrlKey || metaKey) {
-      userZoomed.current = true;
+      chapterStore.getState().setZoomed(true);
       const p = e.target.getStage()?.getPointerPosition() ?? { x: size.w / 2, y: size.h / 2 };
       const scale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, view.scale * Math.exp(-deltaY * 0.0015)));
-      const at = screenToStrip(p, view);
+      const at = toPage(p);
       setView({ scale, x: p.x - at.x * scale, y: p.y - at.y * scale });
     } else if (shiftKey) setView({ ...view, x: view.x - deltaY });
     else setView({ ...view, x: view.x - deltaX, y: view.y - deltaY });
@@ -199,21 +159,12 @@ export const ChapterCanvas = memo(function ChapterCanvas(props: {
     if (!stage || !p) return;
     const s = editorStore.getState();
     const base = { sx: p.x, sy: p.y, start: view, from: toPage(p) };
-    const at = screenToStrip(p, view);
     // Cột Gốc khi chia đôi chỉ để xem: kéo = kéo canvas.
-    if (space || e.evt.button === 1 || (split && e.evt.button === 0 && at.x < 0)) {
+    if (space || e.evt.button === 1 || (split && e.evt.button === 0 && base.from.x < 0)) {
       gesture.current = { kind: "pan", ...base };
       return;
     }
     if (e.evt.button !== 0) return;
-    // Bấm vào page khác → chỉ kích hoạt page đó.
-    const hit = at.y >= 0 && at.y < strip.h ? pageAt(at.y, offsets) : -1;
-    const hitId = hit >= 0 ? pages[hit]?.id : undefined;
-    if (hitId && hitId !== activeId) {
-      s.select(null);
-      props.onActivate(hitId);
-      return;
-    }
     if (tool === "select") {
       if (
         e.target === stage ||
@@ -275,17 +226,9 @@ export const ChapterCanvas = memo(function ChapterCanvas(props: {
     }
   };
 
-  // Vùng nhìn theo toạ độ strip; mỗi page dùng bản dịch theo offset của nó.
+  // Vùng nhìn theo toạ độ page.
   const viewport = { x: -view.x / view.scale, y: -view.y / view.scale, w: size.w / view.scale, h: size.h / view.scale };
-  const mounted = visiblePages(
-    offsets,
-    pages.map((p) => p.height),
-    viewport,
-    1,
-    split ? MAX_MOUNTED / 2 : MAX_MOUNTED,
-  );
-  const local = (off: number) => ({ ...viewport, y: viewport.y - off });
-  // Đã xem ảnh gốc 1 lần → giữ layer gốc của page đang mount (bật/tắt không tải lại).
+  // Đã xem ảnh gốc 1 lần → giữ layer gốc của page đang hiện (bật/tắt không tải lại).
   const [originalSeen, setOriginalSeen] = useState(false);
   if (showOriginal && !originalSeen) setOriginalSeen(true);
   const cursor = space ? "grab" : tool === "select" ? "default" : "crosshair";
@@ -306,69 +249,39 @@ export const ChapterCanvas = memo(function ChapterCanvas(props: {
           onPointerUp={onUp}
           onPointerLeave={onUp}
         >
-          <Layer listening={false}>
-            {split &&
-              mounted.map((i) => {
-                const p = pages[i];
-                if (!p) return null;
-                const off = offsets[i] ?? 0;
-                return (
-                  <PageSlot
-                    key={`orig:${p.id}`}
-                    pageId={p.id}
-                    size={{ w: p.width, h: p.height }}
-                    offset={off}
-                    x={content.x}
-                    images={props.images.get(p.id)}
-                    viewport={{ ...local(off), x: viewport.x - content.x }}
-                    scale={view.scale}
-                    showOriginal
-                    keepOriginal={false}
-                    onImageError={props.onImageError}
-                  />
-                );
-              })}
-            {mounted.map((i) => {
-              const p = pages[i];
-              if (!p) return null;
-              const off = offsets[i] ?? 0;
-              return (
+          {active && (
+            <Layer listening={false}>
+              {split && (
                 <PageSlot
-                  key={p.id}
-                  pageId={p.id}
-                  size={{ w: p.width, h: p.height }}
-                  offset={off}
-                  images={props.images.get(p.id)}
-                  viewport={local(off)}
+                  key={`orig:${active.id}`}
+                  pageId={active.id}
+                  size={page}
+                  x={content.x}
+                  images={props.images.get(active.id)}
+                  viewport={{ ...viewport, x: viewport.x - content.x }}
                   scale={view.scale}
-                  showOriginal={showOriginal}
-                  processing={props.processing.get(p.id)}
-                  keepOriginal={originalSeen && !split}
+                  showOriginal
+                  keepOriginal={false}
                   onImageError={props.onImageError}
                 />
-              );
-            })}
-            {!showOriginal &&
-              mounted.map((i) => {
-                const p = pages[i];
-                if (!p || p.id === activeId || props.processing.has(p.id)) return null;
-                const off = offsets[i] ?? 0;
-                return (
-                  <StaticTextLayer
-                    key={p.id}
-                    kit={kit}
-                    boxes={cache[p.id]?.state?.text_boxes ?? NO_BOXES}
-                    offset={off}
-                    viewport={local(off)}
-                  />
-                );
-              })}
-          </Layer>
-          {!showOriginal && active && !props.processing.has(active.id) && (
-            <TextLayer kit={kit} viewport={local(activeOff)} offset={activeOff} />
+              )}
+              <PageSlot
+                key={active.id}
+                pageId={active.id}
+                size={page}
+                images={props.images.get(active.id)}
+                viewport={viewport}
+                scale={view.scale}
+                showOriginal={showOriginal}
+                processing={props.processing.get(active.id)}
+                keepOriginal={originalSeen && !split}
+                onImageError={props.onImageError}
+              />
+            </Layer>
           )}
-          <MaskLayer offset={activeOff} />
-          <OcrOverlay draft={draft} pending={props.ocrPending} offset={activeOff} />
+          {!showOriginal && active && !props.processing.has(active.id) && <TextLayer kit={kit} viewport={viewport} />}
+          <MaskLayer />
+          <OcrOverlay draft={draft} pending={props.ocrPending} />
         </KStage>
       )}
       <TextEditOverlay kit={kit} />
@@ -381,7 +294,6 @@ function TextEditOverlay({ kit }: { kit: FontKit }) {
   const editing = useEditor((s) => s.editing);
   const box = useEditor((s) => (s.editing ? s.doc?.text_boxes.find((b) => b.id === s.editing) : undefined));
   const view = useEditor((s) => s.view);
-  const offset = useChapterStore((s) => activeOffset(s));
   const ref = useRef<HTMLTextAreaElement>(null);
   const cancelled = useRef(false);
 
@@ -416,7 +328,7 @@ function TextEditOverlay({ kit }: { kit: FontKit }) {
       }}
       style={{
         left: view.x + box.x * k,
-        top: view.y + (offset + box.y) * k,
+        top: view.y + box.y * k,
         width: box.w * k,
         height: box.h * k,
         transform: `rotate(${box.rotation}deg)`,
