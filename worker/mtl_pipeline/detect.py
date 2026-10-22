@@ -125,8 +125,29 @@ def dedupe_text_classes(dets: list[Detection], min_cover: float = 0.7) -> list[D
     return [d for d in dets if d.kind == "bubble"] + kept
 
 
-def to_regions(dets: list[Detection], page_w: int, page_h: int) -> list[Region]:
-    """Detection → Region có id theo thứ tự đọc; gắn text_bubble vào bubble chứa nó."""
+# Box nhập vào hàng hiện tại khi chồng lấn dọc với box mở hàng ≥ tỉ lệ này của cạnh ngắn hơn.
+RTL_ROW_OVERLAP = 0.5
+
+
+def rtl_order(regions: list[Region]) -> list[Region]:
+    """Thứ tự đọc manga phải→trái: gom box thành hàng (trên → dưới), trong mỗi hàng đọc từ mép phải sang trái.
+    So với box mở hàng chứ không với dải đã nới — box cao (SFX/lời dẫn vắt qua nhiều khung) không kéo
+    hàng dưới nhập vào hàng trên."""
+    rows: list[tuple[Region, list[Region]]] = []  # (box mở hàng, thành viên)
+    for r in sorted(regions, key=lambda r: (r.bbox.y, -r.bbox.x2)):
+        if rows:
+            anchor, members = rows[-1]
+            overlap = min(anchor.bbox.y2, r.bbox.y2) - max(anchor.bbox.y, r.bbox.y)
+            if overlap >= RTL_ROW_OVERLAP * min(r.bbox.h, anchor.bbox.h):
+                members.append(r)
+                continue
+        rows.append((r, [r]))
+    return [r for _, members in rows for r in sorted(members, key=lambda r: (-r.bbox.x2, r.bbox.y))]
+
+
+def to_regions(dets: list[Detection], page_w: int, page_h: int, rtl: bool = False) -> list[Region]:
+    """Detection → Region có id theo thứ tự đọc; gắn text_bubble vào bubble chứa nó.
+    rtl=True: manga Nhật dạng trang (xem rtl_order)."""
     regions: list[Region] = []
     for d in dedupe_text_classes(dets):
         x1, y1 = max(0, int(round(d.x1))), max(0, int(round(d.y1)))
@@ -137,8 +158,11 @@ def to_regions(dets: list[Detection], page_w: int, page_h: int) -> list[Region]:
         regions.append(
             Region(id="", kind=d.kind, bbox=BBox(x=x1, y=y1, w=x2 - x1, h=y2 - y1), score=round(d.score, 4))
         )
-    # Thứ tự đọc của strip dọc: trên → dưới, rồi trái → phải.
-    regions.sort(key=lambda r: (r.bbox.y, r.bbox.x))
+    if rtl:
+        regions = rtl_order(regions)
+    else:
+        # Thứ tự đọc của strip dọc: trên → dưới, rồi trái → phải.
+        regions.sort(key=lambda r: (r.bbox.y, r.bbox.x))
     for i, r in enumerate(regions):
         r.id = f"r{i}"
     bubbles = [r for r in regions if r.kind == "bubble"]
@@ -177,8 +201,8 @@ class Detector:
             if sc >= self.score_thresh and 0 <= int(lab) < len(CLASSES)
         ]
 
-    def detect(self, img: np.ndarray) -> list[Region]:
-        """img: HxWx3 RGB uint8 → regions theo thứ tự đọc."""
+    def detect(self, img: np.ndarray, rtl: bool = False) -> list[Region]:
+        """img: HxWx3 RGB uint8 → regions theo thứ tự đọc (rtl: phải→trái, xem rtl_order)."""
         page_h, page_w = img.shape[:2]
         spans = tile_spans(page_h, page_w)
         dets: list[Detection] = []
@@ -197,4 +221,4 @@ class Detector:
                         at_seam=top_cut or bottom_cut,
                     )
                 )
-        return to_regions(merge_detections(dets), page_w, page_h)
+        return to_regions(merge_detections(dets), page_w, page_h, rtl)

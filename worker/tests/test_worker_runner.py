@@ -91,7 +91,10 @@ class FakeClient:
 
 
 class FakePipeline:
-    def prepare_image(self, img):
+    rtl: bool | None = None
+
+    def prepare_image(self, img, rtl=False):
+        self.rtl = rtl
         regs = [Region(id="t0", kind="text_free", bbox=BBox(x=2, y=2, w=40, h=20), score=0.9)]
         mask = np.zeros(img.shape[:2], np.uint8)
         return regs, mask, img.copy(), None
@@ -103,7 +106,10 @@ class FakeProvider:
     def __init__(self, error: ProviderError | None = None):
         self.error = error
 
+    source_lang: str | None = None
+
     def ocr_page(self, req):
+        self.source_lang = req.source_lang
         if self.error:
             raise self.error
         items = [OcrItem(id=c.id, source="안녕", confidence=0.9) for c in req.crops]
@@ -145,6 +151,18 @@ def test_prepare_success_uploads_then_completes_with_usage():
     result, usage = c.calls[-1][1]
     assert result["clean_rev"] == 7 and result["mask_rev"] == 7
     assert usage["llm_in"] == 10 and usage["calls"] == 1 and usage["seq"] == 1
+
+
+def test_prepare_uses_payload_language_and_reading_order():
+    # Payload cũ (không reading_order) → ltr; payload mới → truyền rtl + ngôn ngữ nguồn xuống detect/OCR.
+    deps = Deps()
+    run_job(FakeClient(), prepare_job(), HANDLERS, deps)
+    assert deps.pipeline.rtl is False and deps.provider.source_lang == "ko"
+    job = prepare_job()
+    job["payload"] |= {"source_lang": "ja", "reading_order": "rtl"}
+    deps = Deps()
+    assert run_job(FakeClient(), job, HANDLERS, deps) == "succeeded"
+    assert deps.pipeline.rtl is True and deps.provider.source_lang == "ja"
 
 
 def test_rate_limit_is_reported_as_rate_limited_with_partial_and_usage():

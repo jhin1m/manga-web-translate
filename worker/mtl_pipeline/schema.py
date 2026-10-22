@@ -114,6 +114,7 @@ class OcrCrop(BaseModel):
 class OcrRequest(BaseModel):
     page_ord: int
     crops: list[OcrCrop]
+    source_lang: str = "ko"
 
 
 class OcrItem(BaseModel):
@@ -156,11 +157,16 @@ class RollingContext(BaseModel):
     notes: str = ""
 
 
+DEFAULT_HONORIFIC_POLICY = "chuyển kính ngữ sang cách xưng hô/gọi nhau tự nhiên của ngôn ngữ đích"
+
+
 class TranslateRequest(BaseModel):
     pages: list[PageText]
+    source_lang: str = "ko"
+    target_lang: str = "vi"
     glossary: dict[str, str] = Field(default_factory=dict)
     pronoun_rules: str = ""
-    honorific_policy: str = "chuyển -nim/-ssi sang cách xưng hô tiếng Việt tự nhiên"
+    honorific_policy: str = DEFAULT_HONORIFIC_POLICY
     context: RollingContext | None = None
 
 

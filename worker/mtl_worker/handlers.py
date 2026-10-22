@@ -68,11 +68,13 @@ def handle_prepare(ctx: JobContext, deps: Deps) -> dict[str, Any]:
         mask = open_gray(ctx.download(partial["mask"]))
     else:
         ctx.report("detect", 0.05)
-        regions, mask, clean, _ = deps.pipeline.prepare_image(img)
+        # Payload trước khi có reading_order/source_lang (job xếp hàng từ bản cũ) → mặc định manhwa tiếng Hàn.
+        rtl = ctx.payload.get("reading_order", "ltr") == "rtl"
+        regions, mask, clean, _ = deps.pipeline.prepare_image(img, rtl)
     ctx.report("ocr", 0.6)
     try:
         # LLM gọi cuối cùng: lỗi provider vẫn giữ được artifact detect/inpaint.
-        ocr = ocr_page(deps.provider, img, regions, 0)
+        ocr = ocr_page(deps.provider, img, regions, 0, ctx.payload.get("source_lang", "ko"))
     except ProviderError as e:
         failure = classify_provider_error(e)
         ctx.upload("clean", png_bytes(clean)[0])
@@ -109,7 +111,11 @@ def _settings(payload: dict[str, Any]) -> SeriesSettings:
     if s["style_prompt"].strip():
         rules = f"{rules}\nPhong cách: {s['style_prompt'].strip()}".strip()
     return SeriesSettings(
-        glossary=dict(s["glossary"]), pronoun_rules=rules, honorific_policy=s["honorific_policy"]
+        source_lang=s.get("source_lang", "ko"),
+        target_lang=s.get("target_lang", "vi"),
+        glossary=dict(s["glossary"]),
+        pronoun_rules=rules,
+        honorific_policy=s["honorific_policy"],
     )
 
 
@@ -284,7 +290,8 @@ def handle_ocr_region(ctx: JobContext, deps: Deps) -> dict[str, Any]:
         polarity=estimate_polarity(crop),
     )
     ctx.report("ocr", 0.2)
-    ocr = ocr_page(deps.provider, img, [region], 0)
+    source_lang = ctx.payload.get("source_lang", "ko")
+    ocr = ocr_page(deps.provider, img, [region], 0, source_lang)
     ctx.add_usage(ocr.usage)
     item = next((it for it in ocr.items if it.id == region.id), OcrItem(id=region.id, empty=True))
     translation, low = "", item.low_conf
@@ -302,9 +309,8 @@ def handle_ocr_region(ctx: JobContext, deps: Deps) -> dict[str, Any]:
                 )
             ],
         )
-        tr = translate_chapter(
-            deps.provider, [page], SeriesSettings(), "rolling", RollingContext(lines=lines)
-        )
+        settings = SeriesSettings(source_lang=source_lang, target_lang=ctx.payload.get("target_lang", "vi"))
+        tr = translate_chapter(deps.provider, [page], settings, "rolling", RollingContext(lines=lines))
         ctx.add_usage(tr.usage)
         it = tr.items.get("0", {}).get(qualified_id(0, region.id))
         if it:

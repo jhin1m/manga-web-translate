@@ -83,6 +83,7 @@ def test_anthropic_ocr_request_shape_and_parse():
     assert [c["type"] for c in content] == ["text", "text", "image"]
     assert content[2]["source"]["media_type"] == "image/png"
     assert res.items[0].source == "안녕"
+    assert content[0]["text"].startswith("source_lang=ko (tiếng Hàn).")
     assert res.usage[0] == TokenUsage(
         provider="anthropic", model="claude-haiku-5-5", input_tokens=1200, output_tokens=80
     )
@@ -105,6 +106,21 @@ def test_anthropic_translate_sends_json_payload():
     payload = json.loads(kw["messages"][0]["content"][0]["text"])
     assert payload["glossary"] == {"민준": "Minjun"} and payload["pages"][0]["regions"][0]["id"] == "p0.r1"
     assert res.items[0].translation == "Chào" and res.context_notes
+    # Không truyền ngôn ngữ (payload cũ) → mặc định cặp Hàn → Việt.
+    assert payload["source_lang"] == "ko (tiếng Hàn)" and payload["target_lang"] == "vi (tiếng Việt)"
+
+
+def test_language_pair_reaches_ocr_and_translate_payloads():
+    fake = FakeAnthropic([OCR_JSON, TR_JSON])
+    prov = AnthropicProvider("claude-haiku-5-5", client=fake)
+    prov.ocr_page(OcrRequest(page_ord=0, crops=[OcrCrop(id="r1", png=b"\x89PNG")], source_lang="ja"))
+    assert fake.calls[0]["messages"][0]["content"][0]["text"].startswith("source_lang=ja (tiếng Nhật).")
+    page = PageText(
+        ord=0, regions=[RegionText(id="p0.r1", kind="text_bubble", bbox_norm=[0, 0, 1, 1], source="やあ")]
+    )
+    translate_chapter(prov, [page], SeriesSettings(source_lang="ja", target_lang="es"), "rolling")
+    payload = json.loads(fake.calls[1]["messages"][0]["content"][0]["text"])
+    assert payload["source_lang"] == "ja (tiếng Nhật)" and payload["target_lang"] == "es (tiếng Tây Ban Nha)"
 
 
 def test_anthropic_rate_limit_classified_with_retry_after():

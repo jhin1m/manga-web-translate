@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 
 from .providers.base import LLMProvider, ProviderError
 from .schema import (
+    DEFAULT_HONORIFIC_POLICY,
     ContextLine,
     ContextMode,
     PageText,
@@ -23,9 +24,11 @@ MAX_CHARACTERS = 30
 
 @dataclass
 class SeriesSettings:
+    source_lang: str = "ko"
+    target_lang: str = "vi"
     glossary: dict[str, str] = field(default_factory=dict)
     pronoun_rules: str = ""
-    honorific_policy: str = "chuyển -nim/-ssi sang cách xưng hô tiếng Việt tự nhiên"
+    honorific_policy: str = DEFAULT_HONORIFIC_POLICY
 
 
 @dataclass
@@ -81,6 +84,8 @@ def _translate_once(
     """1 call + retry 1 lần khi lệch id/JSON sai; vẫn lệch → id thiếu thành low_conf."""
     req = TranslateRequest(
         pages=batch,
+        source_lang=settings.source_lang,
+        target_lang=settings.target_lang,
         glossary=settings.glossary,
         pronoun_rules=settings.pronoun_rules,
         honorific_policy=settings.honorific_policy,

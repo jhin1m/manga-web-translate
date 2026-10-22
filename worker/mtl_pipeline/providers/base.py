@@ -9,6 +9,7 @@ from typing import Any, Protocol
 
 from pydantic import ValidationError
 
+from ..langs import lang_label
 from ..schema import ErrorClass, OcrRequest, OcrResult, TokenUsage, TranslateRequest, TranslateResult
 
 # Giá USD / 1M token (vào, ra). Phải kiểm lại lúc chạy bench — giá provider thay đổi.
@@ -127,13 +128,18 @@ def load_prompt(name: str) -> str:
 
 def ocr_user_text(req: OcrRequest) -> str:
     ids = ", ".join(c.id for c in req.crops)
-    return f"Trang {req.page_ord}. Các crop theo thứ tự, mỗi ảnh đi sau nhãn id của nó. Danh sách id: {ids}."
+    return (
+        f"source_lang={lang_label(req.source_lang)}. "
+        f"Trang {req.page_ord}. Các crop theo thứ tự, mỗi ảnh đi sau nhãn id của nó. Danh sách id: {ids}."
+    )
 
 
 def translate_user_text(req: TranslateRequest) -> str:
     """Payload giai đoạn 2 dạng JSON (thứ tự trang/vùng giữ nguyên, khoá sắp xếp để prompt ổn định)."""
     payload = {
         "pages": [p.model_dump() for p in req.pages],
+        "source_lang": lang_label(req.source_lang),
+        "target_lang": lang_label(req.target_lang),
         "glossary": req.glossary,
         "pronoun_rules": req.pronoun_rules,
         "honorific_policy": req.honorific_policy,

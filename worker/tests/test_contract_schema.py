@@ -13,7 +13,7 @@ from mtl_worker.handlers import build_page_state
 from mtl_worker.runner import region_from_shared, region_to_shared
 
 META = {
-    "pipeline_version": "0.3.0",
+    "pipeline_version": "0.4.0",
     "model": "gemini-2.5-flash",
     "glossary_rev": 0,
     "settings_rev": 0,

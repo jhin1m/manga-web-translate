@@ -56,7 +56,9 @@ def validate_ids(expected: list[str], items: list[OcrItem]) -> tuple[list[OcrIte
     return out, ok
 
 
-def ocr_page(provider: LLMProvider, img: np.ndarray, regions: list[Region], page_ord: int) -> OcrResult:
+def ocr_page(
+    provider: LLMProvider, img: np.ndarray, regions: list[Region], page_ord: int, source_lang: str = "ko"
+) -> OcrResult:
     """Chép chữ mọi vùng chữ của trang trong 1 call; thiếu/thừa id → retry 1 lần rồi đánh low_conf."""
     local_empty: list[OcrItem] = []
     crops: list[OcrCrop] = []
@@ -69,7 +71,7 @@ def ocr_page(provider: LLMProvider, img: np.ndarray, regions: list[Region], page
     if not crops:
         return OcrResult(items=local_empty)
 
-    req = OcrRequest(page_ord=page_ord, crops=crops)
+    req = OcrRequest(page_ord=page_ord, crops=crops, source_lang=source_lang)
     expected = [c.id for c in crops]
     usage: list[TokenUsage] = []
     items: list[OcrItem] | None = None  # kết quả lệch id gần nhất

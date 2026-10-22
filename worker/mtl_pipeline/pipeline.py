@@ -63,9 +63,11 @@ class Pipeline:
 
     # ---- giai đoạn 1 ----
 
-    def prepare_image(self, img: np.ndarray) -> tuple[list[Region], np.ndarray, np.ndarray, PrepareTiming]:
+    def prepare_image(
+        self, img: np.ndarray, rtl: bool = False
+    ) -> tuple[list[Region], np.ndarray, np.ndarray, PrepareTiming]:
         t0 = time.perf_counter()
-        regions = self.detector.detect(img)
+        regions = self.detector.detect(img, rtl)
         t1 = time.perf_counter()
         mask = build_text_mask(img, self.masker.predict(img), regions)
         t2 = time.perf_counter()
