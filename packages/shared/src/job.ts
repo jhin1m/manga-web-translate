@@ -45,6 +45,9 @@ export const CHAPTER_STATUSES = [
   "done",
 ] as const;
 export const PAGE_STATUSES = ["pending", "preparing", "prepared", "translating", "ready", "failed"] as const;
+/** Lý do bỏ qua ảnh gốc trước Bước 1: người dùng xoá, hoặc khớp ảnh credit series đã học. Ảnh bỏ qua không vào ingest. */
+export const SOURCE_SKIP_REASONS = ["user", "credit"] as const;
+export type SourceSkipReason = (typeof SOURCE_SKIP_REASONS)[number];
 export const USAGE_KINDS = [
   "pages",
   "llm_tokens_in",

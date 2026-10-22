@@ -12,7 +12,7 @@ import {
   type PageState,
   storageKeys,
 } from "@mtl/shared";
-import { and, asc, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
 import { MAX_GET_TTL_S, MAX_PUT_TTL_S, presignGet, presignPut } from "../storage.ts";
 
@@ -123,7 +123,13 @@ export async function buildInputs(tx: DbLike, job: Job): Promise<Record<string, 
       const rows = await tx
         .select()
         .from(sourceFiles)
-        .where(and(eq(sourceFiles.chapterId, p.chapter_id), eq(sourceFiles.workspaceId, job.workspaceId)))
+        .where(
+          and(
+            eq(sourceFiles.chapterId, p.chapter_id),
+            eq(sourceFiles.workspaceId, job.workspaceId),
+            isNull(sourceFiles.skip),
+          ),
+        )
         .orderBy(asc(sourceFiles.ord));
       return {
         sources: await Promise.all(

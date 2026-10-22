@@ -4,14 +4,21 @@
  * MinIO theo policy giới hạn (red team #12), server kiểm lại khi commit.
  */
 
-import { chapters, pages, scoped, series, sourceFiles } from "@mtl/db";
+import { chapters, isUuid, NotFoundError, pages, type Scoped, scoped, series, sourceFiles } from "@mtl/db";
 import { PAGE_FORMATS, storageKeys } from "@mtl/shared";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, isNull, type SQL } from "drizzle-orm";
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { v7 as uuidv7 } from "uuid";
 import { z } from "zod";
-import { enqueueIngest, inJobTx, retranslate, retryFailedPages, translatePrepared } from "../jobs/enqueue.ts";
+import {
+  enqueueIngest,
+  inJobTx,
+  lockChapter,
+  retranslate,
+  retryFailedPages,
+  translatePrepared,
+} from "../jobs/enqueue.ts";
 import { acquireChapterLock, activeLockHolder, LOCK_TTL_MS, releaseChapterLock } from "../lib/chapter-lock.ts";
 import { cancelChapterJobs, removeChapters } from "../lib/chapter-removal.ts";
 import { memberNames } from "../lib/member-names.ts";
@@ -70,6 +77,8 @@ const ChapterPatch = z
   .object({ number: ChapterNumber.optional(), series_id: z.string().uuid().optional() })
   .refine((b) => b.number !== undefined || b.series_id !== undefined, { message: "number hoặc series_id" });
 
+/** Chỉ "user" từ API: "credit" do server gán khi khớp ảnh credit đã học của series. */
+const SourceSkipBody = z.object({ skip: z.enum(["user"]).nullable() });
 const PresignBody = z.object({ file_ids: z.array(z.string().uuid()).min(1).max(MAX_FILES_PER_CHAPTER) });
 /** mode bỏ trống → page_format của series (web không gửi). */
 const CommitBody = z.object({ mode: z.enum(PAGE_FORMATS).optional() });
@@ -80,6 +89,9 @@ const RecentQuery = z.object({
 const TranslateBody = z.object({ page_ids: z.array(z.string().uuid()).min(1).max(1000).optional() });
 
 type SourceFile = typeof sourceFiles.$inferSelect;
+type Chapter = typeof chapters.$inferSelect;
+
+const sourceFileView = (f: SourceFile) => ({ id: f.id, ord: f.ord, bytes: f.bytes, mime: f.mime, skip: f.skip });
 
 const conflict = (error: string, message: string) =>
   new HTTPException(409, { res: Response.json({ error, message }, { status: 409 }) });
@@ -213,29 +225,43 @@ chapterRoutes.post("/w/:ws/chapters/:chapterId/presign", requireWorkspace(), asy
 });
 
 /**
- * Commit: với từng file HEAD (tồn tại, ≤ 30MB) + 16 byte đầu khớp `mime` khai báo. File sai bị loại (xoá
- * khỏi source_files) và báo lại; còn file hợp lệ → enqueue **chỉ** chapter.ingest (pages do ingest tạo).
- * Chỉ commit chương nháp hoặc chương ingest lỗi (chưa có page) — chương đã xử lý muốn làm lại thì tạo chương
- * mới (tránh xoá bản AI/chỉnh sửa và trả tiền dịch lại). Loại file + enqueue cùng transaction: enqueueIngest
- * từ chối (409) thì không mất source_files nào.
+ * Chương còn sửa được bộ ảnh gốc (commit, bỏ qua ảnh): nháp, hoặc cắt trang lỗi mà chưa có page. Người khác giữ
+ * khoá còn hạn → 423 (không đổi bộ ảnh dưới tay người đang làm).
  */
-chapterRoutes.post("/w/:ws/chapters/:chapterId/commit", requireWorkspace(), async (c) => {
-  const body = await parseJson(c, CommitBody);
-  const sdb = c.get("sdb");
-  const ws = c.get("workspaceId");
-  const user = c.get("user");
-  const ch = await sdb.byId(chapters, c.req.param("chapterId"), "chapter");
+async function assertSourcesEditable(sdb: Scoped, ch: Chapter, userId: string) {
   const holder = activeLockHolder(ch);
-  if (holder && holder !== user.id) {
+  if (holder && holder !== userId) {
     throw new HTTPException(423, { res: Response.json({ error: "chapter_locked", holder }, { status: 423 }) });
   }
   const ingestFailed = ch.status === "partial_failed" && !(await sdb.find(pages, eq(pages.chapterId, ch.id)));
   if (ch.status !== "draft" && !ingestFailed) {
     throw conflict("chapter_not_draft", "chương đã xử lý — tạo chương mới để upload lại");
   }
-  const files = await sdb.select(sourceFiles, eq(sourceFiles.chapterId, ch.id));
-  files.sort((a, b) => a.ord - b.ord);
-  if (files.length === 0) throw new HTTPException(400, { message: "chapter has no source files" });
+}
+
+/**
+ * Commit: với từng file HEAD (tồn tại, ≤ 30MB) + 16 byte đầu khớp `mime` khai báo. File sai bị loại (xoá
+ * khỏi source_files) và báo lại; còn file hợp lệ → enqueue **chỉ** chapter.ingest (pages do ingest tạo).
+ * Chỉ commit chương nháp hoặc chương ingest lỗi (chưa có page) — chương đã xử lý muốn làm lại thì tạo chương
+ * mới (tránh xoá bản AI/chỉnh sửa và trả tiền dịch lại). Loại file + enqueue cùng transaction: enqueueIngest
+ * từ chối (409) thì không mất source_files nào. Ảnh bỏ qua không kiểm, không xoá; bộ ảnh đổi giữa lúc kiểm và lúc
+ * enqueue (bỏ/dùng lại ảnh ở tab khác) → 409 `sources_changed`, không ghép ảnh chưa kiểm.
+ */
+chapterRoutes.post("/w/:ws/chapters/:chapterId/commit", requireWorkspace(), async (c) => {
+  const body = await parseJson(c, CommitBody);
+  const sdb = c.get("sdb");
+  const ws = c.get("workspaceId");
+  const ch = await sdb.byId(chapters, c.req.param("chapterId"), "chapter");
+  await assertSourcesEditable(sdb, ch, c.get("user").id);
+  const all = await sdb.select(sourceFiles, eq(sourceFiles.chapterId, ch.id));
+  if (all.length === 0) throw new HTTPException(400, { message: "chapter has no source files" });
+  // Ảnh bỏ qua không kiểm, không xoá (giữ để hoàn tác); ingest cũng chỉ lấy ảnh không bỏ qua.
+  const files = all.filter((f) => f.skip === null).sort((a, b) => a.ord - b.ord);
+  if (files.length === 0) {
+    throw new HTTPException(400, {
+      res: Response.json({ error: "no_valid_files", message: "Đã bỏ hết ảnh", rejected: [] }, { status: 400 }),
+    });
+  }
 
   const checked = await mapLimit(files, 8, async (f) => {
     const h = await head(f.storageKey);
@@ -252,7 +278,13 @@ chapterRoutes.post("/w/:ws/chapters/:chapterId/commit", requireWorkspace(), asyn
     });
   }
   const { job, created } = await inJobTx(async (tx) => {
+    await lockChapter(tx, ws, ch.id);
     const t = scoped(tx, ws);
+    const now = await t.select(sourceFiles, and(eq(sourceFiles.chapterId, ch.id), isNull(sourceFiles.skip)) as SQL);
+    const checkedIds = new Set(files.map((f) => f.id));
+    if (now.length !== checkedIds.size || now.some((f) => !checkedIds.has(f.id))) {
+      throw conflict("sources_changed", "bộ ảnh vừa đổi — bấm lại Bước 1");
+    }
     if (rejected.length) {
       await t.delete(
         sourceFiles,
@@ -269,6 +301,26 @@ chapterRoutes.post("/w/:ws/chapters/:chapterId/commit", requireWorkspace(), asyn
     return enqueueIngest(tx, ws, ch.id, body.mode);
   });
   return c.json({ job: jobView(job), created, accepted: valid.length, rejected: rejectedView }, 202);
+});
+
+/** Bỏ qua / dùng lại 1 ảnh gốc trước Bước 1 (hoàn tác được; hàng vẫn giữ để tải tiếp khớp đúng bộ file). */
+chapterRoutes.patch("/w/:ws/chapters/:chapterId/source-files/:fileId", requireWorkspace(), async (c) => {
+  const body = await parseJson(c, SourceSkipBody);
+  const ws = c.get("workspaceId");
+  const fileId = c.req.param("fileId");
+  const ch = await c.get("sdb").byId(chapters, c.req.param("chapterId"), "chapter");
+  if (!isUuid(fileId)) throw new NotFoundError("source file");
+  // Khoá dòng chương (như commit/enqueueIngest) → không đổi bộ ảnh xen giữa lúc Bước 1 đang enqueue.
+  const row = await inJobTx(async (tx) => {
+    const t = scoped(tx, ws);
+    await assertSourcesEditable(t, await lockChapter(tx, ws, ch.id), c.get("user").id);
+    const [r] = await t.update(sourceFiles, and(eq(sourceFiles.chapterId, ch.id), eq(sourceFiles.id, fileId)) as SQL, {
+      skip: body.skip,
+    });
+    return r;
+  });
+  if (!row) throw new NotFoundError("source file");
+  return c.json(sourceFileView(row));
 });
 
 /** Chi tiết chương + khoá + danh sách source file (để tiếp tục upload/commit chương draft). */
@@ -294,9 +346,7 @@ chapterRoutes.get("/w/:ws/chapters/:chapterId", requireWorkspace(), async (c) =>
             expires_at: new Date(ch.lockedAt.getTime() + LOCK_TTL_MS),
           }
         : null,
-    source_files: files
-      .sort((a, b) => a.ord - b.ord)
-      .map((f) => ({ id: f.id, ord: f.ord, bytes: f.bytes, mime: f.mime })),
+    source_files: files.sort((a, b) => a.ord - b.ord).map(sourceFileView),
   });
 });
 

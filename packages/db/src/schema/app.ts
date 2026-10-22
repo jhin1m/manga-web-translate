@@ -17,6 +17,8 @@ import {
   type PageFormat,
   type PageState,
   type PreparePartial,
+  SOURCE_SKIP_REASONS,
+  type SourceSkipReason,
   USAGE_KINDS,
 } from "@mtl/shared";
 import { sql } from "drizzle-orm";
@@ -129,6 +131,8 @@ export const sourceFiles = pgTable(
     mime: text("mime").notNull(),
     width: integer("width"),
     height: integer("height"),
+    /** Bỏ qua khi commit/ingest (null = dùng). Giữ hàng để hoàn tác và để tải tiếp khớp đúng bộ file. */
+    skip: text("skip").$type<SourceSkipReason>(),
     ...timestamps,
   },
   (t) => [
@@ -136,6 +140,7 @@ export const sourceFiles = pgTable(
       "cascade",
     ),
     index("source_files_chapter_idx").on(t.chapterId, t.ord),
+    check("source_files_skip_chk", inList(sql`${t.skip}`, SOURCE_SKIP_REASONS)),
   ],
 );
 
