@@ -86,7 +86,9 @@ test("series tabs keep the series header and mark the current tab", async ({ pag
   await expect(page.getByRole("form", { name: "Thêm từ vào glossary" })).toBeVisible();
 });
 
-test("new series picks source language; settings edit target language and page format", async ({ page }) => {
+test("new series picks source language; settings edit target language, page format and ignored text", async ({
+  page,
+}) => {
   await login(page);
   await page.goto("/");
   await page.getByRole("button", { name: "+ Series mới" }).click();
@@ -107,12 +109,24 @@ test("new series picks source language; settings edit target language and page f
   await expect(page.getByText(/Nhật → Anh/)).toBeVisible();
   await expect(page.getByLabel("Định dạng truyện")).toHaveValue("strip");
 
+  // Chữ bỏ qua (watermark): dòng quá ngắn báo lỗi tại dòng, chặn lưu; sửa xong lưu được, mục trùng gộp lại.
+  const ignore = page.getByLabel("Chữ bỏ qua (watermark)");
+  await ignore.fill("discord.gg/nhom\nab");
+  await expect(page.getByText("Dòng 2: mỗi mục 3–100 ký tự (không tính http://).")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Lưu cài đặt" })).toBeDisabled();
+  await ignore.fill("discord.gg/nhom\nDISCORD.GG/NHOM\nNhóm Mèo");
+  await page.getByRole("button", { name: "Lưu cài đặt" }).click();
+  await expect(page.getByRole("status").filter({ hasText: "Đã lưu" })).toBeVisible();
+  await expect(ignore).toHaveValue("discord.gg/nhom\nNhóm Mèo");
+
   const url = new URL(page.url());
   const seriesId = url.pathname.split("/").at(-1) as string;
   const s = (await (await page.request.get(`/api/w/${state.workspaceId}/series/${seriesId}`)).json()) as {
     source_lang: string;
     target_lang: string;
     page_format: string;
+    ignore_text: string[];
   };
   expect([s.source_lang, s.target_lang, s.page_format]).toEqual(["ja", "en", "strip"]);
+  expect(s.ignore_text).toEqual(["discord.gg/nhom", "Nhóm Mèo"]);
 });

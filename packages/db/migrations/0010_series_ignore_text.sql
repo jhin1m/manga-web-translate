@@ -1,0 +1,1 @@
+ALTER TABLE "series" ADD COLUMN "ignore_text" text[] DEFAULT '{}'::text[] NOT NULL;

@@ -508,6 +508,96 @@ describe("series settings", () => {
   });
 });
 
+describe("ignored text (watermark) per series", () => {
+  it("validates the list; changing it bumps glossary_rev, never settings_rev", async () => {
+    const s = await json<{ id: string; settings_rev: number; glossary_rev: number; ignore_text: string[] }>(
+      await api("/series", { method: "POST", body: { title: "Ignore rev" } }),
+      201,
+    );
+    expect(s.ignore_text).toEqual([]);
+    const patch = (ignore_text: unknown) => api(`/series/${s.id}`, { method: "PATCH", body: { ignore_text } });
+    expect((await patch(["ab"])).status).toBe(400);
+    // Ngưỡng tính trên dạng đã chuẩn hoá: "http://a" còn "a", 1 chữ NFD vẫn là 1 ký tự.
+    expect((await patch(["http://a"])).status).toBe(400);
+    expect((await patch(["ắ".normalize("NFD")])).status).toBe(400);
+    expect((await patch(["x".repeat(101)])).status).toBe(400);
+    expect((await patch(Array.from({ length: 51 }, (_, i) => `mục ${i}`))).status).toBe(400);
+    const t1 = await json<typeof s>(await patch([" discord.gg ", "DISCORD.GG", "Asura Scans"]), 200);
+    expect(t1).toMatchObject({
+      ignore_text: ["discord.gg", "Asura Scans"],
+      glossary_rev: s.glossary_rev + 1,
+      settings_rev: s.settings_rev,
+    });
+    // Lưu lại y nguyên → không tăng.
+    expect((await json<typeof s>(await patch(["discord.gg", "Asura Scans"]), 200)).glossary_rev).toBe(t1.glossary_rev);
+  });
+
+  it("a matching OCR line is sent as empty, kept out of neighbour context; removing the entry translates it again", async () => {
+    const ch = await uploadChapter(3, "8");
+    await ingestAndPrepare(ch);
+    // Mỗi page thêm 1 dòng watermark cạnh thoại.
+    const rows = await db.select().from(pages).where(eq(pages.chapterId, ch));
+    for (const p of rows) {
+      const ocr = p.ocrResult as NonNullable<typeof p.ocrResult>;
+      await db
+        .update(pages)
+        .set({
+          ocrResult: {
+            ...ocr,
+            items: [
+              ...ocr.items,
+              { ...(ocr.items[0] as (typeof ocr.items)[number]), id: "wm", source: "Read at DISCORD.GG/abc" },
+            ],
+          },
+        })
+        .where(eq(pages.id, p.id));
+    }
+    const ignore = async (list: string[]) =>
+      json(await api(`/series/${A.seriesId}`, { method: "PATCH", body: { ignore_text: list } }), 200);
+    await ignore(["discord.gg"]);
+    type Inputs = {
+      pages: { ocr_result: { items: { id: string; empty: boolean }[] } }[];
+      context_lines: { source: string }[];
+    };
+    const emptyOf = (i: Inputs) => i.pages.flatMap((p) => p.ocr_result.items.map((it) => [it.id, it.empty]));
+
+    const [tj] = await claimFor(ch, "chapter.translate", 1);
+    expect(emptyOf(tj?.inputs as Inputs)).toEqual([
+      ["t0", false],
+      ["wm", true],
+      ["t0", false],
+      ["wm", true],
+      ["t0", false],
+      ["wm", true],
+    ]);
+    expect((await doTranslate(token, tj as Claimed)).status).toBe(200);
+    // DB không bị sửa: chỉ inputs gửi worker.
+    const [stored] = await db
+      .select()
+      .from(pages)
+      .where(eq(pages.id, rows[0]?.id as string));
+    expect(stored?.ocrResult?.items.find((it) => it.id === "wm")?.empty).toBe(false);
+
+    const mid = (await progress(ch)).pages[1]?.id as string;
+    await json(await api(`/chapters/${ch}/translate`, { method: "POST", body: { page_ids: [mid] } }), 202);
+    const [nb] = await claimFor(ch, "chapter.translate", 1);
+    const ctx = ((nb as Claimed).inputs as Inputs).context_lines.map((l) => l.source);
+    expect(ctx.length).toBeGreaterThan(0);
+    expect(ctx.some((l) => l.includes("DISCORD"))).toBe(false);
+    expect((await doTranslate(token, nb as Claimed)).status).toBe(200);
+
+    // Bỏ mục → lần dịch sau gửi vùng đó bình thường.
+    await ignore([]);
+    await json(await api(`/chapters/${ch}/translate`, { method: "POST", body: { page_ids: [mid] } }), 202);
+    const [again] = await claimFor(ch, "chapter.translate", 1);
+    expect(emptyOf(again?.inputs as Inputs)).toEqual([
+      ["t0", false],
+      ["wm", false],
+    ]);
+    expect((await doTranslate(token, again as Claimed)).status).toBe(200);
+  });
+});
+
 describe("recent chapters", () => {
   type Recent = {
     chapters: {

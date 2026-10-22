@@ -83,6 +83,8 @@ export const series = pgTable(
     glossaryRev: integer("glossary_rev").notNull().default(0),
     /** Tăng khi đổi cài đặt ảnh hưởng dịch/typeset. */
     settingsRev: integer("settings_rev").notNull().default(0),
+    /** Chữ bỏ qua (watermark, URL nhóm dịch): vùng OCR chứa mục nào → không dịch, không box (lọc lúc claim dịch). */
+    ignoreText: text("ignore_text").array().notNull().default(sql`'{}'::text[]`),
     ...timestamps,
   },
   (t) => [
