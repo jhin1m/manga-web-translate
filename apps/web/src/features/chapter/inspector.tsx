@@ -1,10 +1,10 @@
 /**
- * Inspector bên phải màn chương, 2 tab:
- * - "Khối chữ": khối đang chọn (bảng hoặc canvas) — Gốc (OCR, read-only) + "OCR lại", Bản dịch (cùng nguồn với
+ * Nội dung panel công cụ (panel ngữ cảnh cạnh rail công cụ):
+ * - Chọn / Chữ / OCR: khối đang chọn (bảng hoặc canvas) — Gốc (OCR, read-only) + "OCR lại", Bản dịch (cùng nguồn với
  *   bảng), cảnh báo tràn khung, thuộc tính box, "Áp kiểu này cho khối cùng loại trong chương". Không chọn khối →
  *   thông tin trang (trạng thái, cờ, lỗi job) + "Bỏ chỉnh sửa tay" khi trang khác bản AI. Luôn có "Dịch lại trang
  *   này", AI có bản mới, xung đột khi lưu.
- * - "Xoá chữ": brush/tẩy mask + xoá chữ lại (MaskPanel). Chọn tab = đổi công cụ và ngược lại.
+ * - Mask / Tẩy: brush/tẩy mask + xoá chữ lại (MaskPanel).
  */
 import type { TextBox } from "@mtl/shared";
 import { useMemo, useState } from "react";
@@ -65,11 +65,6 @@ export function Inspector(props: InspectorProps) {
   );
   if (!page) return <p className="muted small ed-pad cw-pad">Chưa có trang để sửa.</p>;
 
-  const setTab = (mask: boolean) => {
-    const s = editorStore.getState();
-    if (mask && !maskTab) s.setTool("brush");
-    else if (!mask && maskTab) s.setTool("select");
-  };
   const lv = PAGE_LEVEL[pageLevel(page.status)];
   const jobError = describeJobError(page.job);
   const retranslate = (
@@ -86,14 +81,6 @@ export function Inspector(props: InspectorProps) {
 
   return (
     <>
-      <div role="tablist" aria-label="Bảng thuộc tính" className="cw-tabs cw-side-tabs">
-        <button type="button" role="tab" aria-selected={!maskTab} onClick={() => setTab(false)}>
-          Khối chữ
-        </button>
-        <button type="button" role="tab" aria-selected={maskTab} onClick={() => setTab(true)}>
-          Xoá chữ
-        </button>
-      </div>
       <div className="cw-side-head">
         <h2>Trang {page.ord + 1}</h2>
         <span className="muted small">

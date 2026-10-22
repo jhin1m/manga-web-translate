@@ -1,7 +1,7 @@
 ---
 phase: 2
 title: "Khung bố cục: rail công cụ + panel ngữ cảnh"
-status: pending
+status: completed
 priority: P1
 effort: "5h"
 dependencies: [1]

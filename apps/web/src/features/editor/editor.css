@@ -52,19 +52,6 @@
   white-space: pre-wrap;
 }
 
-.ed-side {
-  grid-area: side;
-  border-left: 1px solid var(--c-line);
-  overflow-y: auto;
-  font-size: var(--fs-sm);
-}
-.ed-side > section {
-  padding: var(--sp-3);
-  border-bottom: 1px solid var(--c-line);
-}
-.ed-side > .notice {
-  margin: var(--sp-2);
-}
 .ed-h {
   margin-bottom: var(--sp-1);
 }

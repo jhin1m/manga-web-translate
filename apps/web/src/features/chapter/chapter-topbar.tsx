@@ -1,13 +1,14 @@
 /**
- * Thanh trên màn chương: ← series, tên chương (bấm → đổi series / số chương), chip trạng thái chương (chỗ duy nhất nói chương đang ở đâu), chỉ
- * báo sửa/lưu thu nhỏ (giữ khoá · Đã lưu / Chỉ xem), chế độ xem Gốc/Dịch/Chia đôi, Dịch lại ▾, Huỷ xử lý, icon
- * Hoạt động (+ số việc đang chạy) + Phím tắt, và nút chính theo trạng thái (primary-action.ts; "Xuất" mở drawer).
+ * Thanh trên màn chương: ← series, tên chương (bấm → đổi series / số chương), chip trạng thái chương (chỗ duy nhất
+ * nói chương đang ở đâu), chỉ báo sửa/lưu thu nhỏ (giữ khoá · Đã lưu / Chỉ xem), Hoàn tác / Làm lại, chế độ xem
+ * Gốc/Dịch/Chia đôi, Dịch lại ▾, Huỷ xử lý, icon Hoạt động (+ số việc đang chạy) + Phím tắt, và nút chính theo trạng
+ * thái (primary-action.ts; "Xuất" mở drawer).
  * Dưới nó là băng cảnh báo — chỉ hiện khi người dùng phải biết/làm gì (khoá bị giữ/mất/lỗi, khôi phục, lỗi lưu, chờ AI).
  */
 import { Link } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 import type { LockState } from "../chapter/use-chapter-lock.ts";
-import { type ReadOnlyReason, type SaveStatus, useEditor } from "../editor/store.ts";
+import { editorStore, type ReadOnlyReason, type SaveStatus, useEditor } from "../editor/store.ts";
 import type { RecoveryItem } from "../editor/use-chapter-session.ts";
 import { FilePickButton } from "../upload/drop-zone.tsx";
 import { ActivityButton } from "./activity-drawer.tsx";
@@ -15,6 +16,7 @@ import type { ChapterDetail } from "./api.ts";
 import { ChapterMetaPopover } from "./chapter-meta-popover.tsx";
 import type { ChapterCommand, PrimaryAction } from "./primary-action.ts";
 import type { Tone } from "./status.ts";
+import { RedoIcon, UndoIcon } from "./tool-icons.tsx";
 import { ViewModeSwitch } from "./view-mode-switch.tsx";
 
 const SAVE_LABEL: Record<SaveStatus, string> = {
@@ -89,6 +91,8 @@ export function ChapterTopbar(props: {
       </span>
       <EditState {...props.access} />
       <span className="spacer" />
+      <UndoRedo />
+      <span className="cw-top-sep" />
       <ViewModeSwitch />
       {has("retranslate") && (
         <details className="cw-menu">
@@ -141,6 +145,38 @@ export function ChapterTopbar(props: {
           </button>
         ))}
     </header>
+  );
+}
+
+/** Hoàn tác / Làm lại (Ctrl/Cmd+Z, Ctrl/Cmd+Shift+Z) — tắt khi hết lịch sử hoặc đang chỉ xem. */
+function UndoRedo() {
+  const canUndo = useEditor((s) => s.history.past.length > 0);
+  const canRedo = useEditor((s) => s.history.future.length > 0);
+  const readOnly = useEditor((s) => !!s.readOnly);
+  const st = editorStore.getState();
+  return (
+    <span className="cw-icons">
+      <button
+        type="button"
+        className="icon-btn"
+        aria-label="Hoàn tác (Ctrl+Z)"
+        title="Hoàn tác (Ctrl+Z)"
+        disabled={!canUndo || readOnly}
+        onClick={st.undo}
+      >
+        <UndoIcon size={18} />
+      </button>
+      <button
+        type="button"
+        className="icon-btn"
+        aria-label="Làm lại (Ctrl+Shift+Z)"
+        title="Làm lại (Ctrl+Shift+Z)"
+        disabled={!canRedo || readOnly}
+        onClick={st.redo}
+      >
+        <RedoIcon size={18} />
+      </button>
+    </span>
   );
 }
 

@@ -1,18 +1,18 @@
 /*
- * Màn chương gộp (docs/design-guidelines.md, hướng A): thanh trên + băng cảnh báo (chỉ khi có) | rail trang · canvas · inspector |
- * bảng văn bản dưới. Toàn màn hình (ngoài app shell). Canvas nền xám trung tính để nhìn ảnh.
+ * Màn chương gộp (docs/design-guidelines.md, hướng A): thanh trên + băng cảnh báo (chỉ khi có) | rail công cụ 64px ·
+ * panel ngữ cảnh (288px, 560px cho Bản dịch / Tìm; thu = cột về 0) · canvas · cột trang. Toàn màn hình (ngoài app
+ * shell). Canvas nền ấm trung tính để nhìn ảnh.
  */
 .cw {
   position: fixed;
   inset: 0;
   display: grid;
-  grid-template-columns: 196px minmax(0, 1fr) 320px;
-  grid-template-rows: 52px auto minmax(0, 1fr) auto;
+  grid-template-columns: 64px auto minmax(0, 1fr) 196px;
+  grid-template-rows: 52px auto minmax(0, 1fr);
   grid-template-areas:
-    "top top top"
-    "band band band"
-    "rail main side"
-    "rail bottom bottom";
+    "top top top top"
+    "band band band band"
+    "tools panel main thumbs";
   background: var(--c-bg);
 }
 
@@ -25,9 +25,13 @@
   border-bottom: 1px solid var(--c-line);
   min-width: 0;
 }
-.cw-top .spacer,
-.cw-bottom-head .spacer {
+.cw-top .spacer {
   flex: 1;
+}
+.cw-top-sep {
+  width: 1px;
+  height: 20px;
+  background: var(--c-line);
 }
 .cw-back {
   display: flex;
@@ -151,12 +155,147 @@
   min-height: 0;
 }
 
+/* Rail công cụ: nút 52×52 icon + nhãn 11px. Đang mở panel của nó = nền nhấn; công cụ đang chọn (panel thu) = chữ nhấn. */
+.cw-toolrail {
+  grid-area: tools;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: var(--sp-2) 0;
+  border-right: 1px solid var(--c-line);
+  min-height: 0;
+  overflow-y: auto;
+}
+.cw-toolbtn {
+  flex: none;
+  width: 52px;
+  height: 52px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--c-fg-muted);
+  font-size: 11px;
+  line-height: 1.1;
+}
+.cw-toolbtn:hover {
+  background: var(--c-surface-2);
+  color: var(--c-fg);
+}
+.cw-toolbtn[data-current] {
+  color: var(--c-accent-hover);
+}
+.cw-toolbtn[aria-pressed="true"] {
+  background: var(--c-accent-weak);
+  color: var(--c-accent-hover);
+  font-weight: 500;
+}
+.cw-toolrail-sep {
+  flex: none;
+  width: 32px;
+  height: 1px;
+  margin: 4px 0;
+  background: var(--c-line);
+}
+
+/* Panel ngữ cảnh: đầu 44px (tiêu đề + nút thu), thân cuộn; Bản dịch là flex column để bảng ảo cao hết panel. */
+.cw-panel {
+  grid-area: panel;
+  width: 288px;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--c-line);
+  background: var(--c-bg);
+  font-size: var(--fs-sm);
+}
+.cw-panel[data-wide] {
+  width: 560px;
+}
+.cw-panel[hidden] {
+  display: none;
+}
+.cw-panel-head {
+  flex: none;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: 0 var(--sp-2) 0 var(--sp-4);
+  border-bottom: 1px solid var(--c-surface-2);
+}
+.cw-panel-head h2 {
+  flex: 1;
+  font-size: var(--fs-md);
+}
+.cw-panel-head .icon-btn {
+  width: 32px;
+  height: 32px;
+}
+.cw-panel-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.cw-panel-body > [hidden] {
+  display: none;
+}
+.cw-panel-tool {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+.cw-panel-tool > section {
+  padding: var(--sp-3);
+  border-bottom: 1px solid var(--c-line);
+}
+.cw-panel-tool > .notice {
+  margin: var(--sp-2);
+}
+.cw-panel-table {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.cw-panel-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-1) var(--sp-3);
+  padding: var(--sp-2) var(--sp-4);
+  border-bottom: 1px solid var(--c-surface-2);
+}
+.cw-panel-find {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  padding: var(--sp-4);
+}
+.cw-panel-find > [hidden] {
+  display: none;
+}
+.cw-seg-full > * {
+  flex: 1;
+  justify-content: center;
+}
+
 .cw-rail {
-  grid-area: rail;
+  grid-area: thumbs;
   display: flex;
   flex-direction: column;
   min-height: 0;
-  border-right: 1px solid var(--c-line);
+  border-left: 1px solid var(--c-line);
 }
 /* Rail hẹp: nút lọc thứ 3 ("Đã xoá n") xuống dòng thay vì tràn ra sau canvas. */
 .cw-rail-filter {
@@ -260,29 +399,6 @@
 }
 .cw-canvas .ed-canvas {
   background: var(--c-canvas);
-}
-.cw-tools {
-  flex: none;
-  display: flex;
-  align-items: center;
-  /* safe: hàng hẹp hơn nội dung → bám trái, cuộn ngang được tới nút đầu. */
-  justify-content: safe center;
-  gap: 2px;
-  padding: 3px var(--sp-3);
-  background: var(--c-bg);
-  border-bottom: 1px solid var(--c-line);
-  white-space: nowrap;
-  overflow-x: auto;
-}
-.cw-tools > button {
-  border-color: transparent;
-  font-size: var(--fs-xs);
-}
-.cw-sep {
-  width: 1px;
-  align-self: stretch;
-  margin: 2px 4px;
-  background: var(--c-line);
 }
 .cw-canvas-foot {
   position: absolute;
@@ -396,10 +512,6 @@
   white-space: normal;
 }
 
-.cw-side {
-  grid-area: side;
-  min-height: 0;
-}
 .cw-side-head {
   display: flex;
   align-items: baseline;
@@ -414,78 +526,6 @@
   padding: 0 var(--sp-3);
 }
 
-.cw-bottom {
-  grid-area: bottom;
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  border-top: 1px solid var(--c-line-strong);
-}
-.cw-resize {
-  all: unset;
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: -3px;
-  height: 6px;
-  cursor: ns-resize;
-  z-index: 5;
-  touch-action: none;
-}
-.cw-bottom-head {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-2);
-  height: 40px;
-  padding: 0 var(--sp-3);
-  border-bottom: 1px solid var(--c-line);
-}
-.cw-bottom-body {
-  flex: 1;
-  min-height: 0;
-  overflow: auto;
-  padding: var(--sp-3);
-}
-.cw-bottom-body.flush {
-  padding: 0;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-}
-.cw-bottom-body[hidden] {
-  display: none;
-}
-
-/* Tab (bảng dưới + inspector): gạch chân màu nhấn ở tab đang chọn. */
-.cw-tabs {
-  display: flex;
-  gap: var(--sp-1);
-  align-self: stretch;
-}
-.cw-tabs > [role="tab"] {
-  height: 100%;
-  min-height: 0;
-  padding: 0 var(--sp-3);
-  border: 0;
-  border-bottom: 2px solid transparent;
-  border-radius: 0;
-  background: none;
-  color: var(--c-fg-muted);
-}
-.cw-tabs > [aria-selected="true"] {
-  border-bottom-color: var(--c-accent);
-  color: var(--c-fg);
-  font-weight: 600;
-}
-.cw-side-tabs {
-  height: 40px;
-  border-bottom: 1px solid var(--c-line);
-}
-.cw-side-tabs > [role="tab"] {
-  flex: 1;
-  justify-content: center;
-}
 .cw-check {
   display: flex;
   align-items: center;
