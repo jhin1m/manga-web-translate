@@ -29,6 +29,7 @@ import type { SlotImages, SlotProcessing } from "../editor/canvas/PageSlot.tsx";
 import { chapterStore, revealRect } from "../editor/chapter-store.ts";
 import { dialogueFont } from "../editor/fonts.ts";
 import { CanvasStatus } from "../editor/panels/CanvasToolbar.tsx";
+import { MaskPanel } from "../editor/panels/MaskPanel.tsx";
 import type { ShortcutAction } from "../editor/shortcuts.ts";
 import { editorStore, useEditor } from "../editor/store.ts";
 import { resetChapterSession, useChapterSession } from "../editor/use-chapter-session.ts";
@@ -56,12 +57,12 @@ import { ContextPanel, type FocusRequest } from "./context-panel.tsx";
 import { ExportDrawer } from "./export-drawer.tsx";
 import { isExportActive, useExports } from "./export-panel.tsx";
 import { FindReplacePanel } from "./FindReplace.tsx";
-import { Inspector } from "./inspector.tsx";
 import { providerWait, providerWaitText } from "./job-error.ts";
 import { readPanel, writePanel } from "./layout-prefs.ts";
 import { PageRail } from "./page-rail.tsx";
 import { needsReview, pageLevel } from "./page-status.ts";
 import { type ChapterCommand, primaryAction } from "./primary-action.ts";
+import { SelectPanel } from "./select-panel.tsx";
 import { ShortcutHelp } from "./shortcut-help.tsx";
 import { SourceRail } from "./source-rail.tsx";
 import { type SourceItem, sourceCounts, stepSource } from "./source-rail-model.ts";
@@ -69,6 +70,7 @@ import { SourceViewer } from "./source-viewer.tsx";
 import { chapterChip, isChapterSettled } from "./status.ts";
 import { filterRows, KIND_LABEL, type Row, rowKeyOfBox, sameKindBoxIds, type TableFilter } from "./text-table/rows.ts";
 import { TableFilters, TextTable, useChapterRows } from "./text-table/text-table.tsx";
+import { OcrToolView, TextToolView } from "./tool-panels.tsx";
 import { ToolRail } from "./tool-rail.tsx";
 import { isWidePanel, PANEL_TITLE, type PanelId, type RailTarget, railClick } from "./tool-rail-model.ts";
 import { useChapterData } from "./use-chapter-data.ts";
@@ -271,6 +273,7 @@ function Workspace({ ws, seriesId, chapterId, page: searchPage, drawer: searchDr
   const overflowKey = [...new Set(allRows.filter((r) => r.flags.includes("overflow")).map((r) => r.pageId))].join(",");
   const overflowPages = useMemo(() => new Set(overflowKey ? overflowKey.split(",") : []), [overflowKey]);
   const activeOverflow = allRows.filter((r) => r.pageId === activeId && r.flags.includes("overflow")).length;
+  const activeBlocks = allRows.filter((r) => r.pageId === activeId).length;
 
   // ---- Thao tác chương ----
   const uploadState = useChapterUpload(chapterId);
@@ -564,6 +567,11 @@ function Workspace({ ws, seriesId, chapterId, page: searchPage, drawer: searchDr
   const ocr = useOcrRegion(ws, activeId ?? "", defaultFont, { w: activeMeta?.width ?? 0, h: activeMeta?.height ?? 0 });
   const ocrStart = ocr.start;
   const onOcr = useCallback((r: PageRect) => void ocrStart(r), [ocrStart]);
+  /** "Dịch lại khối" = nhận dạng + dịch lại vùng OCR của khối (khối tự thêm không có vùng → bỏ qua). */
+  const reocrRow = (row: Pick<Row, "regionId">) => {
+    const [x, y, w, h] = editorStore.getState().doc?.regions.find((r) => r.id === row.regionId)?.bbox ?? [];
+    if (row.regionId && w && h) void ocr.start({ x: x ?? 0, y: y ?? 0, w, h }, row.regionId);
+  };
 
   const errors = [
     session.fontError,
@@ -705,43 +713,56 @@ function Workspace({ ws, seriesId, chapterId, page: searchPage, drawer: searchDr
       >
         {view === "tool" && (
           <div className="cw-panel-tool">
-            <Inspector
-              ws={ws}
-              page={activeMeta}
-              row={currentRow}
-              overflowCount={activeOverflow}
-              kit={kit}
-              busy={{
-                retranslate: action.isPending,
-                ocr: ocr.pending.length > 0,
-                applyKind: applyKind.isPending,
-              }}
-              onRetranslatePage={() => action.mutate("retranslate-page")}
-              onReocr={(row) => {
-                const [x, y, w, h] = editorStore.getState().doc?.regions.find((r) => r.id === row.regionId)?.bbox ?? [];
-                if (row.regionId && w && h) void ocr.start({ x: x ?? 0, y: y ?? 0, w, h }, row.regionId);
-              }}
-              onApplyKind={(row) => applyKind.mutate(row)}
-              onMaskDone={data.refresh}
-              onHidePage={() => activeMeta && skipPage(activeMeta, true)}
-              hideDisabled={
-                !pagesEditable || pageSkip.isPending
-                  ? "Cần giữ khoá chương (chương không đang chạy)"
-                  : pages.length <= 1
-                    ? "Không ẩn được trang cuối cùng"
+            {tool === "select" || sourceMode ? (
+              <SelectPanel
+                ws={ws}
+                page={activeMeta}
+                row={currentRow}
+                blockTotal={activeBlocks}
+                overflowCount={activeOverflow}
+                kit={kit}
+                busy={{
+                  retranslate: action.isPending,
+                  ocr: ocr.pending.length > 0,
+                  applyKind: applyKind.isPending,
+                }}
+                onRetranslatePage={() => action.mutate("retranslate-page")}
+                onReocr={reocrRow}
+                onApplyKind={(row) => applyKind.mutate(row)}
+                onHidePage={() => activeMeta && skipPage(activeMeta, true)}
+                hideDisabled={
+                  !pagesEditable || pageSkip.isPending
+                    ? "Cần giữ khoá chương (chương không đang chạy)"
+                    : pages.length <= 1
+                      ? "Không ẩn được trang cuối cùng"
+                      : undefined
+                }
+                source={
+                  sourceMode
+                    ? {
+                        item: sources[sourceIdx],
+                        ...sourceCounts(sources),
+                        editable: sourcesEditable,
+                        onSkip: skipSource,
+                      }
                     : undefined
-              }
-              source={
-                sourceMode
-                  ? {
-                      item: sources[sourceIdx],
-                      ...sourceCounts(sources),
-                      editable: sourcesEditable,
-                      onSkip: skipSource,
-                    }
-                  : undefined
-              }
-            />
+                }
+              />
+            ) : tool === "text" ? (
+              <TextToolView font={defaultFont} />
+            ) : tool === "ocr" ? (
+              <OcrToolView lang={series.data?.source_lang} pending={ocr.pending.length} />
+            ) : activeMeta ? (
+              <MaskPanel
+                ws={ws}
+                pageId={activeMeta.id}
+                cleanRev={activeMeta.clean_rev}
+                page={{ w: activeMeta.width, h: activeMeta.height }}
+                onDone={data.refresh}
+              />
+            ) : (
+              <p className="muted small cw-pad">Chưa có trang để sửa.</p>
+            )}
           </div>
         )}
         {seen.has("table") && (

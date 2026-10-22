@@ -1,7 +1,7 @@
 /**
- * Mask → reinpaint: cỡ bút, xoá nét, gửi. Luồng: PNG theo vùng có nét → presigned POST (≤ 5MB) →
- * POST /reinpaint {user_mask_key, offset, base_clean_rev} → poll job → báo `onDone` để tải lại page
- * (layer clean chuyển sang clean_rev mới). Nét mask không vào undo/page_state.
+ * Panel công cụ Mask (B) / Tẩy nét mask (E): đổi Tô ↔ Tẩy nét, cỡ bút, bỏ nét, gửi xoá chữ. Luồng reinpaint: PNG
+ * theo vùng có nét → presigned POST (≤ 5MB) → POST /reinpaint {user_mask_key, offset, base_clean_rev} → poll job →
+ * báo `onDone` để tải lại page (layer clean chuyển sang clean_rev mới). Nét mask không vào undo/page_state.
  */
 import { useEffect, useRef, useState } from "react";
 import { errorMessage } from "../../../lib/api.ts";
@@ -19,6 +19,7 @@ export function MaskPanel(props: {
   const strokes = useEditor((s) => s.mask.strokes);
   const size = useEditor((s) => s.mask.size);
   const readOnly = useEditor((s) => !!s.readOnly);
+  const tool = useEditor((s) => s.tool);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const abort = useRef<AbortController | null>(null);
@@ -54,7 +55,25 @@ export function MaskPanel(props: {
 
   return (
     <section className="ed-mask">
-      <h3>Xoá chữ sót (mask)</h3>
+      <p className="small muted">Tô lên chữ còn sót, rồi bấm "Xoá chữ vùng đã tô". Chỉ vùng tô được gửi đi.</p>
+      <fieldset className="ed-seg" aria-label="Chế độ bút">
+        <button
+          type="button"
+          aria-pressed={tool === "brush"}
+          className={tool === "brush" ? "on" : undefined}
+          onClick={() => editorStore.getState().setTool("brush")}
+        >
+          Tô (B)
+        </button>
+        <button
+          type="button"
+          aria-pressed={tool === "eraser"}
+          className={tool === "eraser" ? "on" : undefined}
+          onClick={() => editorStore.getState().setTool("eraser")}
+        >
+          Tẩy nét (E)
+        </button>
+      </fieldset>
       <label htmlFor="ed-brush">Cỡ bút: {size}px</label>
       <input
         id="ed-brush"
@@ -64,7 +83,6 @@ export function MaskPanel(props: {
         value={size}
         onChange={(e) => editorStore.getState().setMask({ size: Number(e.target.value) })}
       />
-      <p className="small muted">B: tô vùng cần xoá · E: tẩy nét tô. Chỉ vùng tô được gửi đi.</p>
       <div className="ed-actions">
         <button
           type="button"

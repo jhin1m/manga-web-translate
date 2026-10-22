@@ -546,16 +546,6 @@
   height: 160px;
   border: 1px dashed var(--c-line);
 }
-.cw-side-head {
-  display: flex;
-  align-items: baseline;
-  gap: var(--sp-2);
-  padding: var(--sp-3);
-  border-bottom: 1px solid var(--c-line);
-}
-.cw-side-head h2 {
-  font-size: var(--fs-md);
-}
 .cw-pad {
   padding: 0 var(--sp-3);
 }
@@ -570,7 +560,7 @@
   white-space: nowrap;
 }
 
-/* Bảng văn bản (div + virtualize): # · Tr. · Gốc · Dịch · Loại · Tình trạng. */
+/* Bảng văn bản (div + virtualize) trong panel 560px: # · Tr. · Gốc · Dịch · Tình trạng (loại ở title dòng). */
 .cw-table {
   flex: 1;
   min-height: 0;
@@ -580,7 +570,7 @@
 }
 .cw-tr {
   display: grid;
-  grid-template-columns: 44px 44px minmax(0, 3fr) minmax(0, 5fr) 72px 150px;
+  grid-template-columns: 28px 32px minmax(0, 1fr) minmax(0, 1.2fr) 84px;
   align-items: center;
   gap: var(--sp-2);
   padding: 0 var(--sp-3);
@@ -662,7 +652,7 @@
   max-height: 40vh;
 }
 
-/* Inspector: khối đang chọn. */
+/* Panel Chọn / công cụ. */
 .cw-block {
   display: flex;
   flex-direction: column;
@@ -685,11 +675,40 @@
   font-size: var(--fs-xs);
   color: var(--c-fg-muted);
 }
-.cw-field-head label {
+label.cw-field-head {
   margin: 0;
 }
 .cw-field textarea {
   font-size: var(--fs-md);
+}
+.cw-panel-sub {
+  font-size: var(--fs-xs);
+  color: var(--c-fg-muted);
+}
+.cw-page-line {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font-size: var(--fs-sm);
+  color: var(--c-fg);
+}
+.cw-flags {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  margin: 0;
+  padding-left: var(--sp-4);
+  font-size: var(--fs-sm);
+}
+.cw-flags .danger {
+  color: var(--c-danger);
+}
+.cw-warn {
+  padding: var(--sp-2) 10px;
+  border-radius: var(--radius);
+  background: var(--c-warn-weak);
+  color: var(--c-warn);
+  font-size: var(--fs-sm);
 }
 .cw-src-box {
   padding: var(--sp-2) 10px;
@@ -710,22 +729,6 @@
 .cw-wide {
   width: 100%;
   justify-content: center;
-}
-.cw-page-info {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  gap: var(--sp-1) var(--sp-3);
-  margin: 0;
-  font-size: var(--fs-sm);
-}
-.cw-page-info dt {
-  color: var(--c-fg-muted);
-}
-.cw-page-info dd {
-  margin: 0;
-}
-.cw-page-info .danger {
-  color: var(--c-danger);
 }
 /* Lỗi thô của provider (JSON dài) — thu gọn, không tràn inspector. */
 .cw-error-raw {
@@ -777,4 +780,16 @@
 }
 .cw-meta-pop .row {
   justify-content: flex-end;
+}
+
+/* "Kiểu chữ nâng cao": thu gọn mặc định. */
+.cw-adv > summary {
+  cursor: pointer;
+  min-height: 32px;
+  display: flex;
+  align-items: center;
+  color: var(--c-fg-muted);
+}
+.cw-adv[open] > summary {
+  margin-bottom: var(--sp-2);
 }

@@ -1,7 +1,7 @@
 ---
 phase: 4
 title: "Nội dung panel: Chọn, công cụ, Bản dịch, Tìm"
-status: pending
+status: completed
 priority: P1
 effort: "5h"
 dependencies: [2, 3]

@@ -64,6 +64,7 @@ body {
   font: var(--fs-md) / var(--lh) var(--font-ui);
   color: var(--c-fg);
   background: var(--c-bg);
+  accent-color: var(--c-accent);
   -webkit-font-smoothing: antialiased;
 }
 

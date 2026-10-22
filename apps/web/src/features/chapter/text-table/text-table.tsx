@@ -1,5 +1,5 @@
 /**
- * Bảng văn bản cả chương (tab "Bản dịch" ở bảng dưới): 1 dòng / khối, sửa bản dịch tại chỗ, song song canvas.
+ * Bảng văn bản cả chương (panel "Bản dịch cả chương", 560px): 1 dòng / khối, sửa bản dịch tại chỗ, song song canvas.
  * Virtualize (`@tanstack/react-virtual`) — dòng đang focus luôn được render để textarea không mất focus khi cuộn.
  *
  * Đồng bộ 2 chiều: focus/click dòng → `onPick` (kích hoạt page, chọn box, cuộn canvas); dòng `current` đổi từ
@@ -72,9 +72,9 @@ export function TableFilters(props: { value: TableFilter; onChange(f: TableFilte
       </label>
       <label className="cw-check">
         <input type="checkbox" checked={value.page} onChange={(e) => onChange({ ...value, page: e.target.checked })} />
-        Chỉ trang đang sửa
+        Chỉ trang đang mở
       </label>
-      <span className="muted small">Enter: dòng sau · click dòng = chọn trên canvas</span>
+      <span className="muted small">Bấm một dòng để mở trang đó và chọn khối trên ảnh. Enter: dòng sau</span>
     </>
   );
 }
@@ -166,7 +166,6 @@ export function TextTable(props: {
         <span>Tr.</span>
         <span>Gốc</span>
         <span>Dịch (sửa tại chỗ)</span>
-        <span>Loại</span>
         <span>Tình trạng</span>
       </div>
       <div className="cw-tbody" ref={scrollRef}>
@@ -183,6 +182,7 @@ export function TextTable(props: {
                 key={v.key}
                 data-row={r.key}
                 className={cls.join(" ")}
+                title={`Trang ${r.ord + 1} · khối ${r.index} · ${KIND_LABEL[r.kind]}`}
                 style={{ transform: `translateY(${v.start}px)`, height: ROW_H }}
                 onClick={(e) => {
                   if (!(e.target instanceof HTMLTextAreaElement)) onPick(r);
@@ -211,9 +211,8 @@ export function TextTable(props: {
                     onKeyDown={(e) => onKey(e, v.index)}
                   />
                 </span>
-                <span className="muted small">{KIND_LABEL[r.kind]}</span>
                 <span>
-                  <span className="status" data-tone={st.tone}>
+                  <span className="status" data-tone={st.tone} title={st.text}>
                     {st.text}
                   </span>
                 </span>
