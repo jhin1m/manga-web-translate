@@ -1,6 +1,6 @@
 /**
  * Canvas màn chương: hiện từng trang một — chỉ page đang sửa (active), vẽ qua transform `view` (toạ độ page) trên 1
- * Stage bằng khung nhìn (không bao giờ bằng page — giới hạn canvas Safari). Đổi trang ở rail / phím ←/→.
+ * Stage bằng khung nhìn (không bao giờ bằng page — giới hạn canvas Safari). Đổi trang ở cột trang / pager / phím ←/→.
  *
  * Chế độ xem (chapterStore): Gốc = ảnh gốc, ẩn chữ; Dịch = ảnh sạch + chữ; Chia đôi = thêm cột Gốc bên trái cùng
  * Stage (cuộn/zoom đồng bộ tự nhiên), chỉ cột Dịch nhận thao tác — bấm/kéo ở cột Gốc = kéo canvas.
@@ -95,7 +95,7 @@ export const ChapterCanvas = memo(function ChapterCanvas(props: {
   }, []);
 
   // Lần đầu có page active + khung đã đo: vừa khung theo page đó. Khung đổi cỡ khi chưa ai động vào khung nhìn
-  // (bảng dưới mở/thu sau lần đo đầu) → vừa lại. Đổi trang sau đó do chapterStore.setActive đặt khung nhìn.
+  // (panel ngữ cảnh mở/thu sau lần đo đầu) → vừa lại. Đổi trang sau đó do chapterStore.setActive đặt khung nhìn.
   useEffect(() => {
     if (size.w === 0 || page.w === 0) return;
     if (fitted && editorStore.getState().view !== lastFit.current) return;

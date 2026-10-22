@@ -55,8 +55,13 @@ export function ContextMenu(props: {
     });
   }, [props.at, props.alignRight]);
 
+  // Focus mục đầu sau khi menu đã đặt chỗ (lúc đo còn `visibility: hidden` → chưa focus được).
+  const placed = pos !== null;
   useEffect(() => {
-    ref.current?.querySelector<HTMLButtonElement>("button:not(:disabled)")?.focus();
+    if (placed) ref.current?.querySelector<HTMLButtonElement>("button:not(:disabled)")?.focus();
+  }, [placed]);
+
+  useEffect(() => {
     const close = () => closeRef.current();
     const outside = (e: PointerEvent) => {
       if (!ref.current?.contains(e.target as Node)) close();

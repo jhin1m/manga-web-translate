@@ -80,3 +80,40 @@ export async function apiReadyChapter(page: Page, number: string, opts: FakeWork
   if (!ready) throw new Error("chapter not ready");
   return chapter.id;
 }
+
+/** Nút rail công cụ màn chương → tiêu đề panel nó mở (tên của `complementary`). */
+const PANELS = {
+  select: ["Chọn (V)", "Chọn & sửa"],
+  text: ["Chữ (T)", "Thêm chữ"],
+  table: ["Bản dịch cả chương", "Bản dịch cả chương"],
+  find: ["Tìm / Thay · Glossary (Ctrl+F)", "Tìm / Thay · Glossary"],
+} as const;
+
+/** Nút trên rail công cụ màn chương. */
+export const railButton = (page: Page, panel: keyof typeof PANELS) =>
+  page.getByRole("navigation", { name: "Công cụ" }).getByRole("button", { name: PANELS[panel][0], exact: true });
+
+/** Mở panel qua rail công cụ (đang mở thì giữ — bấm lại sẽ thu) → vùng panel. */
+export async function openPanel(page: Page, panel: keyof typeof PANELS) {
+  const btn = railButton(page, panel);
+  await expect(btn).toBeEnabled({ timeout: 15_000 });
+  if ((await btn.getAttribute("aria-pressed")) !== "true") await btn.click();
+  await expect(btn).toHaveAttribute("aria-pressed", "true");
+  return page.getByRole("complementary", { name: PANELS[panel][1], exact: true });
+}
+
+/** Panel Tìm, đoạn "Tìm / Thay" hoặc "Áp glossary" → vùng của đoạn đó. */
+export async function openFind(page: Page, part: "Tìm / Thay" | "Glossary") {
+  const panel = await openPanel(page, "find");
+  const seg = panel.getByRole("button", { name: part, exact: true });
+  await seg.click();
+  await expect(seg).toHaveAttribute("aria-pressed", "true");
+  return panel.getByRole("group", { name: part === "Glossary" ? "Áp glossary" : "Tìm / Thay", exact: true });
+}
+
+/** Cột thumbnail trang của màn chương. */
+export const pageThumbs = (page: Page) => page.getByRole("complementary", { name: "Danh sách trang" });
+
+/** Thumbnail trang `n` (tên truy cập "Trang n · <trạng thái>"). */
+export const pageThumb = (page: Page, n: number) =>
+  pageThumbs(page).getByRole("button", { name: new RegExp(`^Trang ${n} · `) });

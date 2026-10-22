@@ -50,7 +50,7 @@ export function useChapterRows(kit: FontKit | null, ignore: readonly string[]): 
   );
 }
 
-/** Sửa bản dịch của 1 khối (bảng hoặc inspector) trên page đang sửa; gõ liên tục = 1 bước undo. */
+/** Sửa bản dịch của 1 khối (bảng hoặc panel Chọn) trên page đang sửa; gõ liên tục = 1 bước undo. */
 export function setRowTranslation(row: Pick<Row, "pageId" | "regionId" | "boxId">, text: string) {
   const s = editorStore.getState();
   if (s.pageId !== row.pageId || !s.layout) return;

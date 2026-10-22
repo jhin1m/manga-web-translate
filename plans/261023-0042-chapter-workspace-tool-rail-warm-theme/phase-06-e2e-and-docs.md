@@ -1,7 +1,7 @@
 ---
 phase: 6
 title: "E2E theo bố cục mới + cập nhật docs"
-status: pending
+status: completed
 priority: P1
 effort: "5h"
 dependencies: [1, 2, 3, 4, 5]

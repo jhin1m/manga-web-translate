@@ -1,9 +1,9 @@
 /**
- * Tìm & thay trong chương (tab ở bảng dưới màn chương): bắt buộc "Xem trước" (danh sách khớp) rồi mới "Áp dụng"
- * (gửi versions của lần xem trước để server từ chối nếu page đã đổi); sau áp có "Hoàn tác" theo batch_id. Ghi nội
+ * Tìm & thay trong chương (đoạn "Tìm / Thay" của panel Tìm màn chương): bắt buộc "Xem trước" (danh sách khớp) rồi
+ * mới "Áp dụng" (gửi versions của lần xem trước để server từ chối nếu page đã đổi); sau áp có "Hoàn tác" theo batch_id. Ghi nội
  * dung cần khoá chương — dùng khoá của phiên. Trước mỗi lượt gọi server: lưu phần đang sửa (`beforeWrite`); sau ghi:
  * tải lại state chương (page đang sửa nạp lại nếu chưa sửa gì). Bấm 1 kết quả → nhảy tới khối đó.
- * Cũng export `useBatchFlow` + `MatchList` + `FlowPanel` để tab "Áp glossary" dùng lại cùng luồng.
+ * Cũng export `useBatchFlow` + `MatchList` + `FlowPanel` để đoạn "Glossary" dùng lại cùng luồng.
  */
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Fragment, useRef, useState } from "react";

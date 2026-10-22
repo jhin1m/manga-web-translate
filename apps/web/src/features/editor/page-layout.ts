@@ -65,7 +65,7 @@ export function blockBarPos(
 /** Page cao hơn `PAGE_RATIO_MAX` × rộng (webtoon cắt dải) không vừa theo chiều cao — chữ sẽ quá nhỏ để đọc. */
 export const PAGE_RATIO_MAX = 2;
 
-/** Vừa theo chiều cao không thu page dưới mức này — khung thấp (bảng dưới mở) thì cuộn còn hơn chữ không đọc được. */
+/** Vừa theo chiều cao không thu page dưới mức này — khung thấp thì cuộn còn hơn chữ không đọc được. */
 export const FIT_HEIGHT_MIN = 0.5;
 
 /**

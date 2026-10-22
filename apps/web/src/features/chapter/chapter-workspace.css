@@ -253,6 +253,12 @@
 .cw-panel-find > [hidden] {
   display: none;
 }
+.cw-find-part {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
 .cw-seg-full > * {
   flex: 1;
   justify-content: center;
@@ -754,7 +760,7 @@ label.cw-field-head {
   width: 100%;
   justify-content: center;
 }
-/* Lỗi thô của provider (JSON dài) — thu gọn, không tràn inspector. */
+/* Lỗi thô của provider (JSON dài) — thu gọn, không tràn panel. */
 .cw-error-raw {
   margin-top: var(--sp-1);
   color: var(--c-fg-muted);

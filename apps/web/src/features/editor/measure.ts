@@ -173,7 +173,7 @@ const overflowTolerance = (side: number) => Math.max(OVERFLOW_TOLERANCE_PX, OVER
  * Số px chữ tràn khỏi box cần cảnh báo (0 = vừa hoặc tràn trong dung sai): chiều cao khối dòng + 2·pad vượt `h`,
  * hoặc dòng rộng hơn `w − 2·pad`. Đo trên `lines` đã chốt (như khi vẽ), cùng công thức chiều cao với `fitText` —
  * box auto_fit chỉ tràn khi đã xuống cỡ nhỏ nhất mà vẫn không vừa. Vượt dung sai → trả số px đo thật (không trừ
- * dung sai). Nguồn duy nhất cho cờ "tràn khung" (bảng văn bản, rail, inspector, cảnh báo xuất).
+ * dung sai). Nguồn duy nhất cho cờ "tràn khung" (bảng văn bản, cột trang, panel Chọn, cảnh báo xuất).
  */
 export function boxOverflow(box: OverflowBox, m: FontMetrics, measure: MeasureFn): number {
   if (box.lines.length === 0) return 0;

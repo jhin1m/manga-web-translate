@@ -1,7 +1,8 @@
 /**
  * Quản lý series / chương: xoá series từ hàng series ở home và xoá chương từ hàng chương (xác nhận tại chỗ; Huỷ không
  * xoá), chuyển tab Chương / Glossary / Cài đặt giữ nguyên đầu trang series; chọn ngôn ngữ gốc khi tạo series và
- * sửa ngôn ngữ đích / định dạng truyện trong Cài đặt.
+ * sửa ngôn ngữ đích / định dạng truyện trong Cài đặt. Tên series dài cắt "…" (title đủ tên), không đè cột trạng thái
+ * ở home, không tràn ở trang series và thanh trên màn chương.
  */
 import { expect, test } from "@playwright/test";
 import { WEB_URL } from "./env.ts";
@@ -129,4 +130,59 @@ test("new series picks source language; settings edit target language, page form
   };
   expect([s.source_lang, s.target_lang, s.page_format]).toEqual(["ja", "en", "strip"]);
   expect(s.ignore_text).toEqual(["discord.gg/nhom", "Nhóm Mèo"]);
+});
+
+test("a very long series name is truncated with a full-name title and never overlaps the status column", async ({
+  page,
+}) => {
+  await login(page);
+  const title = `Series_${"DaiKhongDauCach".repeat(4)} ${"tên rất dài có dấu cách ".repeat(3)}`.slice(0, 120).trim();
+  const created = await page.request.post(`/api/w/${state.workspaceId}/series`, {
+    headers: { origin: WEB_URL },
+    data: { title },
+  });
+  expect(created.status()).toBe(201);
+  const s = (await created.json()) as { id: string };
+  const chapter = await page.request.post(`/api/w/${state.workspaceId}/chapters`, {
+    headers: { origin: WEB_URL },
+    data: {
+      series_id: s.id,
+      number: "1",
+      files: [{ name: "1.png", content_type: "image/png", bytes: PNG_1PX.length }],
+    },
+  });
+  expect(chapter.status()).toBe(201);
+  const chapterId = ((await chapter.json()) as { chapter: { id: string } }).chapter.id;
+
+  for (const width of [1568, 390]) {
+    await page.setViewportSize({ width, height: 800 });
+    await page.goto("/");
+    const row = page.locator(`.row-item[data-series="${s.id}"]`);
+    const name = row.locator(".row-name");
+    await expect(name).toHaveAttribute("title", title);
+    const status = row.locator(".row-open .grow");
+    await expect(status).toContainText("Ch.1");
+    const n = await name.boundingBox();
+    const st = await status.boundingBox();
+    if (!n || !st) throw new Error("row not laid out");
+    // Cùng hàng → tên kết thúc trước cột trạng thái; xuống hàng (màn hẹp) → không chồng theo chiều dọc.
+    const sameLine = n.y < st.y + st.height && st.y < n.y + n.height;
+    if (sameLine) expect(n.x + n.width).toBeLessThanOrEqual(st.x);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  }
+
+  // Trang series + thanh trên màn chương: không tràn ngang.
+  await page.setViewportSize({ width: 1568, height: 800 });
+  await page.goto(`/w/${state.workspaceId}/s/${s.id}`);
+  await expect(page.getByRole("heading", { name: title })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.goto(`/w/${state.workspaceId}/s/${s.id}/c/${chapterId}`);
+  const back = page.locator(".cw-back");
+  await expect(back).toHaveAttribute("title", title);
+  expect((await page.locator(".cw-back-name").boundingBox())?.width ?? 999).toBeLessThanOrEqual(240);
+
+  // Dọn: series này có chương mới nhất → spec sau thả file sẽ đoán nhầm vào nó.
+  await page.goto("/");
+  const del = await page.request.delete(`/api/w/${state.workspaceId}/series/${s.id}`, { headers: { origin: WEB_URL } });
+  expect(del.ok()).toBe(true);
 });

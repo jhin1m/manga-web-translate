@@ -1,6 +1,6 @@
 /**
  * OCR vùng chọn: kéo khung (công cụ O) → POST /ocr-region → poll job → chèn region + text box vào state như
- * một thao tác editor (có undo, đi qua save). "OCR lại" 1 vùng có sẵn (inspector): cùng job trên bbox của vùng,
+ * một thao tác editor (có undo, đi qua save). "Dịch lại khối" 1 vùng có sẵn (panel Chọn, thanh nổi): cùng job trên bbox của vùng,
  * kết quả thay chữ gốc + bản dịch của vùng đó. Khung đang chờ hiện viền đứt; lỗi báo trên panel.
  */
 import type { Region } from "@mtl/shared";

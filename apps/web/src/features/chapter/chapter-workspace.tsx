@@ -790,7 +790,7 @@ function Workspace({ ws, seriesId, chapterId, page: searchPage, drawer: searchDr
                 Glossary
               </button>
             </fieldset>
-            <div hidden={findTab !== "find"}>
+            <fieldset className="cw-find-part" aria-label="Tìm / Thay" hidden={findTab !== "find"}>
               <FindReplacePanel
                 ws={ws}
                 seriesId={seriesId}
@@ -799,8 +799,8 @@ function Workspace({ ws, seriesId, chapterId, page: searchPage, drawer: searchDr
                 beforeWrite={flush}
                 onJump={jump}
               />
-            </div>
-            <div hidden={findTab !== "glossary"}>
+            </fieldset>
+            <fieldset className="cw-find-part" aria-label="Áp glossary" hidden={findTab !== "glossary"}>
               <ApplyGlossaryPanel
                 ws={ws}
                 seriesId={seriesId}
@@ -809,7 +809,7 @@ function Workspace({ ws, seriesId, chapterId, page: searchPage, drawer: searchDr
                 beforeWrite={flush}
                 onJump={jump}
               />
-            </div>
+            </fieldset>
           </div>
         )}
       </ContextPanel>

@@ -9,7 +9,7 @@ export default defineConfig({
   workers: 1,
   reporter: [["list"]],
   globalSetup: "./e2e/global-setup.ts",
-  // Màn ≥ 24" (owner chốt): bố cục mặc định của màn chương hiện đủ rail + canvas + inspector + bảng dưới.
+  // Màn ≥ 24" (owner chốt): màn chương hiện rail công cụ + panel rộng 560px + canvas + cột trang mà vẫn còn chỗ.
   use: {
     baseURL: WEB_URL,
     trace: "retain-on-failure",
