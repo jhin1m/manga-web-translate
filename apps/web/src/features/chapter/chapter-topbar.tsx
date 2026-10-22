@@ -58,6 +58,7 @@ export function ChapterTopbar(props: {
         to="/w/$ws/s/$seriesId"
         params={{ ws: props.ws, seriesId: props.seriesId }}
         className="cw-back"
+        title={detail?.series.title}
         onClick={(e) => {
           if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
           e.preventDefault();
@@ -75,7 +76,7 @@ export function ChapterTopbar(props: {
         >
           <path d="M15 18l-6-6 6-6" />
         </svg>
-        {detail?.series.title ?? "Series"}
+        <span className="cw-back-name">{detail?.series.title ?? "Series"}</span>
       </Link>
       <ChapterMetaPopover ws={props.ws} detail={detail} onMoved={props.onMoved} />
       {/* Luôn render vùng live (rỗng khi chưa tải) để trình đọc màn hình báo được lần đổi đầu tiên. */}

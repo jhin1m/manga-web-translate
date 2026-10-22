@@ -88,7 +88,7 @@ function SeriesHead({ series }: { series: SeriesDetail }) {
       <div className="cover lg" aria-hidden="true">
         {series.title.trim().charAt(0).toUpperCase()}
       </div>
-      <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+      <div className="series-head-text">
         <h1>{series.title}</h1>
         <span className="muted">
           {langShort(series.source_lang)} → {langShort(series.target_lang)} · {series.chapters.length} chương ·{" "}

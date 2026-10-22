@@ -11,7 +11,7 @@
 .ed-seg .on {
   background: var(--c-accent-weak);
   border-color: var(--c-accent);
-  color: var(--c-accent);
+  color: var(--c-accent-hover);
 }
 .ed-notices:empty {
   display: none;
@@ -30,7 +30,7 @@
   flex: 1;
   min-height: 0;
   overflow: hidden;
-  background: #8a8a85;
+  background: var(--c-canvas);
   touch-action: none;
 }
 .ed-loading {
@@ -38,7 +38,7 @@
   place-items: center;
 }
 .ed-loading .muted {
-  color: #f6f6f5;
+  color: var(--c-fg-muted);
 }
 .ed-textedit {
   position: absolute;

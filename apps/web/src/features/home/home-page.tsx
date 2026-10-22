@@ -161,7 +161,9 @@ function SeriesRow({ ws, s, canDelete }: { ws: string; s: SeriesListItem; canDel
           {s.title.trim().charAt(0).toUpperCase()}
         </span>
         <span className="row-title">
-          <span className="row-name">{s.title}</span>
+          <span className="row-name" title={s.title}>
+            {s.title}
+          </span>
           <span className="row-sub">
             {s.chapter_count} chương · {s.exported_count ?? 0} đã xuất
           </span>

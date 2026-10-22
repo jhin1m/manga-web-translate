@@ -3,7 +3,7 @@
   position: fixed;
   inset: 0;
   z-index: 40;
-  background: rgb(27 27 26 / 0.32);
+  background: rgb(42 38 32 / 0.32);
 }
 .drawer {
   position: fixed;

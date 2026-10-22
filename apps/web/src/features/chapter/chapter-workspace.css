@@ -33,8 +33,15 @@
   display: flex;
   align-items: center;
   gap: 6px;
+  min-width: 0;
   color: var(--c-fg-muted);
   white-space: nowrap;
+}
+/* Tên series dài cắt "…" (title của link hiện tên đầy đủ); icon ‹ không bị cắt. */
+.cw-back-name {
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .cw-title {
   font-size: var(--fs-lg);
@@ -167,7 +174,7 @@
 .cw-rail-filter [aria-pressed="true"] {
   border-color: var(--c-accent);
   background: var(--c-accent-weak);
-  color: var(--c-accent);
+  color: var(--c-accent-hover);
 }
 .cw-rail-list {
   flex: 1;
@@ -218,7 +225,7 @@
 }
 .cw-rail-flag {
   font-size: var(--fs-xs);
-  color: var(--c-accent);
+  color: var(--c-accent-hover);
 }
 
 .cw-main {
@@ -252,7 +259,7 @@
   flex-direction: column;
 }
 .cw-canvas .ed-canvas {
-  background: #e4e4e2;
+  background: var(--c-canvas);
 }
 .cw-tools {
   flex: none;
@@ -623,7 +630,7 @@
   padding: 0;
   border: 0;
   background: none;
-  color: var(--c-accent);
+  color: var(--c-accent-hover);
   font-size: var(--fs-xs);
 }
 .cw-wide {

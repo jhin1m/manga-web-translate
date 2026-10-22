@@ -1,7 +1,7 @@
 ---
 title: "Màn chương: rail công cụ + 1 panel, bảng màu Giấy ấm"
 description: "Thay bố cục 4 vùng của màn chương bằng rail công cụ 64px + panel ngữ cảnh + canvas vừa khung + cột thumbnail 112px; đổi token màu toàn app sang Giấy ấm; sửa tên series dài đè cột trạng thái."
-status: pending
+status: in-progress
 priority: P1
 effort: 26h
 branch: feat/chapter-workspace-tool-rail
@@ -21,7 +21,7 @@ nghệ mới; đã rà code thực tế thay cho researcher).
 
 | # | Phase | Effort | Phụ thuộc | Trạng thái |
 |---|---|---|---|---|
-| 1 | [Token Giấy ấm + lỗi tên series dài](./phase-01-warm-tokens-and-series-name-overflow.md) | 2h | — | pending |
+| 1 | [Token Giấy ấm + lỗi tên series dài](./phase-01-warm-tokens-and-series-name-overflow.md) | 2h | — | completed |
 | 2 | [Rail công cụ + panel ngữ cảnh (khung)](./phase-02-tool-rail-and-context-panel-shell.md) | 5h | 1 | pending |
 | 3 | [Cột thumbnail 112px + menu chuột phải](./phase-03-thumbnail-column-and-page-menu.md) | 4h | 2 | pending |
 | 4 | [Nội dung panel: Chọn, công cụ, Bản dịch, Tìm](./phase-04-panel-content-select-tools-table-find.md) | 5h | 2, 3 | pending |

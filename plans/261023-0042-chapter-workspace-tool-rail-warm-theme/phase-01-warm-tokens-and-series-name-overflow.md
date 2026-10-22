@@ -1,7 +1,7 @@
 ---
 phase: 1
 title: "Token màu Giấy ấm + lỗi tên series dài"
-status: pending
+status: completed
 priority: P1
 effort: "2h"
 dependencies: []
