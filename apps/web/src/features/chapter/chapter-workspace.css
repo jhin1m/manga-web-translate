@@ -303,36 +303,88 @@
   padding: 0 6px;
   line-height: 20px;
 }
-.cw-empty {
+/* Chương chưa có page: dải trên (tiến độ upload, vùng thả tải tiếp, thông báo cắt trang) + 1 ảnh gốc. */
+.cw-source {
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: var(--sp-3);
-  padding: var(--sp-5);
-  overflow-y: auto;
+  min-height: 0;
 }
-
-/* Ảnh gốc xem trước của chương chưa có page: cột dọc như strip, giới hạn bề ngang. */
-.source-preview {
-  list-style: none;
-  margin: 0 auto;
-  padding: 0;
-  width: 100%;
-  max-width: 720px;
+.cw-source-band {
   display: flex;
   flex-direction: column;
   gap: var(--sp-2);
+  padding: var(--sp-3) var(--sp-4) 0;
 }
-.source-preview img {
+.cw-source-band:empty {
+  display: none;
+}
+/* Ảnh vừa bề ngang (không phóng quá cỡ thật), ảnh cao cuộn dọc như đọc webtoon; chừa chỗ cho thanh ‹ › dưới. */
+.cw-source-view {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--sp-3) var(--sp-4) 56px;
+}
+.cw-source-view figure {
+  margin: 0 auto;
+  width: fit-content;
+  max-width: 100%;
+}
+.cw-source-view img {
   display: block;
-  width: 100%;
+  max-width: 100%;
   height: auto;
 }
-.source-preview-missing {
+.cw-source-view figure[data-skipped] img {
+  opacity: 0.4;
+}
+.cw-source-view figcaption {
+  margin-top: var(--sp-1);
+  color: var(--c-fg-subtle);
+}
+.source-missing {
   display: grid;
   place-items: center;
   height: 160px;
   border: 1px dashed var(--c-line);
+}
+/* Mục rail ảnh gốc: nút chọn + icon Xoá/Khôi phục cạnh nhau (không lồng nút). */
+.cw-rail-head {
+  padding: 10px;
+  border-bottom: 1px solid var(--c-line);
+}
+.cw-source-item {
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  padding: 0 4px 0 0;
+}
+.cw-rail-pick {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px;
+  border-color: transparent;
+  background: none;
+  text-align: left;
+  justify-content: flex-start;
+  height: auto;
+}
+/* Hover tô cả mục (nút chọn + icon) thay vì riêng nút chọn; mục đang xem giữ nền nhấn. */
+.cw-rail-pick:hover {
+  background: none;
+}
+.cw-source-item:not(.on):hover {
+  background: var(--c-surface);
+}
+.cw-source-item[data-skipped] .cw-thumb img {
+  opacity: 0.35;
+}
+/* Rail hẹp: nhãn dài ("Credit · tự bỏ") xuống dòng thay vì đè lên icon. */
+.cw-source-item .status {
+  white-space: normal;
 }
 
 .cw-side {

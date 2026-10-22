@@ -1,8 +1,9 @@
 /**
  * Màn chương = editor gộp (`/w/:ws/s/:s/c/:c?page=`): thanh trên (+ băng cảnh báo khi có) | rail trang · canvas từng
- * trang · inspector | bảng dưới (Bản dịch cả chương / Tìm–Thay / Áp glossary). Chương nháp: canvas là tiến độ upload
- * + vùng thả để tải tiếp + ảnh gốc xem trước (cả lúc đang cắt trang). Upload xong không tự chạy: "Bước 1" = cắt trang
- * + xoá chữ + OCR, xong dừng ở "Chờ dịch" (xem ảnh sạch, sửa mask) tới khi bấm "Bước 2 · Dịch".
+ * trang · inspector | bảng dưới (Bản dịch cả chương / Tìm–Thay / Áp glossary). Chương chưa có page (nháp, đang cắt
+ * trang, cắt lỗi): rail là từng ảnh gốc (xoá / khôi phục trước Bước 1), canvas là ảnh đang chọn + tiến độ upload + vùng
+ * thả để tải tiếp. Upload xong không tự chạy: "Bước 1" = cắt trang + xoá chữ + OCR, xong dừng ở "Chờ dịch" (xem ảnh
+ * sạch, sửa mask) tới khi bấm "Bước 2 · Dịch".
  *
  * Trạng thái chương chỉ ở chip thanh trên (+ rail theo trang). Kết quả thao tác (dịch lại, áp kiểu…) là thông báo nổi
  * trên canvas, tự ẩn; Bước 1 / Bước 2 thành công không báo gì thêm (chip đã đổi), Bước 1 chỉ báo khi có ảnh bị loại.
@@ -59,11 +60,14 @@ import { PageRail } from "./page-rail.tsx";
 import { needsReview, pageLevel } from "./page-status.ts";
 import { type ChapterCommand, primaryAction } from "./primary-action.ts";
 import { ShortcutHelp } from "./shortcut-help.tsx";
-import { SourcePreview } from "./source-preview.tsx";
+import { SourceRail } from "./source-rail.tsx";
+import { type SourceItem, sourceCounts, stepSource } from "./source-rail-model.ts";
+import { SourceViewer } from "./source-viewer.tsx";
 import { chapterChip, isChapterSettled } from "./status.ts";
 import { filterRows, KIND_LABEL, type Row, rowKeyOfBox, sameKindBoxIds, type TableFilter } from "./text-table/rows.ts";
 import { TableFilters, TextTable, useChapterRows } from "./text-table/text-table.tsx";
 import { useChapterData } from "./use-chapter-data.ts";
+import { useSetSourceSkip, useSourceImages } from "./use-source-images.ts";
 
 const URL_SYNC_MS = 400;
 /** Thông báo kết quả (info) tự ẩn sau chừng này; lỗi giữ tới khi đóng. */
@@ -72,8 +76,18 @@ const NO_PAGES: never[] = [];
 
 type DrawerKind = "export" | "activity" | "help";
 type Props = { ws: string; seriesId: string; chapterId: string; page?: string; drawer?: "export" };
-/** `untilStable`: giữ tới khi chương chạy xong lượt xử lý vừa bắt đầu (ảnh bị loại khi Dịch chương). */
-type Notice = { tone: "info" | "warn" | "danger"; text: string; untilStable?: boolean };
+/**
+ * `untilStable`: giữ tới khi chương chạy xong lượt xử lý vừa bắt đầu (ảnh bị loại khi Dịch chương). `action`: nút
+ * kèm thông báo (vd. "Hoàn tác" sau khi xoá ảnh).
+ */
+type Notice = {
+  tone: "info" | "warn" | "danger";
+  text: string;
+  untilStable?: boolean;
+  action?: { label: string; run(): void };
+  /** Nhóm thông báo — "source-skip": khôi phục ảnh chỉ đóng thông báo "Đã xoá ảnh…", không đụng lỗi khác. */
+  key?: "source-skip";
+};
 
 /** Dịch chương mà có ảnh bị loại: giữ tới khi chương chạy xong lượt xử lý vừa bắt đầu. */
 const rejectedNotice = (accepted: number, rejected: Rejected[]): Notice => ({
@@ -240,13 +254,20 @@ function Workspace({ ws, seriesId, chapterId, page: searchPage, drawer: searchDr
   const activeOverflow = allRows.filter((r) => r.pageId === activeId && r.flags.includes("overflow")).length;
 
   // ---- Thao tác chương ----
-  const upload = uploadManager.view(chapterId, useChapterUpload(chapterId));
+  const uploadState = useChapterUpload(chapterId);
+  const upload = uploadManager.view(chapterId, uploadState);
   const counts = data.progress?.counts ?? {};
   const ready = counts.ready ?? 0;
+  const declared = data.detail?.source_files ?? [];
+  const skippedFiles = declared.filter((f) => f.skip !== null).length;
+  const uploaded = uploadManager.uploadedIds(chapterId, uploadState);
+  const pendingFiles = uploaded ? declared.filter((f) => f.skip === null && !uploaded.has(f.id)).length : 0;
   const primary = status
     ? primaryAction({
         status,
-        sourceFiles: data.detail?.source_files.length ?? 0,
+        sourceFiles: declared.length - skippedFiles,
+        skippedFiles,
+        pendingFiles,
         upload,
         pages: pages.length,
         ready,
@@ -396,6 +417,39 @@ function Workspace({ ws, seriesId, chapterId, page: searchPage, drawer: searchDr
     void navigate({ to: "/w/$ws/s/$seriesId", params: { ws, seriesId } });
   };
 
+  // ---- Ảnh gốc khi chưa có page (rail + canvas) ----
+  // Chờ có tiến độ (danh sách page) mới quyết: chi tiết về trước thì chương đã có page cũng chớp sang ảnh gốc.
+  const sourceMode = !!data.progress && pages.length === 0;
+  const sources = useSourceImages(ws, chapterId, sourceMode);
+  const [sourcePick, setSourcePick] = useState<string | null>(null);
+  const sourceId = sources.some((it) => it.id === sourcePick) ? sourcePick : (sources[0]?.id ?? null);
+  const sourceIdx = sources.findIndex((it) => it.id === sourceId);
+  const sourcesEditable = status === "draft" || (status === "partial_failed" && pages.length === 0);
+  const sourceSkip = useSetSourceSkip(ws, chapterId, (e) => notify({ tone: "danger", text: errorMessage(e) }));
+  const skipSource = useCallback(
+    (it: SourceItem, skip: "user" | null) =>
+      sourceSkip.mutate(
+        { id: it.id, skip },
+        {
+          onSuccess: () => {
+            if (skip) {
+              notify({
+                tone: "info",
+                key: "source-skip",
+                text: `Đã xoá ảnh ${it.n}.`,
+                action: { label: "Hoàn tác", run: () => skipSource(it, null) },
+              });
+            } else setNotice((n) => (n?.key === "source-skip" ? null : n));
+          },
+        },
+      ),
+    [sourceSkip.mutate, notify],
+  );
+  const stepSourceBy = (dir: -1 | 1) => {
+    const next = stepSource(sources, sourceId, dir);
+    if (next) setSourcePick(next);
+  };
+
   // ---- Ảnh + OCR của page active ----
   const slotImages = useMemo(() => {
     const m = new Map<string, SlotImages>();
@@ -453,7 +507,8 @@ function Workspace({ ws, seriesId, chapterId, page: searchPage, drawer: searchDr
       case "toggleOriginal":
         return void cs.setViewMode(cs.viewMode === "original" ? "translated" : "original");
       case "page":
-        go(pages[idx + a.dir]?.id);
+        if (sourceMode) stepSourceBy(a.dir);
+        else go(pages[idx + a.dir]?.id);
         return;
       case "block": {
         // Khối trước/sau theo thứ tự bảng (xuyên trang); chưa có khối hiện tại → khối đầu/cuối của page active.
@@ -534,43 +589,52 @@ function Workspace({ ws, seriesId, chapterId, page: searchPage, drawer: searchDr
         onRecovery={(accept) => void session.restore(accept)}
         aiWait={aiWait}
       />
-      <PageRail pages={pages} images={data.images} activeId={activeId} overflow={overflowPages} onPick={go} />
+      {sourceMode ? (
+        <SourceRail
+          items={sources}
+          activeId={sourceId}
+          editable={sourcesEditable}
+          onPick={setSourcePick}
+          onSkip={skipSource}
+        />
+      ) : (
+        <PageRail pages={pages} images={data.images} activeId={activeId} overflow={overflowPages} onPick={go} />
+      )}
       <main className="cw-main">
         <Notices errors={errors} notice={notice} onDismiss={() => notify(null)} />
-        {isDraft || pages.length === 0 ? (
-          <div className="cw-empty">
-            {isDraft ? (
-              <>
-                <ChapterUploadStatus ws={ws} chapterId={chapterId} onResume={resume} resumeError={resumeError} />
-                {!upload && (
-                  <p className="muted">
-                    Chương nháp: {data.detail?.source_files.length ?? 0} ảnh đã khai báo. Bấm "Dịch chương" khi đã tải
-                    đủ ảnh.
-                  </p>
-                )}
-                {primary?.command === "upload" && (
-                  <DropZone
-                    label="Tải tiếp ảnh"
-                    size="md"
-                    title="Thả lại đúng bộ file của chương để tải tiếp"
-                    hint="Ảnh đã tải được bỏ qua — chỉ tải phần còn thiếu"
-                    onFiles={resume}
-                  />
-                )}
-                <SourcePreview ws={ws} chapterId={chapterId} />
-              </>
-            ) : (
-              <>
+        {sourceMode ? (
+          <div className="cw-source">
+            <div className="cw-source-band">
+              {isDraft ? (
+                <>
+                  <ChapterUploadStatus ws={ws} chapterId={chapterId} onResume={resume} resumeError={resumeError} />
+                  {primary?.command === "upload" && (
+                    <DropZone
+                      label="Tải tiếp ảnh"
+                      size="md"
+                      title="Thả lại đúng bộ file của chương để tải tiếp"
+                      hint="Ảnh đã tải được bỏ qua — chỉ tải phần còn thiếu"
+                      onFiles={resume}
+                    />
+                  )}
+                </>
+              ) : (
                 <p className="muted">
                   {status === "ingesting"
                     ? "Đang ghép và cắt trang theo bóng thoại…"
                     : status === "partial_failed"
-                      ? `Cắt trang lỗi${ingestError ? `: ${ingestError}` : ""} — bấm "Chạy lại cắt trang" để cắt lại từ ảnh đã tải.`
+                      ? `Cắt trang lỗi${ingestError ? `: ${ingestError}` : ""} — bấm "Chạy lại bước 1" để cắt lại từ ảnh đã tải.`
                       : "Chưa có trang."}
                 </p>
-                <SourcePreview ws={ws} chapterId={chapterId} />
-              </>
-            )}
+              )}
+            </div>
+            <SourceViewer
+              chapterId={chapterId}
+              item={sources[sourceIdx]}
+              index={sourceIdx}
+              total={sourceCounts(sources).total}
+              onStep={stepSourceBy}
+            />
           </div>
         ) : (
           <div className="cw-canvas">
@@ -707,6 +771,11 @@ function Notices(props: { errors: (string | null | undefined)[]; notice: Notice 
       {props.notice && (
         <div className={`notice ${props.notice.tone}`} role={props.notice.tone === "danger" ? "alert" : "status"}>
           {props.notice.text}{" "}
+          {props.notice.action && (
+            <button type="button" className="btn-ghost" onClick={props.notice.action.run}>
+              {props.notice.action.label}
+            </button>
+          )}
           <button type="button" className="btn-ghost" onClick={props.onDismiss}>
             Đóng
           </button>
