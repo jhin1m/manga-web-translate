@@ -84,6 +84,8 @@ export function ContextMenu(props: {
     const next = dir === "first" ? 0 : dir === "last" ? items.length - 1 : (i + dir + items.length) % items.length;
     items[next]?.focus();
   };
+  // Có mục bật/tắt → mọi mục chừa cột dấu ✓ để chữ thẳng hàng.
+  const checkable = props.items.some((it) => it.checked !== undefined);
   const closeAndReturn = () => {
     onClose();
     if (anchor?.isConnected) anchor.focus();
@@ -124,7 +126,7 @@ export function ContextMenu(props: {
             it.run();
           }}
         >
-          {it.checked !== undefined && <span className="cw-ctx-check">{it.checked && <CheckIcon size={14} />}</span>}
+          {checkable && <span className="cw-ctx-check">{it.checked && <CheckIcon size={14} />}</span>}
           {it.label}
         </button>
       ))}
