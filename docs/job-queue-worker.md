@@ -75,6 +75,21 @@ Circuit breaker: ≥ 5 lỗi provider/rate_limited trong 5' → `runtime_flags.l
 `page.prepare` gửi kèm `partial {clean_rev, mask_rev, regions}` → lần sau bỏ qua detect/inpaint. Lease hết hạn → reaper
 trả `queued` (giữ attempts) hoặc `failed` khi hết lượt.
 
+## Ảnh / trang bỏ qua, chữ bỏ qua
+
+- `chapter.ingest` chỉ nhận ảnh gốc `source_files.skip IS NULL` (`'user'` = xoá tay, `'credit'` = khớp ảnh credit
+  series đã học lúc tạo chương); commit kiểm lại bộ ảnh trong transaction, đổi giữa chừng → 409 `sources_changed`.
+- Trang `pages.skipped`: không vào `chapter.translate` (Bước 2, retry, dịch lại), không làm `context_lines`, không
+  tính trạng thái chương; `chapter.export` nhận `pages[].skipped` (pipeline 0.4.2).
+- **Chữ bỏ qua** (`series.ignore_text`, Cài đặt series → "Chữ bỏ qua (watermark)"; ≤ 50 mục, 3–100 ký tự tính trên
+  dạng đã chuẩn hoá): lúc claim `chapter.translate`, item OCR chứa một mục (NFC, không phân biệt hoa/thường, bỏ
+  `http(s)://`, gộp khoảng trắng — `packages/shared/src/ignore-text.ts`) được gửi `empty: true` → worker không dịch,
+  không đặt box (ảnh đã sạch từ Bước 1). `ocr_result` trong DB không đổi → bỏ mục rồi dịch lại là dịch vùng đó bình
+  thường. Dòng khớp cũng bị bỏ khỏi `context_lines` (cả `page.ocr_region`; vùng người dùng tự vẽ thì vẫn dịch). Đổi
+  danh sách tăng `glossary_rev` (khoá job dịch), **không** `settings_rev` (nằm trong khoá prepare → thử lại trang lỗi
+  sẽ chạy lại Bước 1). Chương đã dịch không bị sửa ngược: bảng văn bản ẩn dòng khớp, trừ khi box còn in chữ. URL bị
+  OCR tách bằng dấu cách (`discord . gg`) hoặc watermark detector không bắt thì không khớp / còn trên ảnh.
+
 ## Ingest strip / pages
 
 Mode ingest = `series.page_format` (`POST /chapters/:id/commit` không gửi `mode` → lấy của series; body `mode` chỉ để

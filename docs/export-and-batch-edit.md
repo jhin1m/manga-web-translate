@@ -25,6 +25,9 @@ Render phía server bằng chính `worker/mtl_pipeline/render.py` (một rendere
 - **Layout**: `pages` = `{ord+1:03}` mỗi page; `original_slices` = cắt lại đúng slice upload gốc theo `source_map`,
   ghép theo cửa sổ trượt (render từng page, dán vào buffer slice đích, slice đủ hàng thì ghi ra zip) — không giữ cả
   strip trong RAM. Slice có đoạn thuộc page chưa dịch bị bỏ khi `include_untranslated=false`.
+- **Trang đã ẩn** (`pages.skipped`, xem [editor.md](./editor.md)): `ExportInputs.pages[].skipped`. Layout `pages`
+  bỏ trang ẩn, file vẫn đánh số liên tục `001…n`; `original_slices` bỏ slice nằm trọn trong trang ẩn, slice vắt qua
+  trang ẩn giữ pixel gốc ở đoạn đó. Hết trang hiện → 409 `no_pages`. Tìm/Thay và Áp glossary không đọc/ghi trang ẩn.
 - **Tải nền**: worker tải hết ảnh nền ra thư mục tạm trước khi render (URL ký 15', render chương dài có thể lâu hơn).
   Tên file `{ord+1}` đệm ≥ 3 chữ số (đủ chữ số khi > 999 ảnh).
 - **Ảnh**: `png_zip` luôn PNG; `cbz` quality 100 → PNG, < 100 → JPEG. Zip ghi ra file tạm (entry STORED), CBZ có

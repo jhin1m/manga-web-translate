@@ -28,6 +28,37 @@ nhả khoá (cùng chuỗi `serial` với lock) → gọi API; khoá được l�
 khoá → băng cảnh báo báo tên + "Thử lại", chỉ báo cạnh chip đổi thành "Chỉ xem", editor chỉ xem. Đang giữ khoá
 bình thường không có băng (chỉ báo nhỏ icon khoá + "Đã lưu" ở thanh trên).
 
+## Ảnh gốc trước Bước 1, xoá ảnh / trang, ảnh tự bỏ
+
+**Trước Bước 1** (chương chưa có page: nháp, đang cắt, cắt lỗi) rail trái là danh sách ảnh gốc "Ảnh n" theo thứ tự
+upload (`source-rail.tsx`, `use-source-images.ts`): ảnh thả trong tab hiện ngay từ Blob local khi còn đang tải (nhãn
+"Đang tải" / "Tải lỗi" / "Chưa tải"), còn lại dùng URL ký (`GET …/chapters/:id/source-files`). Bấm = xem lớn ở canvas,
+←/→ chuyển ảnh. Icon Xoá / Khôi phục khi còn sửa được bộ ảnh: `PATCH …/chapters/:id/source-files/:fileId {skip}` đặt
+`source_files.skip = 'user'` (giữ hàng để hoàn tác và để tải tiếp khớp bộ file); commit/ingest bỏ ảnh `skip`, nút
+Bước 1 đếm ảnh còn dùng. Người khác giữ khoá → 423; đã có page → 409.
+
+**Sau Bước 1** icon Xoá trên rail trang ẩn trang (`PATCH /pages/:id {skipped}`, cần giữ khoá; chương đang chạy →
+409 `chapter_busy`; trang hiện cuối cùng → 409 `last_page`). Trang ẩn giữ dữ liệu, nằm trong bộ lọc "Đã xoá" để khôi
+phục; không dịch (Bước 2, dịch lại, chạy lại lỗi; dịch thẳng trang ẩn → 409 `page_skipped`), không làm ngữ cảnh trang
+bên cạnh, không tính trạng thái/đếm của chương, không bị Tìm/Thay / Áp glossary đụng tới, không xuất. Số trang giữ
+số gốc (1, 2, 4…); bộ đếm và "Trang i/n" chỉ đếm trang hiện. Ẩn/khôi phục sau khi đã xuất **không** đánh dấu "cần
+xuất lại".
+
+Toast sau khi xoá ảnh/trang: "Hoàn tác" · **"Luôn bỏ ở series này"** — học ảnh credit của series
+(`POST /series/:id/skip-images {source_file_id | page_id}`; từ trang thì học mọi ảnh gốc nằm trọn trong trang theo
+`source_map`). Trình duyệt tính dHash 64 bit + kích thước mọi ảnh lúc thả (`image-fingerprint.ts`, ~0,1s/96 ảnh) và
+gửi trong `POST /chapters`; ảnh khớp ảnh đã học (Hamming ≤ 6 và tỉ lệ khung lệch ≤ 5%,
+`packages/shared/src/dhash.ts`) được tạo sẵn `skip = 'credit'` → rail hiện mờ "Credit · tự bỏ" + Khôi phục. Ảnh
+đầu/cuối (3 mỗi đầu) lệch width > 10% so với trung vị chương chỉ có nhãn gợi ý "Có thể là credit" (không tự bỏ). Học
+từ chối ảnh không có hash (`no_hash`), ảnh gần trơn (≤ 8 hoặc ≥ 56 bit 1 — dễ khớp nhầm trang trắng, `plain_image`),
+ảnh chưa tải lên xong (`not_uploaded`, toast có "Thử lại"), trang không chứa trọn ảnh nào (`no_whole_image`); tối đa
+100 ảnh/series, khoá hàng series nên bấm 2 lần không học trùng. Ảnh đã học lưu bản sao riêng
+(`ws/{ws}/series/{id}/skip/…`, còn khi xoá chương nguồn) và quản lý ở Cài đặt series → "Ảnh tự bỏ" (xoá khỏi danh
+sách không đổi chương đã tạo); xoá series dọn cả thư mục đó.
+
+Giới hạn: credit cùng width với trang truyện đã bị ghép vào page lớn sau Bước 1 thì không tự bỏ được (chỉ ẩn cả
+trang); credit cùng mẫu nhưng đổi chữ có thể không khớp; chưa có AI phân loại credit.
+
 ## Dữ liệu và lưu
 
 - Nguồn sự thật: `page_states.state` (zod `PageState`, `packages/shared/src/page-state.ts`). Store zustand giữ `doc`
