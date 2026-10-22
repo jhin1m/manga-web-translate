@@ -43,6 +43,13 @@
       "when": 1792663091411,
       "tag": "0005_series_page_format",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1792667722550,
+      "tag": "0006_glossary_lang_pair",
+      "breakpoints": true
     }
   ]
 }

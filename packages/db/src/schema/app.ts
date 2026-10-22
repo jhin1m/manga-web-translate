@@ -227,6 +227,9 @@ export const glossaryEntries = pgTable(
     workspaceId: workspaceId(),
     /** null = áp cho toàn workspace. */
     seriesId: uuid("series_id"),
+    /** Chỉ entry chung (series_id null) mang cặp nguồn→đích; entry series theo cặp của series (API đảm bảo). */
+    sourceLang: text("source_lang"),
+    targetLang: text("target_lang"),
     sourceTerm: text("source_term").notNull(),
     targetTerm: text("target_term").notNull(),
     note: text("note").notNull().default(""),
@@ -238,8 +241,11 @@ export const glossaryEntries = pgTable(
       "cascade",
     ),
     index("glossary_ws_series_idx").on(t.workspaceId, t.seriesId),
-    // Một term mỗi phạm vi (series hoặc workspace khi series_id null) — chặn tạo trùng khi request đua nhau.
-    unique("glossary_entries_scope_term_uq").on(t.workspaceId, t.seriesId, t.sourceTerm).nullsNotDistinct(),
+    // Một term mỗi phạm vi (series, hoặc cặp ngôn ngữ của workspace khi series_id null) — chặn tạo trùng khi
+    // request đua nhau.
+    unique("glossary_entries_scope_term_uq")
+      .on(t.workspaceId, t.seriesId, t.sourceLang, t.targetLang, t.sourceTerm)
+      .nullsNotDistinct(),
   ],
 );
 
