@@ -19,7 +19,8 @@ export function mergeGlossary(entries: GlossaryEntry[], inherited: GlossaryEntry
 
 export function ApplyGlossaryPanel(props: ToolPanelProps) {
   const { ws, seriesId, chapterId, lock, beforeWrite, onJump } = props;
-  const q = useQuery({ queryKey: glossaryKey(ws, seriesId), queryFn: () => fetchGlossary(ws, seriesId) });
+  const scope = { seriesId };
+  const q = useQuery({ queryKey: glossaryKey(ws, scope), queryFn: () => fetchGlossary(ws, scope) });
   const entries = useMemo(() => (q.data ? mergeGlossary(q.data.entries, q.data.inherited) : []), [q.data]);
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [from, setFrom] = useState<Record<string, string>>({});

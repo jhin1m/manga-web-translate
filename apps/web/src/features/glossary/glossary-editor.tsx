@@ -1,10 +1,13 @@
 /**
- * Bảng glossary sửa tại chỗ + import/export CSV. Dùng cho cả cấp workspace và cấp series (series ghi đè
- * entry workspace trùng từ gốc). Mọi thay đổi làm server tăng glossary_rev — lần dịch sau dùng term mới.
+ * Bảng glossary sửa tại chỗ + import/export CSV. Dùng cho cả glossary chung (theo cặp nguồn→đích, chọn ở trang
+ * Glossary chung) và cấp series (series ghi đè entry chung cùng cặp trùng từ gốc). Mọi thay đổi làm server tăng
+ * glossary_rev — lần dịch sau dùng term mới.
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type FormEvent, useState } from "react";
 import { ApiError, errorMessage } from "../../lib/api.ts";
+import { LANG_NAMES, pairLabel, TARGET_LANGS, type TargetLang } from "../series/lang-labels.ts";
+import { SourceLangSelect } from "../series/source-lang-select.tsx";
 import {
   createEntry,
   deleteEntry,
@@ -12,17 +15,28 @@ import {
   exportCsvUrl,
   fetchGlossary,
   type GlossaryEntry,
+  type GlossaryScope,
   glossaryKey,
   importCsv,
+  type LangPair,
   updateEntry,
 } from "./api.ts";
 
 const EMPTY: EntryInput = { source_term: "", target_term: "", note: "", case_sensitive: false };
 
-export function GlossaryEditor({ ws, seriesId }: { ws: string; seriesId: string | null }) {
+/** `inheritedLabel`: nhãn dòng kế thừa từ glossary chung (chỉ cấp series, VD "từ glossary chung (Hàn → Việt)"). */
+export function GlossaryEditor({
+  ws,
+  scope,
+  inheritedLabel = "từ glossary chung",
+}: {
+  ws: string;
+  scope: GlossaryScope;
+  inheritedLabel?: string;
+}) {
   const qc = useQueryClient();
-  const key = glossaryKey(ws, seriesId);
-  const q = useQuery({ queryKey: key, queryFn: () => fetchGlossary(ws, seriesId) });
+  const key = glossaryKey(ws, scope);
+  const q = useQuery({ queryKey: key, queryFn: () => fetchGlossary(ws, scope) });
   const [draft, setDraft] = useState<EntryInput>(EMPTY);
   const [editing, setEditing] = useState<{ id: string; v: EntryInput } | null>(null);
   const [mode, setMode] = useState<"merge" | "replace">("merge");
@@ -49,7 +63,7 @@ export function GlossaryEditor({ ws, seriesId }: { ws: string; seriesId: string 
   };
 
   const add = useMutation({
-    mutationFn: () => createEntry(ws, seriesId, draft),
+    mutationFn: () => createEntry(ws, scope, draft),
     onSuccess: () => {
       setDraft(EMPTY);
       done();
@@ -70,7 +84,7 @@ export function GlossaryEditor({ ws, seriesId }: { ws: string; seriesId: string 
     onError: fail,
   });
   const upload = useMutation({
-    mutationFn: async (file: File) => importCsv(ws, seriesId, await file.text(), mode),
+    mutationFn: async (file: File) => importCsv(ws, scope, await file.text(), mode),
     onSuccess: (r) => done(`Đã nhập: thêm ${r.created}, cập nhật ${r.updated}.`),
     onError: fail,
   });
@@ -149,7 +163,7 @@ export function GlossaryEditor({ ws, seriesId }: { ws: string; seriesId: string 
           onChange={(e) => setFilter(e.target.value)}
         />
         <span className="spacer" />
-        <a className="btn" href={exportCsvUrl(ws, seriesId)} download>
+        <a className="btn" href={exportCsvUrl(ws, scope)} download>
           Xuất CSV
         </a>
         <select
@@ -296,7 +310,7 @@ export function GlossaryEditor({ ws, seriesId }: { ws: string; seriesId: string 
                 <td>{e.note}</td>
                 <td>{e.case_sensitive ? "Có" : ""}</td>
                 <td className="small" style={{ textAlign: "right" }}>
-                  {overridden.has(e.source_term) ? "bị series ghi đè" : "từ glossary chung"}
+                  {overridden.has(e.source_term) ? "bị series ghi đè" : inheritedLabel}
                 </td>
               </tr>
             ))}
@@ -314,14 +328,31 @@ export function GlossaryEditor({ ws, seriesId }: { ws: string; seriesId: string 
   );
 }
 
-export function WorkspaceGlossaryPage({ ws }: { ws: string }) {
+/** Glossary chung của một cặp nguồn→đích (cặp giữ trong URL `?src=&tgt=`, route đổi khi chọn). */
+export function WorkspaceGlossaryPage(props: { ws: string; pair: LangPair; onPairChange: (p: LangPair) => void }) {
+  const { ws, pair, onPairChange } = props;
   return (
     <div className="page page-narrow">
       <div className="page-head">
         <h1>Glossary chung</h1>
+        <span className="spacer" />
+        <SourceLangSelect value={pair.source_lang} onChange={(v) => onPairChange({ ...pair, source_lang: v })} />
+        <span aria-hidden="true">→</span>
+        <select
+          aria-label="Ngôn ngữ đích"
+          value={pair.target_lang}
+          onChange={(e) => onPairChange({ ...pair, target_lang: e.target.value as TargetLang })}
+        >
+          {TARGET_LANGS.map((l) => (
+            <option key={l} value={l}>
+              {LANG_NAMES[l]}
+            </option>
+          ))}
+        </select>
       </div>
-      <p className="muted small">Áp cho mọi series của workspace; entry trùng ở series sẽ ghi đè.</p>
-      <GlossaryEditor ws={ws} seriesId={null} />
+      <p className="muted small">Áp cho series dịch {pairLabel(pair)}; entry trùng ở series sẽ ghi đè.</p>
+      {/* key: đổi cặp = bảng mới (bỏ nháp, bản sửa dở và xác nhận "thay toàn bộ" của cặp cũ). */}
+      <GlossaryEditor key={`${pair.source_lang}-${pair.target_lang}`} ws={ws} scope={{ pair }} />
     </div>
   );
 }

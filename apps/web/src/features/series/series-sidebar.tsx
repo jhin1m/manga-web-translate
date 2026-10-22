@@ -1,5 +1,5 @@
 /**
- * Cột phải màn series: tóm tắt cài đặt dịch ("Sửa" → `?tab=settings`) và glossary của series (thêm nhanh KO/VI,
+ * Cột phải màn series: tóm tắt cài đặt dịch ("Sửa" → `?tab=settings`) và glossary của series (thêm nhanh theo ngôn ngữ series,
  * 5 từ mới nhất, "Xem tất cả" → `?tab=glossary`).
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -37,29 +37,31 @@ export function SeriesSidebar({ ws, series }: { ws: string; series: Series }) {
         </dl>
         <div className="small muted">Áp cho mọi chương dịch sau khi lưu; chương đã sửa tay không bị đổi.</div>
       </section>
-      <GlossaryCard ws={ws} seriesId={series.id} />
+      <GlossaryCard ws={ws} series={series} />
     </aside>
   );
 }
 
-function GlossaryCard({ ws, seriesId }: { ws: string; seriesId: string }) {
+function GlossaryCard({ ws, series }: { ws: string; series: Series }) {
   const qc = useQueryClient();
-  const key = glossaryKey(ws, seriesId);
-  const q = useQuery({ queryKey: key, queryFn: () => fetchGlossary(ws, seriesId) });
-  const [ko, setKo] = useState("");
-  const [vi, setVi] = useState("");
+  const seriesId = series.id;
+  const scope = { seriesId };
+  const key = glossaryKey(ws, scope);
+  const q = useQuery({ queryKey: key, queryFn: () => fetchGlossary(ws, scope) });
+  const [src, setSrc] = useState("");
+  const [tgt, setTgt] = useState("");
   const add = useMutation({
     mutationFn: () =>
-      createEntry(ws, seriesId, { source_term: ko.trim(), target_term: vi.trim(), note: "", case_sensitive: false }),
+      createEntry(ws, scope, { source_term: src.trim(), target_term: tgt.trim(), note: "", case_sensitive: false }),
     onSuccess: () => {
-      setKo("");
-      setVi("");
+      setSrc("");
+      setTgt("");
       void qc.invalidateQueries({ queryKey: key });
     },
   });
   const submit = (e: FormEvent) => {
     e.preventDefault();
-    if (ko.trim() && vi.trim()) add.mutate();
+    if (src.trim() && tgt.trim()) add.mutate();
   };
   const entries = q.data?.entries ?? [];
   const recent = [...entries].sort((a, b) => b.updated_at.localeCompare(a.updated_at)).slice(0, RECENT_TERMS);
@@ -73,9 +75,19 @@ function GlossaryCard({ ws, seriesId }: { ws: string; seriesId: string }) {
         </Link>
       </div>
       <form onSubmit={submit}>
-        <input aria-label="Từ gốc" placeholder="Từ gốc (KO)" value={ko} onChange={(e) => setKo(e.target.value)} />
-        <input aria-label="Bản dịch" placeholder="Dịch (VI)" value={vi} onChange={(e) => setVi(e.target.value)} />
-        <button type="submit" disabled={add.isPending || !ko.trim() || !vi.trim()}>
+        <input
+          aria-label="Từ gốc"
+          placeholder={`Từ gốc (${series.source_lang.toUpperCase()})`}
+          value={src}
+          onChange={(e) => setSrc(e.target.value)}
+        />
+        <input
+          aria-label="Bản dịch"
+          placeholder={`Dịch (${series.target_lang.toUpperCase()})`}
+          value={tgt}
+          onChange={(e) => setTgt(e.target.value)}
+        />
+        <button type="submit" disabled={add.isPending || !src.trim() || !tgt.trim()}>
           Thêm
         </button>
       </form>

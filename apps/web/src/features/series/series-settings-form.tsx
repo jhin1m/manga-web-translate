@@ -4,10 +4,11 @@
  * font mặc định, quy tắc xưng hô theo cặp nhân vật. Server tăng settings_rev khi trường ảnh hưởng dịch đổi. Kèm vùng
  * xoá series. Dùng ở `?tab=settings` của màn series.
  */
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { type FormEvent, useState } from "react";
 import { errorMessage } from "../../lib/api.ts";
+import { fetchGlossary, glossaryKey } from "../glossary/api.ts";
 import {
   deleteSeries,
   FONT_IDS,
@@ -23,6 +24,7 @@ import {
   HONORIFIC_EXAMPLES,
   isTestedSource,
   LANG_NAMES,
+  langChangeWarning,
   PAGE_FORMAT_LABELS,
   PAGE_FORMATS,
   SOURCE_LANGS,
@@ -53,6 +55,12 @@ export function SeriesSettingsForm({ ws, series }: { ws: string; series: Series 
   const qc = useQueryClient();
   const [f, setF] = useState<Form>(() => toForm(series));
   const [saved, setSaved] = useState<string | null>(null);
+  const glossaryScope = { seriesId: series.id };
+  const glossary = useQuery({
+    queryKey: glossaryKey(ws, glossaryScope),
+    queryFn: () => fetchGlossary(ws, glossaryScope),
+  });
+  const langWarning = langChangeWarning(series, f, glossary.data?.entries.length);
   const save = useMutation({
     mutationFn: () => patchSeries(ws, series.id, f),
     onSuccess: (s) => {
@@ -62,6 +70,10 @@ export function SeriesSettingsForm({ ws, series }: { ws: string; series: Series 
           : "Đã lưu.",
       );
       void qc.invalidateQueries({ queryKey: ["series", ws] });
+      // Key glossary series không chứa cặp → làm mới để mục kế thừa / Áp glossary theo cặp mới.
+      if (s.source_lang !== series.source_lang || s.target_lang !== series.target_lang) {
+        void qc.invalidateQueries({ queryKey: ["glossary", ws] });
+      }
     },
   });
   const set = <K extends keyof Form>(k: K, v: Form[K]) => {
@@ -121,6 +133,11 @@ export function SeriesSettingsForm({ ws, series }: { ws: string; series: Series 
               ))}
             </select>
           </div>
+          {langWarning && (
+            <p className="notice" role="status" style={{ gridColumn: "1 / -1" }}>
+              {langWarning}
+            </p>
+          )}
           <div>
             <label htmlFor="s-fmt">Định dạng truyện</label>
             <select

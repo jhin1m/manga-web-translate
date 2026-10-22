@@ -21,6 +21,7 @@ import {
 import { lazy, Suspense, useEffect } from "react";
 import { WorkspaceGlossaryPage } from "../features/glossary/glossary-editor.tsx";
 import { HomePage } from "../features/home/home-page.tsx";
+import { SOURCE_LANGS, type SourceLang, TARGET_LANGS, type TargetLang } from "../features/series/lang-labels.ts";
 import { SeriesPage } from "../features/series/series-page.tsx";
 import { errorMessage } from "../lib/api.ts";
 import { setCurrentWs, useCurrentWorkspace } from "../lib/current-workspace.ts";
@@ -161,12 +162,25 @@ export const chapterRoute = createRoute({
   },
 });
 
+/** Glossary chung theo cặp `?src=&tgt=`; thiếu/sai → Hàn → Việt. */
 const glossaryRoute = createRoute({
   getParentRoute: () => workspaceRoute,
   path: "glossary",
+  validateSearch: (search: Record<string, unknown>): { src?: SourceLang; tgt?: TargetLang } => ({
+    ...(SOURCE_LANGS.includes(search.src as SourceLang) ? { src: search.src as SourceLang } : {}),
+    ...(TARGET_LANGS.includes(search.tgt as TargetLang) ? { tgt: search.tgt as TargetLang } : {}),
+  }),
   component: function GlossaryRoute() {
     const { ws } = glossaryRoute.useParams();
-    return <WorkspaceGlossaryPage ws={ws} />;
+    const { src = "ko", tgt = "vi" } = glossaryRoute.useSearch();
+    const navigate = glossaryRoute.useNavigate();
+    return (
+      <WorkspaceGlossaryPage
+        ws={ws}
+        pair={{ source_lang: src, target_lang: tgt }}
+        onPairChange={(p) => void navigate({ search: { src: p.source_lang, tgt: p.target_lang }, replace: true })}
+      />
+    );
   },
 });
 

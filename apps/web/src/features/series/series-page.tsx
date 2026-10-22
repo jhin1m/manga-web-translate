@@ -26,7 +26,7 @@ import {
   type SeriesDetail,
   seriesKeys,
 } from "./api.ts";
-import { langShort } from "./lang-labels.ts";
+import { langShort, pairLabel } from "./lang-labels.ts";
 import { DeleteSeries, SeriesSettingsForm } from "./series-settings-form.tsx";
 import { SeriesSidebar } from "./series-sidebar.tsx";
 import "../home/home.css";
@@ -68,7 +68,7 @@ export function SeriesPage(props: { ws: string; seriesId: string; tab?: SeriesTa
             )}
             {tab === "glossary" && (
               <section aria-label="Glossary của series (đầy đủ)" className="tab-panel">
-                <GlossaryEditor ws={ws} seriesId={seriesId} />
+                <GlossaryEditor ws={ws} scope={{ seriesId }} inheritedLabel={`từ glossary chung (${pairLabel(s)})`} />
               </section>
             )}
           </>
@@ -99,7 +99,8 @@ function SeriesHead({ series }: { series: SeriesDetail }) {
 
 /** Tab đang mở do router đánh dấu (`aria-current`), so cả `?tab`. */
 function SeriesTabs({ ws, series }: { ws: string; series: SeriesDetail }) {
-  const glossary = useQuery({ queryKey: glossaryKey(ws, series.id), queryFn: () => fetchGlossary(ws, series.id) });
+  const scope = { seriesId: series.id };
+  const glossary = useQuery({ queryKey: glossaryKey(ws, scope), queryFn: () => fetchGlossary(ws, scope) });
   const terms = glossary.data?.entries.length;
   const tabs: [SeriesTab, string][] = [
     ["chapters", `Chương · ${series.chapters.length}`],

@@ -19,6 +19,22 @@ export type { PageFormat, SourceLang, TargetLang };
 /** Tên ngắn cho header ("Hàn → Việt"). */
 export const langShort = (code: string) => LANG_NAMES[code as SourceLang]?.replace(/^Tiếng /, "") ?? code;
 
+type Pair = { source_lang: string; target_lang: string };
+/** "Hàn → Việt". */
+export const pairLabel = (p: Pair) => `${langShort(p.source_lang)} → ${langShort(p.target_lang)}`;
+
+/**
+ * Cảnh báo ở form Cài đặt khi đổi ngôn ngữ mà series có glossary riêng (entry riêng không gắn cặp nên vẫn áp
+ * sau khi đổi). Không đổi cặp, hoặc chưa biết / 0 từ → null.
+ */
+export function langChangeWarning(saved: Pair, form: Pair, ownTerms: number | undefined): string | null {
+  if (!ownTerms || (saved.source_lang === form.source_lang && saved.target_lang === form.target_lang)) return null;
+  return (
+    `Glossary riêng của series có ${ownTerms} từ viết cho ${pairLabel(saved)} — kiểm lại sau khi đổi ngôn ngữ. ` +
+    `Glossary chung sẽ chuyển sang cặp ${pairLabel(form)}.`
+  );
+}
+
 export const PAGE_FORMAT_LABELS: Record<PageFormat, string> = {
   strip: "Cuộn dọc (manhwa/manhua)",
   pages: "Từng trang (manga)",
