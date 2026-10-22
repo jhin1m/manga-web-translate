@@ -5,7 +5,7 @@
  */
 
 import { chapters, isUuid, NotFoundError, pages, type Scoped, scoped, series, sourceFiles } from "@mtl/db";
-import { PAGE_FORMATS, storageKeys } from "@mtl/shared";
+import { DHASH_RE, PAGE_FORMATS, storageKeys } from "@mtl/shared";
 import { and, eq, inArray, isNull, type SQL } from "drizzle-orm";
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
@@ -27,6 +27,7 @@ import { type AppEnv, requireWorkspace } from "../middleware/workspace.ts";
 import { head, MAX_POST_TTL_S, presignPost, readPrefix } from "../storage.ts";
 import { jobView } from "./jobs.ts";
 import { chapterStats, chapterSummary, exportStatus } from "./series.ts";
+import { creditMatcher } from "./series-skip-images.ts";
 
 /** Ảnh nhận upload → đuôi key. Content-Type nằm trong policy POST nên MinIO giữ đúng giá trị này. */
 export const CHAPTER_UPLOAD_TYPES = { "image/png": "png", "image/jpeg": "jpg", "image/webp": "webp" } as const;
@@ -60,6 +61,10 @@ const UploadFile = z.object({
   name: z.string().min(1).max(255),
   content_type: z.enum(Object.keys(CHAPTER_UPLOAD_TYPES) as [UploadMime, ...UploadMime[]]),
   bytes: z.number().int().min(1).max(MAX_FILE_BYTES),
+  /** Dấu nhận dạng trình duyệt tính lúc thả ảnh (không tính được thì bỏ trống) — khớp ảnh credit đã học. */
+  dhash: z.string().regex(DHASH_RE).optional(),
+  width: z.number().int().positive().optional(),
+  height: z.number().int().positive().optional(),
 });
 
 const ChapterNumber = z.union([z.number().nonnegative(), z.string().regex(/^\d+(\.\d+)?$/)]).transform(String);
@@ -156,13 +161,17 @@ chapterRoutes.get("/w/:ws/recent-chapters", requireWorkspace(), async (c) => {
   });
 });
 
-/** Tạo chương (draft) + source_files theo thứ tự + presigned POST cho từng file. */
+/**
+ * Tạo chương (draft) + source_files theo thứ tự + presigned POST cho từng file. Ảnh khớp ảnh credit series đã học
+ * được bỏ qua sẵn (`skip = 'credit'`, khôi phục được như ảnh xoá tay).
+ */
 chapterRoutes.post("/w/:ws/chapters", requireWorkspace(), async (c) => {
   const body = await parseJson(c, ChapterCreate);
   const ws = c.get("workspaceId");
   const { chapter, files } = await c.get("sdb").transaction(async (tx) => {
     const s = await tx.byId(series, body.series_id, "series");
     const chapter = await tx.insert(chapters, { seriesId: s.id, number: body.number, title: body.title });
+    const credit = await creditMatcher(tx, s.id);
     const files: SourceFile[] = [];
     for (const [ord, f] of body.files.entries()) {
       const key = storageKeys.source(ws, chapter.id, uuidv7(), CHAPTER_UPLOAD_TYPES[f.content_type]);
@@ -173,6 +182,10 @@ chapterRoutes.post("/w/:ws/chapters", requireWorkspace(), async (c) => {
           storageKey: key,
           bytes: f.bytes,
           mime: f.content_type,
+          dhash: f.dhash,
+          width: f.width,
+          height: f.height,
+          skip: credit(f),
         }),
       );
     }

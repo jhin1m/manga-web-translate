@@ -5,6 +5,7 @@
  *   chữ ký SigV4 gắn với host nên URL phải ký đúng host trình duyệt sẽ gọi.
  */
 import {
+  CopyObjectCommand,
   DeleteObjectsCommand,
   GetObjectCommand,
   GetObjectTaggingCommand,
@@ -114,6 +115,17 @@ export async function readPrefix(key: string, n: number): Promise<Uint8Array> {
   const r = await internal.send(new GetObjectCommand({ Bucket, Key: key, Range: `bytes=0-${n - 1}` }));
   const bytes = await r.Body?.transformToByteArray();
   return bytes ?? new Uint8Array();
+}
+
+/** Chép object trong bucket (server-side, không tải về). */
+export async function copyObject(from: string, to: string): Promise<void> {
+  const source = `${Bucket}/${from}`.split("/").map(encodeURIComponent).join("/");
+  await internal.send(new CopyObjectCommand({ Bucket, Key: to, CopySource: source }));
+}
+
+/** Xoá 1 object (không có cũng không lỗi). */
+export async function deleteObject(key: string): Promise<void> {
+  await internal.send(new DeleteObjectsCommand({ Bucket, Delete: { Objects: [{ Key: key }], Quiet: true } }));
 }
 
 /** Xoá mọi object dưới `prefix` (theo trang 1000 key — trần của ListObjectsV2/DeleteObjects). Trả số key đã xoá. */

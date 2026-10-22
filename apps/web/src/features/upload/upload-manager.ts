@@ -1,7 +1,8 @@
 /**
  * Upload chương chạy nền, sống qua điều hướng (store zustand cấp module): thả file ở home/series → tạo chương →
  * trả `chapterId` ngay để mở màn chương, các file tiếp tục upload song song 4, thử lại 3 lần (ký lại khi thử lại).
- * Upload xong không tự chạy gì: chương ở lại nháp, chờ người dùng bấm "Bước 1" ở màn chương.
+ * Upload xong không tự chạy gì: chương ở lại nháp, chờ người dùng bấm "Bước 1" ở màn chương. Trước khi tạo chương tính
+ * dấu nhận dạng từng ảnh (dHash + kích thước) để server bỏ qua sẵn ảnh credit series đã học.
  *
  * Tab đóng giữa chừng: localStorage giữ dấu `mtl.upload.<chapterId>` (tổng + id file đã xong); thả lại đúng bộ
  * file → khớp theo thứ tự (natural sort) + bytes với `source_files` → ký lại + upload phần thiếu.
@@ -11,6 +12,7 @@ import { createStore } from "zustand/vanilla";
 import type { UploadView } from "../chapter/next-action.ts";
 import { createChapter, type PresignedTarget, presignAgain } from "./api.ts";
 import { isJunkEntry, type PageFile } from "./files.ts";
+import { fingerprintAll } from "./image-fingerprint.ts";
 import { naturalSortBy } from "./natural-sort.ts";
 import { type ItemState, type ItemStatus, postToPresigned, runUploadQueue } from "./upload-queue.ts";
 
@@ -48,6 +50,8 @@ export type UploadDeps = {
   post: (target: PresignedTarget, blob: Blob, onProgress: (loaded: number) => void) => Promise<void>;
   storage: KV | null;
   backoff: (attempt: number) => number;
+  /** Dấu nhận dạng theo thứ tự trang (null = không tính được, gửi thiếu — không chặn upload). */
+  fingerprints: (blobs: Blob[]) => Promise<({ dhash: string; width: number; height: number } | null)[]>;
 };
 
 /** Chương nháp tối thiểu cho resume (khớp ChapterDetail). */
@@ -163,11 +167,17 @@ export function createUploadManager(deps: UploadDeps) {
     /** Tạo chương nháp + bắt đầu upload; resolve ngay sau khi có chapterId (upload chạy tiếp ở nền). */
     async startNewChapter(o: { ws: string; seriesId: string; number: string; title?: string; pages: PageFile[] }) {
       const pages = orderPages(o.pages);
+      const fps = await deps.fingerprints(pages.map((p) => p.blob)).catch(() => []);
       const res = await deps.createChapter(o.ws, {
         series_id: o.seriesId,
         number: o.number,
         title: o.title ?? "",
-        files: pages.map((p) => ({ name: p.name, content_type: p.contentType ?? "", bytes: p.size })),
+        files: pages.map((p, i) => ({
+          name: p.name,
+          content_type: p.contentType ?? "",
+          bytes: p.size,
+          ...(fps[i] ?? {}),
+        })),
       });
       const chapterId = res.chapter.id;
       const items: Item[] = [];
@@ -267,6 +277,7 @@ export const uploadManager = createUploadManager({
   post: (t, blob, onProgress) => postToPresigned(t, blob, onProgress),
   storage: safeStorage(),
   backoff: (n) => 1000 * 2 ** (n - 2),
+  fingerprints: (blobs) => fingerprintAll(blobs),
 });
 
 // Rời tab khi còn file đang upload → trình duyệt hỏi xác nhận.

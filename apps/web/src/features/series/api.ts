@@ -76,6 +76,7 @@ export const seriesKeys = {
   list: (ws: string) => ["series", ws] as const,
   detail: (ws: string, id: string) => ["series", ws, id] as const,
   recent: (ws: string) => ["series", ws, "recent-chapters"] as const,
+  skipImages: (ws: string, id: string) => ["series", ws, id, "skip-images"] as const,
 };
 
 export const fetchSeriesList = (ws: string) => api<{ series: SeriesListItem[] }>(wsPath(ws, "/series"));
@@ -90,6 +91,19 @@ export const patchSeries = (ws: string, id: string, body: Partial<SeriesSettings
 export const deleteSeries = (ws: string, id: string) => api<void>(wsPath(ws, `/series/${id}`), { method: "DELETE" });
 /** Xoá hẳn chương (ảnh, bản dịch, lịch sử). Người khác đang mở sửa → 423 kèm `holder_name`. */
 export const deleteChapter = (ws: string, id: string) => api<void>(wsPath(ws, `/chapters/${id}`), { method: "DELETE" });
+
+/** Ảnh credit series đã học — chương tạo sau có ảnh khớp được bỏ qua sẵn. */
+export type SkipImage = { id: string; width: number; height: number; url: string; created_at: string };
+export const fetchSkipImages = (ws: string, seriesId: string) =>
+  api<{ images: SkipImage[] }>(wsPath(ws, `/series/${seriesId}/skip-images`));
+/** "Luôn bỏ ở series này": học 1 ảnh gốc, hoặc mọi ảnh gốc nằm trọn trong 1 trang. */
+export const learnSkipImage = (ws: string, seriesId: string, from: { source_file_id: string } | { page_id: string }) =>
+  api<{ learned: number; known: number }>(wsPath(ws, `/series/${seriesId}/skip-images`), {
+    method: "POST",
+    body: from,
+  });
+export const deleteSkipImage = (ws: string, seriesId: string, id: string) =>
+  api<void>(wsPath(ws, `/series/${seriesId}/skip-images/${id}`), { method: "DELETE" });
 
 /** Số chương gợi ý cho lần upload tiếp theo: lớn nhất + 1. */
 export function nextChapterNumber(chapters: Pick<ChapterSummary, "number">[]): string {

@@ -1,11 +1,17 @@
 import { describe, expect, it } from "vitest";
 import type { SourceFileImage } from "./api.ts";
-import { sourceCounts, sourceItems, sourceLabel, stepSource } from "./source-rail-model.ts";
+import { creditHints, sourceCounts, sourceItems, sourceLabel, stepSource } from "./source-rail-model.ts";
 
-const file = (id: string, ord: number, skip: SourceFileImage["skip"] = null): SourceFileImage => ({
+const file = (
+  id: string,
+  ord: number,
+  skip: SourceFileImage["skip"] = null,
+  width: number | null = null,
+): SourceFileImage => ({
   id,
   ord,
   skip,
+  width,
   url: `https://files/${id}`,
 });
 
@@ -43,6 +49,33 @@ describe("source rail model", () => {
   it("files a previous tab never finished uploading are labelled Chưa tải", () => {
     const items = sourceItems([file("a", 0), file("b", 1)], new Map(), undefined, new Set(["a"]));
     expect(items.map(sourceLabel)).toEqual([null, { label: "Chưa tải", tone: "warn" }]);
+  });
+
+  it("hints credit only for the first / last 3 images whose width is more than 10% off the median", () => {
+    const w = [690, 800, 800, 800, 600, 800, 800, 800, 880, 900];
+    // 690 (−13.75%) đầu, 900 (+12.5%) cuối → gợi ý; 600 ở giữa → không; 880 (+10%) không vượt ngưỡng.
+    expect(creditHints(w)).toEqual([true, false, false, false, false, false, false, false, false, true]);
+    expect(creditHints([null, 800, 800, 800, 800, null])).toEqual(Array(6).fill(false));
+    expect(creditHints([])).toEqual([]);
+    // Trung vị số chẵn = trung bình 2 giữa: (800 + 1000) / 2 = 900 → 1000 lệch 11%.
+    expect(creditHints([800, 1000])).toEqual([true, true]);
+  });
+
+  it("the credit hint shows after skip and upload labels", () => {
+    const files = [
+      file("a", 0, null, 500),
+      file("b", 1, null, 800),
+      file("c", 2, "user", 500),
+      file("d", 3, null, 800),
+    ];
+    const items = sourceItems([...files, file("e", 4, null, 800)], new Map(), { d: "uploading" }, null);
+    expect(items.map(sourceLabel)).toEqual([
+      { label: "Có thể là credit", tone: "warn" },
+      null,
+      { label: "Đã xoá", tone: "muted" },
+      { label: "Đang tải", tone: "busy" },
+      null,
+    ]);
   });
 
   it("counts skipped images and steps through every image, skipped included", () => {

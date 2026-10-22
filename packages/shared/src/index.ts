@@ -1,3 +1,4 @@
+export * from "./dhash.ts";
 export * from "./job.ts";
 export * from "./page-state.ts";
 export * from "./series-lang.ts";

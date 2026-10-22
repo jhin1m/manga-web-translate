@@ -12,6 +12,7 @@ import { activeLockHolder } from "../lib/chapter-lock.ts";
 import { chaptersOf, removeChapters } from "../lib/chapter-removal.ts";
 import { parseJson } from "../lib/validate.ts";
 import { type AppEnv, requireWorkspace } from "../middleware/workspace.ts";
+import { deletePrefix } from "../storage.ts";
 
 export const HONORIFIC_POLICIES = ["translate", "keep"] as const;
 export const LLM_TIERS = ["standard", "premium"] as const;
@@ -307,12 +308,21 @@ seriesRoutes.patch("/w/:ws/series/:seriesId", requireWorkspace(), async (c) => {
   return c.json(seriesView(updated));
 });
 
-/** Xoá series cùng mọi chương + glossary riêng của nó (admin trở lên). Chương đang bị người khác giữ khoá → 423. */
+/**
+ * Xoá series cùng mọi chương + glossary riêng + ảnh credit đã học (admin trở lên). Chương đang bị người khác giữ khoá
+ * → 423.
+ */
 seriesRoutes.delete("/w/:ws/series/:seriesId", requireWorkspace("admin"), async (c) => {
   const sdb = c.get("sdb");
   const s = await sdb.byId(series, c.req.param("seriesId"), "series");
   await removeChapters(sdb, c.get("workspaceId"), c.get("user").id, await chaptersOf(sdb, s.id), async () => {
     await sdb.delete(series, eq(series.id, s.id));
   });
+  // Hàng series_skip_images đã cascade theo series; dọn bản sao ảnh (lỗi chỉ để lại file mồ côi).
+  try {
+    await deletePrefix(`ws/${c.get("workspaceId")}/series/${s.id}/`);
+  } catch (err) {
+    console.error("[series] dọn ảnh tự bỏ thất bại", err);
+  }
   return c.body(null, 204);
 });

@@ -71,6 +71,8 @@ pageRoutes.get("/w/:ws/chapters/:chapterId/source-files", requireWorkspace(), as
         id: f.id,
         ord: f.ord,
         skip: f.skip,
+        /** Trình duyệt đo lúc thả ảnh (null = không đo được) — rail gợi ý ảnh lệch khổ có thể là credit. */
+        width: f.width,
         url: await presignGet(f.storageKey, THUMB_TTL_S),
       })),
     ),

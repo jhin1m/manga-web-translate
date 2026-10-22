@@ -529,6 +529,34 @@ label.file-pick input {
   height: 36px;
   padding: 0 18px;
 }
+/* Ảnh tự bỏ của series: lưới thumbnail, icon Xoá góc trên phải. */
+.skip-images-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: var(--sp-2);
+  margin: var(--sp-3) 0 0;
+  padding: 0;
+  list-style: none;
+}
+.skip-images-grid li {
+  position: relative;
+  border: 1px solid var(--c-line);
+  border-radius: 4px;
+  overflow: hidden;
+  background: var(--c-surface-2);
+}
+.skip-images-grid img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  object-fit: contain;
+}
+.skip-images-grid .icon-btn {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  background: var(--c-surface);
+}
 .danger-zone {
   border: 1px solid var(--c-danger);
   border-radius: 6px;

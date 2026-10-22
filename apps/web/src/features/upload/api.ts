@@ -15,7 +15,8 @@ export const createChapter = (
     series_id: string;
     number: string;
     title: string;
-    files: { name: string; content_type: string; bytes: number }[];
+    /** dhash/width/height: dấu nhận dạng ảnh (bỏ trống khi không tính được) — server bỏ qua sẵn ảnh credit đã học. */
+    files: { name: string; content_type: string; bytes: number; dhash?: string; width?: number; height?: number }[];
   },
 ) =>
   api<{ chapter: ChapterSummary; files: (PresignedTarget & { name: string })[] }>(wsPath(ws, "/chapters"), {

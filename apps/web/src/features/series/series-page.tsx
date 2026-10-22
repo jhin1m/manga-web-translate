@@ -29,6 +29,7 @@ import {
 import { langShort, pairLabel } from "./lang-labels.ts";
 import { DeleteSeries, SeriesSettingsForm } from "./series-settings-form.tsx";
 import { SeriesSidebar } from "./series-sidebar.tsx";
+import { SkipImagesSection } from "./skip-images-section.tsx";
 import "../home/home.css";
 
 export type SeriesTab = "chapters" | "glossary" | "settings";
@@ -63,6 +64,7 @@ export function SeriesPage(props: { ws: string; seriesId: string; tab?: SeriesTa
             {tab === "settings" && (
               <div className="tab-panel">
                 <SeriesSettingsForm key={`${s.id}:${s.settings_rev}`} ws={ws} series={s} />
+                <SkipImagesSection ws={ws} seriesId={s.id} />
                 {props.canDeleteSeries && <DeleteSeries ws={ws} series={s} />}
               </div>
             )}
