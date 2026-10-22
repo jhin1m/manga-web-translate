@@ -1,7 +1,7 @@
 ---
 title: "Màn chương: rail công cụ + 1 panel, bảng màu Giấy ấm"
 description: "Thay bố cục 4 vùng của màn chương bằng rail công cụ 64px + panel ngữ cảnh + canvas vừa khung + cột thumbnail 112px; đổi token màu toàn app sang Giấy ấm; sửa tên series dài đè cột trạng thái."
-status: in-progress
+status: completed
 priority: P1
 effort: 26h
 branch: feat/chapter-workspace-tool-rail
@@ -61,14 +61,14 @@ phase 2 tới phase 6 — sửa ở phase 6, không nới test.
 
 ## Tiêu chí nghiệm thu
 
-- [ ] Màn chương đúng bố cục đích; mỗi lúc chỉ 1 panel; bấm lại icon đang mở thu panel, canvas rộng ra.
-- [ ] Mọi dòng bảng trên làm được ≤ 1 cú bấm; mọi phím trong `docs/editor.md` chạy như cũ.
-- [ ] Token Giấy ấm áp toàn app; chữ ≥ 4.5:1, icon/viền thông tin ≥ 3:1; không gradient/glass/emoji, 1 màu nhấn, bo góc
+- [x] Màn chương đúng bố cục đích; mỗi lúc chỉ 1 panel; bấm lại icon đang mở thu panel, canvas rộng ra.
+- [x] Mọi dòng bảng trên làm được ≤ 1 cú bấm; mọi phím trong `docs/editor.md` chạy như cũ.
+- [x] Token Giấy ấm áp toàn app; chữ ≥ 4.5:1, icon/viền thông tin ≥ 3:1; không gradient/glass/emoji, 1 màu nhấn, bo góc
   ≤ 8px; icon-only có `aria-label`, tooltip có phím tắt, vùng bấm ≥ 32px.
-- [ ] Tên series dài cắt "…" + `title` ở home, trang series, thanh trên màn chương.
-- [ ] `pnpm typecheck && pnpm lint && pnpm test && pnpm --filter @mtl/web e2e` xanh; e2e sửa theo bố cục mới, không
+- [x] Tên series dài cắt "…" + `title` ở home, trang series, thanh trên màn chương.
+- [x] `pnpm typecheck && pnpm lint && pnpm test && pnpm --filter @mtl/web e2e` xanh; e2e sửa theo bố cục mới, không
   xoá hành vi đang kiểm.
-- [ ] `docs/design-guidelines.md`, `docs/editor.md`, `docs/export-and-batch-edit.md`, `docs/development-setup.md`,
+- [x] `docs/design-guidelines.md`, `docs/editor.md`, `docs/export-and-batch-edit.md`, `docs/development-setup.md`,
   `README.md` khớp bố cục mới.
 
 ## Câu hỏi mở (đã tự quyết tạm, owner xem lại)
@@ -99,3 +99,20 @@ phase 2 tới phase 6 — sửa ở phase 6, không nới test.
 13. **Nhớ panel theo trình duyệt** (`localStorage mtl.layout = { panel }`); khoá cũ của bảng dưới bị bỏ qua.
 14. Ngoài phạm vi (theo brief): bỏ cột phải "Cài đặt dịch" + "Glossary" ở trang series; dark mode / chọn theme; thay đổi
     backend, schema, API.
+
+Tự quyết thêm khi làm (owner xem lại):
+
+15. **Bấm thumbnail trang ẩn → mở menu "Khôi phục trang n"** (canvas không mở được trang ẩn). Đếm đầu cột "N trang"
+    chỉ đếm trang hiện; lọc "Cần xem k" không gồm trang ẩn.
+16. **Chương chưa có page → công cụ tự về Chọn** (panel Chọn hiện ảnh gốc đang xem); Chữ/Mask/Tẩy/OCR tắt trên rail.
+17. **Panel Tìm được nhớ nhưng chương chưa dịch xong → tạm hiện panel công cụ** (không ghi đè lựa chọn đã nhớ).
+18. **Thanh nổi cạnh khối nằm ở `features/chapter/block-toolbar.tsx`** (phủ lên khung canvas, không trong
+    `editor/canvas`) để dùng chung icon của màn chương; ẩn khi đang xem Gốc. Hướng xoay của khối không tính khi đặt vị trí.
+19. **Esc trong bảng phím tắt ghi "Bỏ chọn khối"** (bỏ "đóng bảng phụ" vì không còn bảng dưới); hành vi phím không đổi.
+20. **"Chạy lại trang lỗi" có trong menu ⋯** khi chương đang chạy mà có trang lỗi (trước đây chỉ ở drawer Hoạt động).
+21. **Xung đột khi lưu nằm trên mọi panel** (không chỉ panel Chọn) và tự mở panel khi đang thu — không ép đổi công cụ
+    sang Chọn. "AI có bản mới" vẫn chỉ ở panel Chọn (thumbnail đã báo "Cần xem").
+22. **Khung canvas đổi cỡ (thu/mở panel, 288 ↔ 560) khi chưa tự zoom → vừa lại theo bề rộng mới, giữ điểm trang đang ở
+    mép trên**; đã zoom → giữ mức, chỉ căn lại. Chọn khối làm panel tự mở nên ảnh co lại một chút — chấp nhận.
+23. **Núm xoay Transformer đặt gần khung hơn (20px thay vì 50px)** để thanh nổi phía trên khối không che núm.
+
