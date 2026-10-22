@@ -59,27 +59,32 @@ Toàn màn hình (ngoài app shell), `chapter-workspace.css`: thanh trên 52px (
 - **Lỗi job viết cho người** (`job-error.ts`): rail/inspector/Hoạt động nói loại lỗi + việc cần làm ("Dịch lại trang
   này", "Chạy lại trang lỗi"); lỗi thô của provider (JSON dài) chỉ nằm trong "Chi tiết kỹ thuật" thu gọn ở inspector.
 - **Thông báo kết quả** (dịch lại, áp kiểu, lỗi thao tác): nổi trên canvas, không đẩy bố cục; info tự ẩn sau 6s.
-  "Dịch chương" (bấm tay hoặc tự dịch khi upload xong) thành công không báo thêm; có ảnh bị loại → giữ thông báo tới
-  khi chương xử lý xong; tự dịch lỗi → thông báo lỗi, chương ở lại nháp với nút "Dịch chương".
+  Bước 1 / Bước 2 thành công không báo thêm (chip đã đổi); Bước 1 có ảnh bị loại → giữ thông báo tới khi chương xử
+  lý xong.
 
 | Vùng | Nội dung |
 |---|---|
 | Rail trái (196px) | Danh sách trang + trạng thái từng trang |
-| Giữa | Strip canvas liên tục, nền xám trung tính; chế độ Gốc / Dịch / Chia đôi |
+| Giữa | Canvas từng trang (page active, căn giữa, ‹ › đổi trang), nền xám trung tính; chế độ Gốc / Dịch / Chia đôi |
 | Inspector phải (320px) | Thuộc tính khối/vùng của trang đang sửa |
 | Bảng dưới | Tab Bản dịch (bảng văn bản cả chương) / Tìm / Thay / Áp glossary; kéo cao, thu gọn (mặc định thu gọn khi < 1600px) |
 
-- **Nút chính** (1 nút, theo trạng thái chương, `primary-action.ts`): Tải ảnh → Dịch chương (= commit; chương tạo
-  bằng cách thả file tự dịch khi upload xong — nút khoá trong lúc chờ/đang bắt đầu dịch) → "Xuất" khoá trong lúc cắt trang/dịch (tiến độ ở chip) → Xuất. Chương có trang lỗi: "Chạy lại trang lỗi";
+- **Nút chính** (1 nút, theo trạng thái chương, `primary-action.ts`): Tải ảnh → **Bước 1 · Xoá chữ + OCR** (= commit:
+  ghép + cắt trang, xoá chữ, OCR; khoá tới khi upload xong, không bao giờ tự chạy) → chương "Chờ dịch" (soát ảnh
+  sạch, sửa mask) → **Bước 2 · Dịch** (dịch + chèn chữ) → "Xuất" khoá trong lúc chạy (tiến độ ở chip: "Bước 1 · OCR
+  x/N", "Đang dịch x/N") → Xuất. Chương có trang lỗi: "Chạy lại trang lỗi";
   "Dịch lại cả chương" nằm trong menu phụ.
 - **Drawer phải 420px** (`app/drawer.tsx`): Xuất (cảnh báo "Trước khi xuất", định dạng, tải) và Hoạt động (upload +
   job chương + lượt xuất). Không dùng modal cho thao tác chính. Chi tiết: [editor.md](./editor.md).
-- **Home** (`/`): vùng thả file lớn ("thả là dịch": đoán được series → tạo chương + tự dịch + mở màn chương; không
-  đoán được / file lỗi → dòng xác nhận "Sau khi thả file") → hàng series (bấm cả hàng để mở). **Series**: đầu trang +
+- **Home** (`/`): vùng thả file lớn (đoán được series → tạo chương nháp + upload + mở màn chương, chờ bấm Bước 1; không
+  đoán được / file lỗi → dòng xác nhận "Sau khi thả file"; chọn "+ Series mới…" thì có thêm select ngôn ngữ gốc) →
+  hàng series (bấm hàng để mở, icon Sửa → tab Cài đặt,
+  icon Xoá xác nhận tại chỗ rồi xoá cả series — chỉ admin/owner). **Series**: đầu trang +
   tab Chương / Glossary / Cài đặt dịch (`?tab=`) dùng chung; tab Chương = vùng thả cho chương kế (series cố định, cũng
-  tự tạo + tự dịch) + hàng chương (bấm cả hàng hoặc icon Sửa để mở, icon Xoá xác nhận tại chỗ). Hàng danh sách không
-  có nút "bước tiếp theo" — dịch / xuất / chạy lại làm trong màn chương. Xoá series ở cuối tab Cài đặt (gõ tên để
-  xác nhận, chỉ admin/owner).
+  tự tạo chương nháp) + hàng chương (bấm cả hàng hoặc icon Sửa để mở, icon Xoá xác nhận tại chỗ). Hàng danh sách không
+  có nút "bước tiếp theo" — dịch / xuất / chạy lại làm trong màn chương. Ngoài icon Xoá ở home, cuối tab Cài
+  đặt cũng xoá được series (gõ tên để xác nhận, chỉ admin/owner). Tạo series (home) = tên + select ngôn ngữ gốc; tab Cài đặt sửa
+  ngôn ngữ gốc / đích và định dạng truyện (Cuộn dọc / Từng trang — áp cho chương upload sau khi lưu).
 
 ## Thành phần
 

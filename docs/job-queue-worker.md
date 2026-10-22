@@ -75,12 +75,36 @@ Circuit breaker: ≥ 5 lỗi provider/rate_limited trong 5' → `runtime_flags.l
 `page.prepare` gửi kèm `partial {clean_rev, mask_rev, regions}` → lần sau bỏ qua detect/inpaint. Lease hết hạn → reaper
 trả `queued` (giữ attempts) hoặc `failed` khi hết lượt.
 
-## Ingest strip
+## Ingest strip / pages
+
+Mode ingest = `series.page_format` (`POST /chapters/:id/commit` không gửi `mode` → lấy của series; body `mode` chỉ để
+override khi test/tool), ghi lại ở `chapters.ingest_mode`. Series mới không gửi `page_format` → theo ngôn ngữ gốc:
+`ja` → `pages`, còn lại → `strip`. Đổi `page_format` chỉ áp cho lần commit sau (không tăng `settings_rev`).
 
 `worker/mtl_pipeline/ingest.py`: slice liên tiếp cùng width → strip ảo → detector → cắt ở hàng không giao box (lề 16px),
 ưu tiên ~4500px trong cửa sổ 3000–6000; không có → kéo dài tới 12000px; vẫn không → hàng giao ít box nhất + `cut_flag`.
 Không overlap; `source_map` ghi slice gốc ↔ đoạn y của page. `mode: "pages"` (manga): 1 file = 1 page. Ingest lại khi
 đã có `state_origin='user'` → 409 `chapter_has_user_edits` (tạo chương mới).
+
+## Ngôn ngữ + thứ tự đọc
+
+Series chọn nguồn `ko | ja | zh | en`, đích `vi | en | id | es | pt | fr` (`packages/shared/src/series-lang.ts`;
+nguồn ≠ `ko` chỉ ghi chú "chưa kiểm định kỹ", không chặn). Ngôn ngữ đi trong payload, prompt
+(`worker/mtl_pipeline/prompts/`) tĩnh để giữ cache:
+
+| Job | Field | Dùng ở worker |
+|---|---|---|
+| `page.prepare` | `source_lang`, `reading_order` (`ltr`/`rtl`) | dòng `source_lang=…` đầu nội dung OCR; `rtl` → id vùng chữ theo hàng trên→dưới, trong hàng phải→trái (`detect.rtl_order`) |
+| `page.ocr_region` | `source_lang`, `target_lang` | OCR + dịch 1 vùng |
+| `chapter.translate` | `settings.source_lang`, `settings.target_lang` | `source_lang`/`target_lang` trong JSON gửi dịch |
+
+`reading_order = rtl` chỉ khi nguồn `ja` **và** `chapters.ingest_mode = pages` (mode chương thực sự được cắt, không
+phải `page_format` hiện tại); còn lại `ltr` (thuật toán cũ, id vùng không đổi). Hàng của `rtl` so với box mở hàng nên
+box cao vắt qua nhiều khung không gộp hai hàng. Đổi `source_lang`/`target_lang` → `settings_rev + 1`. `honorific_policy` gửi đi là câu chỉ dẫn sinh theo
+cặp nguồn → đích (`honorificText` ở `apps/api/src/jobs/enqueue.ts`). Field ngôn ngữ trong payload là optional: job
+xếp hàng trước pipeline 0.4.0 thiếu → worker mặc định `ko` → `vi`, `ltr`. Pipeline 0.4.0 là `MIN_PIPELINE_VERSION`:
+**mọi** worker 0.3.x nhận 426 ngay khi API mới lên → cập nhật worker Mac/Modal cùng lúc deploy API, không thì hàng
+đợi dừng hẳn.
 
 ## Xuất chương
 

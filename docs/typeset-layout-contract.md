@@ -51,6 +51,8 @@ lệch bbox mực từng dòng ≤ 1px — xem `benchmarks/phase-01-results.md`)
   Một nguồn mỗi phía, khớp nhau: `manifest.defaults[0]` (`PREFERRED_DEFAULTS` trong `scripts/font_glyph_check.py`),
   `DEFAULT_FONT` (`worker/mtl_pipeline/fonts.py`), `DEFAULT_DIALOGUE_FONT` (`apps/api/src/jobs/enqueue.ts`; test
   `apps/api/test/fonts.test.ts` + `worker/tests/test_typeset_fit.py` giữ khớp). Series đã chọn font riêng giữ nguyên.
+- **Đích không phải tiếng Việt** (`en | id | es | pt | fr`): cùng bộ font — mọi font trong `manifest.json` phải đủ glyph
+  cho các đích này (`worker/tests/test_font_coverage.py`). Đích CJK/Thái chưa hỗ trợ (cần font + ngắt dòng không dấu cách).
 - **Viền**: mọi box auto-typeset có viền màu tương phản với chữ (chữ đen → viền trắng, chữ trắng → viền đen),
   `width = max(1.5, font_size × k)` làm tròn 0.1, `k = 0.1` trong bóng, `0.12` chữ ngoài bóng đè art
   (`STROKE_BUBBLE`/`STROKE_FREE` ở `typeset.py`; editor dùng cùng công thức `contrastStroke` cho khối chèn OCR /
