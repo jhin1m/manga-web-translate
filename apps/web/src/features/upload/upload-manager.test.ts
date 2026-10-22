@@ -24,11 +24,17 @@ const target = (id: string, ord: number) => ({
 
 /** Server + storage giả: ghi lại body createChapter, số lần presign, và mỗi lần POST file. */
 function fakeServer(post: (fileId: string, attempt: number) => Promise<void> = async () => {}) {
-  const calls = { create: [] as string[][], presign: [] as string[][], post: [] as string[] };
+  const calls = {
+    create: [] as string[][],
+    createFiles: [] as Parameters<UploadDeps["createChapter"]>[1]["files"][],
+    presign: [] as string[][],
+    post: [] as string[],
+  };
   const attempts = new Map<string, number>();
   const deps: UploadDeps = {
     createChapter: async (_ws, body) => {
       calls.create.push(body.files.map((f) => f.name));
+      calls.createFiles.push(body.files);
       return {
         chapter: {
           id: "ch-1",
@@ -55,6 +61,7 @@ function fakeServer(post: (fileId: string, attempt: number) => Promise<void> = a
     },
     storage: memoryStorage(),
     backoff: () => 0,
+    fingerprints: async (blobs) => blobs.map(() => null),
   };
   return { deps, calls };
 }
@@ -87,6 +94,35 @@ describe("upload manager", () => {
       pages: [png("10.png"), png("__MACOSX/._9.png"), png("9.png"), png("1.png")],
     });
     expect(calls.create).toEqual([["1.png", "9.png", "10.png"]]);
+    await settled(m, "ch-1");
+  });
+
+  it("sends each image's fingerprint in page order; leaves it out when it could not be computed", async () => {
+    const { deps, calls } = fakeServer();
+    const seen: number[] = [];
+    deps.fingerprints = async (blobs) =>
+      blobs.map((b) => {
+        seen.push(b.size);
+        return b.size === 2 ? null : { dhash: "0f0f0f0f0f0f0f0f", width: b.size, height: 100 };
+      });
+    const m = createUploadManager(deps);
+    await m.startNewChapter({ ws: "w", seriesId: "s", number: "1", pages: [png("2.png", 2), png("1.png", 1)] });
+    expect(seen).toEqual([1, 2]);
+    expect(calls.createFiles[0]).toEqual([
+      { name: "1.png", content_type: "image/png", bytes: 1, dhash: "0f0f0f0f0f0f0f0f", width: 1, height: 100 },
+      { name: "2.png", content_type: "image/png", bytes: 2 },
+    ]);
+    await settled(m, "ch-1");
+  });
+
+  it("still creates the chapter when fingerprinting fails outright", async () => {
+    const { deps, calls } = fakeServer();
+    deps.fingerprints = async () => {
+      throw new Error("decode");
+    };
+    const m = createUploadManager(deps);
+    await m.startNewChapter({ ws: "w", seriesId: "s", number: "1", pages: [png("1.png", 3)] });
+    expect(calls.createFiles[0]).toEqual([{ name: "1.png", content_type: "image/png", bytes: 3 }]);
     await settled(m, "ch-1");
   });
 

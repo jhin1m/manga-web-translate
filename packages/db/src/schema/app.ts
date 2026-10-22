@@ -133,6 +133,8 @@ export const sourceFiles = pgTable(
     height: integer("height"),
     /** Bỏ qua khi commit/ingest (null = dùng). Giữ hàng để hoàn tác và để tải tiếp khớp đúng bộ file. */
     skip: text("skip").$type<SourceSkipReason>(),
+    /** dHash 16 hex trình duyệt tính lúc thả ảnh (null = không tính được) — khớp/học ảnh credit của series. */
+    dhash: text("dhash"),
     ...timestamps,
   },
   (t) => [
@@ -141,6 +143,33 @@ export const sourceFiles = pgTable(
     ),
     index("source_files_chapter_idx").on(t.chapterId, t.ord),
     check("source_files_skip_chk", inList(sql`${t.skip}`, SOURCE_SKIP_REASONS)),
+  ],
+);
+
+/**
+ * Ảnh credit series đã học ("Luôn bỏ ở series này"): chương mới có ảnh khớp (dHash + tỉ lệ khung) bị bỏ qua sẵn
+ * (`source_files.skip = 'credit'`). `thumb_key` là bản sao riêng → còn xem được khi chương nguồn bị xoá.
+ */
+export const seriesSkipImages = pgTable(
+  "series_skip_images",
+  {
+    id: idPk(),
+    workspaceId: workspaceId(),
+    seriesId: uuid("series_id").notNull(),
+    dhash: text("dhash").notNull(),
+    width: integer("width").notNull(),
+    height: integer("height").notNull(),
+    thumbKey: text("thumb_key").notNull(),
+    /** Chương học ra ảnh — chỉ để tra cứu, không FK (xoá chương vẫn giữ ảnh đã học). */
+    learnedFromChapterId: uuid("learned_from_chapter_id"),
+    createdBy: text("created_by"),
+    ...timestamps,
+  },
+  (t) => [
+    foreignKey({ columns: [t.workspaceId, t.seriesId], foreignColumns: [series.workspaceId, series.id] }).onDelete(
+      "cascade",
+    ),
+    index("series_skip_images_series_idx").on(t.seriesId),
   ],
 );
 

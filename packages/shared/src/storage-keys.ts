@@ -14,6 +14,8 @@ export const storageKeys = {
   /** Mask người vẽ trong editor. */
   userMask: (ws: string, page: string, id: string) => `ws/${ws}/pg/${page}/user-mask/${id}.png`,
   export: (ws: string, ch: string, jobId: string, ext: "zip" | "cbz") => `ws/${ws}/ch/${ch}/export/${jobId}.${ext}`,
+  /** Bản sao ảnh credit series đã học (còn khi chương nguồn bị xoá); xoá series dọn cả `ws/{ws}/series/{id}/`. */
+  seriesSkip: (ws: string, series: string, id: string, ext: string) => `ws/${ws}/series/${series}/skip/${id}.${ext}`,
 } as const;
 
 /** Key có thuộc workspace không — chặn ký URL cho key của workspace khác. */

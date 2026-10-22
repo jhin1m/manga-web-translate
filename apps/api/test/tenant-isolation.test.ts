@@ -13,6 +13,7 @@ import {
   pages,
   scoped,
   series,
+  seriesSkipImages,
   sourceFiles,
 } from "@mtl/db";
 import { emptyPageState, pageId } from "@mtl/shared";
@@ -36,6 +37,8 @@ const spareChapterOf: Record<string, string> = {};
 /** Ảnh gốc của chương dự phòng (route bỏ qua ảnh; chương nháp chưa có page). */
 const spareSourceOf: Record<string, string> = {};
 let sourceFileA = "";
+/** Ảnh credit đã học của series mẫu (route skip-images). */
+const skipImageOf: Record<string, string> = {};
 
 beforeAll(async () => {
   [A, B] = await Promise.all([seedWorkspace("a"), seedWorkspace("b")]);
@@ -88,6 +91,15 @@ beforeAll(async () => {
     });
     await scoped(db, s.workspaceId).insert(pageStates, { pageId: pid, state: emptyPageState(100, 100) });
     pageOf[s.workspaceId] = pid;
+    skipImageOf[s.workspaceId] = (
+      await scoped(db, s.workspaceId).insert(seriesSkipImages, {
+        seriesId: s.seriesId,
+        dhash: "0f0f0f0f0f0f0f0f",
+        width: 800,
+        height: 1200,
+        thumbKey: `ws/${s.workspaceId}/series/${s.seriesId}/skip/tenant.png`,
+      })
+    ).id;
   }
   const f = await scoped(db, A.workspaceId).insert(sourceFiles, {
     chapterId: A.chapterId,
@@ -117,6 +129,10 @@ const BODIES: Record<string, unknown> = {
   "PATCH /api/w/:ws/chapters/:chapterId": { number: "99" },
   "POST /api/w/:ws/chapters/:chapterId/translate": {},
   "PATCH /api/w/:ws/chapters/:chapterId/source-files/:fileId": { skip: "user" },
+  // Ảnh dự phòng của A không có hash → own trả 409 no_hash (qua được tra series + ảnh).
+  get "POST /api/w/:ws/series/:seriesId/skip-images"() {
+    return { source_file_id: spareSourceOf[A.workspaceId] };
+  },
   "POST /api/w/:ws/glossary": { source_term: "마법", target_term: "ma pháp" },
   "POST /api/w/:ws/series/:seriesId/glossary": { source_term: "마법", target_term: "phép thuật" },
   "PATCH /api/w/:ws/glossary/:entryId": { note: "tên kiếm" },
@@ -192,6 +208,12 @@ const RESOURCE_CASES: Record<string, (b: Seed) => Record<string, string>> = {
   "POST /api/w/:ws/chapters/:chapterId/glossary-apply/preview": (b) => ({ chapterId: b.chapterId }),
   "POST /api/w/:ws/chapters/:chapterId/glossary-apply/apply": (b) => ({ chapterId: b.chapterId }),
   "GET /api/w/:ws/chapters/:chapterId/states": (b) => ({ chapterId: b.chapterId }),
+  "GET /api/w/:ws/series/:seriesId/skip-images": (b) => ({ seriesId: b.seriesId }),
+  "POST /api/w/:ws/series/:seriesId/skip-images": (b) => ({ seriesId: b.seriesId }),
+  "DELETE /api/w/:ws/series/:seriesId/skip-images/:imageId": (b) => ({
+    seriesId: b.seriesId,
+    imageId: skipImageOf[b.workspaceId] ?? "",
+  }),
   "DELETE /api/w/:ws/chapters/:chapterId": (b) => ({ chapterId: spareChapterOf[b.workspaceId] ?? "" }),
   "DELETE /api/w/:ws/series/:seriesId": (b) => ({ seriesId: spareSeriesOf[b.workspaceId] ?? "" }),
 };

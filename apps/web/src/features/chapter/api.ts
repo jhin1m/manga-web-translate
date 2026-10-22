@@ -87,7 +87,13 @@ export const fetchChapter = (ws: string, ch: string) => api<ChapterDetail>(base(
 export const fetchProgress = (ws: string, ch: string) => api<Progress>(base(ws, ch, "/progress"));
 export const fetchPages = (ws: string, ch: string) =>
   api<{ expires_at: string; pages: PageImage[] }>(base(ws, ch, "/pages"));
-export type SourceFileImage = { id: string; ord: number; skip: SourceSkipReason | null; url: string };
+export type SourceFileImage = {
+  id: string;
+  ord: number;
+  skip: SourceSkipReason | null;
+  width: number | null;
+  url: string;
+};
 export const fetchSourceFiles = (ws: string, ch: string) =>
   api<{ expires_at: string; files: SourceFileImage[] }>(base(ws, ch, "/source-files"));
 /** Xoá (ẩn) / khôi phục 1 trang sau Bước 1 (cần giữ khoá; 409 khi chương đang chạy hoặc là trang cuối còn hiện). */

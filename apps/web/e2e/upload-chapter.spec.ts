@@ -3,13 +3,14 @@
  * còn đang upload; rail hiện 10 ảnh gốc ngay, bấm ảnh → xem lớn → upload xong xoá 1 ảnh (hoàn tác được) → bấm
  * "Bước 1" → worker giả → "Bước 2 · Dịch" → 9 trang "Xong" trên rail. Thêm: drawer
  * Hoạt động ở home khi đang upload; màn series (3 ảnh lẻ = 1 chương nháp số kế tiếp) + đổi số chương / series trên thanh trên +
- * glossary thêm nhanh; file lỗi → dòng xác nhận cũ báo lỗi. Test đầu đăng nhập bằng form `/login` (các spec khác
+ * glossary thêm nhanh; ảnh credit "Luôn bỏ ở series này" tự bỏ ở chương sau; file lỗi → dòng xác nhận cũ báo lỗi. Test đầu đăng nhập bằng form `/login` (các spec khác
  * dùng dev auto-login).
  */
 import { expect, type Route, test } from "@playwright/test";
 import { zipSync } from "fflate";
 import { WEB_URL } from "./env.ts";
 import { PNG_1PX, runFakeWorker } from "./fake-worker.ts";
+import { grayPng } from "./gray-png.ts";
 import { login, loginWithForm, state } from "./helpers.ts";
 
 const ws = state.workspaceId;
@@ -155,6 +156,61 @@ test("series page: 3 loose images = 1 draft chapter waiting for Bước 1; fix i
   await glossary.getByLabel("Bản dịch").fill("Kim Jun");
   await glossary.getByRole("button", { name: "Thêm" }).click();
   await expect(glossary.getByRole("cell", { name: "Kim Jun" })).toBeVisible();
+});
+
+test("a credit deleted with “Luôn bỏ ở series này” is skipped in the next chapter and can be restored", async ({
+  page,
+}) => {
+  await login(page);
+  const created = await page.request.post(`/api/w/${ws}/series`, {
+    headers: { origin: WEB_URL },
+    data: { title: "Series credit e2e" },
+  });
+  expect(created.status()).toBe(201);
+  const sid = ((await created.json()) as { id: string }).id;
+  // 2 trang truyện sáng dần sang phải (khổ 80×120) + credit ô bàn cờ, khổ rộng hơn (100×120).
+  const files = [
+    { name: "p1.png", mimeType: "image/png", buffer: grayPng(80, 120, (x) => x * 3) },
+    { name: "p2.png", mimeType: "image/png", buffer: grayPng(80, 120, (x, y) => x * 2 + y) },
+    {
+      name: "p3.png",
+      mimeType: "image/png",
+      buffer: grayPng(100, 120, (x, y) => ((Math.floor(x / 11) + Math.floor(y / 15)) % 2) * 220),
+    },
+  ];
+  const dropChapter = async () => {
+    await page.goto(`/w/${ws}/s/${sid}`);
+    await page
+      .getByRole("region", { name: "Thêm chương tiếp theo" })
+      .locator('input[type="file"]')
+      .setInputFiles(files);
+    await expect(page).toHaveURL(new RegExp(`/s/${sid}/c/[0-9a-f-]{36}$`), { timeout: 30_000 });
+    await expect(page.getByRole("button", { name: "Bước 1 · Xoá chữ + OCR" })).toBeEnabled({ timeout: 30_000 });
+    return page.getByRole("complementary", { name: "Danh sách ảnh gốc" });
+  };
+
+  let sources = await dropChapter();
+  const last = sources.locator(".cw-rail-row").nth(2);
+  // Ảnh cuối lệch khổ → chỉ gợi ý, không tự bỏ.
+  await expect(last).toContainText("Có thể là credit");
+  await sources.getByRole("button", { name: "Xoá ảnh 3" }).click();
+  await page.getByRole("button", { name: "Luôn bỏ ở series này" }).click();
+  await expect(page.getByText("Đã học 1 ảnh")).toBeVisible();
+
+  sources = await dropChapter();
+  await expect(sources.locator(".cw-rail-row").nth(2)).toContainText("Credit · tự bỏ");
+  await expect(sources).toContainText("đã bỏ 1");
+  await expect(sources.locator(".cw-rail-row").nth(0)).not.toContainText("Credit");
+  await sources.getByRole("button", { name: "Khôi phục ảnh 3" }).click();
+  await expect(sources.getByRole("button", { name: "Xoá ảnh 3" })).toBeVisible();
+  await expect(sources).not.toContainText("đã bỏ");
+
+  // Cài đặt series: ảnh đã học, xoá khỏi danh sách.
+  await page.goto(`/w/${ws}/s/${sid}?tab=settings`);
+  const learned = page.getByRole("group", { name: "Ảnh tự bỏ" });
+  await expect(learned.getByRole("img", { name: "Ảnh tự bỏ 1" })).toBeVisible();
+  await learned.getByRole("button", { name: "Xoá ảnh tự bỏ 1" }).click();
+  await expect(learned.getByText("Chưa có ảnh nào.")).toBeVisible();
 });
 
 test("files the app cannot take as-is fall back to the confirm row with the problem", async ({ page }) => {

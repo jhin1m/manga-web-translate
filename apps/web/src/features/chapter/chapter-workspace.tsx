@@ -18,10 +18,10 @@
 import "../editor/editor.css";
 import "./chapter-workspace.css";
 import type { PageState } from "@mtl/shared";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { errorMessage } from "../../lib/api.ts";
+import { ApiError, errorMessage } from "../../lib/api.ts";
 import { deleteBox, setStyleMany } from "../editor/actions.ts";
 import { ChapterCanvas } from "../editor/canvas/ChapterCanvas.tsx";
 import { type PageRect, useOcrRegion } from "../editor/canvas/OcrSelect.tsx";
@@ -34,7 +34,7 @@ import { editorStore, useEditor } from "../editor/store.ts";
 import { resetChapterSession, useChapterSession } from "../editor/use-chapter-session.ts";
 import { useShortcuts } from "../editor/use-shortcuts.ts";
 import { ApplyGlossaryPanel } from "../glossary/ApplyGlossary.tsx";
-import { fetchSeries, seriesKeys } from "../series/api.ts";
+import { fetchSeries, learnSkipImage, seriesKeys } from "../series/api.ts";
 import { ChapterUploadStatus, resumeFromFiles } from "../upload/chapter-upload-status.tsx";
 import { DropZone } from "../upload/drop-zone.tsx";
 import { uploadManager, useChapterUpload } from "../upload/upload-manager.ts";
@@ -79,14 +79,14 @@ const NO_PAGES: never[] = [];
 type DrawerKind = "export" | "activity" | "help";
 type Props = { ws: string; seriesId: string; chapterId: string; page?: string; drawer?: "export" };
 /**
- * `untilStable`: giữ tới khi chương chạy xong lượt xử lý vừa bắt đầu (ảnh bị loại khi Dịch chương). `action`: nút
- * kèm thông báo (vd. "Hoàn tác" sau khi xoá ảnh).
+ * `untilStable`: giữ tới khi chương chạy xong lượt xử lý vừa bắt đầu (ảnh bị loại khi Dịch chương). `actions`: nút
+ * kèm thông báo (vd. "Hoàn tác", "Luôn bỏ ở series này" sau khi xoá ảnh).
  */
 type Notice = {
   tone: "info" | "warn" | "danger";
   text: string;
   untilStable?: boolean;
-  action?: { label: string; run(): void };
+  actions?: { label: string; run(): void }[];
   /** Nhóm thông báo — "skip": khôi phục ảnh/trang chỉ đóng thông báo "Đã xoá…", không đụng lỗi khác. */
   key?: "skip";
 };
@@ -131,6 +131,7 @@ function Workspace({ ws, seriesId, chapterId, page: searchPage, drawer: searchDr
   const { kit } = session;
   // Font thoại của series cho box tạo tay (cùng key với màn series → lưu cài đặt là cập nhật).
   const series = useQuery({ queryKey: seriesKeys.detail(ws, seriesId), queryFn: () => fetchSeries(ws, seriesId) });
+  const queryClient = useQueryClient();
   const activeId = useEditor((s) => s.pageId);
   const [notice, setNotice] = useState<Notice | null>(null);
   const [imageError, setImageError] = useState<string | null>(null);
@@ -427,6 +428,37 @@ function Workspace({ ws, seriesId, chapterId, page: searchPage, drawer: searchDr
   const sourceId = sources.some((it) => it.id === sourcePick) ? sourcePick : (sources[0]?.id ?? null);
   const sourceIdx = sources.findIndex((it) => it.id === sourceId);
   const sourcesEditable = status === "draft" || (status === "partial_failed" && pages.length === 0);
+  // "Luôn bỏ ở series này" (toast sau khi xoá ảnh / trang): học ảnh credit → chương sau tự bỏ ảnh giống.
+  const learnSkip = useMutation({
+    mutationFn: (from: { source_file_id: string } | { page_id: string }) => learnSkipImage(ws, seriesId, from),
+    // Thay toast có nút ngay khi bấm → không bấm 2 lần.
+    onMutate: () => notify({ tone: "info", text: "Đang lưu ảnh tự bỏ…" }),
+    onSuccess: (r) => {
+      notify({
+        tone: "info",
+        text: r.learned
+          ? `Đã học ${r.learned} ảnh — chương sau của series tự bỏ ảnh giống.`
+          : "Ảnh này đã có trong danh sách tự bỏ của series.",
+      });
+      void queryClient.invalidateQueries({ queryKey: seriesKeys.skipImages(ws, seriesId) });
+    },
+    // Ảnh chưa tải lên xong (thường là ảnh cuối, xoá ngay khi thả) → giữ nút thử lại thay vì mất hẳn lựa chọn.
+    onError: (e, from) =>
+      notify({
+        tone: "danger",
+        text: errorMessage(e),
+        ...(e instanceof ApiError && e.body.error === "not_uploaded"
+          ? { actions: [{ label: "Thử lại", run: () => learnSkip.mutate(from) }] }
+          : {}),
+      }),
+  });
+  const alwaysSkip = useCallback(
+    (from: { source_file_id: string } | { page_id: string }) => ({
+      label: "Luôn bỏ ở series này",
+      run: () => learnSkip.mutate(from),
+    }),
+    [learnSkip.mutate],
+  );
   const sourceSkip = useSetSourceSkip(ws, chapterId, (e) => notify({ tone: "danger", text: errorMessage(e) }));
   const skipSource = useCallback(
     (it: SourceItem, skip: "user" | null) =>
@@ -439,13 +471,16 @@ function Workspace({ ws, seriesId, chapterId, page: searchPage, drawer: searchDr
                 tone: "info",
                 key: "skip",
                 text: `Đã xoá ảnh ${it.n}.`,
-                action: { label: "Hoàn tác", run: () => skipSource(it, null) },
+                actions: [
+                  { label: "Hoàn tác", run: () => skipSource(it, null) },
+                  alwaysSkip({ source_file_id: it.id }),
+                ],
               });
             } else setNotice((n) => (n?.key === "skip" ? null : n));
           },
         },
       ),
-    [sourceSkip.mutate, notify],
+    [sourceSkip.mutate, notify, alwaysSkip],
   );
   // ---- Xoá (ẩn) / khôi phục trang sau Bước 1 ----
   const pagesEditable = session.lockEnabled && session.lock.state.status === "held";
@@ -457,7 +492,10 @@ function Workspace({ ws, seriesId, chapterId, page: searchPage, drawer: searchDr
           tone: "info",
           key: "skip",
           text: `Đã xoá trang ${page.ord + 1} (không dịch, không xuất).`,
-          action: { label: "Hoàn tác", run: () => pageSkip.mutate({ page, skipped: false }) },
+          actions: [
+            { label: "Hoàn tác", run: () => pageSkip.mutate({ page, skipped: false }) },
+            alwaysSkip({ page_id: page.id }),
+          ],
         });
       } else setNotice((n) => (n?.key === "skip" ? null : n));
     },
@@ -811,11 +849,11 @@ function Notices(props: { errors: (string | null | undefined)[]; notice: Notice 
       {props.notice && (
         <div className={`notice ${props.notice.tone}`} role={props.notice.tone === "danger" ? "alert" : "status"}>
           {props.notice.text}{" "}
-          {props.notice.action && (
-            <button type="button" className="btn-ghost" onClick={props.notice.action.run}>
-              {props.notice.action.label}
+          {props.notice.actions?.map((a) => (
+            <button key={a.label} type="button" className="btn-ghost" onClick={a.run}>
+              {a.label}
             </button>
-          )}
+          ))}
           <button type="button" className="btn-ghost" onClick={props.onDismiss}>
             Đóng
           </button>
