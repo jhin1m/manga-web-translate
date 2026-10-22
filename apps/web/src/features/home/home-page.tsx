@@ -1,18 +1,22 @@
 /**
  * Home của workspace, từ trên xuống: vùng thả lớn (thả bất kỳ đâu trên trang cũng được; đoán được series → tạo
- * chương + tự dịch + mở màn chương, không thì dòng xác nhận inline) → danh sách series (tìm, "+ Series mới"; bấm cả
- * hàng để mở series).
+ * chương + tự dịch + mở màn chương, không thì dòng xác nhận inline) → danh sách series (tìm, "+ Series mới"; bấm
+ * hàng để mở series, icon Sửa → cài đặt series, icon Xoá → xác nhận tại chỗ rồi xoá cả series).
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { type FormEvent, useState } from "react";
-import { errorMessage } from "../../lib/api.ts";
+import { useWorkspace } from "../../app/app-shell.tsx";
+import { ApiError, errorMessage } from "../../lib/api.ts";
 import { needsWork, nextAction } from "../chapter/next-action.ts";
-import { createSeries, fetchSeriesList, type SeriesListItem, seriesKeys } from "../series/api.ts";
+import { createSeries, deleteSeries, fetchSeriesList, type SeriesListItem, seriesKeys } from "../series/api.ts";
+import type { SourceLang } from "../series/lang-labels.ts";
+import { SourceLangSelect } from "../series/source-lang-select.tsx";
 import { DropZone, usePageDrop } from "../upload/drop-zone.tsx";
 import { normalizeName } from "../upload/parse-chapter-filename.ts";
 import { useDropToTranslate } from "./drop-to-translate.ts";
 import { NewChapterConfirmRow } from "./new-chapter-confirm-row.tsx";
+import { PencilIcon, TrashIcon } from "./row-icons.tsx";
 import "./home.css";
 
 type Pending = { files: File[]; seriesId?: string; seq: number };
@@ -64,11 +68,14 @@ function SeriesRows(props: { ws: string; series: SeriesListItem[] | undefined; e
   const { ws } = props;
   const qc = useQueryClient();
   const navigate = useNavigate();
+  // Xoá series cần quyền admin trở lên (API cũng chặn); member chỉ thấy icon Sửa.
+  const canDelete = useWorkspace().role !== "member";
   const [search, setSearch] = useState("");
   const [adding, setAdding] = useState(false);
   const [title, setTitle] = useState("");
+  const [sourceLang, setSourceLang] = useState<SourceLang>("ko");
   const create = useMutation({
-    mutationFn: () => createSeries(ws, { title: title.trim() }),
+    mutationFn: () => createSeries(ws, { title: title.trim(), source_lang: sourceLang }),
     onSuccess: (s) => {
       setTitle("");
       setAdding(false);
@@ -108,6 +115,7 @@ function SeriesRows(props: { ws: string; series: SeriesListItem[] | undefined; e
               onChange={(e) => setTitle(e.target.value)}
               onKeyDown={(e) => e.key === "Escape" && setAdding(false)}
             />
+            <SourceLangSelect value={sourceLang} onChange={setSourceLang} />
             <button type="submit" className="btn-primary" disabled={create.isPending || !title.trim()}>
               Tạo series
             </button>
@@ -131,50 +139,124 @@ function SeriesRows(props: { ws: string; series: SeriesListItem[] | undefined; e
           </div>
         )}
         {list.map((s) => (
-          <SeriesRow key={s.id} ws={ws} s={s} />
+          <SeriesRow key={s.id} ws={ws} s={s} canDelete={canDelete} />
         ))}
       </div>
     </section>
   );
 }
 
-function SeriesRow({ ws, s }: { ws: string; s: SeriesListItem }) {
+function SeriesRow({ ws, s, canDelete }: { ws: string; s: SeriesListItem; canDelete: boolean }) {
+  const [confirming, setConfirming] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
   const latest = s.latest_chapter;
   const a = latest ? nextAction(latest) : null;
   const state =
     !latest || !a ? "Chưa có chương" : needsWork(latest) ? `Ch.${latest.number} · ${a.state}` : "Đã xuất hết";
   const tone = !latest || !a ? "idle" : needsWork(latest) ? a.tone : "ok";
   return (
-    <Link className="row-item row-link" to="/w/$ws/s/$seriesId" params={{ ws, seriesId: s.id }}>
-      <span className="cover" aria-hidden="true">
-        {s.title.trim().charAt(0).toUpperCase()}
-      </span>
-      <span className="row-title">
-        <span className="row-name">{s.title}</span>
-        <span className="row-sub">
-          {s.chapter_count} chương · {s.exported_count ?? 0} đã xuất
+    <div className="row-item" data-series={s.id}>
+      <Link className="row-open" to="/w/$ws/s/$seriesId" params={{ ws, seriesId: s.id }}>
+        <span className="cover" aria-hidden="true">
+          {s.title.trim().charAt(0).toUpperCase()}
         </span>
-      </span>
-      <span className="grow row small">
-        <span className="dot" data-tone={tone} />
-        {state}
-      </span>
-      <Chevron />
-    </Link>
+        <span className="row-title">
+          <span className="row-name">{s.title}</span>
+          <span className="row-sub">
+            {s.chapter_count} chương · {s.exported_count ?? 0} đã xuất
+          </span>
+        </span>
+        <span className="grow row small">
+          <span className="dot" data-tone={tone} />
+          {state}
+        </span>
+      </Link>
+      {confirming ? (
+        <DeleteSeriesConfirm
+          ws={ws}
+          s={s}
+          onDone={() => setConfirming(false)}
+          onError={(text) => {
+            setConfirming(false);
+            setMsg(text);
+          }}
+        />
+      ) : (
+        <>
+          <Link
+            className="btn icon-btn"
+            to="/w/$ws/s/$seriesId"
+            params={{ ws, seriesId: s.id }}
+            search={{ tab: "settings" }}
+            aria-label={`Sửa series ${s.title}`}
+            title="Sửa series"
+          >
+            <PencilIcon />
+          </Link>
+          {canDelete && (
+            <button
+              type="button"
+              className="icon-btn"
+              data-danger
+              aria-label={`Xoá series ${s.title}`}
+              title="Xoá series"
+              onClick={() => {
+                setMsg(null);
+                setConfirming(true);
+              }}
+            >
+              <TrashIcon />
+            </button>
+          )}
+        </>
+      )}
+      {msg && <div className="row-error">{msg}</div>}
+    </div>
   );
 }
 
-const Chevron = () => (
-  <svg
-    className="row-chevron"
-    width="16"
-    height="16"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="2"
-    aria-hidden="true"
-  >
-    <path d="m9 6 6 6-6 6" />
-  </svg>
-);
+/** Xác nhận tại chỗ: xoá series cùng mọi chương + glossary riêng (không hoàn tác). */
+function DeleteSeriesConfirm(props: {
+  ws: string;
+  s: SeriesListItem;
+  onDone: () => void;
+  onError: (text: string) => void;
+}) {
+  const { ws, s } = props;
+  const qc = useQueryClient();
+  const del = useMutation({
+    mutationFn: () => deleteSeries(ws, s.id),
+    onSuccess: () => {
+      props.onDone();
+      qc.removeQueries({ queryKey: seriesKeys.detail(ws, s.id) });
+      void qc.invalidateQueries({ queryKey: seriesKeys.list(ws) });
+    },
+    onError: (e) =>
+      props.onError(
+        e instanceof ApiError && e.status === 423
+          ? `${String(e.body.holder_name ?? "Người khác")} đang mở sửa một chương của series này — đợi họ đóng chương rồi xoá.`
+          : errorMessage(e),
+      ),
+  });
+  return (
+    <div className="row delete-confirm" role="alertdialog" aria-label={`Xác nhận xoá series ${s.title}`}>
+      <span className="small">
+        Xoá hẳn series <b>{s.title}</b>
+        {s.chapter_count > 0 ? ` cùng ${s.chapter_count} chương (ảnh, bản dịch, lịch sử)` : ""} và glossary riêng?
+      </span>
+      <button
+        type="button"
+        className="btn-danger-solid"
+        disabled={del.isPending}
+        // biome-ignore lint/a11y/noAutofocus: vừa bấm xoá → Enter xác nhận, Esc/Tab sang Huỷ
+        autoFocus
+        onClick={() => del.mutate()}
+      >
+        {del.isPending ? "Đang xoá…" : "Xoá series"}
+      </button>
+      <button type="button" disabled={del.isPending} onClick={props.onDone}>
+        Huỷ
+      </button>
+    </div>
+  );
+}

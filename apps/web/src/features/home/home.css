@@ -279,24 +279,29 @@ label.file-pick input {
   font-size: 20px;
 }
 
-/* Cả hàng là link (series ở home). */
-.row-link {
+/* Hàng series ở home: phần bìa + tên + trạng thái là link mở series (bấm cả vùng), icon Sửa/Xoá bên phải. */
+.row-open {
+  flex: 1;
+  min-width: 260px;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
   color: inherit;
-  cursor: pointer;
+  margin: calc(-1 * var(--sp-2)) 0;
+  padding: var(--sp-2) 0;
+  border-radius: var(--radius);
 }
-.row-link:hover {
-  background: var(--c-surface);
+.row-open:hover {
   text-decoration: none;
+}
+.row-item:has(> .row-open:hover) {
+  background: var(--c-surface);
 }
 .row-name {
   font-weight: 600;
 }
-.row-link:hover .row-name {
+.row-open:hover .row-name {
   color: var(--c-accent);
-}
-.row-chevron {
-  color: var(--c-fg-subtle);
-  flex-shrink: 0;
 }
 
 /* Chấm trạng thái 10px. */

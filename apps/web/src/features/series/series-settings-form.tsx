@@ -1,5 +1,6 @@
 /**
- * Form cài đặt dịch của series (chia nhóm Chung / Dịch / Font / Xưng hô): ngôn ngữ, kính ngữ, tier model, giọng văn,
+ * Form cài đặt dịch của series (chia nhóm Chung / Dịch / Font / Xưng hô): ngôn ngữ, định dạng truyện, kính ngữ, tier
+ * model, giọng văn,
  * font mặc định, quy tắc xưng hô theo cặp nhân vật. Server tăng settings_rev khi trường ảnh hưởng dịch đổi. Kèm vùng
  * xoá series. Dùng ở `?tab=settings` của màn series.
  */
@@ -17,6 +18,16 @@ import {
   type SeriesSettings,
   seriesKeys,
 } from "./api.ts";
+import {
+  addressPlaceholder,
+  HONORIFIC_EXAMPLES,
+  isTestedSource,
+  LANG_NAMES,
+  PAGE_FORMAT_LABELS,
+  PAGE_FORMATS,
+  SOURCE_LANGS,
+  TARGET_LANGS,
+} from "./lang-labels.ts";
 
 const FONT_SLOTS: { slot: FontSlot; label: string }[] = [
   { slot: "dialogue", label: "Thoại" },
@@ -30,6 +41,7 @@ const toForm = (s: Series): Form => ({
   title: s.title,
   source_lang: s.source_lang,
   target_lang: s.target_lang,
+  page_format: s.page_format,
   honorific_policy: s.honorific_policy,
   pronoun_rules: s.pronoun_rules,
   style_prompt: s.style_prompt,
@@ -85,33 +97,54 @@ export function SeriesSettingsForm({ ws, series }: { ws: string; series: Series 
               value={f.source_lang}
               onChange={(e) => set("source_lang", e.target.value as Form["source_lang"])}
             >
-              <option value="ko">Tiếng Hàn (ko)</option>
-              <option value="ja" disabled>
-                Tiếng Nhật (sắp có)
-              </option>
-              <option value="zh" disabled>
-                Tiếng Trung (sắp có)
-              </option>
-              <option value="en" disabled>
-                Tiếng Anh (sắp có)
-              </option>
+              {SOURCE_LANGS.map((l) => (
+                <option key={l} value={l}>
+                  {LANG_NAMES[l]} ({l})
+                </option>
+              ))}
             </select>
+            {!isTestedSource(f.source_lang) && (
+              <span className="hint">Chưa kiểm định kỹ — kết quả có thể kém hơn tiếng Hàn.</span>
+            )}
           </div>
           <div>
             <label htmlFor="s-tgt">Ngôn ngữ đích</label>
-            <select id="s-tgt" value={f.target_lang} onChange={(e) => set("target_lang", e.target.value as "vi")}>
-              <option value="vi">Tiếng Việt (vi)</option>
+            <select
+              id="s-tgt"
+              value={f.target_lang}
+              onChange={(e) => set("target_lang", e.target.value as Form["target_lang"])}
+            >
+              {TARGET_LANGS.map((l) => (
+                <option key={l} value={l}>
+                  {LANG_NAMES[l]} ({l})
+                </option>
+              ))}
             </select>
           </div>
           <div>
-            <label htmlFor="s-hon">Kính ngữ (-nim, -ssi…)</label>
+            <label htmlFor="s-fmt">Định dạng truyện</label>
+            <select
+              id="s-fmt"
+              value={f.page_format}
+              onChange={(e) => set("page_format", e.target.value as Form["page_format"])}
+            >
+              {PAGE_FORMATS.map((p) => (
+                <option key={p} value={p}>
+                  {PAGE_FORMAT_LABELS[p]}
+                </option>
+              ))}
+            </select>
+            <span className="hint">Áp dụng cho chương upload sau khi lưu.</span>
+          </div>
+          <div>
+            <label htmlFor="s-hon">Kính ngữ ({HONORIFIC_EXAMPLES[f.source_lang]})</label>
             <select
               id="s-hon"
               value={f.honorific_policy}
               onChange={(e) => set("honorific_policy", e.target.value as Form["honorific_policy"])}
             >
-              <option value="translate">Chuyển sang xưng hô tiếng Việt</option>
-              <option value="keep">Giữ nguyên hậu tố</option>
+              <option value="translate">Chuyển sang cách gọi của ngôn ngữ đích</option>
+              <option value="keep">Giữ nguyên kính ngữ (phiên âm)</option>
             </select>
           </div>
           <div>
@@ -130,7 +163,7 @@ export function SeriesSettingsForm({ ws, series }: { ws: string; series: Series 
         <textarea
           id="s-style"
           maxLength={1000}
-          placeholder="VD: giọng trẻ, đời thường; giữ tên riêng phiên âm Hàn"
+          placeholder="VD: giọng trẻ, đời thường; giữ tên riêng phiên âm"
           value={f.style_prompt}
           onChange={(e) => set("style_prompt", e.target.value)}
         />
@@ -166,8 +199,10 @@ export function SeriesSettingsForm({ ws, series }: { ws: string; series: Series 
       </fieldset>
 
       <fieldset className="settings-group">
-        <legend>Quy tắc xưng hô</legend>
-        <span className="hint">Người nói → người nghe: cách xưng / gọi. VD: Minjun → Seoyeon: anh/em.</span>
+        <legend>Cách xưng hô / gọi nhau</legend>
+        <span className="hint">
+          Người nói → người nghe: cách xưng / gọi. VD: Minjun → Seoyeon: {addressPlaceholder(f.target_lang)}.
+        </span>
         {f.pronoun_rules.length > 0 && (
           <table className="data">
             <thead>
@@ -200,7 +235,7 @@ export function SeriesSettingsForm({ ws, series }: { ws: string; series: Series 
                   <td>
                     <input
                       aria-label="Xưng / gọi"
-                      placeholder="anh/em"
+                      placeholder={addressPlaceholder(f.target_lang)}
                       value={r.address}
                       onChange={(e) => setRule(i, { address: e.target.value })}
                     />

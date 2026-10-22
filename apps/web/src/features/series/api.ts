@@ -1,4 +1,5 @@
 /** Kiểu + query của series (khớp apps/api/src/routes/series.ts). */
+import type { PageFormat, SourceLang, TargetLang } from "@mtl/shared/series-lang";
 import { api, wsPath } from "../../lib/api.ts";
 
 export const FONT_IDS = [
@@ -17,8 +18,10 @@ export type PronounRule = { speaker: string; listener: string; address: string; 
 export type FontSlot = "dialogue" | "narration" | "sfx";
 
 export type SeriesSettings = {
-  source_lang: "ko" | "ja" | "zh" | "en";
-  target_lang: "vi";
+  source_lang: SourceLang;
+  target_lang: TargetLang;
+  /** Cách commit chương: strip (ghép rồi cắt) hoặc pages (mỗi file 1 trang). */
+  page_format: PageFormat;
   honorific_policy: "translate" | "keep";
   pronoun_rules: PronounRule[];
   style_prompt: string;

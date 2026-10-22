@@ -26,14 +26,13 @@ import {
   type SeriesDetail,
   seriesKeys,
 } from "./api.ts";
+import { langShort } from "./lang-labels.ts";
 import { DeleteSeries, SeriesSettingsForm } from "./series-settings-form.tsx";
 import { SeriesSidebar } from "./series-sidebar.tsx";
 import "../home/home.css";
 
 export type SeriesTab = "chapters" | "glossary" | "settings";
 type Filter = "todo" | "exported" | "all";
-
-const LANG: Record<string, string> = { ko: "Hàn", ja: "Nhật", zh: "Trung", en: "Anh", vi: "Việt" };
 
 const useSeries = (ws: string, seriesId: string) =>
   useQuery({
@@ -90,7 +89,8 @@ function SeriesHead({ series }: { series: SeriesDetail }) {
       <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
         <h1>{series.title}</h1>
         <span className="muted">
-          {LANG[series.source_lang]} → {LANG[series.target_lang]} · {series.chapters.length} chương · {exported} đã xuất
+          {langShort(series.source_lang)} → {langShort(series.target_lang)} · {series.chapters.length} chương ·{" "}
+          {exported} đã xuất
         </span>
       </div>
     </div>

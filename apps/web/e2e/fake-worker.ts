@@ -7,7 +7,7 @@ import { zipSync } from "fflate";
 import { emptyPageState, type PageState } from "../../../packages/shared/src/index.ts";
 import { API_URL } from "./env.ts";
 
-const VERSION = "0.3.0";
+const VERSION = "0.4.0";
 const SHA = "ab".repeat(32);
 /** PNG 1×1 hợp lệ. */
 export const PNG_1PX = Buffer.from(
