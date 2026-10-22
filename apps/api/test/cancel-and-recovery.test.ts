@@ -15,6 +15,7 @@ import {
   failJob,
   jobRow,
   pageRows,
+  translateIfPrepared,
   workerToken,
 } from "./worker-helpers.ts";
 
@@ -39,7 +40,7 @@ describe("cancel paths", () => {
     expect(await chapterStatus(S.chapterId)).toBe("draft");
   });
 
-  it("cancelling the last page.prepare still advances the prepared pages to stage 2", async () => {
+  it("cancelling the last page.prepare leaves the prepared pages waiting for Dịch, not stuck processing", async () => {
     const { S, token } = await ingested("cprep", 2);
     const [a] = await claimJobs(token, { caps: ["page.prepare"] });
     expect((await doPrepare(token, a as Claimed)).status).toBe(200);
@@ -48,6 +49,8 @@ describe("cancel paths", () => {
     );
     expect(queued).toBeDefined();
     await cancelJob(S.workspaceId, queued?.id as string);
+    expect(await chapterStatus(S.chapterId)).toBe("prepared");
+    await translateIfPrepared(S.chapterId);
     const [t] = await claimJobs(token, { caps: ["chapter.translate"] });
     expect(t).toBeDefined();
     expect((await doTranslate(token, t as Claimed)).status).toBe(200);
@@ -58,6 +61,7 @@ describe("cancel paths", () => {
     const { S, token } = await ingested("ctr", 1);
     const [a] = await claimJobs(token, { caps: ["page.prepare"] });
     expect((await doPrepare(token, a as Claimed)).status).toBe(200);
+    await translateIfPrepared(S.chapterId);
     const tr = (await db.select().from(jobs).where(eq(jobs.chapterId, S.chapterId))).find(
       (j) => j.type === "chapter.translate",
     );
@@ -70,6 +74,7 @@ describe("cancel paths", () => {
     const { S, token } = await ingested("crtr", 1);
     const [a] = await claimJobs(token, { caps: ["page.prepare"] });
     await doPrepare(token, a as Claimed);
+    await translateIfPrepared(S.chapterId);
     const [t] = await claimJobs(token, { caps: ["chapter.translate"] });
     await doTranslate(token, t as Claimed);
     const [pg] = await pageRows(S.chapterId);

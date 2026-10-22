@@ -15,8 +15,8 @@ import { memberNames } from "./member-names.ts";
 type Chapter = typeof chapters.$inferSelect;
 
 /**
- * Huỷ mọi job đang hoạt động của chương. Huỷ page.prepare cuối có thể nối sang chapter.translate cho page đã
- * prepare (queue.terminal) → lặp tới khi không còn job active (có trần vòng lặp).
+ * Huỷ mọi job đang hoạt động của chương; lặp tới khi không còn job active (job có thể được tạo xen giữa lúc huỷ,
+ * có trần vòng lặp).
  */
 export async function cancelChapterJobs(sdb: Scoped, ws: string, chapterId: string): Promise<number> {
   let cancelled = 0;

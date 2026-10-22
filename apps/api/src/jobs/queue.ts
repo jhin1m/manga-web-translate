@@ -281,7 +281,7 @@ async function applyResult(t: DbLike, job: Job, attempt: number, result: JobResu
         })
         .where(eq(pages.id, job.pageId));
       await recordServerUsage(t, job, attempt, "pages", 1);
-      if (job.chapterId) await refreshChapter(t, ws, job.chapterId, true);
+      if (job.chapterId) await refreshChapter(t, ws, job.chapterId);
       return undefined;
     }
     case "chapter.translate": {
@@ -319,7 +319,7 @@ async function applyResult(t: DbLike, job: Job, attempt: number, result: JobResu
           .where(inArray(pages.id, [...got]));
       const missing = p.page_ids.filter((id) => !got.has(id));
       if (missing.length) await t.update(pages).set({ status: "failed" }).where(inArray(pages.id, missing));
-      await refreshChapter(t, ws, p.chapter_id, false);
+      await refreshChapter(t, ws, p.chapter_id);
       return undefined;
     }
     case "page.reinpaint": {
@@ -419,8 +419,8 @@ export async function terminal(
       return;
     case "page.prepare":
       await t.update(pages).set({ status: "failed" }).where(eq(pages.id, p.page_id));
-      // Page còn lại đã prepare vẫn được nối sang giai đoạn 2 (kể cả khi huỷ page cuối) — chương không kẹt.
-      if (job.chapterId) await refreshChapter(t, ws, job.chapterId, true);
+      // Huỷ page cuối của giai đoạn 1: page còn lại đã prepare → chương `prepared` (chờ "Dịch"), không kẹt processing.
+      if (job.chapterId) await refreshChapter(t, ws, job.chapterId);
       return;
     case "chapter.translate": {
       // Page đang chờ/đang dịch: đã có bản AI trước (dịch lại) → giữ `ready`; chưa có → `failed`.
@@ -433,7 +433,7 @@ export async function terminal(
       const failed = affected.filter((r) => r.aiRev === 0).map((r) => r.id);
       if (ready.length) await t.update(pages).set({ status: "ready" }).where(inArray(pages.id, ready));
       if (failed.length) await t.update(pages).set({ status: "failed" }).where(inArray(pages.id, failed));
-      await refreshChapter(t, ws, p.chapter_id, false);
+      await refreshChapter(t, ws, p.chapter_id);
       return;
     }
     default:

@@ -14,6 +14,7 @@ import {
   doPrepare,
   doTranslate,
   pageRows,
+  translateIfPrepared,
   usage,
   workerToken,
 } from "./worker-helpers.ts";
@@ -73,9 +74,13 @@ describe("worker protocol end-to-end", () => {
     }
     expect(done).toBe(N);
 
+    // Xong bước 1: chương dừng chờ "Dịch", chưa có chapter.translate; bấm Dịch → đúng 1 job.
     p = await progress();
     expect(p.counts.prepared).toBe(N);
-    // Mọi page terminal giai đoạn 1 → đúng 1 chapter.translate được tạo.
+    expect(p.chapter.status).toBe("prepared");
+    const before = await db.select().from(jobs).where(eq(jobs.chapterId, A.chapterId));
+    expect(before.filter((j) => j.type === "chapter.translate")).toHaveLength(0);
+    await translateIfPrepared(A.chapterId);
     const translates = await db.select().from(jobs).where(eq(jobs.chapterId, A.chapterId));
     expect(translates.filter((j) => j.type === "chapter.translate")).toHaveLength(1);
 

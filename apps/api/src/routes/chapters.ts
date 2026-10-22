@@ -11,7 +11,7 @@ import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { v7 as uuidv7 } from "uuid";
 import { z } from "zod";
-import { enqueueIngest, inJobTx, retranslate, retryFailedPages } from "../jobs/enqueue.ts";
+import { enqueueIngest, inJobTx, retranslate, retryFailedPages, translatePrepared } from "../jobs/enqueue.ts";
 import { acquireChapterLock, activeLockHolder, LOCK_TTL_MS, releaseChapterLock } from "../lib/chapter-lock.ts";
 import { cancelChapterJobs, removeChapters } from "../lib/chapter-removal.ts";
 import { memberNames } from "../lib/member-names.ts";
@@ -300,6 +300,13 @@ chapterRoutes.get("/w/:ws/chapters/:chapterId", requireWorkspace(), async (c) =>
 });
 
 /** Page lỗi giai đoạn 1 → page.prepare; lỗi giai đoạn 2 → chapter.translate cho riêng chúng. */
+/** Bước 2 "Dịch": chương xong bước 1 (`prepared`) → dịch + chèn chữ các page đã OCR. */
+chapterRoutes.post("/w/:ws/chapters/:chapterId/translate-prepared", requireWorkspace(), async (c) => {
+  const ch = await c.get("sdb").byId(chapters, c.req.param("chapterId"), "chapter");
+  const { job, created } = await inJobTx((tx) => translatePrepared(tx, c.get("workspaceId"), ch.id));
+  return c.json({ job: jobView(job), created }, 202);
+});
+
 chapterRoutes.post("/w/:ws/chapters/:chapterId/retry-failed", requireWorkspace(), async (c) => {
   const ch = await c.get("sdb").byId(chapters, c.req.param("chapterId"), "chapter");
   const created = await inJobTx((tx) => retryFailedPages(tx, c.get("workspaceId"), ch.id));

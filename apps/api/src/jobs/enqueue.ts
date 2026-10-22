@@ -257,8 +257,8 @@ export async function retranslate(tx: DbLike, ws: string, chapterId: string, pag
 }
 
 /**
- * "Chạy lại trang lỗi" cấp chương: page lỗi giai đoạn 1 (chưa có OCR hợp lệ) → page.prepare (dịch tự nối khi
- * giai đoạn 1 xong); page lỗi giai đoạn 2 → chapter.translate cho riêng chúng.
+ * "Chạy lại trang lỗi" cấp chương: page lỗi giai đoạn 1 (chưa có OCR hợp lệ) → page.prepare (xong → chờ "Dịch");
+ * page lỗi giai đoạn 2 → chapter.translate cho riêng chúng.
  */
 export async function retryFailedPages(tx: DbLike, ws: string, chapterId: string) {
   const ch = await lockChapter(tx, ws, chapterId);
@@ -365,7 +365,10 @@ async function pageIn(tx: DbLike, ws: string, pageId: string): Promise<Page> {
   return p;
 }
 
-/** Tạo pages + page_states rỗng + page.prepare cho kết quả ingest (cùng transaction với complete). */
+/**
+ * Bước 1 (tiếp): tạo pages + page_states rỗng + page.prepare cho kết quả ingest (cùng transaction với complete).
+ * Giai đoạn 1 xong chương dừng ở `prepared` — bước 2 (dịch) chỉ chạy khi người dùng bấm (`translatePrepared`).
+ */
 export async function createIngestedPages(
   tx: DbLike,
   ch: Chapter,
@@ -388,24 +391,29 @@ export async function createIngestedPages(
   return inserted;
 }
 
-const STAGE1_BUSY = new Set(["pending", "preparing"]);
-const BUSY = new Set(["pending", "preparing", "prepared", "translating"]);
+/**
+ * Bước 2 "Dịch": chương `prepared` → chapter.translate cho mọi page đã qua giai đoạn 1 (chưa dịch). Cả chương đã
+ * prepare → ngữ cảnh cuộn; có page lỗi giai đoạn 1 → chỉ dịch page sẵn sàng, ngữ cảnh trang lân cận.
+ */
+export async function translatePrepared(tx: DbLike, ws: string, chapterId: string) {
+  const ch = await lockChapter(tx, ws, chapterId);
+  if (ch.status !== "prepared") throw conflict("chapter_not_prepared", "chương chưa xong bước 1 hoặc đang dịch");
+  const rows = await tx.select({ id: pages.id, status: pages.status }).from(pages).where(eq(pages.chapterId, ch.id));
+  const prepared = rows.filter((p) => p.status === "prepared").map((p) => p.id);
+  if (prepared.length === 0) throw conflict("page_not_prepared", "không có trang nào chờ dịch");
+  return enqueueTranslate(tx, ws, ch.id, prepared, prepared.length === rows.length ? "rolling" : "neighbors");
+}
+
+const BUSY = new Set(["pending", "preparing", "translating"]);
 
 /**
- * Tính lại trạng thái chương sau mỗi sự kiện job (khoá dòng chapter → các complete song song tuần tự hoá,
- * không bỏ lỡ "page cuối cùng xong"). `advance`: giai đoạn 1 đã xong hết → enqueue chapter.translate cho
- * page `prepared`.
+ * Tính lại trạng thái chương sau mỗi sự kiện job (khoá dòng chapter → các complete song song tuần tự hoá, không bỏ
+ * lỡ "page cuối cùng xong"). Không tự sang bước 2: hết việc mà còn page `prepared` → chương `prepared` (chờ "Dịch").
  */
-export async function refreshChapter(tx: DbLike, ws: string, chapterId: string, advance: boolean): Promise<void> {
+export async function refreshChapter(tx: DbLike, ws: string, chapterId: string): Promise<void> {
   const ch = await lockChapter(tx, ws, chapterId);
   if (ch.status === "ingesting" || ch.status === "draft") return;
   const rows = await tx.select({ id: pages.id, status: pages.status }).from(pages).where(eq(pages.chapterId, ch.id));
-  if (advance && rows.length && !rows.some((p) => STAGE1_BUSY.has(p.status))) {
-    const prepared = rows.filter((p) => p.status === "prepared").map((p) => p.id);
-    if (prepared.length) {
-      await enqueueTranslate(tx, ws, ch.id, prepared, prepared.length === rows.length ? "rolling" : "neighbors");
-    }
-  }
   const busy = rows.some((p) => BUSY.has(p.status)) || !!(await activeJobOf(tx, ch.id, "chapter.translate"));
   const status = busy
     ? "processing"
@@ -413,6 +421,8 @@ export async function refreshChapter(tx: DbLike, ws: string, chapterId: string, 
       ? ch.status === "done"
         ? "done"
         : "review"
-      : "partial_failed";
+      : rows.some((p) => p.status === "prepared")
+        ? "prepared"
+        : "partial_failed";
   if (status !== ch.status) await tx.update(chapters).set({ status }).where(eq(chapters.id, ch.id));
 }

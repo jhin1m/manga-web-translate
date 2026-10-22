@@ -1,8 +1,9 @@
 /** Worker giả lập trong test: gọi đúng giao thức HTTP có fencing, upload output thật qua presigned PUT. */
-import { jobs, pages, scoped, sourceFiles, workspaceSettings } from "@mtl/db";
+import { chapters, jobs, pages, scoped, sourceFiles, workspaceSettings } from "@mtl/db";
 import { emptyPageState, type JobResult, type PageState, storageKeys, type WorkerUsage } from "@mtl/shared";
 import { eq, sql } from "drizzle-orm";
 import { v7 as uuidv7 } from "uuid";
+import { inJobTx, translatePrepared } from "../src/jobs/enqueue.ts";
 import { createWorkerToken } from "../src/lib/worker-token.ts";
 import { app, db } from "./helpers.ts";
 
@@ -81,6 +82,16 @@ export function failJob(
     usage: extra.usage ?? null,
     partial: extra.partial ?? null,
   });
+}
+
+/** Bấm bước 2 "Dịch" khi chương đã xong bước 1 (giống POST /translate-prepared); chưa xong → không làm gì. */
+export async function translateIfPrepared(chapterId: string) {
+  const [ch] = await db
+    .select({ ws: chapters.workspaceId, status: chapters.status })
+    .from(chapters)
+    .where(eq(chapters.id, chapterId));
+  if (ch?.status !== "prepared") return null;
+  return inJobTx((tx) => translatePrepared(tx, ch.ws, chapterId));
 }
 
 /** Ingest giả: mỗi source = 1 page, upload PNG cho từng page qua presign-outputs. */

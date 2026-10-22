@@ -33,7 +33,16 @@ export const ERROR_CLASSES = ["provider", "rate_limited", "schema", "invalid_inp
 export const ErrorClass = z.enum(ERROR_CLASSES);
 export type ErrorClass = z.infer<typeof ErrorClass>;
 
-export const CHAPTER_STATUSES = ["draft", "ingesting", "processing", "review", "partial_failed", "done"] as const;
+/** `prepared` = xong bước 1 (cắt trang + xoá chữ + OCR), chờ người dùng bấm "Dịch". */
+export const CHAPTER_STATUSES = [
+  "draft",
+  "ingesting",
+  "processing",
+  "prepared",
+  "review",
+  "partial_failed",
+  "done",
+] as const;
 export const PAGE_STATUSES = ["pending", "preparing", "prepared", "translating", "ready", "failed"] as const;
 export const USAGE_KINDS = [
   "pages",

@@ -1,0 +1,2 @@
+ALTER TABLE "chapters" DROP CONSTRAINT "chapters_status_chk";--> statement-breakpoint
+ALTER TABLE "chapters" ADD CONSTRAINT "chapters_status_chk" CHECK ("chapters"."status" in ('draft', 'ingesting', 'processing', 'prepared', 'review', 'partial_failed', 'done'));

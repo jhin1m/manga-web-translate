@@ -111,6 +111,11 @@ async function ingestAndPrepare(chapterId: string, failOrd?: number) {
     const r = j.payload.page_id === failId ? await failJob(token, j, "invalid_input") : await doPrepare(token, j);
     expect(r.status).toBe(200);
   }
+  // Xong bước 1 → chờ "Dịch" (không tự dịch); bấm Dịch 2 lần → lần sau 409.
+  expect((await progress(chapterId)).chapter.status).toBe("prepared");
+  expect(await claimFor(chapterId, "chapter.translate")).toEqual([]);
+  await json(await api(`/chapters/${chapterId}/translate-prepared`, { method: "POST" }), 202);
+  await json(await api(`/chapters/${chapterId}/translate-prepared`, { method: "POST" }), 409);
 }
 
 describe("chapter flow", () => {
@@ -157,7 +162,7 @@ describe("chapter flow", () => {
   it("partial_failed → retry-failed re-runs only the failed page and ends in review", async () => {
     const ch = await uploadChapter(3, "2");
     await ingestAndPrepare(ch, 1);
-    // 2 page prepare xong → translate cho riêng chúng (neighbors).
+    // 2 page prepare xong, đã bấm Dịch → translate cho riêng chúng (neighbors).
     const [tj] = await claimFor(ch, "chapter.translate", 1);
     expect(tj?.payload.context).toBe("neighbors");
     expect((await doTranslate(token, tj as Claimed)).status).toBe(200);
@@ -170,6 +175,9 @@ describe("chapter flow", () => {
     expect(created.map((j) => j.type)).toEqual(["page.prepare"]);
     const [pj] = await claimFor(ch, "page.prepare", 5);
     expect((await doPrepare(token, pj as Claimed)).status).toBe(200);
+    // Trang chạy lại xong bước 1 → chờ "Dịch" như chương mới.
+    expect((await progress(ch)).chapter.status).toBe("prepared");
+    await json(await api(`/chapters/${ch}/translate-prepared`, { method: "POST" }), 202);
     const [tj2] = await claimFor(ch, "chapter.translate", 1);
     expect(tj2?.payload.page_ids).toHaveLength(1);
     expect((await doTranslate(token, tj2 as Claimed)).status).toBe(200);

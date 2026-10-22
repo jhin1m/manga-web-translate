@@ -141,6 +141,7 @@ const RESOURCE_CASES: Record<string, (b: Seed) => Record<string, string>> = {
   "POST /api/w/:ws/chapters/:chapterId/presign": (b) => ({ chapterId: b.chapterId }),
   "POST /api/w/:ws/chapters/:chapterId/commit": (b) => ({ chapterId: b.chapterId }),
   "POST /api/w/:ws/chapters/:chapterId/retry-failed": (b) => ({ chapterId: b.chapterId }),
+  "POST /api/w/:ws/chapters/:chapterId/translate-prepared": (b) => ({ chapterId: b.chapterId }),
   "POST /api/w/:ws/chapters/:chapterId/translate": (b) => ({ chapterId: b.chapterId }),
   "POST /api/w/:ws/chapters/:chapterId/cancel": (b) => ({ chapterId: b.chapterId }),
   "POST /api/w/:ws/chapters/:chapterId/lock": (b) => ({ chapterId: b.chapterId }),

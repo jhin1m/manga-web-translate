@@ -24,6 +24,7 @@ import {
   makeRunnable,
   OCR,
   putPng,
+  translateIfPrepared,
   usage,
   wcall,
   workerToken,
@@ -110,7 +111,9 @@ describe("provider / rate_limited", () => {
     }
     expect((await jobRow(victim?.id as string)).status).toBe("failed");
 
-    // Giai đoạn 1 xong (1 prepared + 1 failed) → dịch riêng page đã prepare.
+    // Giai đoạn 1 xong (1 prepared + 1 failed) → chờ "Dịch"; bấm → dịch riêng page đã prepare.
+    expect((await db.select().from(chapters).where(eq(chapters.id, S.chapterId)))[0]?.status).toBe("prepared");
+    await translateIfPrepared(S.chapterId);
     const t = await claimOne(token, ["chapter.translate"]);
     expect(t.payload.context).toBe("neighbors");
     expect((await doTranslate(token, t)).status).toBe(200);
