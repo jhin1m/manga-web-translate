@@ -1,6 +1,6 @@
 /**
  * Form cài đặt dịch của series (chia nhóm Chung / Dịch / Font / Xưng hô): ngôn ngữ, định dạng truyện, kính ngữ, tier
- * model, giọng văn,
+ * model, giọng văn, chữ bỏ qua (watermark),
  * font mặc định, quy tắc xưng hô theo cặp nhân vật. Server tăng settings_rev khi trường ảnh hưởng dịch đổi. Kèm vùng
  * xoá series. Dùng ở `?tab=settings` của màn series.
  */
@@ -19,6 +19,7 @@ import {
   type SeriesSettings,
   seriesKeys,
 } from "./api.ts";
+import { parseIgnoreText } from "./ignore-text-input.ts";
 import {
   addressPlaceholder,
   HONORIFIC_EXAMPLES,
@@ -37,7 +38,8 @@ const FONT_SLOTS: { slot: FontSlot; label: string; empty: string; hint?: string 
   { slot: "narration", label: "Dẫn truyện", empty: "Giống font thoại", hint: "Áp dụng cho chữ ngoài bóng." },
 ];
 
-type Form = SeriesSettings & { title: string };
+/** Chữ bỏ qua sửa ở ô riêng (chuỗi nhiều dòng), ghép vào lúc lưu. */
+type Form = Omit<SeriesSettings, "ignore_text"> & { title: string };
 
 const toForm = (s: Series): Form => ({
   title: s.title,
@@ -55,6 +57,8 @@ export function SeriesSettingsForm({ ws, series }: { ws: string; series: Series 
   const qc = useQueryClient();
   const [f, setF] = useState<Form>(() => toForm(series));
   const [saved, setSaved] = useState<string | null>(null);
+  const [ignoreRaw, setIgnoreRaw] = useState(() => series.ignore_text.join("\n"));
+  const ignore = parseIgnoreText(ignoreRaw);
   const glossaryScope = { seriesId: series.id };
   const glossary = useQuery({
     queryKey: glossaryKey(ws, glossaryScope),
@@ -62,13 +66,14 @@ export function SeriesSettingsForm({ ws, series }: { ws: string; series: Series 
   });
   const langWarning = langChangeWarning(series, f, glossary.data?.entries.length);
   const save = useMutation({
-    mutationFn: () => patchSeries(ws, series.id, f),
+    mutationFn: () => patchSeries(ws, series.id, { ...f, ignore_text: ignore.list }),
     onSuccess: (s) => {
       setSaved(
-        s.settings_rev !== series.settings_rev
+        s.settings_rev !== series.settings_rev || s.glossary_rev !== series.glossary_rev
           ? "Đã lưu. Lần dịch sau dùng cài đặt mới (chương đã dịch không tự chạy lại)."
           : "Đã lưu.",
       );
+      setIgnoreRaw(s.ignore_text.join("\n"));
       void qc.invalidateQueries({ queryKey: ["series", ws] });
       // Key glossary series không chứa cặp → làm mới để mục kế thừa / Áp glossary theo cặp mới.
       if (s.source_lang !== series.source_lang || s.target_lang !== series.target_lang) {
@@ -185,6 +190,25 @@ export function SeriesSettingsForm({ ws, series }: { ws: string; series: Series 
           onChange={(e) => set("style_prompt", e.target.value)}
         />
         <span className="hint">Mô tả ngắn gửi kèm cho AI ở mọi lần dịch.</span>
+        <label htmlFor="s-ignore">Chữ bỏ qua (watermark)</label>
+        <textarea
+          id="s-ignore"
+          placeholder={"VD:\ndiscord.gg/nhomdich\nTên nhóm dịch"}
+          value={ignoreRaw}
+          aria-invalid={ignore.error ? true : undefined}
+          onChange={(e) => {
+            setSaved(null);
+            setIgnoreRaw(e.target.value);
+          }}
+        />
+        {ignore.error ? (
+          <span className="small error">{ignore.error}</span>
+        ) : (
+          <span className="hint">
+            Mỗi dòng 1 mục. Vùng chữ chứa mục nào thì không dịch, không chèn chữ (chương đã dịch không đổi). Dùng URL
+            hoặc tên nhóm cụ thể — mục chung chung dễ bỏ nhầm thoại.
+          </span>
+        )}
       </fieldset>
 
       <fieldset className="settings-group">
@@ -293,7 +317,11 @@ export function SeriesSettingsForm({ ws, series }: { ws: string; series: Series 
       </fieldset>
 
       <div className="settings-save">
-        <button type="submit" className="btn-primary" disabled={save.isPending || !rulesValid || !f.title.trim()}>
+        <button
+          type="submit"
+          className="btn-primary"
+          disabled={save.isPending || !rulesValid || !f.title.trim() || !!ignore.error}
+        >
           {save.isPending ? "Đang lưu…" : "Lưu cài đặt"}
         </button>
         {!rulesValid && <span className="small error">Điền đủ người nói, người nghe, xưng/gọi cho mọi quy tắc.</span>}

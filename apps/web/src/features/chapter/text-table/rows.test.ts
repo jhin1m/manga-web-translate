@@ -128,6 +128,35 @@ describe("text table rows", () => {
     expect(rowKeyOfBox("p", { id: "x", region_id: "bub" }, s)).toBe("p:x");
   });
 
+  it("regions whose source text matches the series' ignored text get no row, nor do their boxes", () => {
+    const s: PageState = {
+      ...doc(0),
+      regions: [region("a", "Một"), { ...region("wm", ""), source_text: "Read at DISCORD.GG/abc" }, region("b", "Hai")],
+      text_boxes: [box("ta", "a", "Một"), box("twm", "wm", ""), box("tb", "b", "Hai")],
+    };
+    const build = (ignore: string[]) =>
+      buildRows(
+        [{ id: "p", ord: 0, ai_update_available: false }],
+        { p: { state: s } },
+        { pageId: null, doc: null },
+        () => false,
+        undefined,
+        ignore,
+      ).map((r) => [r.key, r.index]);
+    expect(build(["discord.gg"])).toEqual([
+      ["p:a", 1],
+      ["p:b", 2],
+    ]);
+    expect(build([])).toEqual([
+      ["p:a", 1],
+      ["p:wm", 2],
+      ["p:b", 3],
+    ]);
+    // Chương dịch trước khi thêm mục: box watermark còn in chữ → giữ dòng để thấy và xoá.
+    s.text_boxes[1] = box("twm", "wm", "Đọc tại discord");
+    expect(build(["discord.gg"]).map(([k]) => k)).toEqual(["p:a", "p:wm", "p:b"]);
+  });
+
   it("same-kind boxes for 'apply style' skip the source box and hidden boxes", () => {
     const s = page2();
     s.text_boxes.push({ ...box("ta2", "a", "Hai"), hidden: true }, box("ta3", "a", "Ba"));

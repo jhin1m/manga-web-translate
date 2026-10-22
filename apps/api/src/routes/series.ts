@@ -1,9 +1,19 @@
 /**
  * Series + cài đặt dịch. Đổi trường ảnh hưởng dịch/typeset → `settings_rev + 1` (red team #3) — job enqueue
- * sau đó có input_rev mới, job cũ không bị dùng lại nhầm.
+ * sau đó có input_rev mới, job cũ không bị dùng lại nhầm. Đổi chữ bỏ qua → `glossary_rev + 1` (xem PATCH).
  */
 import { chapters, jobs, pageStates, pages, type Scoped, series } from "@mtl/db";
-import { defaultPageFormat, PAGE_FORMATS, SOURCE_LANGS, TARGET_LANGS } from "@mtl/shared";
+import {
+  cleanIgnoreList,
+  defaultPageFormat,
+  IGNORE_TEXT_ITEMS,
+  IGNORE_TEXT_MAX,
+  IGNORE_TEXT_MIN,
+  isValidIgnoreEntry,
+  PAGE_FORMATS,
+  SOURCE_LANGS,
+  TARGET_LANGS,
+} from "@mtl/shared";
 import { and, eq, inArray, type SQL, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
@@ -46,6 +56,16 @@ const Settings = z.object({
   style_prompt: z.string().max(1000),
   default_fonts: z.object({ dialogue: z.enum(FONT_IDS), narration: z.enum(FONT_IDS), sfx: z.enum(FONT_IDS) }).partial(),
   llm_tier: z.enum(LLM_TIERS),
+  /** Chữ bỏ qua (watermark): dạng đã chuẩn hoá ngắn hơn 3 ký tự dễ nuốt cả thoại → 400. */
+  ignore_text: z
+    .array(
+      z
+        .string()
+        .trim()
+        .refine(isValidIgnoreEntry, `mỗi mục ${IGNORE_TEXT_MIN}–${IGNORE_TEXT_MAX} ký tự (không tính http://)`),
+    )
+    .max(IGNORE_TEXT_ITEMS)
+    .transform(cleanIgnoreList),
 });
 
 const SeriesCreate = Settings.partial().extend({ title: z.string().trim().min(1).max(200) });
@@ -71,6 +91,7 @@ export const seriesView = (s: SeriesRow) => ({
   llm_tier: s.llmTier === "premium" ? "premium" : "standard",
   glossary_rev: s.glossaryRev,
   settings_rev: s.settingsRev,
+  ignore_text: s.ignoreText,
   created_at: s.createdAt,
   updated_at: s.updatedAt,
 });
@@ -198,6 +219,7 @@ function toColumns(body: z.infer<typeof SeriesPatch>) {
   if (body.style_prompt !== undefined) set.stylePrompt = body.style_prompt;
   if (body.default_fonts !== undefined) set.defaultFonts = body.default_fonts;
   if (body.llm_tier !== undefined) set.llmTier = body.llm_tier;
+  if (body.ignore_text !== undefined) set.ignoreText = body.ignore_text;
   return set;
 }
 
@@ -301,6 +323,11 @@ seriesRoutes.patch("/w/:ws/series/:seriesId", requireWorkspace(), async (c) => {
     const set = toColumns(body);
     // Tăng trong SQL (không từ giá trị đã đọc) → 2 lần lưu đồng thời không cùng ra một rev.
     if (translationChanged(cur, set)) set.settingsRev = sql`${series.settingsRev} + 1` as unknown as number;
+    // Chữ bỏ qua chỉ tác động giai đoạn dịch (lọc lúc claim chapter.translate) → glossary_rev (khoá job dịch), không
+    // settings_rev: settings_rev nằm trong khoá prepare → thử lại trang lỗi sẽ chạy lại cả Bước 1.
+    if (set.ignoreText && JSON.stringify(set.ignoreText) !== JSON.stringify(cur.ignoreText)) {
+      set.glossaryRev = sql`${series.glossaryRev} + 1` as unknown as number;
+    }
     const [row] = await tx.update(series, eq(series.id, cur.id), set);
     if (!row) throw new HTTPException(404, { message: "series not found" });
     return row;

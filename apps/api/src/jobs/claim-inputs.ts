@@ -6,6 +6,7 @@ import { chapters, type DbLike, type jobs, pageStates, pages, series, sourceFile
 import {
   EXPORT_FILE,
   EXPORT_OBJECT_TAG,
+  isIgnoredText,
   type JobPayload,
   keyBelongsToWorkspace,
   type OcrResult,
@@ -87,17 +88,38 @@ async function pageById(tx: DbLike, id: string): Promise<Page> {
   return p;
 }
 
-/** Dòng ngữ cảnh của 1 page: nguồn OCR (+ bản dịch từ state hiện tại nếu `withTranslation`). */
-function pageLines(ocr: OcrResult | null, state: PageState | null, withTranslation: boolean) {
+/** Chữ bỏ qua (watermark) của series chứa chương — đọc lúc claim để đổi danh sách có hiệu lực ngay lần dịch kế. */
+async function ignoreListOf(tx: DbLike, chapterId: string): Promise<string[]> {
+  const [r] = await tx
+    .select({ list: series.ignoreText })
+    .from(chapters)
+    .innerJoin(series, eq(series.id, chapters.seriesId))
+    .where(eq(chapters.id, chapterId));
+  return r?.list ?? [];
+}
+
+/** Vùng OCR khớp chữ bỏ qua → `empty` (worker không dịch, không đặt box; ảnh đã sạch từ Bước 1). Không sửa DB. */
+const withoutIgnored = (ocr: OcrResult, ignore: readonly string[]): OcrResult =>
+  ignore.length
+    ? { ...ocr, items: ocr.items.map((it) => (isIgnoredText(it.source, ignore) ? { ...it, empty: true } : it)) }
+    : ocr;
+
+/** Dòng ngữ cảnh của 1 page: nguồn OCR (+ bản dịch từ state hiện tại nếu `withTranslation`), bỏ chữ bỏ qua. */
+function pageLines(
+  ocr: OcrResult | null,
+  state: PageState | null,
+  withTranslation: boolean,
+  ignore: readonly string[] = [],
+) {
   if (!ocr) return [];
   const tr = new Map((state?.regions ?? []).map((r) => [r.id, r.translation]));
   return ocr.items
-    .filter((it) => !it.empty && !it.is_sfx && it.source.trim())
+    .filter((it) => !it.empty && !it.is_sfx && it.source.trim() && !isIgnoredText(it.source, ignore))
     .map((it) => ({ source: it.source, translation: withTranslation ? (tr.get(it.id) ?? "") : "" }));
 }
 
 /** context=neighbors: với mỗi đoạn page liên tiếp được dịch lại, lấy trang ngay trước (nguồn + dịch) và ngay sau (nguồn). */
-async function neighborLines(tx: DbLike, chapterId: string, targetIds: string[]) {
+async function neighborLines(tx: DbLike, chapterId: string, targetIds: string[], ignore: readonly string[]) {
   const all = await tx
     .select({ id: pages.id, ord: pages.ord, ocr: pages.ocrResult, state: pageStates.state })
     .from(pages)
@@ -111,8 +133,8 @@ async function neighborLines(tx: DbLike, chapterId: string, targetIds: string[])
     if (target.has(p.id)) return;
     const prevIsTarget = i > 0 && target.has(all[i - 1]?.id ?? "");
     const nextIsTarget = i + 1 < all.length && target.has(all[i + 1]?.id ?? "");
-    if (nextIsTarget) lines.push(...pageLines(p.ocr, p.state, true).slice(-MAX_CONTEXT_LINES / 2));
-    else if (prevIsTarget) lines.push(...pageLines(p.ocr, p.state, false).slice(0, MAX_CONTEXT_LINES / 2));
+    if (nextIsTarget) lines.push(...pageLines(p.ocr, p.state, true, ignore).slice(-MAX_CONTEXT_LINES / 2));
+    else if (prevIsTarget) lines.push(...pageLines(p.ocr, p.state, false, ignore).slice(0, MAX_CONTEXT_LINES / 2));
   });
   return lines.slice(0, MAX_CONTEXT_LINES);
 }
@@ -161,6 +183,7 @@ export async function buildInputs(tx: DbLike, job: Job): Promise<Record<string, 
         .from(pages)
         .where(and(eq(pages.chapterId, p.chapter_id), inArray(pages.id, p.page_ids)))
         .orderBy(asc(pages.ord));
+      const ignore = await ignoreListOf(tx, p.chapter_id);
       return {
         pages: await Promise.all(
           rows.map(async (pg) => {
@@ -170,12 +193,12 @@ export async function buildInputs(tx: DbLike, job: Job): Promise<Record<string, 
               ord: pg.ord,
               width: pg.width,
               height: pg.height,
-              ocr_result: pg.ocrResult,
+              ocr_result: withoutIgnored(pg.ocrResult, ignore),
               clean: await get(storageKeys.clean(job.workspaceId, pg.id, pg.cleanRev)),
             };
           }),
         ),
-        context_lines: p.context === "neighbors" ? await neighborLines(tx, p.chapter_id, p.page_ids) : [],
+        context_lines: p.context === "neighbors" ? await neighborLines(tx, p.chapter_id, p.page_ids, ignore) : [],
       };
     }
     case "page.reinpaint": {
@@ -190,7 +213,10 @@ export async function buildInputs(tx: DbLike, job: Job): Promise<Record<string, 
       const [st] = await tx.select().from(pageStates).where(eq(pageStates.pageId, page.id));
       return {
         original: await get(page.originalKey),
-        context_lines: pageLines(page.ocrResult, st?.state ?? null, true).slice(0, MAX_CONTEXT_LINES),
+        context_lines: pageLines(page.ocrResult, st?.state ?? null, true, await ignoreListOf(tx, page.chapterId)).slice(
+          0,
+          MAX_CONTEXT_LINES,
+        ),
       };
     }
     case "chapter.export":

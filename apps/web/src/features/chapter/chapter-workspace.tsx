@@ -78,6 +78,8 @@ const NO_PAGES: never[] = [];
 
 type DrawerKind = "export" | "activity" | "help";
 type Props = { ws: string; seriesId: string; chapterId: string; page?: string; drawer?: "export" };
+/** Mảng rỗng cố định (series chưa tải) — không đổi tham chiếu mỗi lần render. */
+const NO_IGNORE: readonly string[] = [];
 /**
  * `untilStable`: giữ tới khi chương chạy xong lượt xử lý vừa bắt đầu (ảnh bị loại khi Dịch chương). `actions`: nút
  * kèm thông báo (vd. "Hoàn tác", "Luôn bỏ ở series này" sau khi xoá ảnh).
@@ -208,7 +210,7 @@ function Workspace({ ws, seriesId, chapterId, page: searchPage, drawer: searchDr
   }, [activeId, firstId, navigate, ws, seriesId, chapterId]);
 
   // ---- Bảng văn bản ↔ canvas ↔ inspector ----
-  const allRows = useChapterRows(kit);
+  const allRows = useChapterRows(kit, series.data?.ignore_text ?? NO_IGNORE);
   const [current, setCurrent] = useState<string | null>(null);
   const [filter, setFilter] = useState<TableFilter>({ review: false, page: false });
   const rows = useMemo(() => filterRows(allRows, filter, activeId, current), [allRows, filter, activeId, current]);

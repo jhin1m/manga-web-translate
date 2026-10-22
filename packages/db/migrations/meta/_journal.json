@@ -71,6 +71,13 @@
       "when": 1792683885043,
       "tag": "0009_series_skip_images",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1792684797120,
+      "tag": "0010_series_ignore_text",
+      "breakpoints": true
     }
   ]
 }

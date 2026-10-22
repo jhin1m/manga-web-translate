@@ -20,8 +20,11 @@ import { buildRows, FLAG_LABEL, KIND_LABEL, type Row, type TableFilter } from ".
 
 const ROW_H = 40;
 
-/** Dòng của cả chương: page active đọc `editorStore.doc`, page khác đọc cache; nhớ theo object state. */
-export function useChapterRows(kit: FontKit | null): Row[] {
+/**
+ * Dòng của cả chương: page active đọc `editorStore.doc`, page khác đọc cache; nhớ theo object state. `ignore` = chữ bỏ
+ * qua của series (vùng watermark không thành dòng).
+ */
+export function useChapterRows(kit: FontKit | null, ignore: readonly string[]): Row[] {
   const pages = useChapterStore((s) => s.pages);
   const cache = useChapterStore((s) => s.cache);
   const pageId = useEditor((s) => s.pageId);
@@ -30,13 +33,20 @@ export function useChapterRows(kit: FontKit | null): Row[] {
     () => (kit ? (b: TextBox) => boxOverflows(b, kit.metrics(b.font_family), kit.measure) : () => false),
     [kit],
   );
-  // Nhớ dòng theo object state; font đổi (kit nạp xong) → đo lại tràn khung từ đầu.
-  const memo = useRef({ of: overflowOf, rows: new WeakMap<PageState, { ord: number; ai: boolean; rows: Row[] }>() });
-  if (memo.current.of !== overflowOf) memo.current = { of: overflowOf, rows: new WeakMap() };
+  // Nhớ dòng theo object state; font đổi (kit nạp xong) hoặc danh sách chữ bỏ qua đổi → dựng lại từ đầu.
+  const ignoreKey = ignore.join("\n");
+  const memo = useRef({
+    of: overflowOf,
+    ignoreKey,
+    rows: new WeakMap<PageState, { ord: number; ai: boolean; rows: Row[] }>(),
+  });
+  if (memo.current.of !== overflowOf || memo.current.ignoreKey !== ignoreKey) {
+    memo.current = { of: overflowOf, ignoreKey, rows: new WeakMap() };
+  }
   const rowsMemo = memo.current.rows;
   return useMemo(
-    () => buildRows(pages, cache, { pageId, doc }, overflowOf, rowsMemo),
-    [pages, cache, pageId, doc, overflowOf, rowsMemo],
+    () => buildRows(pages, cache, { pageId, doc }, overflowOf, rowsMemo, ignore),
+    [pages, cache, pageId, doc, overflowOf, rowsMemo, ignore],
   );
 }
 
