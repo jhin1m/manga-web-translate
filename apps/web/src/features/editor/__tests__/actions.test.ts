@@ -6,6 +6,7 @@ import {
   contrastStroke,
   deleteBox,
   diffRegions,
+  duplicateBox,
   editText,
   insertOcrRegion,
   moveBox,
@@ -23,6 +24,28 @@ import { box, doc, layout, region } from "./fixtures.ts";
 const run = (s: PageState, recipe: Parameters<typeof change<PageState>>[1]) => change(s, recipe).state;
 
 describe("editor actions", () => {
+  it("duplicateBox copies text and style at a 16px offset as a free box with a new id", () => {
+    const s0 = doc(1);
+    const src = s0.text_boxes[0];
+    if (!src) throw new Error("no box");
+    const r = change(s0, duplicateBox(src, "tb-copy"));
+    const copy = r.state.text_boxes.find((b) => b.id === "tb-copy");
+    expect(r.state.text_boxes).toHaveLength(2);
+    expect(copy).toMatchObject({
+      x: src.x + 16,
+      y: src.y + 16,
+      region_id: null,
+      text: src.text,
+      font_size: src.font_size,
+    });
+    expect(new Set(r.state.text_boxes.map((b) => b.id)).size).toBe(2);
+    // Bản gốc không đổi, 1 bước hoàn tác trả về đúng state cũ.
+    expect(r.state.text_boxes[0]).toEqual(src);
+    expect(r.inverse.length).toBeGreaterThan(0);
+    // Trùng id thì không thêm.
+    expect(run(r.state, duplicateBox(src, "tb-copy")).text_boxes).toHaveLength(2);
+  });
+
   it("moves and resizes; resize re-wraps lines", () => {
     let s = run(doc(1), moveBox("t0", 50, 60));
     expect(s.text_boxes[0]).toMatchObject({ x: 50, y: 60 });

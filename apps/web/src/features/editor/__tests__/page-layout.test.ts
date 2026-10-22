@@ -1,5 +1,51 @@
 import { describe, expect, it } from "vitest";
-import { clampView, contentBox, FIT_EDGE, FIT_HEIGHT_MIN, fitScale, pageStartView, SPLIT_GAP } from "../page-layout.ts";
+import {
+  blockBarPos,
+  clampView,
+  contentBox,
+  FIT_EDGE,
+  FIT_HEIGHT_MIN,
+  fitScale,
+  pageStartView,
+  SPLIT_GAP,
+} from "../page-layout.ts";
+
+describe("block toolbar position", () => {
+  const frame = { w: 800, h: 600 };
+  const bar = { w: 150, h: 38 };
+  it("sits above the block, 8px apart", () => {
+    expect(blockBarPos({ x: 100, y: 200, w: 120, h: 60 }, { scale: 1, x: 0, y: 0 }, frame, bar)).toEqual({
+      left: 100,
+      top: 200 - 8 - 38,
+      below: false,
+    });
+  });
+  it("goes below a block near the top edge of the view", () => {
+    expect(blockBarPos({ x: 100, y: 20, w: 120, h: 60 }, { scale: 1, x: 0, y: 0 }, frame, bar)).toEqual({
+      left: 100,
+      top: 20 + 60 + 8,
+      below: true,
+    });
+  });
+  it("clamps inside the frame horizontally", () => {
+    expect(blockBarPos({ x: -50, y: 200, w: 60, h: 60 }, { scale: 1, x: 0, y: 0 }, frame, bar).left).toBe(8);
+    expect(blockBarPos({ x: 760, y: 200, w: 60, h: 60 }, { scale: 1, x: 0, y: 0 }, frame, bar).left).toBe(
+      800 - 150 - 8,
+    );
+  });
+  it("follows zoom and pan", () => {
+    expect(blockBarPos({ x: 100, y: 200, w: 120, h: 60 }, { scale: 2, x: 10, y: -100 }, frame, bar)).toEqual({
+      left: 210,
+      top: 300 - 46,
+      below: false,
+    });
+    expect(blockBarPos({ x: 100, y: 200, w: 120, h: 60 }, { scale: 0.5, x: 0, y: 0 }, frame, bar)).toEqual({
+      left: 50,
+      top: 100 - 46,
+      below: false,
+    });
+  });
+});
 
 describe("page layout", () => {
   it("opens a page centered and fitted to that page, not to the widest page of the chapter", () => {

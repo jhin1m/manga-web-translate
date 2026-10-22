@@ -1,7 +1,7 @@
 ---
 phase: 5
 title: "Thanh nổi cạnh khối, Xem gốc, menu ⋯, Vừa khung / 100%"
-status: pending
+status: completed
 priority: P1
 effort: "5h"
 dependencies: [4]

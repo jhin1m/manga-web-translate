@@ -1,8 +1,8 @@
 /**
- * Thanh trên màn chương: ← series, tên chương (bấm → đổi series / số chương), chip trạng thái chương (chỗ duy nhất
- * nói chương đang ở đâu), chỉ báo sửa/lưu thu nhỏ (giữ khoá · Đã lưu / Chỉ xem), Hoàn tác / Làm lại, chế độ xem
- * Gốc/Dịch/Chia đôi, Dịch lại ▾, Huỷ xử lý, icon Hoạt động (+ số việc đang chạy) + Phím tắt, và nút chính theo trạng
- * thái (primary-action.ts; "Xuất" mở drawer).
+ * Thanh trên màn chương: ‹ series, tên chương (bấm → đổi series / số chương), chip trạng thái chương (chỗ duy nhất
+ * nói chương đang ở đâu), chỉ báo sửa/lưu thu nhỏ (giữ khoá · Đã lưu / Chỉ xem) · Hoàn tác / Làm lại · Xem gốc ·
+ * Hoạt động (+ số việc đang chạy) · menu ⋯ (Chia đôi, Dịch lại cả chương, Chạy lại trang lỗi, Phím tắt) · Huỷ xử lý
+ * (khi đang chạy) · Xuất phụ · nút chính theo trạng thái (primary-action.ts; "Xuất" mở drawer).
  * Dưới nó là băng cảnh báo — chỉ hiện khi người dùng phải biết/làm gì (khoá bị giữ/mất/lỗi, khôi phục, lỗi lưu, chờ AI).
  */
 import { Link } from "@tanstack/react-router";
@@ -14,10 +14,10 @@ import { FilePickButton } from "../upload/drop-zone.tsx";
 import { ActivityButton } from "./activity-drawer.tsx";
 import type { ChapterDetail } from "./api.ts";
 import { ChapterMetaPopover } from "./chapter-meta-popover.tsx";
+import { MoreMenu, OriginalToggle } from "./more-menu.tsx";
 import type { ChapterCommand, PrimaryAction } from "./primary-action.ts";
 import type { Tone } from "./status.ts";
 import { RedoIcon, UndoIcon } from "./tool-icons.tsx";
-import { ViewModeSwitch } from "./view-mode-switch.tsx";
 
 const SAVE_LABEL: Record<SaveStatus, string> = {
   saved: "Đã lưu",
@@ -93,25 +93,14 @@ export function ChapterTopbar(props: {
       <span className="spacer" />
       <UndoRedo />
       <span className="cw-top-sep" />
-      <ViewModeSwitch />
-      {has("retranslate") && (
-        <details className="cw-menu">
-          <summary className="btn">Dịch lại ▾</summary>
-          <div className="cw-menu-list" role="menu">
-            <button
-              type="button"
-              role="menuitem"
-              disabled={props.pending}
-              onClick={(e) => {
-                e.currentTarget.closest("details")?.removeAttribute("open");
-                props.onCommand("retranslate");
-              }}
-            >
-              Dịch lại cả chương
-            </button>
-          </div>
-        </details>
-      )}
+      <OriginalToggle />
+      <ActivityButton icon count={props.activityCount} onClick={props.onActivity} />
+      <MoreMenu
+        commands={menu.filter((m) => m.command !== "cancel" && m.command !== "export")}
+        pending={props.pending}
+        onCommand={props.onCommand}
+        onHelp={props.onHelp}
+      />
       {has("cancel") && (
         <button type="button" className="btn-danger" disabled={props.pending} onClick={() => props.onCommand("cancel")}>
           Huỷ xử lý
@@ -122,12 +111,6 @@ export function ChapterTopbar(props: {
           Xuất
         </button>
       )}
-      <span className="cw-icons">
-        <ActivityButton icon count={props.activityCount} onClick={props.onActivity} />
-        <button type="button" className="btn-ghost" aria-label="Phím tắt" title="Phím tắt (?)" onClick={props.onHelp}>
-          ?
-        </button>
-      </span>
       {primary &&
         (primary.command === "upload" ? (
           <FilePickButton className="btn-primary" onFiles={props.onUploadFiles}>

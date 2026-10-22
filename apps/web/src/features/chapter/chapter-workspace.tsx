@@ -9,11 +9,12 @@
  * trên canvas, tự ẩn; Bước 1 / Bước 2 thành công không báo gì thêm (chip đã đổi), Bước 1 chỉ báo khi có ảnh bị loại.
  *
  * Drawer phải: Xuất (nút "Xuất" hoặc `?drawer=export` từ "Xuất lại" ở home), Hoạt động, Phím tắt (`?`). Chế độ xem
- * Gốc / Dịch / Chia đôi + giữ `O` (chapterStore.viewMode). Phím tắt: `editor/shortcuts.ts` (1 listener).
+ * (chapterStore.viewMode): nút "Xem gốc" + giữ `O`, Chia đôi trong menu ⋯. Thanh nổi cạnh khối đang chọn (Sửa chữ ·
+ * Dịch lại khối · Nhân đôi · Xoá). Phím tắt: `editor/shortcuts.ts` (1 listener).
  *
- * Page đang sửa (active) = page canvas đang hiện; đổi khi chọn ở rail, nút ‹ › dưới canvas, phím ←/→/A/D, focus 1
+ * Page đang sửa (active) = page canvas đang hiện; đổi khi chọn ở cột trang, nút ‹ › góc dưới canvas, phím ←/→/A/D, focus 1
  * dòng của bảng hoặc `?page=` đổi từ ngoài; page active ghi lại vào `?page=` (replace, gộp 400ms). Khối đang chọn
- * (`current`, khoá dòng bảng) đồng bộ 2 chiều giữa bảng, canvas và inspector.
+ * (`current`, khoá dòng bảng) đồng bộ 2 chiều giữa bảng, canvas và panel Chọn.
  */
 import "../editor/editor.css";
 import "./chapter-workspace.css";
@@ -28,7 +29,6 @@ import { type PageRect, useOcrRegion } from "../editor/canvas/OcrSelect.tsx";
 import type { SlotImages, SlotProcessing } from "../editor/canvas/PageSlot.tsx";
 import { chapterStore, revealRect } from "../editor/chapter-store.ts";
 import { dialogueFont } from "../editor/fonts.ts";
-import { CanvasStatus } from "../editor/panels/CanvasToolbar.tsx";
 import { MaskPanel } from "../editor/panels/MaskPanel.tsx";
 import type { ShortcutAction } from "../editor/shortcuts.ts";
 import { editorStore, useEditor } from "../editor/store.ts";
@@ -52,6 +52,8 @@ import {
   setPageSkip,
   translatePrepared,
 } from "./api.ts";
+import { BlockToolbar } from "./block-toolbar.tsx";
+import { CanvasPager, CanvasZoom } from "./canvas-controls.tsx";
 import { ChapterTopbar, type EditAccess, LockBand } from "./chapter-topbar.tsx";
 import { ContextPanel, type FocusRequest } from "./context-panel.tsx";
 import { ExportDrawer } from "./export-drawer.tsx";
@@ -223,7 +225,7 @@ function Workspace({ ws, seriesId, chapterId, page: searchPage, drawer: searchDr
     return () => clearTimeout(t);
   }, [activeId, firstId, navigate, ws, seriesId, chapterId]);
 
-  // ---- Bảng văn bản ↔ canvas ↔ inspector ----
+  // ---- Bảng văn bản ↔ canvas ↔ panel Chọn ----
   const allRows = useChapterRows(kit, series.data?.ignore_text ?? NO_IGNORE);
   const [current, setCurrent] = useState<string | null>(null);
   const [filter, setFilter] = useState<TableFilter>({ review: false, page: false });
@@ -368,7 +370,7 @@ function Workspace({ ws, seriesId, chapterId, page: searchPage, drawer: searchDr
     onError: (e) => notify({ tone: "danger", text: errorMessage(e) }),
     onSettled: data.refresh,
   });
-  // "Áp kiểu này cho khối cùng loại trong chương" (inspector hỏi xác nhận trước): page active = 1 bước undo; page
+  // "Áp kiểu này cho khối cùng loại trong chương" (panel Chọn hỏi xác nhận trước): page active = 1 bước undo; page
   // khác ghi thẳng (cần khoá, không hoàn tác được). Lỗi giữa chừng → báo rõ trang nào đã áp.
   const applyKind = useMutation({
     mutationFn: async (row: Row) => {
@@ -567,6 +569,11 @@ function Workspace({ ws, seriesId, chapterId, page: searchPage, drawer: searchDr
   const ocr = useOcrRegion(ws, activeId ?? "", defaultFont, { w: activeMeta?.width ?? 0, h: activeMeta?.height ?? 0 });
   const ocrStart = ocr.start;
   const onOcr = useCallback((r: PageRect) => void ocrStart(r), [ocrStart]);
+  /** "Sửa chữ" ở thanh nổi: mở panel Chọn + focus ô Bản dịch. */
+  const editBlock = () => {
+    setPanel("tool");
+    setFocusReq((r) => ({ seq: (r?.seq ?? 0) + 1, selector: "#cw-translation" }));
+  };
   /** "Dịch lại khối" = nhận dạng + dịch lại vùng OCR của khối (khối tự thêm không có vùng → bỏ qua). */
   const reocrRow = (row: Pick<Row, "regionId">) => {
     const [x, y, w, h] = editorStore.getState().doc?.regions.find((r) => r.id === row.regionId)?.bbox ?? [];
@@ -859,7 +866,14 @@ function Workspace({ ws, seriesId, chapterId, page: searchPage, drawer: searchDr
                 <span className="muted">Đang tải…</span>
               </div>
             )}
-            <CanvasStatus onStep={(dir) => go(pages[idx + dir]?.id)} />
+            <BlockToolbar
+              processing={!!activeId && processing.has(activeId)}
+              ocrBusy={ocr.pending.length > 0}
+              onEdit={editBlock}
+              onRetranslate={(regionId) => reocrRow({ regionId })}
+            />
+            <CanvasPager onStep={(dir) => go(pages[idx + dir]?.id)} />
+            <CanvasZoom />
           </div>
         )}
       </main>

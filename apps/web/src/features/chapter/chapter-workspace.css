@@ -76,9 +76,6 @@
   align-items: center;
   gap: 2px;
 }
-.cw-icons > button {
-  padding: 0 8px;
-}
 .cw-seg {
   border: 0;
   margin: 0;
@@ -105,34 +102,6 @@
   border-color: var(--c-accent);
   color: #fff;
 }
-.cw-menu {
-  position: relative;
-}
-.cw-menu > summary {
-  list-style: none;
-  cursor: pointer;
-}
-.cw-menu > summary::-webkit-details-marker {
-  display: none;
-}
-.cw-menu-list {
-  position: absolute;
-  right: 0;
-  top: calc(100% + 4px);
-  z-index: 20;
-  min-width: 180px;
-  display: flex;
-  flex-direction: column;
-  padding: var(--sp-1);
-  background: var(--c-bg);
-  border: 1px solid var(--c-line-strong);
-  border-radius: var(--radius);
-}
-.cw-menu-list > * {
-  justify-content: flex-start;
-  border-color: transparent;
-}
-
 .cw-band {
   grid-area: band;
   display: flex;
@@ -468,37 +437,92 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 .cw-canvas .ed-canvas {
   background: var(--c-canvas);
 }
-.cw-canvas-foot {
+/* Điều khiển nổi góc dưới canvas: ‹ Trang n / M › (trái), Vừa khung · 100% · zoom (phải). */
+.cw-pager,
+.cw-zoom {
   position: absolute;
-  left: 12px;
-  right: 12px;
-  bottom: 12px;
-  display: flex;
-  justify-content: space-between;
-  pointer-events: none;
-  font-size: var(--fs-xs);
-}
-.cw-canvas-foot > span {
-  background: var(--c-bg);
-  border: 1px solid var(--c-line-strong);
-  border-radius: var(--radius);
-  padding: 4px 8px;
-}
-.cw-canvas-foot > .cw-pager {
+  bottom: 14px;
+  z-index: 5;
   display: flex;
   align-items: center;
-  gap: var(--sp-2);
-  padding: 2px 4px;
-  pointer-events: auto;
+  gap: 2px;
+  padding: 2px;
+  background: var(--c-bg);
+  border: 1px solid var(--c-line);
+  border-radius: 6px;
+  font-size: var(--fs-xs);
 }
-.cw-pager > button {
-  min-width: 24px;
+.cw-pager {
+  left: 16px;
+}
+.cw-pager > span {
   padding: 0 6px;
-  line-height: 20px;
+  font-variant-numeric: tabular-nums;
+}
+.cw-pager .icon-btn {
+  width: 32px;
+  height: 32px;
+}
+.cw-zoom {
+  right: 16px;
+}
+.cw-zoom > button {
+  min-height: 32px;
+  padding: 0 10px;
+  border: 0;
+  background: none;
+  font-size: var(--fs-xs);
+}
+.cw-zoom > button[aria-pressed="true"] {
+  background: var(--c-accent-weak);
+  color: var(--c-accent-hover);
+}
+.cw-zoom > .mono {
+  min-width: 44px;
+  padding: 0 6px;
+  text-align: right;
+  color: var(--c-fg-muted);
+}
+/* Thanh thao tác nổi cạnh khối đang chọn. */
+.cw-blockbar {
+  position: absolute;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  background: var(--c-bg);
+  border: 1px solid var(--c-line);
+  border-radius: 6px;
+  box-shadow: 0 2px 6px rgb(0 0 0 / 0.12);
+}
+.cw-blockbar .icon-btn {
+  width: 32px;
+  height: 32px;
+  color: var(--c-fg-muted);
+}
+.cw-blockbar .icon-btn[data-danger] {
+  color: var(--c-danger);
+}
+.cw-blockbar-sep {
+  width: 1px;
+  height: 18px;
+  margin: 0 2px;
+  background: var(--c-line);
+}
+/* Nút "Xem gốc" thanh trên: bật = nền nhấn nhạt. */
+.cw-orig {
+  gap: 6px;
+}
+.cw-orig[aria-pressed="true"] {
+  border-color: var(--c-accent);
+  background: var(--c-accent-weak);
+  color: var(--c-accent-hover);
 }
 /* Chương chưa có page: dải trên (tiến độ upload, vùng thả tải tiếp, thông báo cắt trang) + 1 ảnh gốc. */
 .cw-source {

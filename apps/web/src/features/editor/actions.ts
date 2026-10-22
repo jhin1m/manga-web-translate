@@ -75,6 +75,13 @@ export const addBox = (box: TextBox) => (s: S) => {
   s.text_boxes.push({ ...box, text: nfc(box.text), lines: box.lines.map(nfc) });
 };
 
+/**
+ * Nhân đôi khối: bản sao id mới lệch `offset` px, cùng chữ/kiểu, không gắn vùng OCR (`region_id = null` → dòng "Tự
+ * thêm"). `src` lấy từ `editorStore.getState().doc` (không phải draft) nên clone an toàn.
+ */
+export const duplicateBox = (src: TextBox, newId: string, offset = 16) =>
+  addBox({ ...structuredClone(src), id: newId, region_id: null, x: src.x + offset, y: src.y + offset });
+
 export const deleteBox = (id: string) => (s: S) => {
   const i = s.text_boxes.findIndex((b) => b.id === id);
   if (i >= 0) s.text_boxes.splice(i, 1);

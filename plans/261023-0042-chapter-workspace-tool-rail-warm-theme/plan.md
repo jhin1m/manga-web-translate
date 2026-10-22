@@ -25,7 +25,7 @@ nghệ mới; đã rà code thực tế thay cho researcher).
 | 2 | [Rail công cụ + panel ngữ cảnh (khung)](./phase-02-tool-rail-and-context-panel-shell.md) | 5h | 1 | completed |
 | 3 | [Cột thumbnail 112px + menu chuột phải](./phase-03-thumbnail-column-and-page-menu.md) | 4h | 2 | completed |
 | 4 | [Nội dung panel: Chọn, công cụ, Bản dịch, Tìm](./phase-04-panel-content-select-tools-table-find.md) | 5h | 2, 3 | completed |
-| 5 | [Thanh nổi cạnh khối, Xem gốc, menu ⋯, Vừa khung/100%](./phase-05-block-toolbar-view-original-more-menu.md) | 5h | 4 | pending |
+| 5 | [Thanh nổi cạnh khối, Xem gốc, menu ⋯, Vừa khung/100%](./phase-05-block-toolbar-view-original-more-menu.md) | 5h | 4 | completed |
 | 6 | [E2E theo bố cục mới + docs](./phase-06-e2e-and-docs.md) | 5h | 1–5 | pending |
 
 Làm tuần tự (cùng chạm `chapter-workspace.tsx` / `.css` → không chia song song). Mỗi phase: kiểm tra hẹp ghi trong

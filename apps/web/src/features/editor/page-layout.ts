@@ -40,6 +40,28 @@ export function clampView(v: View, content: Size, box: Size, x0 = 0): View {
   return { scale: v.scale, x: l - x0 * v.scale, y };
 }
 
+/**
+ * Vị trí thanh thao tác nổi cạnh khối đang chọn (toạ độ trong khung canvas): trên khối cách `gap`; khối sát mép trên
+ * khung nhìn → đặt dưới khối; kẹp trong bề ngang khung.
+ */
+export function blockBarPos(
+  box: { x: number; y: number; w: number; h: number },
+  v: View,
+  frame: Size,
+  bar: Size,
+  gap = 8,
+): { left: number; top: number; below: boolean } {
+  const left = v.x + box.x * v.scale;
+  const top = v.y + box.y * v.scale;
+  const above = top - gap - bar.h;
+  const below = above < gap;
+  return {
+    left: Math.max(gap, Math.min(left, frame.w - bar.w - gap)),
+    top: below ? top + box.h * v.scale + gap : above,
+    below,
+  };
+}
+
 /** Page cao hơn `PAGE_RATIO_MAX` × rộng (webtoon cắt dải) không vừa theo chiều cao — chữ sẽ quá nhỏ để đọc. */
 export const PAGE_RATIO_MAX = 2;
 

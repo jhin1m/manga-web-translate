@@ -56,6 +56,11 @@ export type ChapterActions = {
   setActive(pageId: string | null): void;
   setBox(box: Size): void;
   setZoomed(zoomed: boolean): void;
+  /**
+   * Khung nhìn mở trang của page active: không `scale` = "Vừa khung" (bỏ cờ đã zoom); có `scale` (VD 1 = 100%) = đầu
+   * trang sát mép trên ở mức đó, đặt cờ đã zoom (đổi trang giữ mức).
+   */
+  fitView(scale?: number): void;
   setViewMode(mode: ViewMode): void;
   setHoldOriginal(hold: boolean): void;
 };
@@ -144,6 +149,13 @@ export function createChapterStore() {
     },
     setBox: (box) => set({ box }),
     setZoomed: (zoomed) => set({ zoomed }),
+    fitView: (scale) => {
+      const s = get();
+      const p = s.pages.find((x) => x.id === s.activePageId);
+      if (!p || s.box.w === 0) return;
+      editorStore.getState().setView(pageStartView({ w: p.width, h: p.height }, s.viewMode === "split", s.box, scale));
+      set({ zoomed: scale !== undefined });
+    },
     setViewMode: (viewMode) => set({ viewMode }),
     setHoldOriginal: (holdOriginal) => {
       if (get().holdOriginal !== holdOriginal) set({ holdOriginal });
