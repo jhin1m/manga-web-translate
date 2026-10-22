@@ -113,6 +113,7 @@ def make_job(
     quality=100,
     include=True,
     untranslated: set[int] = frozenset(),  # type: ignore[assignment]
+    skipped: set[int] = frozenset(),  # type: ignore[assignment]
     states: dict[int, dict] | None = None,
     chapter: dict | None = None,
 ) -> tuple[dict[str, Any], dict[str, bytes]]:
@@ -128,7 +129,8 @@ def make_job(
                 "ord": ord_,
                 "width": w,
                 "height": img.shape[0],
-                "translated": ord_ not in untranslated,
+                "translated": ord_ not in untranslated and ord_ not in skipped,
+                "skipped": ord_ in skipped,
                 "background": url,
                 "state": (states or {}).get(ord_),
                 "source_map": [
@@ -276,6 +278,27 @@ def test_pages_layout_names_and_sizes():
 def test_pages_layout_skips_untranslated_when_excluded():
     job, bgs = make_job(layout="pages", untranslated={0, 2}, include=False)
     assert open_zip(run(job, bgs)).namelist() == ["002.png", "004.png"]
+
+
+def test_pages_layout_drops_hidden_pages_and_numbers_the_rest_continuously():
+    job, bgs = make_job(layout="pages", skipped={1})
+    zf = open_zip(run(job, bgs))
+    assert zf.namelist() == ["001.png", "002.png", "003.png"]
+    assert [decode(zf, n).shape[:2] for n in zf.namelist()] == [(400, 200), (100, 200), (120, 100)]
+
+
+def test_original_slices_drop_slices_only_on_hidden_pages_and_keep_straddling_ones_intact():
+    # Page 3 (ẩn) chỉ chứa S4 → bỏ S4. Page 2 (ẩn) chứa đoạn cuối S3 vắt từ page 1 → S3 vẫn xuất, nguyên ảnh gốc.
+    job, bgs = make_job(skipped={2, 3})
+    zf = open_zip(run(job, bgs))
+    assert zf.namelist() == ["001.png", "002.png", "003.png"]
+    np.testing.assert_array_equal(decode(zf, "003.png"), slice_image(2))
+
+
+def test_hidden_page_is_not_untranslated_when_untranslated_are_excluded():
+    # S3 vắt page 1 (dịch) + page 2 (ẩn): không bị coi là "dính page chưa dịch" → vẫn xuất khi include=false.
+    job, bgs = make_job(skipped={2}, include=False)
+    assert open_zip(run(job, bgs)).namelist() == ["001.png", "002.png", "003.png", "004.png"]
 
 
 def test_cbz_jpeg_with_comic_info_first():

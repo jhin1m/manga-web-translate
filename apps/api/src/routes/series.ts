@@ -4,7 +4,7 @@
  */
 import { chapters, jobs, pageStates, pages, type Scoped, series } from "@mtl/db";
 import { defaultPageFormat, PAGE_FORMATS, SOURCE_LANGS, TARGET_LANGS } from "@mtl/shared";
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray, type SQL, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { z } from "zod";
@@ -158,7 +158,11 @@ export async function chapterStats(sdb: Scoped, chs: ChapterRow[]) {
   const counts = new Map<string, PageCounts>(ids.map((id) => [id, { total: 0, ready: 0, failed: 0, busy: 0 }]));
   const [groups, exported] = await Promise.all([
     ids.length
-      ? sdb.countBy(pages, { chapterId: pages.chapterId, status: pages.status }, inArray(pages.chapterId, ids))
+      ? sdb.countBy(
+          pages,
+          { chapterId: pages.chapterId, status: pages.status },
+          and(inArray(pages.chapterId, ids), eq(pages.skipped, false)) as SQL,
+        )
       : Promise.resolve([]),
     exportStatus(sdb, chs),
   ]);

@@ -119,7 +119,9 @@ export const ReinpaintInputs = z.object({ base_clean: Url, user_mask: Url });
 export const OcrRegionInputs = z.object({ original: Url, context_lines: z.array(ContextLine) });
 /**
  * chapter.export: state chốt lúc claim (đổi sau đó không ảnh hưởng file đang xuất). `translated` = page đã qua
- * giai đoạn 2 và có ảnh sạch → nền = clean/{clean_rev}; ngược lại nền = ảnh gốc, không vẽ chữ.
+ * giai đoạn 2 và có ảnh sạch → nền = clean/{clean_rev}; ngược lại nền = ảnh gốc, không vẽ chữ. `skipped` = người
+ * dùng đã xoá (ẩn) page: layout `pages` bỏ page, `original_slices` bỏ slice nằm trọn trong page ẩn, slice vắt qua giữ
+ * phần đó bằng ảnh gốc (optional: inputs dựng lúc claim; API bản cũ (rollback) không gửi → coi như false).
  */
 export const ExportInputs = z.object({
   chapter: z.object({ series_title: z.string(), number: z.string(), title: z.string() }),
@@ -130,6 +132,7 @@ export const ExportInputs = z.object({
       width: z.number().int().positive(),
       height: z.number().int().positive(),
       translated: z.boolean(),
+      skipped: z.boolean().optional(),
       background: Url,
       state: PageState.nullable(),
       source_map: z.array(SourceMapEntry),

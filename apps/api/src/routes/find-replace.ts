@@ -121,7 +121,8 @@ const httpError = (status: 404 | 409, body: Record<string, unknown>) =>
   new HTTPException(status, { res: Response.json(body, { status }) });
 
 async function chapterPages(sdb: Scoped, chapterId: string): Promise<PageRow[]> {
-  const ps = await sdb.select(pages, eq(pages.chapterId, chapterId));
+  // Trang ẩn không bị tìm / thay / áp glossary.
+  const ps = await sdb.select(pages, and(eq(pages.chapterId, chapterId), eq(pages.skipped, false)) as SQL);
   if (ps.length === 0) return [];
   const ord = new Map(ps.map((p) => [p.id, p.ord]));
   const states = await sdb.select(

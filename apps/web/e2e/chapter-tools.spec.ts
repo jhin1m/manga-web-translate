@@ -20,15 +20,19 @@ const SOURCE_TERM = "안녕하세요";
 /** Số chương tăng dần (tái lập được, không đụng dải số ngẫu nhiên của editor.spec). */
 let chapterSeq = 3000;
 
-/** Chương 1 trang đã dịch (worker giả) → id chương, id page, số chương. */
-async function readyChapter(page: Page) {
+/** Chương `n` trang (mặc định 1) đã dịch (worker giả) → id chương, id page đầu, số chương. */
+async function readyChapter(page: Page, n = 1) {
   const number = String(++chapterSeq);
   const created = await page.request.post(`/api/w/${ws}/chapters`, {
     headers,
     data: {
       series_id: state.seriesId,
       number,
-      files: [{ name: "1.png", content_type: "image/png", bytes: PNG_1PX.length }],
+      files: Array.from({ length: n }, (_, i) => ({
+        name: `${i + 1}.png`,
+        content_type: "image/png",
+        bytes: PNG_1PX.length,
+      })),
     },
   });
   expect(created.status()).toBe(201);
@@ -36,12 +40,13 @@ async function readyChapter(page: Page) {
     chapter: { id: string };
     files: { url: string; fields: Record<string, string> }[];
   };
-  const f = files[0];
-  if (!f) throw new Error("no upload slot");
-  const form = new FormData();
-  for (const [k, v] of Object.entries(f.fields)) form.append(k, v);
-  form.append("file", new Blob([new Uint8Array(PNG_1PX)], { type: "image/png" }));
-  expect((await fetch(f.url, { method: "POST", body: form })).status).toBe(204);
+  if (files.length !== n) throw new Error("no upload slot");
+  for (const f of files) {
+    const form = new FormData();
+    for (const [k, v] of Object.entries(f.fields)) form.append(k, v);
+    form.append("file", new Blob([new Uint8Array(PNG_1PX)], { type: "image/png" }));
+    expect((await fetch(f.url, { method: "POST", body: form })).status).toBe(204);
+  }
   expect((await page.request.post(`/api/w/${ws}/chapters/${chapter.id}/commit`, { headers, data: {} })).status()).toBe(
     202,
   );
@@ -253,4 +258,30 @@ test.describe("công cụ chương", () => {
     await expect(dlg).toBeHidden();
     await expect(open).toBeFocused();
   });
+});
+
+test("delete a page from the rail (undo, then restore from the Đã xoá filter)", async ({ page }) => {
+  await login(page);
+  const { chapterId } = await readyChapter(page, 3);
+  await openChapter(page, chapterId);
+  const rail = page.getByRole("complementary", { name: "Danh sách trang" });
+
+  await rail.getByRole("button", { name: "Xoá trang 2" }).click();
+  await expect(rail.getByRole("button", { name: "Tất cả 2" })).toBeVisible();
+  // Số trang giữ số gốc: còn Trang 1 và Trang 3.
+  await expect(rail.getByRole("button", { name: /^Trang \d/ })).toHaveText([/^Trang 1/, /^Trang 3/]);
+  // "Hoàn tác" của thông báo (thanh công cụ editor cũng có nút Hoàn tác).
+  await page
+    .getByRole("status")
+    .filter({ hasText: "Đã xoá trang 2" })
+    .getByRole("button", { name: "Hoàn tác" })
+    .click();
+  await expect(rail.getByRole("button", { name: "Tất cả 3" })).toBeVisible();
+  await expect(rail.getByRole("button", { name: /^Đã xoá/ })).toHaveCount(0);
+
+  await rail.getByRole("button", { name: "Xoá trang 2" }).click();
+  await rail.getByRole("button", { name: "Đã xoá 1" }).click();
+  await rail.getByRole("button", { name: "Khôi phục trang 2" }).click();
+  await expect(rail.getByRole("button", { name: "Tất cả 3" })).toBeVisible();
+  await expect(rail.getByRole("button", { name: /^Đã xoá/ })).toHaveCount(0);
 });

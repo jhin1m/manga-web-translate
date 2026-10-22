@@ -1,0 +1,1 @@
+ALTER TABLE "pages" ADD COLUMN "skipped" boolean DEFAULT false NOT NULL;

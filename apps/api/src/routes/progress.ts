@@ -48,7 +48,8 @@ progressRoutes.get("/w/:ws/chapters/:chapterId/progress", requireWorkspace(), as
   }
   const chapterJobs = sorted.filter((j) => j.type === "chapter.ingest" || j.type === "chapter.translate").slice(0, 5);
   const counts: Record<string, number> = {};
-  for (const p of pageRows) counts[p.status] = (counts[p.status] ?? 0) + 1;
+  // Trang ẩn vẫn trả về (rail lọc "Đã xoá" để khôi phục) nhưng không đếm.
+  for (const p of pageRows) if (!p.skipped) counts[p.status] = (counts[p.status] ?? 0) + 1;
   return c.json({
     chapter: { id: ch.id, status: ch.status, ingest_rev: ch.ingestRev },
     counts,
@@ -65,6 +66,7 @@ progressRoutes.get("/w/:ws/chapters/:chapterId/progress", requireWorkspace(), as
           height: p.height,
           clean_rev: p.cleanRev,
           cut_flag: p.cutFlag,
+          skipped: p.skipped,
           ai_update_available: st?.aiUpdateAvailable ?? false,
           version: st?.version ?? 0,
           job: j ? jobView({ ...j, result: null }) : null,

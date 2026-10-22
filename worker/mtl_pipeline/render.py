@@ -256,24 +256,33 @@ class SliceMapError(ValueError):
 class SliceAssembler:
     """Ghép lại slice gốc từ các page đã render theo source_map, kiểu cửa sổ trượt: buffer của slice chỉ sống từ
     đoạn đầu tới đoạn cuối của nó → RAM ~ vài slice chứ không cả strip. `pages`: dict có width, translated,
-    source_map [{source_file_id, src_y, page_y, h}]."""
+    source_map [{source_file_id, src_y, page_y, h}], skipped (tuỳ chọn).
+
+    Page ẩn (`skipped`): slice nằm trọn trong page ẩn bị bỏ; slice vắt qua giữ đoạn đó (page ẩn render ảnh gốc) và
+    không tính là "chưa dịch" — người dùng chủ động bỏ trang, không phải trang còn thiếu bản dịch."""
 
     def __init__(self, pages: Sequence[Mapping[str, Any]], include_untranslated: bool):
         width: dict[str, int] = {}
         height: dict[str, int] = {}
         left: dict[str, int] = {}
         untranslated: set[str] = set()
+        visible: set[str] = set()
         for pg in pages:
+            skipped = bool(pg.get("skipped"))
             for seg in pg["source_map"]:
                 sid = seg["source_file_id"]
                 if width.setdefault(sid, pg["width"]) != pg["width"]:
                     raise SliceMapError(f"slice {sid} nằm trên các page khác bề rộng")
                 height[sid] = max(height.get(sid, 0), seg["src_y"] + seg["h"])
                 left[sid] = left.get(sid, 0) + 1
-                if not pg["translated"]:
-                    untranslated.add(sid)
-        # Slice có đoạn thuộc page chưa dịch → bỏ cả slice khi không xuất bản chưa dịch.
-        self.kept: list[str] = [s for s in width if include_untranslated or s not in untranslated]
+                if not skipped:
+                    visible.add(sid)
+                    if not pg["translated"]:
+                        untranslated.add(sid)
+        # Slice có đoạn thuộc page chưa dịch → bỏ cả slice khi không xuất bản chưa dịch; slice chỉ thuộc page ẩn → bỏ.
+        self.kept: list[str] = [
+            s for s in width if s in visible and (include_untranslated or s not in untranslated)
+        ]
         self._w, self._h = width, height
         self._left = {s: left[s] for s in self.kept}
         self._bufs: dict[str, np.ndarray] = {}

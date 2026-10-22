@@ -43,10 +43,12 @@ import {
   cancelChapter,
   commitChapter,
   type FindMatch,
+  type ProgressPage,
   REJECT_REASON,
   type Rejected,
   retranslate,
   retryFailed,
+  setPageSkip,
   translatePrepared,
 } from "./api.ts";
 import { BottomPanel, type TabRequest } from "./bottom-panel.tsx";
@@ -85,8 +87,8 @@ type Notice = {
   text: string;
   untilStable?: boolean;
   action?: { label: string; run(): void };
-  /** Nhóm thông báo — "source-skip": khôi phục ảnh chỉ đóng thông báo "Đã xoá ảnh…", không đụng lỗi khác. */
-  key?: "source-skip";
+  /** Nhóm thông báo — "skip": khôi phục ảnh/trang chỉ đóng thông báo "Đã xoá…", không đụng lỗi khác. */
+  key?: "skip";
 };
 
 /** Dịch chương mà có ảnh bị loại: giữ tới khi chương chạy xong lượt xử lý vừa bắt đầu. */
@@ -435,16 +437,45 @@ function Workspace({ ws, seriesId, chapterId, page: searchPage, drawer: searchDr
             if (skip) {
               notify({
                 tone: "info",
-                key: "source-skip",
+                key: "skip",
                 text: `Đã xoá ảnh ${it.n}.`,
                 action: { label: "Hoàn tác", run: () => skipSource(it, null) },
               });
-            } else setNotice((n) => (n?.key === "source-skip" ? null : n));
+            } else setNotice((n) => (n?.key === "skip" ? null : n));
           },
         },
       ),
     [sourceSkip.mutate, notify],
   );
+  // ---- Xoá (ẩn) / khôi phục trang sau Bước 1 ----
+  const pagesEditable = session.lockEnabled && session.lock.state.status === "held";
+  const pageSkip = useMutation({
+    mutationFn: ({ page, skipped }: { page: ProgressPage; skipped: boolean }) => setPageSkip(ws, page.id, skipped),
+    onSuccess: (_r, { page, skipped }) => {
+      if (skipped) {
+        notify({
+          tone: "info",
+          key: "skip",
+          text: `Đã xoá trang ${page.ord + 1} (không dịch, không xuất).`,
+          action: { label: "Hoàn tác", run: () => pageSkip.mutate({ page, skipped: false }) },
+        });
+      } else setNotice((n) => (n?.key === "skip" ? null : n));
+    },
+    onError: (e) => notify({ tone: "danger", text: errorMessage(e) }),
+    onSettled: data.refresh,
+  });
+  const skipPage = useCallback(
+    (page: ProgressPage, skipped: boolean) => {
+      // Ẩn trang đang sửa → chuyển sang trang kế (hoặc trước) trước, để lưu chỉnh sửa dở của trang đó.
+      if (skipped && page.id === editorStore.getState().pageId) {
+        const i = pages.findIndex((p) => p.id === page.id);
+        go((pages[i + 1] ?? pages[i - 1])?.id);
+      }
+      pageSkip.mutate({ page, skipped });
+    },
+    [pages, go, pageSkip.mutate],
+  );
+
   const stepSourceBy = (dir: -1 | 1) => {
     const next = stepSource(sources, sourceId, dir);
     if (next) setSourcePick(next);
@@ -598,7 +629,16 @@ function Workspace({ ws, seriesId, chapterId, page: searchPage, drawer: searchDr
           onSkip={skipSource}
         />
       ) : (
-        <PageRail pages={pages} images={data.images} activeId={activeId} overflow={overflowPages} onPick={go} />
+        <PageRail
+          pages={pages}
+          hidden={data.hiddenPages}
+          images={data.images}
+          activeId={activeId}
+          overflow={overflowPages}
+          editable={pagesEditable && !pageSkip.isPending}
+          onPick={go}
+          onSkip={skipPage}
+        />
       )}
       <main className="cw-main">
         <Notices errors={errors} notice={notice} onDismiss={() => notify(null)} />

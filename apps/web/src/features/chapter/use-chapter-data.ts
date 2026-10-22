@@ -4,16 +4,25 @@
  * `chapterStore` cho canvas/rail.
  */
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { chapterStore, type PageMeta } from "../editor/chapter-store.ts";
 import { seriesKeys } from "../series/api.ts";
-import { chapterKeys, fetchChapter, fetchChapterStates, fetchPages, fetchProgress, type PageImage } from "./api.ts";
+import {
+  chapterKeys,
+  fetchChapter,
+  fetchChapterStates,
+  fetchPages,
+  fetchProgress,
+  type PageImage,
+  type ProgressPage,
+} from "./api.ts";
 import { isChapterSettled } from "./status.ts";
 
 export const PROGRESS_POLL_MS = 2500;
 const LOCK_POLL_MS = 15_000;
 const STATES_DEBOUNCE_MS = 1000;
 const URL_REUSE_MS = 10 * 60_000;
+const NO_HIDDEN: ProgressPage[] = [];
 
 /**
  * Giữ nguyên URL ảnh của page khi ảnh không đổi (cùng clean_rev) — mỗi lần ký lại cho URL mới khiến trình
@@ -49,7 +58,12 @@ export function useChapterData(ws: string, chapterId: string) {
       q.state.status === "error" || isChapterSettled(q.state.data?.chapter.status) ? false : PROGRESS_POLL_MS,
     refetchIntervalInBackground: false,
   });
-  const progressPages = progressQ.data?.pages;
+  // Trang đã xoá (ẩn) tách riêng: mọi chỗ khác (canvas, bảng, xuất, đếm) chỉ thấy trang còn hiện; rail dùng danh sách
+  // ẩn cho bộ lọc "Đã xoá" để khôi phục.
+  const raw = progressQ.data;
+  const progress = useMemo(() => raw && { ...raw, pages: raw.pages.filter((p) => !p.skipped) }, [raw]);
+  const hiddenPages = useMemo(() => raw?.pages.filter((p) => p.skipped) ?? NO_HIDDEN, [raw]);
+  const progressPages = progress?.pages;
   const hasPages = (progressPages?.length ?? 0) > 0;
   // URL ảnh ký 15': lấy lại danh sách khi tập page/clean_rev đổi hoặc gần hết hạn.
   const pagesSig = (progressPages ?? []).map((p) => `${p.id}:${p.clean_rev ?? "o"}`).join(",");
@@ -124,7 +138,8 @@ export function useChapterData(ws: string, chapterId: string) {
 
   return {
     detail: detailQ.data,
-    progress: progressQ.data,
+    progress,
+    hiddenPages,
     images,
     error: detailQ.error ?? progressQ.error ?? statesQ.error,
     refresh,

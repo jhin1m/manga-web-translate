@@ -94,6 +94,9 @@ def handle_export(ctx: JobContext, deps: Deps) -> dict[str, Any]:
     pages = sorted(inp["pages"], key=lambda pg: pg["ord"])
     _unique_ords(pages, "page")
     slices_mode = p["layout"] == "original_slices"
+    # Page ẩn không xuất; layout `pages` đặt tên liên tục theo thứ tự page còn hiện (page chưa dịch bị bỏ vẫn giữ chỗ).
+    shown = [pg for pg in pages if not pg.get("skipped")]
+    rank = {pg["ord"]: i for i, pg in enumerate(shown)}
     assembler: SliceAssembler | None = None
     if slices_mode:
         _unique_ords(inp["sources"], "source")
@@ -109,9 +112,9 @@ def handle_export(ctx: JobContext, deps: Deps) -> dict[str, Any]:
         n_files = len(assembler.kept)
         max_ord = max((source_ord[s] for s in assembler.kept), default=0)
     else:
-        work = [pg for pg in pages if include or pg["translated"]]
+        work = [pg for pg in shown if include or pg["translated"]]
         n_files = len(work)
-        max_ord = max((pg["ord"] for pg in work), default=0)
+        max_ord = max((rank[pg["ord"]] for pg in work), default=0)
     # Tên file đủ chữ số để reader sắp đúng thứ tự (≥ 3, chương 1000+ ảnh → 4).
     digits = max(3, len(str(max_ord + 1)))
     if n_files == 0:
@@ -139,7 +142,7 @@ def handle_export(ctx: JobContext, deps: Deps) -> dict[str, Any]:
                 ctx.report("render", DOWNLOAD_SHARE + (RENDER_SHARE - DOWNLOAD_SHARE) * i / len(work))
                 img = _render(pg, backgrounds[pg["ord"]])
                 if assembler is None:
-                    emit(pg["ord"], img)
+                    emit(rank[pg["ord"]], img)
                     continue
                 try:
                     for sid, arr in assembler.add_page(pg, img):
