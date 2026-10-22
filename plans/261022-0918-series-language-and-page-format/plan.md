@@ -57,7 +57,8 @@ Phụ thuộc: 1 → 2 → (3 ∥ 4) → 5. Phase 3 và 4 không chung file.
 - Field ngôn ngữ mới trong payload job là optional (job xếp hàng trước 0.4.0 vẫn qua JSON Schema; worker mặc định ko/vi/ltr).
 - `rtl_order` so với box mở hàng (box cao vắt khung không gộp hai hàng).
 - `LANG_NAMES`, `HONORIFIC_EXAMPLES` dùng chung ở `series-lang.ts`; ví dụ kính ngữ ko giữ "-nim, -ssi" như cũ.
-- Review: `reports/code-review-series-language-report.md`. Còn mở: glossary cấp workspace áp cho mọi cặp ngôn ngữ (M3).
+- Review: `reports/code-review-series-language-report.md`. M3 (glossary cấp workspace áp cho mọi cặp ngôn ngữ) đã xử lý ở
+  [`../261022-1026-glossary-scoped-by-language-pair/plan.md`](../261022-1026-glossary-scoped-by-language-pair/plan.md).
 
 ## Ngoài phạm vi
 

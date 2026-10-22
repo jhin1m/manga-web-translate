@@ -73,6 +73,8 @@ sudo systemctl enable --now mtl-api mtl-jobs mtl-backup.timer mtl-alert.timer
   tự quay về bản đang chạy, xoá release hỏng, cảnh báo.
 - `infra/deploy.sh rollback`: đổi `current` ↔ `previous` + restart + smoke, không build/migrate.
 - Migration chỉ thêm (additive) nên rollback app không cần down DB; down tay ở `packages/db/migrations-down/`.
+  Rollback app qua 0006 (glossary theo cặp): không nhập CSV "thay toàn bộ" ở glossary chung — bản cũ xoá entry mọi
+  cặp (xem [export-and-batch-edit.md](./export-and-batch-edit.md#glossary)).
 - Mỗi lần dừng vì ngân sách tăng `provider_retries` (để số attempt trên dây không trùng ledger) → job bị dừng/mở lại
   > 20 lần sẽ `failed` ở lỗi provider kế tiếp.
 - Container chết không báo chiếm slot `active` tới khi reaper ước lượng (~`MAX_LIFETIME + SCALEDOWN`); trong lúc đó

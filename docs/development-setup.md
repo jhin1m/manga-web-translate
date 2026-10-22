@@ -58,7 +58,7 @@ E2E web (Playwright, Chromium): `pnpm --filter @mtl/web e2e` — tự reset DB `
 
 - API e2e bật dev auto-login cho owner seed (`E2E_OWNER` trong `apps/web/e2e/env.ts`); viewport 1920×1080 (`playwright.config.ts`, để bố cục mặc định của màn chương hiện đủ 4 vùng).
 - Helper `apps/web/e2e/helpers.ts`: `login()` = mở `/` (auto-login), `loginWithForm()` = đăng nhập qua `/login`.
-- Spec: `full-flow` (thả strip ở home → dịch → sửa → xuất), `click-budget` (số thao tác từ home tới editor; thả ảnh = 1 thao tác tới khi chương đang dịch), `routes-redirect` (URL cũ → mới), `upload-chapter`, `editor`, `chapter-tools`, `typeset-parity`.
+- Spec: `full-flow` (thả strip ở home → dịch → sửa → xuất), `click-budget` (số thao tác từ home tới editor; thả ảnh = 1 thao tác tới khi chương đang dịch), `routes-redirect` (URL cũ → mới), `upload-chapter`, `editor`, `chapter-tools`, `series-manage`, `glossary-language-pair` (glossary chung theo cặp + cảnh báo đổi ngôn ngữ series), `typeset-parity`.
 - DB e2e `mtl_test_e2e` **dùng chung mọi checkout** và cổng cố định (5181/8797) → không chạy e2e từ 2 worktree cùng lúc. Gate parity Konva ↔ render.py:
 `pnpm --filter @mtl/web e2e typeset-parity` (CI chạy riêng spec này).
 
@@ -68,7 +68,7 @@ E2E web (Playwright, Chromium): `pnpm --filter @mtl/web e2e` — tự reset DB `
   - `/` = **Home** của workspace hiện tại (`src/lib/current-workspace.ts`: localStorage `mtl.ws` nếu còn là thành viên → workspace duy nhất → `/workspaces` để chọn): vùng thả file lớn (thả là tạo chương + dịch; dòng xác nhận "Sau khi thả file" chỉ khi không đoán được series hoặc file lỗi), hàng series.
   - `/w/$ws/s/$seriesId[?tab=chapters|glossary|settings]` = **Series** (hàng chương + thả file cho chương kế).
   - `/w/$ws/s/$seriesId/c/$chapterId[?page=<pageId>][&drawer=export]` = **Chương** (editor gộp, toàn màn hình ngoài app shell — xem [editor.md](./editor.md)).
-  - `/w/$ws/glossary`, `/w/$ws/members`, `/workspaces`.
+  - `/w/$ws/glossary[?src=&tgt=]` (glossary chung theo cặp nguồn→đích, mặc định ko→vi), `/w/$ws/members`, `/workspaces`.
   - Mọi path cũ redirect: `/w/$ws[/series[/$s[/settings]]]`, `.../series/$s/upload` (→ series), `.../chapters/$c` (→ chương), `.../chapters/$c/edit/$pageId` (→ chương `?page=`).
 - App shell: `src/app/app-shell.tsx` (brand → `/`, đổi workspace khi > 1, menu tài khoản: Glossary chung / Thành viên / Đăng xuất).
 - Dữ liệu: TanStack Query; tiến độ chương poll `/progress` 2,5s cho tới khi chương ổn định (draft/review/partial_failed/done).

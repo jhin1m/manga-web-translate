@@ -53,6 +53,10 @@ lệch bbox mực từng dòng ≤ 1px — xem `benchmarks/phase-01-results.md`)
   `apps/api/test/fonts.test.ts` + `worker/tests/test_typeset_fit.py` giữ khớp). Series đã chọn font riêng giữ nguyên.
 - **Đích không phải tiếng Việt** (`en | id | es | pt | fr`): cùng bộ font — mọi font trong `manifest.json` phải đủ glyph
   cho các đích này (`worker/tests/test_font_coverage.py`). Đích CJK/Thái chưa hỗ trợ (cần font + ngắt dòng không dấu cách).
+- **Vùng đặt chữ** (`available_rect` ở `typeset.py`, chỉ server tính; editor nhận sẵn `x, y, w, h`): chữ trong bóng
+  dùng hình chữ nhật nội tiếp lòng bóng. Bóng có nhiều vùng chữ được dịch (bóng dính nhau, nhiều cụm chữ) → lòng bóng
+  chia Voronoi theo khoảng cách tới bbox từng vùng chữ, mỗi vùng lấy phần của mình (khe `SPLIT_GAP`); vùng OCR rỗng
+  không giữ chỗ. Lòng bóng/phần chia nhỏ hơn bbox gốc → dùng bbox gốc.
 - **Viền**: mọi box auto-typeset có viền màu tương phản với chữ (chữ đen → viền trắng, chữ trắng → viền đen),
   `width = max(1.5, font_size × k)` làm tròn 0.1, `k = 0.1` trong bóng, `0.12` chữ ngoài bóng đè art
   (`STROKE_BUBBLE`/`STROKE_FREE` ở `typeset.py`; editor dùng cùng công thức `contrastStroke` cho khối chèn OCR /
