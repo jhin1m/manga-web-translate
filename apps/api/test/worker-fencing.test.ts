@@ -70,7 +70,7 @@ describe("worker fencing", () => {
           ...f,
           result: { type: "page.prepare", clean_rev: 1, mask_rev: 1, ocr_result: OCR },
           usage: usage(2),
-          pipeline_version: "0.3.0",
+          pipeline_version: "0.4.0",
         }),
         wcall(tk, `/jobs/${j.id}/fail`, {
           ...f,

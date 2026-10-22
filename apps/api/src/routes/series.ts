@@ -3,6 +3,7 @@
  * sau đó có input_rev mới, job cũ không bị dùng lại nhầm.
  */
 import { chapters, jobs, pageStates, pages, type Scoped, series } from "@mtl/db";
+import { defaultPageFormat, PAGE_FORMATS, SOURCE_LANGS, TARGET_LANGS } from "@mtl/shared";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
@@ -12,13 +13,9 @@ import { chaptersOf, removeChapters } from "../lib/chapter-removal.ts";
 import { parseJson } from "../lib/validate.ts";
 import { type AppEnv, requireWorkspace } from "../middleware/workspace.ts";
 
-/** Enum giữ đủ ngôn ngữ cho sau MVP; MVP chỉ bật KO → VI (red team #10). */
-export const SOURCE_LANGS = ["ko", "ja", "zh", "en"] as const;
-export const ENABLED_SOURCE_LANGS: readonly string[] = ["ko"];
-export const TARGET_LANGS = ["vi"] as const;
 export const HONORIFIC_POLICIES = ["translate", "keep"] as const;
 export const LLM_TIERS = ["standard", "premium"] as const;
-/** Font có trong worker/fonts/manifest.json (đủ dấu tiếng Việt). */
+/** Font có trong worker/fonts/manifest.json (đủ dấu tiếng Việt và các đích Latin trong TARGET_LANGS). */
 export const FONT_IDS = [
   "Anton-Regular",
   "Baloo2-Variable",
@@ -40,8 +37,9 @@ const PronounRule = z.object({
 });
 
 const Settings = z.object({
-  source_lang: z.enum(SOURCE_LANGS).refine((l) => ENABLED_SOURCE_LANGS.includes(l), "MVP chỉ hỗ trợ tiếng Hàn (ko)"),
+  source_lang: z.enum(SOURCE_LANGS),
   target_lang: z.enum(TARGET_LANGS),
+  page_format: z.enum(PAGE_FORMATS),
   honorific_policy: z.enum(HONORIFIC_POLICIES),
   pronoun_rules: z.array(PronounRule).max(200),
   style_prompt: z.string().max(1000),
@@ -63,6 +61,7 @@ export const seriesView = (s: SeriesRow) => ({
   title: s.title,
   source_lang: s.sourceLang,
   target_lang: s.targetLang,
+  page_format: s.pageFormat,
   honorific_policy: s.honorificPolicy,
   pronoun_rules: s.pronounRules,
   style_prompt: s.stylePrompt,
@@ -188,6 +187,7 @@ function toColumns(body: z.infer<typeof SeriesPatch>) {
   if (body.title !== undefined) set.title = body.title;
   if (body.source_lang !== undefined) set.sourceLang = body.source_lang;
   if (body.target_lang !== undefined) set.targetLang = body.target_lang;
+  if (body.page_format !== undefined) set.pageFormat = body.page_format;
   if (body.honorific_policy !== undefined) set.honorificPolicy = body.honorific_policy;
   if (body.pronoun_rules !== undefined) set.pronounRules = body.pronoun_rules;
   if (body.style_prompt !== undefined) set.stylePrompt = body.style_prompt;
@@ -262,7 +262,11 @@ seriesRoutes.get("/w/:ws/series", requireWorkspace(), async (c) => {
 
 seriesRoutes.post("/w/:ws/series", requireWorkspace(), async (c) => {
   const body = await parseJson(c, SeriesCreate);
-  const s = await c.get("sdb").insert(series, { llmTier: "standard", ...toColumns(body), title: body.title });
+  // Không gửi page_format → theo ngôn ngữ nguồn (ja → từng trang, còn lại → strip).
+  const pageFormat = body.page_format ?? defaultPageFormat(body.source_lang ?? "ko");
+  const s = await c
+    .get("sdb")
+    .insert(series, { llmTier: "standard", ...toColumns(body), pageFormat, title: body.title });
   return c.json(seriesView(s), 201);
 });
 

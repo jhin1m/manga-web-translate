@@ -5,7 +5,7 @@
  */
 
 import { chapters, pages, scoped, series, sourceFiles } from "@mtl/db";
-import { storageKeys } from "@mtl/shared";
+import { PAGE_FORMATS, storageKeys } from "@mtl/shared";
 import { and, eq, inArray } from "drizzle-orm";
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
@@ -71,7 +71,8 @@ const ChapterPatch = z
   .refine((b) => b.number !== undefined || b.series_id !== undefined, { message: "number hoặc series_id" });
 
 const PresignBody = z.object({ file_ids: z.array(z.string().uuid()).min(1).max(MAX_FILES_PER_CHAPTER) });
-const CommitBody = z.object({ mode: z.enum(["strip", "pages"]).default("strip") });
+/** mode bỏ trống → page_format của series (web không gửi). */
+const CommitBody = z.object({ mode: z.enum(PAGE_FORMATS).optional() });
 const RecentQuery = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(20),
   open: z.enum(["0", "1"]).default("0"),
@@ -299,7 +300,6 @@ chapterRoutes.get("/w/:ws/chapters/:chapterId", requireWorkspace(), async (c) =>
   });
 });
 
-/** Page lỗi giai đoạn 1 → page.prepare; lỗi giai đoạn 2 → chapter.translate cho riêng chúng. */
 /** Bước 2 "Dịch": chương xong bước 1 (`prepared`) → dịch + chèn chữ các page đã OCR. */
 chapterRoutes.post("/w/:ws/chapters/:chapterId/translate-prepared", requireWorkspace(), async (c) => {
   const ch = await c.get("sdb").byId(chapters, c.req.param("chapterId"), "chapter");
@@ -307,6 +307,7 @@ chapterRoutes.post("/w/:ws/chapters/:chapterId/translate-prepared", requireWorks
   return c.json({ job: jobView(job), created }, 202);
 });
 
+/** Page lỗi giai đoạn 1 → page.prepare; lỗi giai đoạn 2 → chapter.translate cho riêng chúng. */
 chapterRoutes.post("/w/:ws/chapters/:chapterId/retry-failed", requireWorkspace(), async (c) => {
   const ch = await c.get("sdb").byId(chapters, c.req.param("chapterId"), "chapter");
   const created = await inJobTx((tx) => retryFailedPages(tx, c.get("workspaceId"), ch.id));

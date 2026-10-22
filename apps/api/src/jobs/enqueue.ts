@@ -18,8 +18,14 @@ import {
 import {
   ACTIVE_JOB_STATUSES,
   emptyPageState,
+  HONORIFIC_EXAMPLES,
   type JobPayload,
   type JobType,
+  LANG_NAMES,
+  type PageFormat,
+  readingOrder,
+  type SourceLang,
+  type TargetLang,
   type TranslateSettings,
 } from "@mtl/shared";
 import { and, asc, eq, inArray, isNull, or, sql } from "drizzle-orm";
@@ -33,10 +39,14 @@ type Chapter = typeof chapters.$inferSelect;
 type Series = typeof series.$inferSelect;
 
 export const DEFAULT_DIALOGUE_FONT = "Bangers-Regular";
-const HONORIFIC_TEXT: Record<string, string> = {
-  translate: "chuyển -nim/-ssi sang cách xưng hô tiếng Việt tự nhiên",
-  keep: "giữ nguyên hậu tố kính ngữ (-nim, -ssi) ở dạng phiên âm",
-};
+/** Câu chỉ dẫn kính ngữ theo cặp nguồn → đích (policy lạ → gửi nguyên văn). */
+export function honorificText(policy: string, src: string, tgt: string): string {
+  const ex = HONORIFIC_EXAMPLES[src as SourceLang] ?? HONORIFIC_EXAMPLES.ko;
+  const target = LANG_NAMES[tgt as TargetLang]?.replace(/^Tiếng/, "tiếng") ?? tgt;
+  if (policy === "keep") return `giữ nguyên kính ngữ (${ex}) ở dạng phiên âm Latin`;
+  if (policy === "translate") return `chuyển kính ngữ (${ex}) sang cách xưng hô/gọi nhau tự nhiên của ${target}`;
+  return policy;
+}
 
 export const inJobTx = <R>(fn: (tx: DbLike) => Promise<R>): Promise<R> =>
   db.transaction((tx) => fn(tx as unknown as DbLike));
@@ -125,7 +135,8 @@ export async function enqueueIngest(
   tx: DbLike,
   ws: string,
   chapterId: string,
-  mode: "strip" | "pages" = "strip",
+  /** Bỏ trống → page_format của series (override chỉ dành cho test/tool). */
+  mode?: PageFormat,
 ): Promise<{ job: Job; created: boolean }> {
   const ch = await lockChapter(tx, ws, chapterId);
   const active = await activeJobOf(tx, ch.id, "chapter.ingest");
@@ -146,27 +157,36 @@ export async function enqueueIngest(
     .where(eq(sourceFiles.chapterId, ch.id))
     .orderBy(asc(sourceFiles.ord));
   if (sources.length === 0) throw new HTTPException(400, { message: "chapter has no source files" });
+  const ingestMode = mode ?? (await seriesOf(tx, ch)).pageFormat;
   const ingestRev = ch.ingestRev + 1;
-  await tx.update(chapters).set({ ingestRev, status: "ingesting" }).where(eq(chapters.id, ch.id));
+  await tx.update(chapters).set({ ingestRev, ingestMode, status: "ingesting" }).where(eq(chapters.id, ch.id));
   return insertJob(tx, {
     workspaceId: ws,
-    payload: { type: "chapter.ingest", chapter_id: ch.id, ingest_rev: ingestRev, mode },
+    payload: { type: "chapter.ingest", chapter_id: ch.id, ingest_rev: ingestRev, mode: ingestMode },
     key: ingestKey(
       ch.id,
       ingestRev,
-      mode,
+      ingestMode,
       sources.map((s) => s.id),
     ),
     chapterId: ch.id,
   });
 }
 
-/** Giai đoạn 1 cho 1 page; page → `pending`. */
-export async function enqueuePrepare(tx: DbLike, page: Page, s: Series) {
+/**
+ * Giai đoạn 1 cho 1 page; page → `pending`. Thứ tự đọc theo mode chương đã thực sự ingest (không theo
+ * page_format hiện tại của series — đổi định dạng chỉ áp cho lần commit sau).
+ */
+export async function enqueuePrepare(tx: DbLike, page: Page, s: Series, ch: Chapter) {
   await tx.update(pages).set({ status: "pending" }).where(eq(pages.id, page.id));
   return insertJob(tx, {
     workspaceId: page.workspaceId,
-    payload: { type: "page.prepare", page_id: page.id, source_lang: s.sourceLang },
+    payload: {
+      type: "page.prepare",
+      page_id: page.id,
+      source_lang: s.sourceLang,
+      reading_order: readingOrder(s.sourceLang, ch.ingestMode),
+    },
     key: prepareKey(page.id, page.originalSha256, s.settingsRev),
     chapterId: page.chapterId,
     pageId: page.id,
@@ -191,8 +211,10 @@ export async function translateSettings(tx: DbLike, s: Series): Promise<Translat
   }
   return {
     glossary,
+    source_lang: s.sourceLang,
+    target_lang: s.targetLang,
     pronoun_rules: s.pronounRules.length ? JSON.stringify(s.pronounRules) : "",
-    honorific_policy: HONORIFIC_TEXT[s.honorificPolicy] ?? s.honorificPolicy,
+    honorific_policy: honorificText(s.honorificPolicy, s.sourceLang, s.targetLang),
     style_prompt: s.stylePrompt,
     font: s.defaultFonts.dialogue ?? DEFAULT_DIALOGUE_FONT,
   };
@@ -273,7 +295,7 @@ export async function retryFailedPages(tx: DbLike, ws: string, chapterId: string
   );
   const stage2 = failed.filter((p) => !stage1.includes(p));
   const created: Job[] = [];
-  for (const p of stage1) created.push((await enqueuePrepare(tx, p, s)).job);
+  for (const p of stage1) created.push((await enqueuePrepare(tx, p, s, ch)).job);
   if (stage2.length) {
     created.push(
       (
@@ -310,13 +332,20 @@ export async function enqueueReinpaint(
   });
 }
 
-/** OCR + dịch 1 vùng (Phase 5) — kết quả nằm ở jobs.result, editor tự chèn. */
+/** OCR + dịch 1 vùng (Phase 5) — kết quả nằm ở jobs.result, editor tự chèn. Ngôn ngữ lấy từ series của page. */
 export async function enqueueOcrRegion(
   tx: DbLike,
   ws: string,
-  payload: Extract<JobPayload, { type: "page.ocr_region" }>,
+  input: Omit<Extract<JobPayload, { type: "page.ocr_region" }>, "source_lang" | "target_lang">,
 ) {
-  const page = await pageIn(tx, ws, payload.page_id);
+  const page = await pageIn(tx, ws, input.page_id);
+  const [ch] = await tx
+    .select()
+    .from(chapters)
+    .where(and(eq(chapters.workspaceId, ws), eq(chapters.id, page.chapterId)));
+  if (!ch) throw new NotFoundError("chapter");
+  const s = await seriesOf(tx, ch);
+  const payload = { ...input, source_lang: s.sourceLang, target_lang: s.targetLang };
   return insertJob(tx, {
     workspaceId: ws,
     payload,
@@ -386,7 +415,7 @@ export async function createIngestedPages(
     .values(
       inserted.map((p) => ({ pageId: p.id, workspaceId: ch.workspaceId, state: emptyPageState(p.width, p.height) })),
     );
-  for (const p of inserted) await enqueuePrepare(tx, p, s);
+  for (const p of inserted) await enqueuePrepare(tx, p, s, ch);
   await tx.update(chapters).set({ status: "processing" }).where(eq(chapters.id, ch.id));
   return inserted;
 }

@@ -267,7 +267,7 @@ describe("chapter lock", () => {
 });
 
 describe("series settings", () => {
-  it("bumps settings_rev only when a translation field changes; MVP only accepts ko", async () => {
+  it("bumps settings_rev only when a translation field changes; rejects unsupported languages", async () => {
     const s = await json<{ id: string; settings_rev: number; llm_tier: string }>(
       await api("/series", { method: "POST", body: { title: "Rev test" } }),
       201,
@@ -293,7 +293,7 @@ describe("series settings", () => {
       200,
     );
     expect(t3.settings_rev).toBe(t2.settings_rev);
-    expect((await api(`/series/${s.id}`, { method: "PATCH", body: { source_lang: "ja" } })).status).toBe(400);
+    expect((await api(`/series/${s.id}`, { method: "PATCH", body: { source_lang: "th" } })).status).toBe(400);
     expect((await api(`/series/${s.id}`, { method: "PATCH", body: {} })).status).toBe(400);
 
     const list = await json<{ series: { id: string; chapter_count: number }[] }>(await api("/series"), 200);
