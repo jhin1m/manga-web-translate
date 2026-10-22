@@ -232,6 +232,9 @@ export function LockBand(props: {
   onRecovery(accept: boolean): void;
   /** Câu giải thích khi trang chờ AI thử lại (job-error.ts providerWaitText); null = không có. */
   aiWait: string | null;
+  /** Số xung đột khi lưu đang bị giấu (panel thu) — đổi trang là mất danh sách, nên báo ở băng. */
+  hiddenConflicts: number;
+  onShowConflicts(): void;
 }) {
   const readOnly = useEditor((s) => s.readOnly);
   const save = useEditor((s) => s.save);
@@ -295,6 +298,20 @@ export function LockBand(props: {
     items.push({ key: "save", tone: "danger", body: `Lỗi lưu: ${save.error ?? "không lưu được"}` });
   }
   if (props.aiWait) items.push({ key: "ai", tone: "warn", body: props.aiWait });
+  if (props.hiddenConflicts > 0) {
+    items.push({
+      key: "conflicts",
+      tone: "danger",
+      body: (
+        <>
+          {props.hiddenConflicts} thay đổi chưa áp được do xung đột khi lưu — đổi trang sẽ mất danh sách.{" "}
+          <button type="button" className="btn-ghost" onClick={props.onShowConflicts}>
+            Xem
+          </button>
+        </>
+      ),
+    });
+  }
   if (!items.length) return null;
   return (
     <div className="cw-band" role="alert" aria-label="Cảnh báo chương">

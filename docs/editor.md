@@ -122,9 +122,10 @@ người đã chỉnh). "Đã xem" → `POST /pages/:id/ai-update/ack {ai_rev}` 
 Rail công cụ (`tool-rail.tsx`, hành vi ở `tool-rail-model.ts`): icon công cụ đặt công cụ + mở panel của nó, bấm lại
 icon đang mở → thu panel (công cụ giữ nguyên); "Bản dịch" / "Tìm" chỉ mở/thu panel, không đổi công cụ. Phím V/T/B/E/R
 đổi công cụ: panel công cụ đang mở thì nội dung đổi theo, panel đang thu thì giữ thu. Chọn khối khi panel
-thu → mở panel công cụ (thường là Chọn; đang ở Bản dịch / Tìm thì giữ). Lưu bị xung đột khi panel thu → mở panel;
-danh sách xung đột nằm ở đầu mọi panel. Panel đang mở nhớ theo trình duyệt (`localStorage mtl.layout =
-{ panel }`, `layout-prefs.ts`). Chỉ xem → mọi công cụ trừ Chọn tắt; chương chưa có page → Chữ / Mask / Tẩy / OCR tắt;
+thu → mở panel công cụ (thường là Chọn; đang ở Bản dịch / Tìm thì giữ; chọn bằng chuột thì mở sau khi nhả chuột để
+không làm lệch khối đang kéo). Lưu bị xung đột khi panel thu → mở panel;
+danh sách xung đột nằm ở đầu mọi panel; thu panel khi còn xung đột → băng cảnh báo báo số mục + nút "Xem". Panel đang mở nhớ theo trình duyệt (`localStorage mtl.layout =
+{ panel }`, `layout-prefs.ts`). Chỉ xem → mọi công cụ trừ Chọn tắt (cả phím T/B/E/R); chương chưa có page → Chữ / Mask / Tẩy / OCR tắt;
 chương chưa dịch xong → Tìm tắt.
 
 - **Chọn** (`select-panel.tsx`): có khối — "Trang n · Khối i / tổng · Loại" (loại chỉ đọc), Gốc (OCR), Bản dịch
@@ -146,7 +147,7 @@ khối (như phím Delete). Hiện khi có khối chọn, công cụ Chọn, kh�
 chạy AI và đang xem bản dịch. Vị trí: `page-layout.blockBarPos` — trên khối cách 8px, khối sát mép trên khung nhìn →
 dưới khối, kẹp trong bề ngang canvas, theo khối khi cuộn/zoom.
 
-**Bảng văn bản** (`text-table/`): 1 dòng / khối (cột #, Tr., Gốc, Dịch sửa tại chỗ, Tình trạng; loại ở title dòng),
+**Bảng văn bản** (`text-table/`): 1 dòng / khối (cột #, Tr., Gốc, Dịch sửa tại chỗ, Loại, Tình trạng),
 ảo hoá; bấm dòng → mở trang + chọn khối trên ảnh; Enter / Shift+Enter dòng sau / trước (xuyên trang), Alt+Enter xuống
 dòng trong ô, Esc bỏ focus; đồng bộ 2 chiều với canvas và panel Chọn.
 

@@ -617,7 +617,7 @@
   white-space: nowrap;
 }
 
-/* Bảng văn bản (div + virtualize) trong panel 560px: # · Tr. · Gốc · Dịch · Tình trạng (loại ở title dòng). */
+/* Bảng văn bản (div + virtualize) trong panel 560px: # · Tr. · Gốc · Dịch · Loại · Tình trạng. */
 .cw-table {
   flex: 1;
   min-height: 0;
@@ -627,7 +627,7 @@
 }
 .cw-tr {
   display: grid;
-  grid-template-columns: 28px 32px minmax(0, 1fr) minmax(0, 1.2fr) 84px;
+  grid-template-columns: 28px 32px minmax(0, 1fr) minmax(0, 1.2fr) 52px 84px;
   align-items: center;
   gap: var(--sp-2);
   padding: 0 var(--sp-3);
@@ -662,7 +662,8 @@
   background: var(--c-accent-weak);
   box-shadow: inset 3px 0 0 var(--c-accent);
 }
-.cw-src {
+.cw-src,
+.cw-kind {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -775,8 +776,9 @@ label.cw-field-head {
   font-size: var(--fs-md);
   white-space: pre-wrap;
 }
+/* Link dạng nút: chữ nhỏ nhưng vùng bấm vẫn ≥ 32px. */
 .btn-link {
-  min-height: 0;
+  min-height: 32px;
   padding: 0;
   border: 0;
   background: none;

@@ -1,13 +1,7 @@
 /*
  * Panel + canvas editor (dùng trong màn chương gộp, chapter-workspace.css lo bố cục) — cùng token/hướng A với phần
- * còn lại (docs/design-guidelines.md). Vùng canvas nền xám trung tính để nhìn ảnh; không gradient, không bóng lớn.
+ * còn lại (docs/design-guidelines.md). Vùng canvas nền ấm trung tính (`--c-canvas`) để nhìn ảnh; không gradient, không bóng lớn.
  */
-.ed-tool kbd {
-  font: inherit;
-  font-size: var(--fs-xs);
-  color: var(--c-fg-subtle);
-}
-.ed-tool.on,
 .ed-seg .on {
   background: var(--c-accent-weak);
   border-color: var(--c-accent);

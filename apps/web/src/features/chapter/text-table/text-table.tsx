@@ -166,6 +166,7 @@ export function TextTable(props: {
         <span>Tr.</span>
         <span>Gốc</span>
         <span>Dịch (sửa tại chỗ)</span>
+        <span>Loại</span>
         <span>Tình trạng</span>
       </div>
       <div className="cw-tbody" ref={scrollRef}>
@@ -211,6 +212,7 @@ export function TextTable(props: {
                     onKeyDown={(e) => onKey(e, v.index)}
                   />
                 </span>
+                <span className="muted small cw-kind">{KIND_LABEL[r.kind]}</span>
                 <span>
                   <span className="status" data-tone={st.tone} title={st.text}>
                     {st.text}

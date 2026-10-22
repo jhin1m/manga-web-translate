@@ -259,20 +259,43 @@ function Workspace({ ws, seriesId, chapterId, page: searchPage, drawer: searchDr
   // Chọn box trên canvas → dòng tương ứng thành dòng hiện tại (bảng cuộn tới); panel đang thu → mở panel công cụ (đang
   // ở Bản dịch / Tìm thì giữ). Bỏ chọn box (bấm nền, Esc) → bỏ dòng hiện tại để panel về thông tin trang; trừ dòng
   // không có box (vùng chưa có khung: chọn từ bảng).
-  useEffect(
-    () =>
-      editorStore.subscribe((s, prev) => {
-        if (s.selection === prev.selection || !s.pageId || !s.doc) return;
-        if (!s.selection) {
-          setCurrent((c) => (rowsRef.current.find((r) => r.key === c)?.boxId ? null : c));
-          return;
-        }
-        if (panelRef.current === null) setPanel("tool");
-        const box = s.doc.text_boxes.find((b) => b.id === s.selection);
-        if (box) setCurrent(rowKeyOfBox(s.pageId, box, s.doc));
-      }),
-    [setPanel],
-  );
+  // Khối được chọn ngay lúc nhấn chuột (có thể đang bắt đầu kéo): mở panel lúc đó làm canvas vừa lại giữa chừng kéo →
+  // khối lệch khỏi chỗ thả. Đang nhấn chuột thì hoãn tới khi nhả.
+  const pointerDown = useRef(false);
+  useEffect(() => {
+    const down = () => {
+      pointerDown.current = true;
+    };
+    const up = () => {
+      pointerDown.current = false;
+    };
+    addEventListener("pointerdown", down, true);
+    addEventListener("pointerup", up, true);
+    addEventListener("pointercancel", up, true);
+    return () => {
+      removeEventListener("pointerdown", down, true);
+      removeEventListener("pointerup", up, true);
+      removeEventListener("pointercancel", up, true);
+    };
+  }, []);
+  useEffect(() => {
+    const openToolPanel = () => {
+      if (panelRef.current === null && editorStore.getState().selection) setPanel("tool");
+    };
+    return editorStore.subscribe((s, prev) => {
+      if (s.selection === prev.selection || !s.pageId || !s.doc) return;
+      if (!s.selection) {
+        setCurrent((c) => (rowsRef.current.find((r) => r.key === c)?.boxId ? null : c));
+        return;
+      }
+      if (panelRef.current === null) {
+        if (pointerDown.current) addEventListener("pointerup", openToolPanel, { once: true });
+        else openToolPanel();
+      }
+      const box = s.doc.text_boxes.find((b) => b.id === s.selection);
+      if (box) setCurrent(rowKeyOfBox(s.pageId, box, s.doc));
+    });
+  }, [setPanel]);
   /** Bấm 1 kết quả Tìm/Thay hoặc Áp glossary → nhảy tới khối đó (panel Tìm giữ nguyên). */
   const jump = (m: FindMatch) => {
     const row = allRows.find((r) => r.pageId === m.page_id && (r.regionId === m.id || r.boxId === m.id));
@@ -603,6 +626,7 @@ function Workspace({ ws, seriesId, chapterId, page: searchPage, drawer: searchDr
   const aiWait = aiWaitInfo ? providerWaitText(aiWaitInfo) : null;
 
   const readOnly = useEditor((s) => !!s.readOnly);
+  const conflictCount = useEditor((s) => s.conflicts.length);
   const railDisabled: Partial<Record<RailTarget, string>> = {};
   for (const t of ["text", "brush", "eraser", "ocr"] as const) {
     if (sourceMode) railDisabled[t] = "Dùng được khi chương đã cắt trang (sau Bước 1)";
@@ -628,7 +652,8 @@ function Workspace({ ws, seriesId, chapterId, page: searchPage, drawer: searchDr
     switch (a.type) {
       case "tool":
         // Chưa có page: chỉ công cụ Chọn (rail cũng tắt các công cụ khác).
-        if (sourceMode && a.tool !== "select") return;
+        // Chỉ xem: cũng chỉ Chọn (rail tắt các công cụ khác, docs/editor.md).
+        if ((sourceMode || s.readOnly) && a.tool !== "select") return;
         return void s.setTool(a.tool);
       case "holdOriginalStart":
         return void cs.setHoldOriginal(true);
@@ -720,13 +745,19 @@ function Workspace({ ws, seriesId, chapterId, page: searchPage, drawer: searchDr
         canRestore={session.lock.state.status === "held" && session.lockEnabled}
         onRecovery={(accept) => void session.restore(accept)}
         aiWait={aiWait}
+        hiddenConflicts={view === null ? conflictCount : 0}
+        onShowConflicts={() => setPanel("tool")}
       />
       <ToolRail panel={view} tool={tool} disabled={railDisabled} onClick={onRail} />
       <ContextPanel
         title={PANEL_TITLE[view === "tool" || !view ? tool : view]}
         open={view !== null}
         wide={isWidePanel(view)}
-        onClose={() => setPanel(null)}
+        onClose={() => {
+          // Nút thu nằm trong panel sắp ẩn → đưa focus về nút rail của panel đó (không rơi về <body>).
+          document.querySelector<HTMLButtonElement>('.cw-toolrail [aria-pressed="true"]')?.focus();
+          setPanel(null);
+        }}
         focus={focusReq}
       >
         {/* Xung đột khi lưu hiện trên mọi panel (đổi trang là mất danh sách → không được giấu sau panel khác). */}

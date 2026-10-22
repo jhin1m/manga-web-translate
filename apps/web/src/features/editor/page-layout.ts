@@ -42,8 +42,8 @@ export function clampView(v: View, content: Size, box: Size, x0 = 0): View {
 
 /**
  * Vị trí thanh thao tác nổi cạnh khối đang chọn (toạ độ trong khung canvas): trên khối cách `above` (mặc định `gap`;
- * lớn hơn để chừa núm xoay của Transformer); khối sát mép trên khung nhìn → đặt dưới khối cách `gap`; kẹp trong bề
- * ngang khung.
+ * lớn hơn để chừa núm xoay của Transformer); khối sát mép trên khung nhìn → đặt dưới khối cách `gap`; kẹp trong
+ * khung (khối cao hơn khung nhìn → thanh đè lên khối thay vì ra ngoài khung).
  */
 export function blockBarPos(
   box: { x: number; y: number; w: number; h: number },
@@ -59,7 +59,7 @@ export function blockBarPos(
   const below = up < gap;
   return {
     left: Math.max(gap, Math.min(left, frame.w - bar.w - gap)),
-    top: below ? top + box.h * v.scale + gap : up,
+    top: Math.max(gap, Math.min(below ? top + box.h * v.scale + gap : up, frame.h - bar.h - gap)),
     below,
   };
 }

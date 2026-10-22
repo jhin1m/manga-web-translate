@@ -36,6 +36,12 @@ describe("block toolbar position", () => {
       below: true,
     });
   });
+  it("stays inside the frame vertically when the block is taller than the view", () => {
+    expect(blockBarPos({ x: 100, y: -50, w: 120, h: 900 }, { scale: 1, x: 0, y: 0 }, frame, bar)).toMatchObject({
+      top: 600 - 38 - 8,
+      below: true,
+    });
+  });
   it("clamps inside the frame horizontally", () => {
     expect(blockBarPos({ x: -50, y: 200, w: 60, h: 60 }, { scale: 1, x: 0, y: 0 }, frame, bar).left).toBe(8);
     expect(blockBarPos({ x: 760, y: 200, w: 60, h: 60 }, { scale: 1, x: 0, y: 0 }, frame, bar).left).toBe(

@@ -116,8 +116,12 @@ export function ContextMenu(props: {
         else if (e.key === "Home") move("first");
         else if (e.key === "End") move("last");
         else if (e.key === "Escape") closeAndReturn();
-        else if (e.key === "Tab") onClose();
-        else {
+        else if (e.key === "Tab") {
+          // Đóng menu, trả focus về phần tử mở rồi để Tab đi tiếp từ đó (không rơi về <body>).
+          closeAndReturn();
+          e.stopPropagation();
+          return;
+        } else {
           // Phím khác (Enter/Space bấm mục) giữ mặc định nhưng không tới phím tắt màn chương (←/→, V/T, Delete…).
           e.stopPropagation();
           return;

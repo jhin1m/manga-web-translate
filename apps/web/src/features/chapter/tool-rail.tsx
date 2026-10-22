@@ -45,11 +45,17 @@ export function ToolRail(props: {
         // Công cụ đang dùng (kể cả khi panel thu / đang ở Bản dịch, Tìm) — trình đọc màn hình biết công cụ nào đang bật.
         aria-current={isTool && tool === it.id ? "true" : undefined}
         data-current={isTool && tool === it.id && !open ? "" : undefined}
+        aria-describedby={reason ? `cw-rail-why-${it.id}` : undefined}
         disabled={!!reason}
         onClick={() => props.onClick(it.id)}
       >
         {it.icon}
         <span aria-hidden="true">{it.label}</span>
+        {reason && (
+          <span id={`cw-rail-why-${it.id}`} className="sr-only">
+            {reason}
+          </span>
+        )}
       </button>
     );
   };

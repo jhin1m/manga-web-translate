@@ -517,6 +517,13 @@ test("tool rail: clicking the open tool collapses the panel and widens the canva
   await select.click();
   await expect(panel).toBeVisible();
   await expect.poll(width).toBeLessThan(open + 1);
+  // Thu bằng nút "Thu panel" (bàn phím) → focus về nút rail của panel vừa thu, không rơi về <body>.
+  await panel.getByRole("button", { name: "Thu panel" }).focus();
+  await page.keyboard.press("Enter");
+  await expect(panel).toBeHidden();
+  await expect(select).toBeFocused();
+  await select.click();
+  await expect(panel).toBeVisible();
   // Phím T đổi nội dung panel đang mở sang công cụ Chữ.
   await page.locator(".ed-canvas").click({ position: { x: 5, y: 5 } });
   await page.keyboard.press("t");
@@ -621,4 +628,72 @@ test("floating block toolbar: edit focuses the translation, duplicate adds a fre
         ).state.text_boxes.length,
     )
     .toBe(0);
+});
+
+test("dragging a block while the panel is collapsed moves it only by the drag distance", async ({ page }) => {
+  await login(page);
+  const { chapterId, pageId } = await readyChapter(page);
+  // Khối lớn giữa trang để bấm trúng giữa khung canvas.
+  const detail = (await (await page.request.get(`/api/w/${ws}/pages/${pageId}`)).json()) as {
+    version: number;
+    state: { text_boxes: unknown[] } & Record<string, unknown>;
+  };
+  const big = {
+    id: "tb-big",
+    region_id: "t0",
+    x: 60,
+    y: 300,
+    w: 600,
+    h: 400,
+    rotation: 0,
+    text: "Xin chào",
+    lines: ["Xin chào"],
+    font_family: "PatrickHand-Regular",
+    font_size: 40,
+    line_height: 1.15,
+    pad: 4,
+    letter_spacing: 0,
+    align: "center",
+    fill: "#000000",
+    stroke: null,
+    auto_fit: false,
+    hidden: false,
+  };
+  expect((await page.request.post(`/api/w/${ws}/chapters/${chapterId}/lock`, { headers })).ok()).toBe(true);
+  const put = await page.request.put(`/api/w/${ws}/pages/${pageId}/state`, {
+    headers: { ...headers, "if-match": `"${detail.version}"` },
+    data: { state: { ...detail.state, text_boxes: [big] } },
+  });
+  expect(put.ok()).toBe(true);
+  expect((await page.request.delete(`/api/w/${ws}/chapters/${chapterId}/lock`, { headers })).ok()).toBe(true);
+
+  await page.goto(chapterUrl(chapterId));
+  await expect(page.locator(".ed-canvas canvas").first()).toBeVisible();
+  await expect(page.getByRole("status", { name: "Khoá chương" })).toContainText("Bạn đang giữ khoá chương");
+  await railButton(page, "select").click();
+  await expect(page.getByRole("complementary", { name: "Chọn & sửa" })).toBeHidden();
+  await page.waitForTimeout(300);
+
+  const frame = await page.locator(".ed-canvas").boundingBox();
+  if (!frame) throw new Error("no canvas");
+  const cx = frame.x + frame.width / 2;
+  const cy = frame.y + frame.height / 2;
+  await page.mouse.move(cx, cy);
+  await page.mouse.down();
+  for (let i = 1; i <= 10; i++) await page.mouse.move(cx + i * 3, cy, { steps: 1 });
+  await page.mouse.up();
+  // Thả xong panel Chọn mở (khối đã chọn).
+  await expect(page.getByRole("complementary", { name: "Chọn & sửa" })).toBeVisible();
+  await expect(page.locator(".status", { hasText: "Đã lưu" })).toBeVisible({ timeout: 10_000 });
+  const boxX = async () =>
+    (
+      (await (await page.request.get(`/api/w/${ws}/pages/${pageId}`)).json()) as {
+        state: { text_boxes: { id: string; x: number; y: number }[] };
+      }
+    ).state.text_boxes.find((b) => b.id === "tb-big");
+  await expect.poll(async () => (await boxX())?.x ?? 0, { timeout: 10_000 }).toBeGreaterThan(60);
+  const moved = await boxX();
+  // Kéo 30px màn hình ở mức ~100% → lệch ~30px trang; không nhảy theo độ dịch bố cục khi panel mở.
+  expect(moved?.x ?? 0).toBeLessThan(60 + 60);
+  expect(Math.abs((moved?.y ?? 0) - 300)).toBeLessThan(10);
 });
