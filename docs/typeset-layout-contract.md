@@ -51,6 +51,15 @@ lệch bbox mực từng dòng ≤ 1px — xem `benchmarks/phase-01-results.md`)
   Một nguồn mỗi phía, khớp nhau: `manifest.defaults[0]` (`PREFERRED_DEFAULTS` trong `scripts/font_glyph_check.py`),
   `DEFAULT_FONT` (`worker/mtl_pipeline/fonts.py`), `DEFAULT_DIALOGUE_FONT` (`apps/api/src/jobs/enqueue.ts`; test
   `apps/api/test/fonts.test.ts` + `worker/tests/test_typeset_fit.py` giữ khớp). Series đã chọn font riêng giữ nguyên.
+  Box tạo tay trong editor (vẽ khung, OCR vùng) cũng dùng font thoại của series (`dialogueFont` ở `editor/fonts.ts`).
+- **Font dẫn truyện**: chữ ngoài bóng (`text_free`) dùng `default_fonts.narration`; trong bóng (`text_bubble`) dùng
+  font thoại (`font_for` ở `typeset.py`). Series chưa chọn → giống font thoại, không có hằng mặc định riêng. API luôn gửi
+  `settings.narration_font` đã resolve; trường optional nên job cũ thiếu nó → worker dùng `settings.font`. Schema có
+  `additionalProperties: false` nên worker < 0.4.1 không đọc được payload mới → `MIN_PIPELINE_VERSION = 0.4.1` (426,
+  worker cũ thoát rõ ràng); API `PIPELINE_VERSION` giữ 0.4.0 để không chạy lại job cũ. Box tạo tay trong editor (kể
+  cả vùng OCR, luôn `text_free`) dùng font thoại — vùng OCR tay thường nằm trong bóng.
+- **SFX**: không dịch, không đặt chữ (giữ nguyên chữ gốc), nên form series không có ô font SFX; khoá `sfx` cũ trong
+  `default_fonts` được giữ nguyên nhưng không dùng.
 - **Đích không phải tiếng Việt** (`en | id | es | pt | fr`): cùng bộ font — mọi font trong `manifest.json` phải đủ glyph
   cho các đích này (`worker/tests/test_font_coverage.py`). Đích CJK/Thái chưa hỗ trợ (cần font + ngắt dòng không dấu cách).
 - **Vùng đặt chữ** (`available_rect` ở `typeset.py`, chỉ server tính; editor nhận sẵn `x, y, w, h`): chữ trong bóng

@@ -104,7 +104,8 @@ box cao vắt qua nhiều khung không gộp hai hàng. Đổi `source_lang`/`ta
 cặp nguồn → đích (`honorificText` ở `apps/api/src/jobs/enqueue.ts`). Field ngôn ngữ trong payload là optional: job
 xếp hàng trước pipeline 0.4.0 thiếu → worker mặc định `ko` → `vi`, `ltr`. Pipeline 0.4.0 là `MIN_PIPELINE_VERSION`:
 **mọi** worker 0.3.x nhận 426 ngay khi API mới lên → cập nhật worker Mac/Modal cùng lúc deploy API, không thì hàng
-đợi dừng hẳn.
+đợi dừng hẳn. Từ 0.4.1 (`settings.narration_font`) `MIN_PIPELINE_VERSION = 0.4.1` cho worker; API `PIPELINE_VERSION`
+(muối input_rev) vẫn 0.4.0 nên job đã chạy không bị chạy lại.
 
 ## Xuất chương
 
