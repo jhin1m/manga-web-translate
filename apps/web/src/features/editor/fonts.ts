@@ -24,6 +24,12 @@ function metricsOf(manifest: FontManifest, fontId: string): FontMetrics {
   return { unitsPerEm: f.unitsPerEm, ascent: f.ascent, descent: f.descent };
 }
 
+/** Font cho box tạo tay: font thoại của series nếu manifest còn font đó, không thì font mặc định đầu tiên. */
+export function dialogueFont(manifest: FontManifest, seriesFont: string | undefined): string {
+  if (seriesFont && manifest.fonts[seriesFont]) return seriesFont;
+  return manifest.defaults[0] ?? Object.keys(manifest.fonts)[0] ?? "Bangers-Regular";
+}
+
 export const canvasFont = (fontId: string, size: number) => `${size}px "${fontId}"`;
 
 /** Đo advance bằng canvas 2D (cùng renderer với Konva). Cache theo (font, cỡ, chuỗi). */

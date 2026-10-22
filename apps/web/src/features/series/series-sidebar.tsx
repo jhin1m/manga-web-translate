@@ -28,8 +28,8 @@ export function SeriesSidebar({ ws, series }: { ws: string; series: Series }) {
         <dl>
           <dt>Font thoại</dt>
           <dd>{fontName(series.default_fonts.dialogue)}</dd>
-          <dt>Font SFX</dt>
-          <dd>{fontName(series.default_fonts.sfx)}</dd>
+          <dt>Font dẫn truyện</dt>
+          <dd>{series.default_fonts.narration ? fontName(series.default_fonts.narration) : "Giống font thoại"}</dd>
           <dt>Xưng hô chính</dt>
           <dd>{rule ? `${rule.speaker} → ${rule.listener}: ${rule.address}` : "Chưa đặt"}</dd>
           <dt>Giọng văn</dt>

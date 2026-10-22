@@ -31,10 +31,10 @@ import {
   TARGET_LANGS,
 } from "./lang-labels.ts";
 
-const FONT_SLOTS: { slot: FontSlot; label: string }[] = [
-  { slot: "dialogue", label: "Thoại" },
-  { slot: "narration", label: "Dẫn truyện" },
-  { slot: "sfx", label: "SFX" },
+// Không có ô SFX: SFX giữ nguyên chữ gốc (không dịch / đặt chữ). Khoá `sfx` đã lưu vẫn được giữ khi lưu form.
+const FONT_SLOTS: { slot: FontSlot; label: string; empty: string; hint?: string }[] = [
+  { slot: "dialogue", label: "Thoại", empty: "Mặc định hệ thống" },
+  { slot: "narration", label: "Dẫn truyện", empty: "Giống font thoại", hint: "Áp dụng cho chữ ngoài bóng." },
 ];
 
 type Form = SeriesSettings & { title: string };
@@ -189,8 +189,8 @@ export function SeriesSettingsForm({ ws, series }: { ws: string; series: Series 
 
       <fieldset className="settings-group">
         <legend>Font mặc định</legend>
-        <div className="grid-3">
-          {FONT_SLOTS.map(({ slot, label }) => (
+        <div className="grid-2">
+          {FONT_SLOTS.map(({ slot, label, empty, hint }) => (
             <div key={slot}>
               <label htmlFor={`s-font-${slot}`}>{label}</label>
               <select
@@ -203,13 +203,14 @@ export function SeriesSettingsForm({ ws, series }: { ws: string; series: Series 
                   set("default_fonts", next);
                 }}
               >
-                <option value="">Mặc định hệ thống</option>
+                <option value="">{empty}</option>
                 {FONT_IDS.map((id) => (
                   <option key={id} value={id}>
                     {id}
                   </option>
                 ))}
               </select>
+              {hint && <span className="hint">{hint}</span>}
             </div>
           ))}
         </div>

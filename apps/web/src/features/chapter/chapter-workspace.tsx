@@ -17,7 +17,7 @@
 import "../editor/editor.css";
 import "./chapter-workspace.css";
 import type { PageState } from "@mtl/shared";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { errorMessage } from "../../lib/api.ts";
@@ -26,12 +26,14 @@ import { ChapterCanvas } from "../editor/canvas/ChapterCanvas.tsx";
 import { type PageRect, useOcrRegion } from "../editor/canvas/OcrSelect.tsx";
 import type { SlotImages, SlotProcessing } from "../editor/canvas/PageSlot.tsx";
 import { chapterStore, revealRect } from "../editor/chapter-store.ts";
+import { dialogueFont } from "../editor/fonts.ts";
 import { CanvasStatus, CanvasToolbar } from "../editor/panels/CanvasToolbar.tsx";
 import type { ShortcutAction } from "../editor/shortcuts.ts";
 import { editorStore, useEditor } from "../editor/store.ts";
 import { resetChapterSession, useChapterSession } from "../editor/use-chapter-session.ts";
 import { useShortcuts } from "../editor/use-shortcuts.ts";
 import { ApplyGlossaryPanel } from "../glossary/ApplyGlossary.tsx";
+import { fetchSeries, seriesKeys } from "../series/api.ts";
 import { ChapterUploadStatus, resumeFromFiles } from "../upload/chapter-upload-status.tsx";
 import { DropZone } from "../upload/drop-zone.tsx";
 import { uploadManager, useChapterUpload } from "../upload/upload-manager.ts";
@@ -111,6 +113,8 @@ function Workspace({ ws, seriesId, chapterId, page: searchPage, drawer: searchDr
     refetchProgress: data.refetchProgress,
   });
   const { kit } = session;
+  // Font thoại của series cho box tạo tay (cùng key với màn series → lưu cài đặt là cập nhật).
+  const series = useQuery({ queryKey: seriesKeys.detail(ws, seriesId), queryFn: () => fetchSeries(ws, seriesId) });
   const activeId = useEditor((s) => s.pageId);
   const [notice, setNotice] = useState<Notice | null>(null);
   const [imageError, setImageError] = useState<string | null>(null);
@@ -413,7 +417,7 @@ function Workspace({ ws, seriesId, chapterId, page: searchPage, drawer: searchDr
   );
   const idx = pages.findIndex((p) => p.id === activeId);
   const activeMeta = pages[idx];
-  const defaultFont = kit?.manifest.defaults[0] ?? "Bangers-Regular";
+  const defaultFont = kit ? dialogueFont(kit.manifest, series.data?.default_fonts.dialogue) : "Bangers-Regular";
   const ocr = useOcrRegion(ws, activeId ?? "", defaultFont, { w: activeMeta?.width ?? 0, h: activeMeta?.height ?? 0 });
   const ocrStart = ocr.start;
   const onOcr = useCallback((r: PageRect) => void ocrStart(r), [ocrStart]);
