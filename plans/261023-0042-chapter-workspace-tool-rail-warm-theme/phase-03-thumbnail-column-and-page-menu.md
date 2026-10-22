@@ -1,7 +1,7 @@
 ---
 phase: 3
 title: "Cột thumbnail 112px + menu chuột phải trang/ảnh"
-status: pending
+status: completed
 priority: P1
 effort: "4h"
 dependencies: [2]

@@ -20,6 +20,7 @@ import { editorStore, useEditor } from "../editor/store.ts";
 import type { ProgressPage } from "./api.ts";
 import { describeJobError } from "./job-error.ts";
 import { PAGE_LEVEL, pageLevel } from "./page-status.ts";
+import { type SourceItem, sourceLabel } from "./source-rail-model.ts";
 import { KIND_LABEL, type Row } from "./text-table/rows.ts";
 import { setRowTranslation } from "./text-table/text-table.tsx";
 
@@ -36,7 +37,62 @@ export type InspectorProps = {
   onReocr(row: Row): void;
   onApplyKind(row: Row): void;
   onMaskDone(): void;
+  /** Ẩn trang đang xem (không dịch, không xuất). */
+  onHidePage(): void;
+  /** Lý do không ẩn được (không giữ khoá, trang cuối…); undefined = ẩn được. */
+  hideDisabled?: string;
+  /** Chương chưa có page: ảnh gốc đang xem + xoá / khôi phục trước Bước 1. */
+  source?: SourceView;
 };
+
+export type SourceView = {
+  item: SourceItem | undefined;
+  total: number;
+  skipped: number;
+  editable: boolean;
+  onSkip(it: SourceItem, skip: "user" | null): void;
+};
+
+/** Panel Chọn khi chương chưa có page: ảnh gốc đang xem ở canvas. */
+function SourcePanel({ item, total, skipped, editable, onSkip }: SourceView) {
+  if (!item) return <p className="muted small ed-pad cw-pad">Chưa có ảnh nào.</p>;
+  const tag = sourceLabel(item);
+  return (
+    <section className="cw-block">
+      <div className="row">
+        <strong>Ảnh {item.n}</strong>
+        {tag && (
+          <span className="status" data-tone={tag.tone}>
+            {tag.label}
+          </span>
+        )}
+      </div>
+      <p className="muted small">
+        {total} ảnh{skipped > 0 ? ` · đã bỏ ${skipped}` : ""}
+      </p>
+      {editable ? (
+        <div className="row">
+          {item.skip ? (
+            <button type="button" onClick={() => onSkip(item, null)}>
+              Khôi phục ảnh này
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="btn-danger"
+              title="Bước 1 bỏ qua ảnh này"
+              onClick={() => onSkip(item, "user")}
+            >
+              Xoá ảnh này
+            </button>
+          )}
+        </div>
+      ) : (
+        <p className="muted small">Bộ ảnh đã chốt — không xoá / khôi phục ảnh được nữa.</p>
+      )}
+    </section>
+  );
+}
 
 function overflowText(box: TextBox, kit: FontKit | null) {
   if (!kit || box.hidden) return null;
@@ -63,6 +119,7 @@ export function Inspector(props: InspectorProps) {
       !!doc && !!ai && JSON.stringify([doc.regions, doc.text_boxes]) !== JSON.stringify([ai.regions, ai.text_boxes]),
     [doc, ai],
   );
+  if (props.source) return <SourcePanel {...props.source} />;
   if (!page) return <p className="muted small ed-pad cw-pad">Chưa có trang để sửa.</p>;
 
   const lv = PAGE_LEVEL[pageLevel(page.status)];
@@ -181,7 +238,17 @@ export function Inspector(props: InspectorProps) {
                 )}
               </dl>
               <p className="muted small">Chọn một khối trên canvas hoặc trong bảng văn bản để sửa.</p>
-              <div className="row">{retranslate}</div>
+              <div className="row">
+                {retranslate}
+                <button
+                  type="button"
+                  disabled={!!props.hideDisabled}
+                  title={props.hideDisabled ?? "Không dịch, không xuất — khôi phục được ở cột trang"}
+                  onClick={props.onHidePage}
+                >
+                  Ẩn trang này
+                </button>
+              </div>
               {edited &&
                 ai &&
                 (confirmReset === page.id ? (

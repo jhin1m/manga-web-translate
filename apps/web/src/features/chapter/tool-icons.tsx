@@ -133,3 +133,8 @@ export const TrashIcon = (p: P) => (
     <path d="M6 7l1 13h10l1-13" />
   </Icon>
 );
+export const CheckIcon = (p: P) => (
+  <Icon {...p}>
+    <path d="M5 12l5 5 9-10" />
+  </Icon>
+);

@@ -92,7 +92,7 @@ type Notice = {
   text: string;
   untilStable?: boolean;
   actions?: { label: string; run(): void }[];
-  /** Nhóm thông báo — "skip": khôi phục ảnh/trang chỉ đóng thông báo "Đã xoá…", không đụng lỗi khác. */
+  /** Nhóm thông báo — "skip": khôi phục ảnh/trang chỉ đóng thông báo "Đã xoá / Đã ẩn…", không đụng lỗi khác. */
   key?: "skip";
 };
 
@@ -444,6 +444,10 @@ function Workspace({ ws, seriesId, chapterId, page: searchPage, drawer: searchDr
   const sourceId = sources.some((it) => it.id === sourcePick) ? sourcePick : (sources[0]?.id ?? null);
   const sourceIdx = sources.findIndex((it) => it.id === sourceId);
   const sourcesEditable = status === "draft" || (status === "partial_failed" && pages.length === 0);
+  // Chưa có page thì chỉ dùng được công cụ Chọn (panel Chọn = ảnh gốc đang xem).
+  useEffect(() => {
+    if (sourceMode && editorStore.getState().tool !== "select") editorStore.getState().setTool("select");
+  }, [sourceMode]);
   // "Luôn bỏ ở series này" (toast sau khi xoá ảnh / trang): học ảnh credit → chương sau tự bỏ ảnh giống.
   const learnSkip = useMutation({
     mutationFn: (from: { source_file_id: string } | { page_id: string }) => learnSkipImage(ws, seriesId, from),
@@ -507,7 +511,7 @@ function Workspace({ ws, seriesId, chapterId, page: searchPage, drawer: searchDr
         notify({
           tone: "info",
           key: "skip",
-          text: `Đã xoá trang ${page.ord + 1} (không dịch, không xuất).`,
+          text: `Đã ẩn trang ${page.ord + 1} (không dịch, không xuất).`,
           actions: [
             { label: "Hoàn tác", run: () => pageSkip.mutate({ page, skipped: false }) },
             alwaysSkip({ page_id: page.id }),
@@ -719,6 +723,24 @@ function Workspace({ ws, seriesId, chapterId, page: searchPage, drawer: searchDr
               }}
               onApplyKind={(row) => applyKind.mutate(row)}
               onMaskDone={data.refresh}
+              onHidePage={() => activeMeta && skipPage(activeMeta, true)}
+              hideDisabled={
+                !pagesEditable || pageSkip.isPending
+                  ? "Cần giữ khoá chương (chương không đang chạy)"
+                  : pages.length <= 1
+                    ? "Không ẩn được trang cuối cùng"
+                    : undefined
+              }
+              source={
+                sourceMode
+                  ? {
+                      item: sources[sourceIdx],
+                      ...sourceCounts(sources),
+                      editable: sourcesEditable,
+                      onSkip: skipSource,
+                    }
+                  : undefined
+              }
             />
           </div>
         )}

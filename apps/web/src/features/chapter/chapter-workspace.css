@@ -1,13 +1,13 @@
 /*
  * Màn chương gộp (docs/design-guidelines.md, hướng A): thanh trên + băng cảnh báo (chỉ khi có) | rail công cụ 64px ·
- * panel ngữ cảnh (288px, 560px cho Bản dịch / Tìm; thu = cột về 0) · canvas · cột trang. Toàn màn hình (ngoài app
+ * panel ngữ cảnh (288px, 560px cho Bản dịch / Tìm; thu = cột về 0) · canvas · cột thumbnail trang 112px. Toàn màn hình (ngoài app
  * shell). Canvas nền ấm trung tính để nhìn ảnh.
  */
 .cw {
   position: fixed;
   inset: 0;
   display: grid;
-  grid-template-columns: 64px auto minmax(0, 1fr) 196px;
+  grid-template-columns: 64px auto minmax(0, 1fr) 112px;
   grid-template-rows: 52px auto minmax(0, 1fr);
   grid-template-areas:
     "top top top top"
@@ -79,8 +79,7 @@
 .cw-icons > button {
   padding: 0 8px;
 }
-.cw-seg,
-.cw-rail-filter {
+.cw-seg {
   border: 0;
   margin: 0;
   min-width: 0;
@@ -290,81 +289,154 @@
   justify-content: center;
 }
 
-.cw-rail {
+/* Cột thumbnail trang / ảnh gốc: chỉ ảnh + số; trạng thái = viền + nhãn ngắn khi có vấn đề. */
+.cw-thumbs {
   grid-area: thumbs;
   display: flex;
   flex-direction: column;
   min-height: 0;
   border-left: 1px solid var(--c-line);
 }
-/* Rail hẹp: nút lọc thứ 3 ("Đã xoá n") xuống dòng thay vì tràn ra sau canvas. */
-.cw-rail-filter {
+.cw-thumbs-head {
+  flex: none;
+  min-height: 36px;
   display: flex;
-  flex-wrap: wrap;
-  gap: var(--sp-1);
-  padding: 10px;
-  border-bottom: 1px solid var(--c-line);
-}
-.cw-rail-filter button {
-  flex: 1;
+  flex-direction: column;
+  align-items: center;
   justify-content: center;
+  gap: var(--sp-1);
+  padding: var(--sp-1);
+  border-bottom: 1px solid var(--c-surface-2);
+  font-size: var(--fs-xs);
+  color: var(--c-fg-muted);
+  text-align: center;
+}
+.cw-thumbs-head button {
+  min-height: 32px;
+  padding: 0 var(--sp-2);
   font-size: var(--fs-xs);
 }
-.cw-rail-filter [aria-pressed="true"] {
+.cw-thumbs-head [aria-pressed="true"] {
   border-color: var(--c-accent);
   background: var(--c-accent-weak);
   color: var(--c-accent-hover);
 }
-.cw-rail-list {
+.cw-thumbs-list {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
-  padding: 10px;
   display: flex;
   flex-direction: column;
-  gap: var(--sp-2);
-}
-.cw-rail-item {
-  display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 6px;
-  border-color: transparent;
-  text-align: left;
-  justify-content: flex-start;
-  height: auto;
+  gap: var(--sp-3);
+  padding: var(--sp-3) 0 var(--sp-4);
 }
-.cw-rail-item.on {
-  border-color: var(--c-accent);
-  background: var(--c-accent-weak);
+.cw-thumb-item {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
 }
 .cw-thumb {
-  width: 44px;
-  height: 64px;
-  flex-shrink: 0;
-  background: var(--c-surface-2);
-  border: 1px solid var(--c-line);
+  position: relative;
+  width: 72px;
+  height: 100px;
+  padding: 0;
   overflow: hidden;
+  background: #fff;
+  border: 1px solid var(--c-line-strong);
+  border-radius: 3px;
+}
+.cw-thumb:hover {
+  background: #fff;
+  border-color: var(--c-fg-subtle);
 }
 .cw-thumb img {
+  display: block;
   width: 100%;
   height: 100%;
   object-fit: cover;
   object-position: top;
-  display: block;
 }
-.cw-rail-meta {
+.cw-thumb[aria-current="page"] {
+  outline: 2px solid var(--c-accent);
+  outline-offset: 3px;
+}
+.cw-thumb[data-tone="danger"] {
+  border: 2px solid var(--c-danger);
+}
+.cw-thumb[data-tone="warn"] {
+  border: 2px solid var(--c-warn);
+}
+.cw-thumb[data-tone="hidden"] {
+  border-style: dashed;
+  opacity: 0.45;
+}
+/* Số trang nằm trên ảnh → màu cố định, không theo theme. */
+.cw-thumb-num {
+  position: absolute;
+  right: 3px;
+  bottom: 3px;
+  min-width: 18px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 3px;
+  background: rgb(27 27 26 / 0.82);
+  color: #fff;
+  font-size: 10.5px;
+  line-height: 16px;
+  text-align: center;
+}
+.cw-thumb-mark {
+  max-width: 100px;
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-size: 11px;
+  line-height: 1.35;
+  text-align: center;
+  color: var(--c-fg-muted);
+}
+.cw-thumb-mark[data-tone="danger"] {
+  color: var(--c-danger);
+  background: var(--c-danger-weak);
+}
+.cw-thumb-mark[data-tone="warn"] {
+  color: var(--c-warn);
+  background: var(--c-warn-weak);
+}
+
+/* Menu nổi (chuột phải thumbnail, "⋯" thanh trên). */
+.cw-ctx-menu {
+  position: fixed;
+  z-index: 40;
+  min-width: 180px;
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  min-width: 0;
+  padding: var(--sp-1);
+  background: var(--c-bg);
+  border: 1px solid var(--c-line-strong);
+  border-radius: 6px;
+  box-shadow: 0 2px 8px rgb(0 0 0 / 0.12);
 }
-.cw-rail-title {
-  font-weight: 600;
-  font-size: var(--fs-sm);
+.cw-ctx-menu > button {
+  justify-content: flex-start;
+  gap: var(--sp-2);
+  min-height: 32px;
+  border-color: transparent;
+  background: none;
+  white-space: nowrap;
 }
-.cw-rail-flag {
-  font-size: var(--fs-xs);
-  color: var(--c-accent-hover);
+.cw-ctx-menu > button:hover:not(:disabled),
+.cw-ctx-menu > button:focus-visible {
+  background: var(--c-surface-2);
+}
+.cw-ctx-menu > button[data-danger] {
+  color: var(--c-danger);
+}
+.cw-ctx-check {
+  display: inline-flex;
+  width: 14px;
 }
 
 .cw-main {
@@ -474,44 +546,6 @@
   height: 160px;
   border: 1px dashed var(--c-line);
 }
-/* Mục rail (ảnh gốc / trang): nút chọn + icon Xoá/Khôi phục cạnh nhau (không lồng nút). */
-.cw-rail-head {
-  padding: 10px;
-  border-bottom: 1px solid var(--c-line);
-}
-.cw-rail-row {
-  border: 1px solid transparent;
-  border-radius: var(--radius);
-  padding: 0 4px 0 0;
-}
-.cw-rail-pick {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 6px;
-  border-color: transparent;
-  background: none;
-  text-align: left;
-  justify-content: flex-start;
-  height: auto;
-}
-/* Hover tô cả mục (nút chọn + icon) thay vì riêng nút chọn; mục đang xem giữ nền nhấn. */
-.cw-rail-pick:hover {
-  background: none;
-}
-.cw-rail-row:not(.on):hover {
-  background: var(--c-surface);
-}
-.cw-rail-row[data-skipped] .cw-thumb img {
-  opacity: 0.35;
-}
-/* Rail hẹp: nhãn dài ("Credit · tự bỏ") xuống dòng thay vì đè lên icon. */
-.cw-rail-row .status {
-  white-space: normal;
-}
-
 .cw-side-head {
   display: flex;
   align-items: baseline;
