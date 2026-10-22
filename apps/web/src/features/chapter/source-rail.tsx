@@ -39,7 +39,7 @@ export const SourceRail = memo(function SourceRail(props: {
             <div
               key={it.id}
               data-source={it.id}
-              className={`cw-rail-item cw-source-item${on ? " on" : ""}`}
+              className={`cw-rail-item cw-rail-row${on ? " on" : ""}`}
               data-skipped={it.skip ? "" : undefined}
             >
               <button

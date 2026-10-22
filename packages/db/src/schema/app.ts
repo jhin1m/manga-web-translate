@@ -166,6 +166,8 @@ export const pages = pgTable(
     preparePartial: jsonb("prepare_partial").$type<PreparePartial & { input_rev: string }>(),
     sourceMap: jsonb("source_map").$type<unknown[]>().notNull().default([]),
     cutFlag: boolean("cut_flag").notNull().default(false),
+    /** Người dùng xoá (ẩn) trang: không dịch, không tính trạng thái chương, không xuất — khôi phục được. */
+    skipped: boolean("skipped").notNull().default(false),
     status: text("status").$type<PageStatus>().notNull().default("pending"),
     ...timestamps,
   },

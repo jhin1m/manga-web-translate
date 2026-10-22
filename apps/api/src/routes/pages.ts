@@ -4,14 +4,23 @@
  * URL là presigned GET TTL ngắn trên FILES_DOMAIN (bucket private) — tách khỏi /progress để polling 2–3s
  * không ký lại URL mỗi lượt.
  */
-import { chapters, pages, sourceFiles } from "@mtl/db";
+import { chapters, pages, scoped, sourceFiles } from "@mtl/db";
 import { storageKeys } from "@mtl/shared";
-import { eq } from "drizzle-orm";
+import { and, eq, type SQL } from "drizzle-orm";
 import { Hono } from "hono";
+import { HTTPException } from "hono/http-exception";
+import { z } from "zod";
+import { inJobTx, lockChapter, refreshChapter } from "../jobs/enqueue.ts";
+import { assertChapterLock } from "../lib/chapter-lock.ts";
+import { parseJson } from "../lib/validate.ts";
 import { type AppEnv, requireWorkspace } from "../middleware/workspace.ts";
 import { MAX_GET_TTL_S, presignGet } from "../storage.ts";
 
 const THUMB_TTL_S = MAX_GET_TTL_S;
+const PageSkipBody = z.object({ skipped: z.boolean() });
+
+const conflict = (error: string, message: string) =>
+  new HTTPException(409, { res: Response.json({ error, message }, { status: 409 }) });
 
 export const pageRoutes = new Hono<AppEnv>();
 
@@ -66,4 +75,32 @@ pageRoutes.get("/w/:ws/chapters/:chapterId/source-files", requireWorkspace(), as
       })),
     ),
   });
+});
+
+/**
+ * Xoá (ẩn) / khôi phục 1 trang sau Bước 1/2 — không tốn job. Cần giữ khoá chương; chương đang cắt trang / chạy AI →
+ * 409. Không cho ẩn trang cuối cùng còn hiện (chương rỗng không có trạng thái hợp lý). Trạng thái chương tính lại ngay
+ * (ẩn trang lỗi cuối → "Chờ duyệt"; khôi phục trang chưa dịch → "Chờ dịch").
+ */
+pageRoutes.patch("/w/:ws/pages/:pageId", requireWorkspace(), async (c) => {
+  const body = await parseJson(c, PageSkipBody);
+  const sdb = c.get("sdb");
+  const ws = c.get("workspaceId");
+  const page = await sdb.byId(pages, c.req.param("pageId"), "page");
+  await assertChapterLock(sdb, page.chapterId, c.get("user").id);
+  const row = await inJobTx(async (tx) => {
+    const ch = await lockChapter(tx, ws, page.chapterId);
+    if (ch.status === "ingesting" || ch.status === "processing") {
+      throw conflict("chapter_busy", "chương đang xử lý — chờ xong rồi xoá / khôi phục trang");
+    }
+    const t = scoped(tx, ws);
+    if (body.skipped) {
+      const visible = await t.select(pages, and(eq(pages.chapterId, ch.id), eq(pages.skipped, false)) as SQL);
+      if (visible.every((p) => p.id === page.id)) throw conflict("last_page", "không xoá được trang cuối cùng");
+    }
+    const [r] = await t.update(pages, eq(pages.id, page.id), { skipped: body.skipped });
+    await refreshChapter(tx, ws, ch.id);
+    return r;
+  });
+  return c.json({ id: page.id, skipped: row?.skipped ?? body.skipped });
 });

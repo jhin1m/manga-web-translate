@@ -233,6 +233,7 @@ export async function enqueueTranslate(
     .where(and(eq(pages.chapterId, ch.id), inArray(pages.id, pageIds)))
     .orderBy(asc(pages.ord));
   if (rows.length !== new Set(pageIds).size) throw new NotFoundError("page");
+  if (rows.some((p) => p.skipped)) throw conflict("page_skipped", "trang đã xoá — khôi phục trước khi dịch");
   const unprepared = rows.filter((p) => !p.ocrResult || !p.prepareInputRev);
   if (unprepared.length) throw conflict("page_not_prepared", `${unprepared.length} page chưa qua giai đoạn 1`);
   await tx.update(chapters).set({ status: "processing" }).where(eq(chapters.id, ch.id));
@@ -261,7 +262,10 @@ export async function enqueueTranslate(
 /** Chạy lại dịch: cả chương (rolling) hoặc tập page (neighbors). */
 export async function retranslate(tx: DbLike, ws: string, chapterId: string, pageIds?: string[]) {
   if (pageIds?.length) return enqueueTranslate(tx, ws, chapterId, pageIds, "neighbors");
-  const all = await tx.select({ id: pages.id }).from(pages).where(eq(pages.chapterId, chapterId));
+  const all = await tx
+    .select({ id: pages.id })
+    .from(pages)
+    .where(and(eq(pages.chapterId, chapterId), eq(pages.skipped, false)));
   if (all.length === 0) throw new NotFoundError("page");
   return enqueueTranslate(
     tx,
@@ -282,7 +286,7 @@ export async function retryFailedPages(tx: DbLike, ws: string, chapterId: string
   const failed = await tx
     .select()
     .from(pages)
-    .where(and(eq(pages.chapterId, ch.id), eq(pages.status, "failed")))
+    .where(and(eq(pages.chapterId, ch.id), eq(pages.status, "failed"), eq(pages.skipped, false)))
     .orderBy(asc(pages.ord));
   const stage1 = failed.filter(
     (p) => !p.ocrResult || p.prepareInputRev !== prepareKey(p.id, p.originalSha256, s.settingsRev).inputRev,
@@ -366,7 +370,8 @@ export async function enqueueExport(tx: DbLike, ws: string, payload: Extract<Job
     .select({ id: pages.id, cleanRev: pages.cleanRev, status: pages.status, version: pageStates.version })
     .from(pages)
     .leftJoin(pageStates, eq(pageStates.pageId, pages.id))
-    .where(eq(pages.chapterId, ch.id));
+    // Trang ẩn không xuất → ẩn/khôi phục đổi khoá (file xuất khác).
+    .where(and(eq(pages.chapterId, ch.id), eq(pages.skipped, false)));
   if (rows.length === 0) throw conflict("no_pages", "chương chưa có trang để xuất");
   return insertJob(tx, {
     workspaceId: ws,
@@ -421,7 +426,10 @@ export async function createIngestedPages(
 export async function translatePrepared(tx: DbLike, ws: string, chapterId: string) {
   const ch = await lockChapter(tx, ws, chapterId);
   if (ch.status !== "prepared") throw conflict("chapter_not_prepared", "chương chưa xong bước 1 hoặc đang dịch");
-  const rows = await tx.select({ id: pages.id, status: pages.status }).from(pages).where(eq(pages.chapterId, ch.id));
+  const rows = await tx
+    .select({ id: pages.id, status: pages.status })
+    .from(pages)
+    .where(and(eq(pages.chapterId, ch.id), eq(pages.skipped, false)));
   const prepared = rows.filter((p) => p.status === "prepared").map((p) => p.id);
   if (prepared.length === 0) throw conflict("page_not_prepared", "không có trang nào chờ dịch");
   return enqueueTranslate(tx, ws, ch.id, prepared, prepared.length === rows.length ? "rolling" : "neighbors");
@@ -436,7 +444,11 @@ const BUSY = new Set(["pending", "preparing", "translating"]);
 export async function refreshChapter(tx: DbLike, ws: string, chapterId: string): Promise<void> {
   const ch = await lockChapter(tx, ws, chapterId);
   if (ch.status === "ingesting" || ch.status === "draft") return;
-  const rows = await tx.select({ id: pages.id, status: pages.status }).from(pages).where(eq(pages.chapterId, ch.id));
+  // Trang ẩn không tính: chương "xong" khi mọi trang còn hiện đã xong.
+  const rows = await tx
+    .select({ id: pages.id, status: pages.status })
+    .from(pages)
+    .where(and(eq(pages.chapterId, ch.id), eq(pages.skipped, false)));
   const busy = rows.some((p) => BUSY.has(p.status)) || !!(await activeJobOf(tx, ch.id, "chapter.translate"));
   const status = busy
     ? "processing"

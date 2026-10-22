@@ -123,6 +123,7 @@ const BODIES: Record<string, unknown> = {
   "POST /api/w/:ws/glossary/csv": { csv: "source_term,target_term\n용,rồng\n" },
   "POST /api/w/:ws/series/:seriesId/glossary/csv": { csv: "source_term,target_term\n용,long\n" },
   "PUT /api/w/:ws/pages/:pageId/state": { state: emptyPageState(100, 100) },
+  "PATCH /api/w/:ws/pages/:pageId": { skipped: false },
   "POST /api/w/:ws/pages/:pageId/ai-update/ack": { ai_rev: 0 },
   "POST /api/w/:ws/pages/:pageId/reinpaint": {
     user_mask_key: "ws/x/pg/x/user-mask/x.png",
@@ -176,6 +177,7 @@ const RESOURCE_CASES: Record<string, (b: Seed) => Record<string, string>> = {
   "DELETE /api/w/:ws/glossary/:entryId": (b) => ({ entryId: entryOf[b.workspaceId] ?? "" }),
   "GET /api/w/:ws/pages/:pageId": (b) => ({ pageId: pageOf[b.workspaceId] ?? "" }),
   "PUT /api/w/:ws/pages/:pageId/state": (b) => ({ pageId: pageOf[b.workspaceId] ?? "" }),
+  "PATCH /api/w/:ws/pages/:pageId": (b) => ({ pageId: pageOf[b.workspaceId] ?? "" }),
   "POST /api/w/:ws/pages/:pageId/ai-update/ack": (b) => ({ pageId: pageOf[b.workspaceId] ?? "" }),
   "POST /api/w/:ws/pages/:pageId/mask-upload": (b) => ({ pageId: pageOf[b.workspaceId] ?? "" }),
   "POST /api/w/:ws/pages/:pageId/reinpaint": (b) => ({ pageId: pageOf[b.workspaceId] ?? "" }),

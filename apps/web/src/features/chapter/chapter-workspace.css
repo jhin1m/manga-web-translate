@@ -151,8 +151,10 @@
   min-height: 0;
   border-right: 1px solid var(--c-line);
 }
+/* Rail hẹp: nút lọc thứ 3 ("Đã xoá n") xuống dòng thay vì tràn ra sau canvas. */
 .cw-rail-filter {
   display: flex;
+  flex-wrap: wrap;
   gap: var(--sp-1);
   padding: 10px;
   border-bottom: 1px solid var(--c-line);
@@ -349,12 +351,12 @@
   height: 160px;
   border: 1px dashed var(--c-line);
 }
-/* Mục rail ảnh gốc: nút chọn + icon Xoá/Khôi phục cạnh nhau (không lồng nút). */
+/* Mục rail (ảnh gốc / trang): nút chọn + icon Xoá/Khôi phục cạnh nhau (không lồng nút). */
 .cw-rail-head {
   padding: 10px;
   border-bottom: 1px solid var(--c-line);
 }
-.cw-source-item {
+.cw-rail-row {
   border: 1px solid transparent;
   border-radius: var(--radius);
   padding: 0 4px 0 0;
@@ -376,14 +378,14 @@
 .cw-rail-pick:hover {
   background: none;
 }
-.cw-source-item:not(.on):hover {
+.cw-rail-row:not(.on):hover {
   background: var(--c-surface);
 }
-.cw-source-item[data-skipped] .cw-thumb img {
+.cw-rail-row[data-skipped] .cw-thumb img {
   opacity: 0.35;
 }
 /* Rail hẹp: nhãn dài ("Credit · tự bỏ") xuống dòng thay vì đè lên icon. */
-.cw-source-item .status {
+.cw-rail-row .status {
   white-space: normal;
 }
 

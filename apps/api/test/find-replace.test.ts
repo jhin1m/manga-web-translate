@@ -257,6 +257,23 @@ describe("apply glossary", () => {
     await unlock(c.chapterId);
   });
 
+  it("skips hidden pages in preview and apply", async () => {
+    const c = await newChapter(2, () => state("Rút Kiếm ra!", "Chào"));
+    const hidden = c.ids[1] as string;
+    await scoped(db, A.workspaceId).update(pages, eq(pages.id, hidden), { skipped: true });
+    const rules = [{ source_term: "검", from: "Kiếm" }];
+    const pv = await api("/glossary-apply/preview", { rules }, c.chapterId);
+    expect(pv.status, await pv.clone().text()).toBe(200);
+    const body = (await pv.json()) as Preview;
+    expect(new Set(body.matches.map((m) => m.page_id))).toEqual(new Set([c.ids[0]]));
+    expect(Object.keys(body.versions)).toEqual([c.ids[0]]);
+    expect((await lock(c.chapterId)).status).toBe(200);
+    const res = await api("/glossary-apply/apply", { rules, versions: body.versions }, c.chapterId);
+    expect(res.status, await res.clone().text()).toBe(200);
+    expect((await stateOf(hidden)).state.regions[0]?.translation).toBe("Rút Kiếm ra!");
+    await unlock(c.chapterId);
+  });
+
   it("workspace entries of another language pair are not part of the series glossary → 400 unknown_terms", async () => {
     await scoped(db, A.workspaceId).insert(glossaryEntries, {
       sourceLang: "ko",

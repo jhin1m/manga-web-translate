@@ -102,7 +102,8 @@ async function neighborLines(tx: DbLike, chapterId: string, targetIds: string[])
     .select({ id: pages.id, ord: pages.ord, ocr: pages.ocrResult, state: pageStates.state })
     .from(pages)
     .leftJoin(pageStates, eq(pageStates.pageId, pages.id))
-    .where(eq(pages.chapterId, chapterId))
+    // Trang đã ẩn (credit, quảng cáo…) không làm ngữ cảnh cho trang bên cạnh.
+    .where(and(eq(pages.chapterId, chapterId), eq(pages.skipped, false)))
     .orderBy(asc(pages.ord));
   const target = new Set(targetIds);
   const lines: { source: string; translation: string }[] = [];
@@ -225,13 +226,15 @@ async function exportInputs(tx: DbLike, job: Job, p: Extract<JobPayload, { type:
     chapter: { series_title: ch.seriesTitle, number: ch.number, title: ch.title },
     pages: await Promise.all(
       rows.map(async ({ page: pg, state }) => {
-        const translated = pg.status === "ready" && pg.cleanRev !== null && state !== null;
+        // Trang ẩn: không vẽ chữ, nền ảnh gốc (chỉ dùng cho phần slice vắt qua nó ở layout original_slices).
+        const translated = !pg.skipped && pg.status === "ready" && pg.cleanRev !== null && state !== null;
         return {
           page_id: pg.id,
           ord: pg.ord,
           width: pg.width,
           height: pg.height,
           translated,
+          skipped: pg.skipped,
           background: await sign(
             translated ? storageKeys.clean(job.workspaceId, pg.id, pg.cleanRev as number) : pg.originalKey,
           ),

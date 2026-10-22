@@ -369,7 +369,9 @@ chapterRoutes.post("/w/:ws/chapters/:chapterId/translate", requireWorkspace(), a
   const body = await parseJson(c, TranslateBody);
   const sdb = c.get("sdb");
   const ch = await sdb.byId(chapters, c.req.param("chapterId"), "chapter");
-  if (!(await sdb.find(pages, eq(pages.chapterId, ch.id)))) throw conflict("no_pages", "chương chưa có trang để dịch");
+  if (!(await sdb.find(pages, and(eq(pages.chapterId, ch.id), eq(pages.skipped, false)) as SQL))) {
+    throw conflict("no_pages", "chương chưa có trang để dịch");
+  }
   const { job, created } = await inJobTx((tx) => retranslate(tx, c.get("workspaceId"), ch.id, body.page_ids));
   return c.json({ job: jobView(job), created }, 202);
 });

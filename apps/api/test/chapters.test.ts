@@ -10,6 +10,7 @@ import { INVITATION_HEADER, INVITATION_TOKEN_HEADER } from "../src/auth.ts";
 import { deletePrefix, head } from "../src/storage.ts";
 import { call, cookieFrom, db, invite, PASSWORD, seedWorkspace, uniq } from "./helpers.ts";
 import {
+  aiState,
   type Claimed,
   claimJobs,
   doIngest,
@@ -26,7 +27,7 @@ type Upload = { id: string; url: string; fields: Record<string, string> };
 type Progress = {
   chapter: { status: string };
   counts: Record<string, number>;
-  pages: { id: string; ord: number; status: string }[];
+  pages: { id: string; ord: number; status: string; skipped: boolean }[];
 };
 
 let A: Seed;
@@ -373,6 +374,102 @@ describe("skip source files before step 1", () => {
       ids[0],
     ]);
     await json(await api(`/chapters/${ch}/cancel`, { method: "POST", body: {} }), 200);
+  });
+});
+
+describe("hide pages after step 1", () => {
+  /** Job loại `type` của đúng chương này (test khác có thể để lại job đang chờ). */
+  const claimOwn = async (ch: string, type: string) =>
+    (await claimFor(ch, type)).find((j) => j.payload.chapter_id === ch) as Claimed;
+  const hide = (pageId: string, skipped: boolean) => api(`/pages/${pageId}`, { method: "PATCH", body: { skipped } });
+
+  it("a hidden page is not translated, not counted, not exported; restoring it brings the chapter back to step 2", async () => {
+    const ch = await uploadChapter(3, "8");
+    expect((await doIngest(token, await claimOwn(ch, "chapter.ingest"))).status).toBe(200);
+    // Claim lặp tới khi đủ prepare của chương này (job sót của test khác chiếm chỗ trong lượt claim).
+    const own = new Set((await progress(ch)).pages.map((p) => p.id));
+    for (let round = 0; round < 5 && (await progress(ch)).chapter.status !== "prepared"; round++) {
+      for (const j of await claimFor(ch, "page.prepare")) {
+        if (own.has(j.payload.page_id as string)) expect((await doPrepare(token, j)).status).toBe(200);
+      }
+    }
+    const [p0, p1, p2] = (await progress(ch)).pages.map((p) => p.id) as [string, string, string];
+
+    // Không giữ khoá → 423 (ghi nội dung chương).
+    expect((await hide(p1, true)).status).toBe(423);
+    await json(await api(`/chapters/${ch}/lock`, { method: "POST" }), 200);
+    expect(await json<{ id: string; skipped: boolean }>(await hide(p1, true), 200)).toEqual({ id: p1, skipped: true });
+
+    const afterHide = await json<Progress>(await api(`/chapters/${ch}/progress`), 200);
+    expect(afterHide.counts).toEqual({ prepared: 2 });
+    expect(afterHide.pages.map((p) => p.skipped)).toEqual([false, true, false]);
+
+    // Bước 2 dịch đúng các trang còn hiện, vẫn ngữ cảnh cuộn cả chương.
+    await json(await api(`/chapters/${ch}/translate-prepared`, { method: "POST" }), 202);
+    const tj = await claimOwn(ch, "chapter.translate");
+    expect(tj.payload.page_ids).toEqual([p0, p2]);
+    expect(tj.payload.context).toBe("rolling");
+    // Đang dịch → không ẩn / khôi phục được.
+    expect((await hide(p0, true)).status).toBe(409);
+    expect((await doTranslate(token, tj)).status).toBe(200);
+    expect((await progress(ch)).chapter.status).toBe("review");
+
+    // Dịch lại riêng trang ẩn → 409; dịch lại trang 3 → ngữ cảnh là trang 1 (đã dịch), bỏ qua trang 2 đã ẩn.
+    const denied = await json<{ error: string }>(
+      await api(`/chapters/${ch}/translate`, { method: "POST", body: { page_ids: [p1] } }),
+      409,
+    );
+    expect(denied.error).toBe("page_skipped");
+    // Bản dịch riêng cho trang 1 để biết ngữ cảnh lấy từ trang nào (trang 2 chưa dịch → bản dịch rỗng).
+    await db
+      .update(pageStates)
+      .set({ state: aiState(720, 3000, "Trang một") })
+      .where(eq(pageStates.pageId, p0));
+    await json(await api(`/chapters/${ch}/translate`, { method: "POST", body: { page_ids: [p2] } }), 202);
+    const rj = await claimOwn(ch, "chapter.translate");
+    const ctx = (rj.inputs as { context_lines: { translation: string }[] }).context_lines;
+    expect(ctx.map((l) => l.translation)).toEqual(["Trang một"]);
+    expect((await doTranslate(token, rj)).status).toBe(200);
+
+    // Tìm/Thay không thấy trang ẩn: trang 2 (ẩn) có cùng chữ với trang 1 nhưng không khớp.
+    await db
+      .update(pageStates)
+      .set({ state: aiState(720, 3000, "Trang hai") })
+      .where(eq(pageStates.pageId, p1));
+    const found = await json<{ matches: { page_id: string }[] }>(
+      await api(`/chapters/${ch}/find-replace/preview`, { method: "POST", body: { find: "Trang", replace: "Tờ" } }),
+      200,
+    );
+    expect(found.matches.map((m) => m.page_id)).toEqual([p0]);
+
+    // Xuất: input đánh dấu trang ẩn, không vẽ chữ trang đó.
+    await json(await api(`/chapters/${ch}/export`, { method: "POST", body: { format: "cbz", layout: "pages" } }), 202);
+    const ej = await claimOwn(ch, "chapter.export");
+    const ex = (ej.inputs as { pages: { page_id: string; skipped: boolean; translated: boolean }[] }).pages;
+    expect(ex.map((p) => [p.page_id, p.skipped, p.translated])).toEqual([
+      [p0, false, true],
+      [p1, true, false],
+      [p2, false, true],
+    ]);
+    await json(await api(`/chapters/${ch}/cancel`, { method: "POST", body: {} }), 200);
+
+    // Không ẩn được trang cuối cùng còn hiện.
+    await json(await hide(p0, true), 200);
+    expect((await json<{ error: string }>(await hide(p2, true), 409)).error).toBe("last_page");
+    await json(await hide(p0, false), 200);
+
+    // Khôi phục trang chưa dịch → chương về "chờ dịch" (bước 2 dịch nốt trang đó).
+    await json(await hide(p1, false), 200);
+    expect((await progress(ch)).chapter.status).toBe("prepared");
+
+    // Trang 2 dịch lỗi (các trang khác xong) → chương lỗi một phần; ẩn trang lỗi duy nhất → chương chờ duyệt.
+    await db.update(pages).set({ status: "failed" }).where(eq(pages.id, p1));
+    await json(await hide(p0, true), 200);
+    await json(await hide(p0, false), 200);
+    expect((await progress(ch)).chapter.status).toBe("partial_failed");
+    await json(await hide(p1, true), 200);
+    expect((await progress(ch)).chapter.status).toBe("review");
+    expect((await api(`/chapters/${ch}/lock`, { method: "DELETE" })).status).toBe(204);
   });
 });
 

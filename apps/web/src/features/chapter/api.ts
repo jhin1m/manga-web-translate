@@ -37,6 +37,8 @@ export type ProgressPage = {
   height: number;
   clean_rev: number | null;
   cut_flag: boolean;
+  /** Người dùng đã xoá (ẩn) trang — không dịch, không xuất, khôi phục được. */
+  skipped: boolean;
   ai_update_available: boolean;
   version: number;
   job: JobView | null;
@@ -88,6 +90,9 @@ export const fetchPages = (ws: string, ch: string) =>
 export type SourceFileImage = { id: string; ord: number; skip: SourceSkipReason | null; url: string };
 export const fetchSourceFiles = (ws: string, ch: string) =>
   api<{ expires_at: string; files: SourceFileImage[] }>(base(ws, ch, "/source-files"));
+/** Xoá (ẩn) / khôi phục 1 trang sau Bước 1 (cần giữ khoá; 409 khi chương đang chạy hoặc là trang cuối còn hiện). */
+export const setPageSkip = (ws: string, pageId: string, skipped: boolean) =>
+  api<{ id: string; skipped: boolean }>(wsPath(ws, `/pages/${pageId}`), { method: "PATCH", body: { skipped } });
 /** Bỏ qua / dùng lại 1 ảnh gốc trước Bước 1 (chương chưa có page; 409 khi đã có page). */
 export const setSourceSkip = (ws: string, ch: string, fileId: string, skip: "user" | null) =>
   api<ChapterDetail["source_files"][number]>(base(ws, ch, `/source-files/${fileId}`), {
