@@ -266,6 +266,116 @@ describe("chapter lock", () => {
   });
 });
 
+describe("skip source files before step 1", () => {
+  /** Chương nháp n ảnh đã upload (chưa commit). */
+  async function draftChapter(n: number, number: string) {
+    const files = Array.from({ length: n }, (_, i) => ({
+      name: `${i + 1}.png`,
+      content_type: "image/png",
+      bytes: PNG_1PX.length,
+    }));
+    const created = await json<{ chapter: { id: string }; files: Upload[] }>(
+      await api("/chapters", { method: "POST", body: { series_id: A.seriesId, number, files } }),
+      201,
+    );
+    await Promise.all(created.files.map((f) => postFile(f, PNG_1PX)));
+    return { ch: created.chapter.id, ids: created.files.map((f) => f.id) };
+  }
+  const skip = (ch: string, id: string, value: "user" | null, cookie?: string) =>
+    api(`/chapters/${ch}/source-files/${id}`, {
+      method: "PATCH",
+      body: { skip: value },
+      ...(cookie ? { cookie } : {}),
+    });
+
+  it("skipped images stay listed but never reach ingest; undo brings them back", async () => {
+    const { ch, ids } = await draftChapter(3, "7");
+    const [a, b, c] = ids as [string, string, string];
+    expect(await json<{ id: string; skip: string | null }>(await skip(ch, b, "user"), 200)).toMatchObject({
+      id: b,
+      skip: "user",
+    });
+    // Hoàn tác rồi bỏ lại: trạng thái cuối mới tính.
+    expect((await json<{ skip: string | null }>(await skip(ch, b, null), 200)).skip).toBeNull();
+    await json(await skip(ch, b, "user"), 200);
+
+    const detail = await json<{ source_files: { id: string; skip: string | null }[] }>(
+      await api(`/chapters/${ch}`),
+      200,
+    );
+    expect(detail.source_files.map((f) => [f.id, f.skip])).toEqual([
+      [a, null],
+      [b, "user"],
+      [c, null],
+    ]);
+
+    const commit = await json<{ accepted: number; rejected: unknown[] }>(
+      await api(`/chapters/${ch}/commit`, { method: "POST", body: {} }),
+      202,
+    );
+    expect(commit).toMatchObject({ accepted: 2, rejected: [] });
+    // Ảnh bỏ qua không bị xoá khi commit (còn để hoàn tác / tải tiếp khớp bộ file).
+    expect((await db.select().from(sourceFiles).where(eq(sourceFiles.chapterId, ch))).length).toBe(3);
+
+    // Test khoá chương trước đó để lại job ingest đang chờ → chọn đúng job của chương này.
+    const ij = (await claimFor(ch, "chapter.ingest")).find((j) => j.payload.chapter_id === ch) as Claimed;
+    const sources = (ij.inputs as { sources: { source_file_id: string }[] }).sources;
+    expect(sources.map((s) => s.source_file_id)).toEqual([a, c]);
+    expect((await doIngest(token, ij)).status).toBe(200);
+    expect((await progress(ch)).pages).toHaveLength(2);
+
+    // Đã có page → bộ ảnh gốc khoá lại.
+    expect((await skip(ch, a, "user")).status).toBe(409);
+    await json(await api(`/chapters/${ch}/cancel`, { method: "POST", body: {} }), 200);
+  });
+
+  it("refuses to commit when every image is skipped; rejects credit from the API and other chapters' files", async () => {
+    const { ch, ids } = await draftChapter(1, "7.5");
+    const other = await draftChapter(1, "7.6");
+    expect(
+      (await api(`/chapters/${ch}/source-files/${ids[0]}`, { method: "PATCH", body: { skip: "credit" } })).status,
+    ).toBe(400);
+    // File của chương khác → 404 (không đổi gì).
+    expect((await skip(ch, other.ids[0] as string, "user")).status).toBe(404);
+    await json(await skip(ch, ids[0] as string, "user"), 200);
+    const res = await json<{ error: string }>(await api(`/chapters/${ch}/commit`, { method: "POST", body: {} }), 400);
+    expect(res.error).toBe("no_valid_files");
+    // Vẫn là nháp: dùng lại ảnh rồi commit được.
+    await json(await skip(ch, ids[0] as string, null), 200);
+    await json(await api(`/chapters/${ch}/commit`, { method: "POST", body: {} }), 202);
+    await json(await api(`/chapters/${ch}/cancel`, { method: "POST", body: {} }), 200);
+  });
+
+  it("someone else holding the lock blocks skipping (423)", async () => {
+    const { ch, ids } = await draftChapter(1, "7.7");
+    await json(await api(`/chapters/${ch}/lock`, { method: "POST" }), 200);
+    expect((await skip(ch, ids[0] as string, "user", memberCookie)).status).toBe(423);
+    await json(await skip(ch, ids[0] as string, "user"), 200);
+    expect((await api(`/chapters/${ch}/lock`, { method: "DELETE" })).status).toBe(204);
+  });
+
+  it("a non-uuid file id is 404, not a server error", async () => {
+    const { ch } = await draftChapter(1, "7.8");
+    expect((await skip(ch, "not-a-uuid", "user")).status).toBe(404);
+  });
+
+  it("an ingest that failed before creating pages can still skip images and commit again", async () => {
+    const { ch, ids } = await draftChapter(2, "7.9");
+    await json(await api(`/chapters/${ch}/commit`, { method: "POST", body: {} }), 202);
+    const ij = (await claimFor(ch, "chapter.ingest")).find((j) => j.payload.chapter_id === ch) as Claimed;
+    expect((await failJob(token, ij, "invalid_input")).status).toBe(200);
+    expect((await progress(ch)).chapter.status).toBe("partial_failed");
+
+    await json(await skip(ch, ids[1] as string, "user"), 200);
+    await json(await api(`/chapters/${ch}/commit`, { method: "POST", body: {} }), 202);
+    const again = (await claimFor(ch, "chapter.ingest")).find((j) => j.payload.chapter_id === ch) as Claimed;
+    expect((again.inputs as { sources: { source_file_id: string }[] }).sources.map((s) => s.source_file_id)).toEqual([
+      ids[0],
+    ]);
+    await json(await api(`/chapters/${ch}/cancel`, { method: "POST", body: {} }), 200);
+  });
+});
+
 describe("series settings", () => {
   it("bumps settings_rev only when a translation field changes; rejects unsupported languages", async () => {
     const s = await json<{ id: string; settings_rev: number; llm_tier: string }>(

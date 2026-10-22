@@ -58,7 +58,12 @@ pageRoutes.get("/w/:ws/chapters/:chapterId/source-files", requireWorkspace(), as
   return c.json({
     expires_at: new Date(Date.now() + THUMB_TTL_S * 1000),
     files: await Promise.all(
-      rows.map(async (f) => ({ id: f.id, ord: f.ord, url: await presignGet(f.storageKey, THUMB_TTL_S) })),
+      rows.map(async (f) => ({
+        id: f.id,
+        ord: f.ord,
+        skip: f.skip,
+        url: await presignGet(f.storageKey, THUMB_TTL_S),
+      })),
     ),
   });
 });

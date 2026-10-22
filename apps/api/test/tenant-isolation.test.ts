@@ -33,6 +33,8 @@ const pageOf: Record<string, string> = {};
 /** Series + chương riêng cho route xoá (đối chứng "own" xoá thật, không đụng tài nguyên mẫu). */
 const spareSeriesOf: Record<string, string> = {};
 const spareChapterOf: Record<string, string> = {};
+/** Ảnh gốc của chương dự phòng (route bỏ qua ảnh; chương nháp chưa có page). */
+const spareSourceOf: Record<string, string> = {};
 let sourceFileA = "";
 
 beforeAll(async () => {
@@ -64,6 +66,15 @@ beforeAll(async () => {
     spareSeriesOf[s.workspaceId] = spare.id;
     spareChapterOf[s.workspaceId] = (
       await scoped(db, s.workspaceId).insert(chapters, { seriesId: s.seriesId, number: "99" })
+    ).id;
+    spareSourceOf[s.workspaceId] = (
+      await scoped(db, s.workspaceId).insert(sourceFiles, {
+        chapterId: spareChapterOf[s.workspaceId] ?? "",
+        ord: 0,
+        storageKey: `ws/${s.workspaceId}/ch/${spareChapterOf[s.workspaceId]}/src/tenant-spare.png`,
+        bytes: 100,
+        mime: "image/png",
+      })
     ).id;
     const pid = pageId(s.chapterId, 1, 0);
     await scoped(db, s.workspaceId).insert(pages, {
@@ -105,6 +116,7 @@ const BODIES: Record<string, unknown> = {
   "POST /api/w/:ws/chapters/:chapterId/commit": {},
   "PATCH /api/w/:ws/chapters/:chapterId": { number: "99" },
   "POST /api/w/:ws/chapters/:chapterId/translate": {},
+  "PATCH /api/w/:ws/chapters/:chapterId/source-files/:fileId": { skip: "user" },
   "POST /api/w/:ws/glossary": { source_term: "마법", target_term: "ma pháp" },
   "POST /api/w/:ws/series/:seriesId/glossary": { source_term: "마법", target_term: "phép thuật" },
   "PATCH /api/w/:ws/glossary/:entryId": { note: "tên kiếm" },
@@ -142,6 +154,10 @@ const RESOURCE_CASES: Record<string, (b: Seed) => Record<string, string>> = {
   "PATCH /api/w/:ws/chapters/:chapterId": (b) => ({ chapterId: b.chapterId }),
   "GET /api/w/:ws/chapters/:chapterId/pages": (b) => ({ chapterId: b.chapterId }),
   "GET /api/w/:ws/chapters/:chapterId/source-files": (b) => ({ chapterId: b.chapterId }),
+  "PATCH /api/w/:ws/chapters/:chapterId/source-files/:fileId": (b) => ({
+    chapterId: spareChapterOf[b.workspaceId] ?? "",
+    fileId: spareSourceOf[b.workspaceId] ?? "",
+  }),
   // presign trước commit: commit (own) loại source file giả (không có object) khỏi chương A.
   "POST /api/w/:ws/chapters/:chapterId/presign": (b) => ({ chapterId: b.chapterId }),
   "POST /api/w/:ws/chapters/:chapterId/commit": (b) => ({ chapterId: b.chapterId }),

@@ -1,5 +1,5 @@
 /** Kiểu + gọi API của chương (khớp apps/api/src/routes/{chapters,pages,progress}.ts). */
-import type { PageState } from "@mtl/shared";
+import type { PageState, SourceSkipReason } from "@mtl/shared";
 import { api, wsPath } from "../../lib/api.ts";
 import type { ChapterStatus, ChapterSummary } from "../series/api.ts";
 import type { PageStatus } from "./status.ts";
@@ -26,7 +26,7 @@ export type ChapterDetail = ChapterSummary & {
   ingest_rev: number;
   series: { id: string; title: string };
   lock: ChapterLock | null;
-  source_files: { id: string; ord: number; bytes: number; mime: string }[];
+  source_files: { id: string; ord: number; bytes: number; mime: string; skip: SourceSkipReason | null }[];
 };
 
 export type ProgressPage = {
@@ -85,7 +85,7 @@ export const fetchChapter = (ws: string, ch: string) => api<ChapterDetail>(base(
 export const fetchProgress = (ws: string, ch: string) => api<Progress>(base(ws, ch, "/progress"));
 export const fetchPages = (ws: string, ch: string) =>
   api<{ expires_at: string; pages: PageImage[] }>(base(ws, ch, "/pages"));
-export type SourceFileImage = { id: string; ord: number; url: string };
+export type SourceFileImage = { id: string; ord: number; skip: SourceSkipReason | null; url: string };
 export const fetchSourceFiles = (ws: string, ch: string) =>
   api<{ expires_at: string; files: SourceFileImage[] }>(base(ws, ch, "/source-files"));
 export const fetchChapterStates = (ws: string, ch: string) => api<{ pages: PageStateRow[] }>(base(ws, ch, "/states"));

@@ -28,7 +28,7 @@ import {
   type TargetLang,
   type TranslateSettings,
 } from "@mtl/shared";
-import { and, asc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
 import { db } from "../db.ts";
 import { mergeBySourceTerm, seriesGlossaryWhere } from "../lib/glossary-scope.ts";
@@ -95,7 +95,7 @@ export async function insertJob(
   return { job: existing, created: false };
 }
 
-async function lockChapter(tx: DbLike, ws: string, chapterId: string): Promise<Chapter> {
+export async function lockChapter(tx: DbLike, ws: string, chapterId: string): Promise<Chapter> {
   const [ch] = await tx
     .select()
     .from(chapters)
@@ -152,10 +152,11 @@ export async function enqueueIngest(
   if (await chapterHasUserEdits(tx, ch.id)) {
     throw conflict("chapter_has_user_edits", "chương đã có chỉnh sửa tay — tạo chương mới để ingest lại");
   }
+  // Khoá idempotency theo đúng bộ ảnh sẽ ghép (bỏ ảnh bỏ qua) → bỏ/dùng lại ảnh rồi cắt lại là lượt ingest mới.
   const sources = await tx
     .select({ id: sourceFiles.id })
     .from(sourceFiles)
-    .where(eq(sourceFiles.chapterId, ch.id))
+    .where(and(eq(sourceFiles.chapterId, ch.id), isNull(sourceFiles.skip)))
     .orderBy(asc(sourceFiles.ord));
   if (sources.length === 0) throw new HTTPException(400, { message: "chapter has no source files" });
   const ingestMode = mode ?? (await seriesOf(tx, ch)).pageFormat;
