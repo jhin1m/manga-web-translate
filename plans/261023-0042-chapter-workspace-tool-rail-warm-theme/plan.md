@@ -109,10 +109,12 @@ Tự quyết thêm khi làm (owner xem lại):
 18. **Thanh nổi cạnh khối nằm ở `features/chapter/block-toolbar.tsx`** (phủ lên khung canvas, không trong
     `editor/canvas`) để dùng chung icon của màn chương; ẩn khi đang xem Gốc. Hướng xoay của khối không tính khi đặt vị trí.
 19. **Esc trong bảng phím tắt ghi "Bỏ chọn khối"** (bỏ "đóng bảng phụ" vì không còn bảng dưới); hành vi phím không đổi.
-20. **"Chạy lại trang lỗi" có trong menu ⋯** khi chương đang chạy mà có trang lỗi (trước đây chỉ ở drawer Hoạt động).
+20. **"Chạy lại trang lỗi" có trong menu ⋯** khi chương ở "Chờ dịch" (xong Bước 1) mà có trang lỗi (theo
+    `primary-action.ts`; trước đây không có trên thanh trên).
 21. **Xung đột khi lưu nằm trên mọi panel** (không chỉ panel Chọn) và tự mở panel khi đang thu — không ép đổi công cụ
     sang Chọn. "AI có bản mới" vẫn chỉ ở panel Chọn (thumbnail đã báo "Cần xem").
 22. **Khung canvas đổi cỡ (thu/mở panel, 288 ↔ 560) khi chưa tự zoom → vừa lại theo bề rộng mới, giữ điểm trang đang ở
-    mép trên**; đã zoom → giữ mức, chỉ căn lại. Chọn khối làm panel tự mở nên ảnh co lại một chút — chấp nhận.
+    mép trên**; đã zoom → giữ mức, chỉ căn lại. Chọn khối làm panel tự mở nên ảnh co lại một chút — chấp nhận; chọn
+    bằng chuột thì panel chỉ mở **sau khi nhả chuột** (đang kéo khối mà canvas vừa lại thì khối lệch khỏi chỗ thả).
 23. **Núm xoay Transformer đặt gần khung hơn (20px thay vì 50px)** để thanh nổi phía trên khối không che núm.
 
