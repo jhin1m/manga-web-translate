@@ -16,6 +16,7 @@ from mtl_pipeline.typeset import (
     block_height,
     bubble_siblings,
     fit_text,
+    font_for,
     inscribed_rect,
     typeset_region,
     wrap_words,
@@ -190,6 +191,14 @@ def test_text_free_gets_contrast_stroke():
     r = Region(id="r0", kind="text_free", bbox=BBox(x=20, y=20, w=260, h=80), score=1.0)
     tb = typeset_region(clean, r, None, "Đêm đó", FONT)
     assert tb.stroke is not None and tb.stroke.width >= 1.5
+
+
+def test_text_outside_bubble_uses_narration_font():
+    b = BBox(x=0, y=0, w=10, h=10)
+    free = Region(id="f", kind="text_free", bbox=b, score=1.0)
+    bubble = Region(id="t", kind="text_bubble", bbox=b, score=1.0)
+    assert font_for(free, "Bangers-Regular", "BeVietnamPro-Regular") == "BeVietnamPro-Regular"
+    assert font_for(bubble, "Bangers-Regular", "BeVietnamPro-Regular") == "Bangers-Regular"
 
 
 def test_light_text_gets_dark_stroke():

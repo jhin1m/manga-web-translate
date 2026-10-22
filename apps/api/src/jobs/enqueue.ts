@@ -199,6 +199,7 @@ export async function translateSettings(tx: DbLike, s: Series): Promise<Translat
   const entries = await tx.select().from(glossaryEntries).where(seriesGlossaryWhere(s));
   const glossary: Record<string, string> = {};
   for (const [term, e] of mergeBySourceTerm(entries)) glossary[term] = e.targetTerm;
+  const font = s.defaultFonts.dialogue ?? DEFAULT_DIALOGUE_FONT;
   return {
     glossary,
     source_lang: s.sourceLang,
@@ -206,7 +207,9 @@ export async function translateSettings(tx: DbLike, s: Series): Promise<Translat
     pronoun_rules: s.pronounRules.length ? JSON.stringify(s.pronounRules) : "",
     honorific_policy: honorificText(s.honorificPolicy, s.sourceLang, s.targetLang),
     style_prompt: s.stylePrompt,
-    font: s.defaultFonts.dialogue ?? DEFAULT_DIALOGUE_FONT,
+    font,
+    // Chưa chọn font dẫn truyện → giống font thoại (series cũ không đổi hành vi).
+    narration_font: s.defaultFonts.narration ?? font,
   };
 }
 

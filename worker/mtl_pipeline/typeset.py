@@ -174,6 +174,11 @@ def hard_wrap(text: str, font_id: str, size: float, max_w: float) -> list[str]:
     return lines
 
 
+def font_for(region: Region, dialogue: str, narration: str) -> str:
+    """Chữ ngoài bóng (text_free) dùng font dẫn truyện; còn lại font thoại."""
+    return narration if region.kind == "text_free" else dialogue
+
+
 def style_for(region: Region, size: float) -> tuple[str, Stroke]:
     """Chữ luôn có viền màu tương phản (chất lettering manga). Chữ ngoài bóng đè art cần viền dày hơn để đọc được."""
     light = region.polarity == "light_on_dark"

@@ -50,6 +50,7 @@ def main(argv: list[str] | None = None) -> int:
     p_tr.add_argument("--context", default="rolling", choices=["rolling", "none"])
     p_tr.add_argument("--series", help="JSON {glossary, pronoun_rules, honorific_policy}")
     p_tr.add_argument("--font", default=DEFAULT_FONT)
+    p_tr.add_argument("--narration-font", help="font chữ ngoài bóng (mặc định = --font)")
 
     p_run = sub.add_parser("run", help="cả 2 giai đoạn")
     add_common(p_run)
@@ -57,6 +58,7 @@ def main(argv: list[str] | None = None) -> int:
     p_run.add_argument("--context", default="rolling", choices=["rolling", "none"])
     p_run.add_argument("--series")
     p_run.add_argument("--font", default=DEFAULT_FONT)
+    p_run.add_argument("--narration-font", help="font chữ ngoài bóng (mặc định = --font)")
 
     p_bench = sub.add_parser("bench", help="đo golden set → bench.csv + blind.html")
     p_bench.add_argument("golden")
@@ -95,7 +97,12 @@ def main(argv: list[str] | None = None) -> int:
             return 1
     if args.cmd in ("translate", "run"):
         states = translate_dir(
-            out, make_provider(args.provider), _settings(args.series), args.context, args.font
+            out,
+            make_provider(args.provider),
+            _settings(args.series),
+            args.context,
+            args.font,
+            narration_font_id=args.narration_font,
         )
         print(f"translate xong {len(states)} trang → {out}")
     return 0

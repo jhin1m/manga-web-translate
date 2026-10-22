@@ -86,6 +86,8 @@ export const TranslateSettings = z.object({
   style_prompt: z.string(),
   /** font_id mặc định cho thoại. */
   font: z.string().min(1),
+  /** font_id cho chữ ngoài bóng (text_free). Optional: job xếp hàng trước khi có trường này → worker dùng `font`. */
+  narration_font: z.string().min(1).optional(),
 });
 export type TranslateSettings = z.infer<typeof TranslateSettings>;
 

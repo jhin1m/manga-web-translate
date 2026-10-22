@@ -113,5 +113,13 @@ describe("series languages + page_format", () => {
     expect(settings).toMatchObject({ source_lang: "ja", target_lang: "en" });
     expect(settings.honorific_policy).toContain("-san");
     expect(settings.honorific_policy).toContain("tiếng Anh");
+    // Chưa chọn font dẫn truyện → giống font thoại.
+    expect(settings.narration_font).toBe(settings.font);
+
+    const [withFonts] = await sdb.update(series, eq(series.id, A.seriesId), {
+      defaultFonts: { dialogue: "Bangers-Regular", narration: "BeVietnamPro-Regular" },
+    });
+    const fonts = await inJobTx((tx) => translateSettings(tx, withFonts as typeof series.$inferSelect));
+    expect(fonts).toMatchObject({ font: "Bangers-Regular", narration_font: "BeVietnamPro-Regular" });
   });
 });

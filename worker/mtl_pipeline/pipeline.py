@@ -26,7 +26,7 @@ from .render import render_page, require_raqm
 from .schema import ContextMode, OcrResult, PageAiState, PageText, Region, RegionText
 from .textmask import CtdMasker, build_text_mask
 from .translate import SeriesSettings, qualified_id, translate_chapter
-from .typeset import bubble_siblings, typeset_region
+from .typeset import bubble_siblings, font_for, typeset_region
 
 IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".webp"}
 
@@ -179,9 +179,12 @@ def translate_dir(
     mode: ContextMode = "rolling",
     font_id: str = DEFAULT_FONT,
     suffix: str = "",
+    narration_font_id: str | None = None,
 ) -> list[PageAiState]:
-    """Dịch cả chương theo thứ tự trang, typeset, render final{suffix}.png + state{suffix}.json."""
+    """Dịch cả chương theo thứ tự trang, typeset, render final{suffix}.png + state{suffix}.json.
+    Chữ ngoài bóng dùng narration_font_id (None → font_id), như server."""
     require_raqm()
+    narration_font_id = narration_font_id or font_id
     pages = load_page_dirs(out)
     page_texts: list[PageText] = []
     for _, meta, ocr in pages:
@@ -222,9 +225,8 @@ def translate_dir(
                 continue
             translations.append(it.model_copy(update={"id": r.id}))
             bubble = by_id.get(r.bubble_id) if r.bubble_id else None
-            boxes.append(
-                typeset_region(clean, r, bubble, it.translation, font_id, bubble_siblings(r, texted))
-            )
+            f = font_for(r, font_id, narration_font_id)
+            boxes.append(typeset_region(clean, r, bubble, it.translation, f, bubble_siblings(r, texted)))
         state = PageAiState(
             page_ord=meta["page_ord"],
             width=meta["width"],

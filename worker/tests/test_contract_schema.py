@@ -74,6 +74,30 @@ def test_page_state_from_pipeline_matches_schema_and_is_nfc():
     assert state["regions"][2]["flags"] == ["sfx"]
 
 
+def test_translate_payload_narration_font_is_optional():
+    settings = {
+        "glossary": {},
+        "pronoun_rules": "",
+        "honorific_policy": "",
+        "style_prompt": "",
+        "font": "Bangers-Regular",
+    }
+    payload = {
+        "type": "chapter.translate",
+        "chapter_id": "0192a3b4-c5d6-7e8f-9a0b-1c2d3e4f5a6b",
+        "page_ids": ["0192a3b4-c5d6-7e8f-9a0b-1c2d3e4f5a6c"],
+        "context": "rolling",
+        "glossary_rev": 0,
+        "settings_rev": 0,
+        "settings": settings,
+    }
+    # Job xếp hàng trước khi có narration_font vẫn hợp lệ.
+    validate_contract("job-payload", payload)
+    validate_contract(
+        "job-payload", {**payload, "settings": {**settings, "narration_font": "BeVietnamPro-Regular"}}
+    )
+
+
 def test_contract_violation_raises():
     with pytest.raises(ContractError):
         validate_contract("job-result", {"type": "page.prepare", "clean_rev": -1})

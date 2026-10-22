@@ -23,16 +23,19 @@ const Env = z.object({
   /** Domain file riêng trình duyệt thấy (dev: localhost:9100, prod: files.<domain>). */
   FILES_DOMAIN: z.string().min(1),
   FILES_SCHEME: z.enum(["http", "https"]).default("https"),
-  /** Phiên bản pipeline dùng tính input_rev lúc enqueue (khớp worker/mtl_worker PIPELINE_VERSION). */
+  /**
+   * Muối input_rev lúc enqueue: chỉ tăng khi cùng input mà worker cho kết quả khác (tăng = chạy lại mọi job, tốn AI).
+   * Có thể thấp hơn worker PIPELINE_VERSION khi worker chỉ tăng để chặn bản cũ qua MIN_PIPELINE_VERSION.
+   */
   PIPELINE_VERSION: z
     .string()
     .regex(/^\d+\.\d+\.\d+$/)
     .default("0.4.0"),
-  /** Worker có pipeline_version thấp hơn → claim trả 426. */
+  /** Worker có pipeline_version thấp hơn → claim trả 426. 0.4.1: worker hiểu settings.narration_font. */
   MIN_PIPELINE_VERSION: z
     .string()
     .regex(/^\d+\.\d+\.\d+$/)
-    .default("0.4.0"),
+    .default("0.4.1"),
   /**
    * Kill-switch ngân sách toàn cục (USD, cộng usage_ledger.cost_usd mọi workspace + chi phí nền tảng, ngày/tháng
    * theo UTC). Bắt buộc ở production; 0 = chặn mọi job tốn tiền. Không đặt (dev/test) = không giới hạn.
