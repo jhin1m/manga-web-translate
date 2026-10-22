@@ -3,7 +3,8 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./series-lang": "./src/series-lang.ts"
   },
   "scripts": {
     "emit": "tsx scripts/emit-json-schema.ts",

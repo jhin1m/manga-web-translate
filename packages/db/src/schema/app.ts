@@ -12,7 +12,9 @@ import {
   type JobPayload,
   type JobResult,
   type OcrResult,
+  PAGE_FORMATS,
   PAGE_STATUSES,
+  type PageFormat,
   type PageState,
   type PreparePartial,
   USAGE_KINDS,
@@ -73,13 +75,19 @@ export const series = pgTable(
     stylePrompt: text("style_prompt").notNull().default(""),
     defaultFonts: jsonb("default_fonts").$type<Record<string, string>>().notNull().default({}),
     llmTier: text("llm_tier").notNull().default("default"),
+    /** Cách commit chương: strip (manhwa/manhua) hoặc pages (manga) — xem PAGE_FORMATS. */
+    pageFormat: text("page_format").$type<PageFormat>().notNull().default("strip"),
     /** Tăng khi sửa glossary của series (sửa entry cấp workspace → tăng mọi series cùng transaction). */
     glossaryRev: integer("glossary_rev").notNull().default(0),
     /** Tăng khi đổi cài đặt ảnh hưởng dịch/typeset. */
     settingsRev: integer("settings_rev").notNull().default(0),
     ...timestamps,
   },
-  (t) => [unique("series_ws_id_uq").on(t.workspaceId, t.id), index("series_ws_idx").on(t.workspaceId)],
+  (t) => [
+    unique("series_ws_id_uq").on(t.workspaceId, t.id),
+    index("series_ws_idx").on(t.workspaceId),
+    check("series_page_format_chk", inList(sql`${t.pageFormat}`, PAGE_FORMATS)),
+  ],
 );
 
 export const chapters = pgTable(
@@ -92,6 +100,8 @@ export const chapters = pgTable(
     title: text("title").notNull().default(""),
     status: text("status").$type<ChapterStatus>().notNull().default("draft"),
     ingestRev: integer("ingest_rev").notNull().default(0),
+    /** Mode của lần commit gần nhất (series.page_format lúc đó) — thứ tự đọc của page.prepare suy từ đây. */
+    ingestMode: text("ingest_mode").$type<PageFormat>().notNull().default("strip"),
     lockedBy: text("locked_by"),
     lockedAt: timestamp("locked_at", { withTimezone: true }),
     ...timestamps,
@@ -103,6 +113,7 @@ export const chapters = pgTable(
     ),
     index("chapters_series_idx").on(t.seriesId),
     check("chapters_status_chk", inList(sql`${t.status}`, CHAPTER_STATUSES)),
+    check("chapters_ingest_mode_chk", inList(sql`${t.ingestMode}`, PAGE_FORMATS)),
   ],
 );
 

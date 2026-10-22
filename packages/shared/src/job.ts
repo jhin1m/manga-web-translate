@@ -3,6 +3,7 @@ import { bytesToHex, utf8ToBytes } from "@noble/hashes/utils.js";
 import { v5 as uuidv5 } from "uuid";
 import { z } from "zod";
 import { BBox, OcrRegion, OcrResult, PageState, Region } from "./page-state.ts";
+import { PAGE_FORMATS } from "./series-lang.ts";
 
 export const JOB_TYPES = [
   "chapter.ingest",
@@ -70,13 +71,16 @@ export const EXPORT_FILE = {
 export const EXPORT_RETENTION_DAYS = 7;
 export const EXPORT_OBJECT_TAG = "mtl-kind=export";
 
-/** strip = ghép slice cùng width thành strip ảo rồi cắt theo detector (manhwa); pages = 1 file = 1 page (manga). */
-export const IngestMode = z.enum(["strip", "pages"]);
+/** = series.page_format (xem series-lang.ts). */
+export const IngestMode = z.enum(PAGE_FORMATS);
 
 /** Snapshot cài đặt dịch lúc enqueue (job tái lập được dù series đổi sau đó). */
 export const TranslateSettings = z.object({
   /** source_term → target_term (đã gộp entry workspace + series). */
   glossary: z.record(z.string(), z.string()),
+  /** Optional: job xếp hàng trước pipeline 0.4.0 không có → worker mặc định ko → vi. */
+  source_lang: z.string().min(2).optional(),
+  target_lang: z.string().min(2).optional(),
   pronoun_rules: z.string(),
   honorific_policy: z.string(),
   style_prompt: z.string(),
@@ -87,7 +91,13 @@ export type TranslateSettings = z.infer<typeof TranslateSettings>;
 
 export const JobPayload = z.discriminatedUnion("type", [
   z.object({ type: z.literal("chapter.ingest"), chapter_id: Uuid, ingest_rev: Rev, mode: IngestMode }),
-  z.object({ type: z.literal("page.prepare"), page_id: Uuid, source_lang: z.string().min(2) }),
+  z.object({
+    type: z.literal("page.prepare"),
+    page_id: Uuid,
+    source_lang: z.string().min(2),
+    /** Optional: job xếp hàng trước pipeline 0.4.0 không có → worker mặc định ltr. */
+    reading_order: z.enum(["ltr", "rtl"]).optional(),
+  }),
   z.object({
     type: z.literal("chapter.translate"),
     chapter_id: Uuid,
@@ -104,7 +114,14 @@ export const JobPayload = z.discriminatedUnion("type", [
     user_mask_key: z.string().min(1),
     offset: z.object({ x: z.number().int(), y: z.number().int() }),
   }),
-  z.object({ type: z.literal("page.ocr_region"), page_id: Uuid, bbox: BBox }),
+  z.object({
+    type: z.literal("page.ocr_region"),
+    page_id: Uuid,
+    bbox: BBox,
+    /** Optional: job xếp hàng trước pipeline 0.4.0 không có → worker mặc định ko → vi. */
+    source_lang: z.string().min(2).optional(),
+    target_lang: z.string().min(2).optional(),
+  }),
   z.object({
     type: z.literal("chapter.export"),
     chapter_id: Uuid,
