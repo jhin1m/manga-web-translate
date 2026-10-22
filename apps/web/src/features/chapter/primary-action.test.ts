@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { primaryAction } from "./primary-action.ts";
 
-const base = { sourceFiles: 3, upload: null, pages: 10, ready: 4, failed: 0 };
+const base = { sourceFiles: 3, skippedFiles: 0, pendingFiles: 0, upload: null, pages: 10, ready: 4, failed: 0 };
 
 describe("primary action", () => {
   it("draft without (all) files → Tải ảnh", () => {
@@ -11,7 +11,28 @@ describe("primary action", () => {
       disabled: false,
     });
     const incomplete = { phase: "incomplete" as const, done: 1, total: 3 };
-    expect(primaryAction({ ...base, status: "draft", upload: incomplete, pages: 0 }).command).toBe("upload");
+    expect(primaryAction({ ...base, status: "draft", upload: incomplete, pendingFiles: 2, pages: 0 }).command).toBe(
+      "upload",
+    );
+  });
+
+  it("upload failed / unfinished but every missing image was deleted → Bước 1", () => {
+    for (const phase of ["failed", "incomplete"] as const) {
+      const upload = { phase, done: 2, total: 3 };
+      expect(
+        primaryAction({ ...base, status: "draft", upload, sourceFiles: 2, skippedFiles: 1, pendingFiles: 0, pages: 0 }),
+      ).toMatchObject({ command: "commit", disabled: false });
+    }
+  });
+
+  it("every image skipped → Bước 1 disabled until one is restored (not a new upload)", () => {
+    for (const status of ["draft", "partial_failed"] as const) {
+      expect(primaryAction({ ...base, status, sourceFiles: 0, skippedFiles: 2, pages: 0 })).toMatchObject({
+        command: "commit",
+        disabled: true,
+        title: "Đã bỏ hết ảnh — khôi phục ít nhất 1 ảnh",
+      });
+    }
   });
 
   it("draft while uploading → Bước 1 disabled until every file is up", () => {

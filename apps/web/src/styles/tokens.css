@@ -165,6 +165,23 @@ button.link {
   padding-inline: var(--sp-1);
 }
 
+/* Nút chỉ có icon (Sửa / Xoá / Khôi phục trên hàng danh sách, rail ảnh gốc). */
+.icon-btn {
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  justify-content: center;
+  border-color: transparent;
+  background: none;
+  color: var(--c-fg-subtle);
+}
+.icon-btn:hover {
+  color: var(--c-accent);
+  background: var(--c-surface-2);
+}
+.icon-btn[data-danger]:hover {
+  color: var(--c-danger);
+}
 /* ---- Bố cục ---- */
 .page {
   padding: var(--sp-4) var(--sp-5) var(--sp-6);

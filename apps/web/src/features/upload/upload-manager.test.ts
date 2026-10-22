@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { toPageFile } from "./files.ts";
 import { createUploadManager, type UploadDeps } from "./upload-manager.ts";
 
@@ -101,9 +101,12 @@ describe("upload manager", () => {
     expect(chapterId).toBe("ch-1");
     expect(m.store.getState().chapters[chapterId]?.phase).toBe("uploading");
     expect(m.view(chapterId)).toEqual({ phase: "uploading", done: 0, total: 1 });
+    // Trạng thái từng file cho rail ảnh gốc.
+    expect(Object.values(m.store.getState().chapters[chapterId]?.files ?? {})).toEqual(["uploading"]);
     release();
     await settled(m, chapterId);
     expect(m.store.getState().chapters[chapterId]).toMatchObject({ phase: "uploaded", done: 1, total: 1 });
+    expect(Object.values(m.store.getState().chapters[chapterId]?.files ?? {})).toEqual(["done"]);
     // Xong hết → dấu resume bị xoá.
     expect(deps.storage?.getItem("mtl.upload.ch-1")).toBeNull();
   });
@@ -133,6 +136,8 @@ describe("upload manager", () => {
       ],
     };
     expect(m.view("ch-9")).toEqual({ phase: "incomplete", done: 1, total: 3 });
+    // Tab cũ: id đã lên storage lấy từ dấu localStorage.
+    expect(m.uploadedIds("ch-9")).toEqual(new Set(["f0"]));
     expect(() => m.resumeChapter({ ws: "w", chapter, pages: [png("1.png"), png("2.png"), png("3.png", 10)] })).toThrow(
       /khác dung lượng/,
     );
@@ -148,5 +153,28 @@ describe("upload manager", () => {
     await settled(m, "ch-9");
     expect(calls.post.sort()).toEqual(["f1", "f2"]);
     expect(m.store.getState().chapters["ch-9"]).toMatchObject({ phase: "uploaded", done: 3, total: 3 });
+    expect(m.uploadedIds("ch-9")).toEqual(new Set(["f0", "f1", "f2"]));
+  });
+
+  it("progress ticks keep the per-file map object; only status changes replace it", async () => {
+    let release = () => {};
+    const gate = new Promise<void>((r) => {
+      release = r;
+    });
+    const { deps } = fakeServer();
+    deps.post = async (_t, _blob, onProgress) => {
+      for (const loaded of [1, 2, 3]) onProgress(loaded);
+      await gate;
+    };
+    const m = createUploadManager(deps);
+    const seen: unknown[] = [];
+    m.store.subscribe((st) => seen.push(st.chapters["ch-1"]?.files));
+    await m.startNewChapter({ ws: "w", seriesId: "s", number: "1", pages: [png("1.png")] });
+    await vi.waitFor(() => expect(seen.length).toBeGreaterThanOrEqual(4));
+    release();
+    await settled(m, "ch-1");
+    // Nhiều lần publish (tiến độ) nhưng chỉ vài object: uploading → done.
+    expect(seen.length).toBeGreaterThan(new Set(seen).size);
+    expect(Object.values(m.store.getState().chapters["ch-1"]?.files ?? {})).toEqual(["done"]);
   });
 });

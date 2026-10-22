@@ -25,10 +25,17 @@ const STEP1: PrimaryAction = {
   menu: [],
 };
 
+/** Mọi ảnh đều bị bỏ qua: không còn gì để ghép — khôi phục ảnh ở rail trước. */
+const ALL_SKIPPED: PrimaryAction = { ...STEP1, disabled: true, title: "Đã bỏ hết ảnh — khôi phục ít nhất 1 ảnh" };
+
 export function primaryAction(input: {
   status: ChapterStatus;
-  /** Số ảnh nguồn đã khai báo (chương nháp). */
+  /** Số ảnh nguồn sẽ đưa vào Bước 1 (đã khai báo, không bị bỏ qua). */
   sourceFiles: number;
+  /** Số ảnh nguồn bị bỏ qua (xoá tay / credit tự bỏ). */
+  skippedFiles: number;
+  /** Ảnh không bị bỏ qua mà chưa lên storage (tải lỗi / tab cũ đóng giữa chừng). Xoá hết chúng → Bước 1 được. */
+  pendingFiles: number;
   upload: UploadView | null;
   pages: number;
   /** Trang đã xong (AI). */
@@ -46,8 +53,11 @@ export function primaryAction(input: {
         title: `Chờ tải xong ảnh (${upload.done}/${upload.total})`,
       };
     }
-    if (input.sourceFiles === 0 || upload?.phase === "failed" || upload?.phase === "incomplete") {
+    if ((upload?.phase === "failed" || upload?.phase === "incomplete") && input.pendingFiles > 0) {
       return { command: "upload", label: "Tải ảnh", disabled: false, menu: [] };
+    }
+    if (input.sourceFiles === 0) {
+      return input.skippedFiles > 0 ? ALL_SKIPPED : { command: "upload", label: "Tải ảnh", disabled: false, menu: [] };
     }
     return STEP1;
   }
@@ -73,14 +83,17 @@ export function primaryAction(input: {
     // Lỗi ở bước cắt trang (chưa có page): "Chạy lại trang lỗi" không có gì để chạy — commit lại = ingest lại từ
     // ảnh đã tải (API chỉ cho commit lại chương ingest lỗi).
     if (input.pages === 0) {
-      return input.sourceFiles > 0
-        ? {
-            command: "commit",
-            label: "Chạy lại bước 1",
-            disabled: false,
-            title: "Cắt trang lỗi — chạy lại bước 1 từ ảnh đã tải",
-            menu: [],
-          }
+      if (input.sourceFiles > 0) {
+        return {
+          command: "commit",
+          label: "Chạy lại bước 1",
+          disabled: false,
+          title: "Cắt trang lỗi — chạy lại bước 1 từ ảnh đã tải",
+          menu: [],
+        };
+      }
+      return input.skippedFiles > 0
+        ? { ...ALL_SKIPPED, label: "Chạy lại bước 1" }
         : { command: "upload", label: "Tải ảnh", disabled: false, menu: [] };
     }
     return {

@@ -12,7 +12,7 @@ import type { UploadView } from "../chapter/next-action.ts";
 import { createChapter, type PresignedTarget, presignAgain } from "./api.ts";
 import { isJunkEntry, type PageFile } from "./files.ts";
 import { naturalSortBy } from "./natural-sort.ts";
-import { type ItemState, postToPresigned, runUploadQueue } from "./upload-queue.ts";
+import { type ItemState, type ItemStatus, postToPresigned, runUploadQueue } from "./upload-queue.ts";
 
 const CONCURRENCY = 4;
 const MAX_ATTEMPTS = 3;
@@ -26,6 +26,8 @@ export type ChapterUpload = {
   bytesTotal: number;
   bytesDone: number;
   errors: { name: string; error: string }[];
+  /** Trạng thái tải từng file (id source file) — rail ảnh gốc hiện "Đang tải" / "Lỗi" theo đây. */
+  files: Record<string, ItemStatus>;
 };
 
 type Marker = { total: number; done: string[] };
@@ -87,8 +89,10 @@ export function createUploadManager(deps: UploadDeps) {
     let done = 0;
     let bytesDone = 0;
     const errors: ChapterUpload["errors"] = [];
+    const files: ChapterUpload["files"] = {};
     for (const it of job.items) {
       const s = job.states.get(it.fileId);
+      files[it.fileId] = s?.status ?? "queued";
       if (s?.status === "done") {
         done++;
         bytesDone += it.page.size;
@@ -96,6 +100,11 @@ export function createUploadManager(deps: UploadDeps) {
       if (s?.status === "failed") errors.push({ name: it.page.name, error: s.error ?? "lỗi" });
     }
     const prev = store.getState().chapters[chapterId];
+    // Sự kiện tiến độ (mỗi vài KB) không đổi trạng thái file nào → giữ object cũ, rail ảnh không vẽ lại mỗi tick.
+    const sameFiles =
+      prev && Object.keys(files).length === Object.keys(prev.files).length
+        ? Object.entries(files).every(([id, st]) => prev.files[id] === st)
+        : false;
     store.setState((st) => ({
       chapters: {
         ...st.chapters,
@@ -107,6 +116,7 @@ export function createUploadManager(deps: UploadDeps) {
           bytesTotal: job.items.reduce((n, it) => n + it.page.size, 0),
           bytesDone,
           errors,
+          files: sameFiles && prev ? prev.files : files,
         },
       },
     }));
@@ -221,6 +231,17 @@ export function createUploadManager(deps: UploadDeps) {
       if (u) return { phase: u.phase, done: u.done, total: u.total };
       const m = readMarker(chapterId);
       return m ? { phase: "incomplete", done: m.done.length, total: m.total } : null;
+    },
+
+    /**
+     * Id file đã lên storage: phiên này (trạng thái từng file) hoặc dấu localStorage của tab cũ. null = không có
+     * upload nào được biết (coi như đủ — server kiểm lại khi commit).
+     */
+    uploadedIds(chapterId: string, current?: ChapterUpload): Set<string> | null {
+      const u = current ?? store.getState().chapters[chapterId];
+      if (u) return new Set(Object.entries(u.files).flatMap(([id, st]) => (st === "done" ? [id] : [])));
+      const m = readMarker(chapterId);
+      return m ? new Set(m.done) : null;
     },
 
     /** File local của chương upload trong tab này (id source file → Blob) — xem trước không cần chờ tải lên. */

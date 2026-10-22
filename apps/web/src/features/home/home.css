@@ -434,22 +434,6 @@ label.file-pick input {
 }
 
 /* Nút chỉ có icon (xoá chương…): vùng bấm 34px. */
-.icon-btn {
-  width: 34px;
-  height: 34px;
-  padding: 0;
-  justify-content: center;
-  border-color: transparent;
-  background: none;
-  color: var(--c-fg-subtle);
-}
-.icon-btn:hover {
-  color: var(--c-accent);
-  background: var(--c-surface-2);
-}
-.icon-btn[data-danger]:hover {
-  color: var(--c-danger);
-}
 .btn-danger-solid {
   background: var(--c-danger);
   border-color: var(--c-danger);

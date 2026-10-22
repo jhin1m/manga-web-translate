@@ -1,6 +1,7 @@
 /**
  * Luồng chính: thả ZIP 10 trang ở home → mở thẳng màn chương (series duy nhất, số chương từ tên ZIP) trong khi ảnh
- * còn đang upload → upload xong bấm "Bước 1" → worker giả → "Bước 2 · Dịch" → 10 trang "Xong" trên rail. Thêm: drawer
+ * còn đang upload; rail hiện 10 ảnh gốc ngay, bấm ảnh → xem lớn → upload xong xoá 1 ảnh (hoàn tác được) → bấm
+ * "Bước 1" → worker giả → "Bước 2 · Dịch" → 9 trang "Xong" trên rail. Thêm: drawer
  * Hoạt động ở home khi đang upload; màn series (3 ảnh lẻ = 1 chương nháp số kế tiếp) + đổi số chương / series trên thanh trên +
  * glossary thêm nhanh; file lỗi → dòng xác nhận cũ báo lỗi. Test đầu đăng nhập bằng form `/login` (các spec khác
  * dùng dev auto-login).
@@ -48,11 +49,18 @@ test("drop a 10-page ZIP on home, open the chapter while uploading, then Bước
   await expect(page.getByRole("status", { name: "Tiến độ tải ảnh" })).toContainText("Đang tải ảnh");
   await expect(page.getByRole("button", { name: "Bước 1 · Xoá chữ + OCR" })).toBeDisabled();
   await expect.poll(() => held.length).toBeGreaterThan(0);
-  // Chưa file nào lên storage nhưng ảnh xem trước đã hiện từ file local, đúng thứ tự tên tự nhiên.
-  const preview = page.getByRole("list", { name: "Ảnh gốc đã tải" });
-  await expect(preview.locator("img")).toHaveCount(10);
-  await expect(preview.locator("img").first()).toHaveAttribute("src", /^blob:/);
-  await expect(preview.locator("img").first()).toHaveAttribute("alt", "Ảnh gốc 1");
+  // Chưa file nào lên storage nhưng rail đã hiện từng ảnh gốc từ file local, đúng thứ tự tên tự nhiên.
+  const sources = page.getByRole("complementary", { name: "Danh sách ảnh gốc" });
+  await expect(sources.locator("img")).toHaveCount(10);
+  await expect(sources.locator("img").first()).toHaveAttribute("src", /^blob:/);
+  await expect(sources.getByText("Đang tải").first()).toBeVisible();
+  // Canvas hiện ảnh đầu; bấm Ảnh 3 trên rail → xem ảnh 3, ← về ảnh 2.
+  await expect(page.getByRole("img", { name: "Ảnh gốc 1" })).toBeVisible();
+  await sources.getByRole("button", { name: /^Ảnh 3/ }).click();
+  await expect(page.getByRole("img", { name: "Ảnh gốc 3" })).toBeVisible();
+  await expect(page.getByText("Ảnh 3/10")).toBeVisible();
+  await page.keyboard.press("ArrowLeft");
+  await expect(page.getByRole("img", { name: "Ảnh gốc 2" })).toBeVisible();
 
   // Rời về home khi còn đang tải: drawer Hoạt động liệt kê chương đang upload kèm tiến độ → quay lại chương.
   await page.getByRole("link", { name: "Series e2e" }).click();
@@ -71,6 +79,15 @@ test("drop a 10-page ZIP on home, open the chapter while uploading, then Bước
   // Upload xong → bấm Bước 1 → xong bước 1 chờ bấm Bước 2.
   const step1 = page.getByRole("button", { name: "Bước 1 · Xoá chữ + OCR" });
   await expect(step1).toBeEnabled({ timeout: 30_000 });
+  // Xoá ảnh 2 → mờ + "Đã xoá", đếm đã bỏ; Hoàn tác khôi phục; xoá lại để Bước 1 bỏ qua nó.
+  await sources.getByRole("button", { name: "Xoá ảnh 2" }).click();
+  await expect(sources).toContainText("đã bỏ 1");
+  await expect(sources.getByText("Đã xoá")).toBeVisible();
+  await page.getByRole("button", { name: "Hoàn tác" }).click();
+  await expect(sources.getByRole("button", { name: "Xoá ảnh 2" })).toBeVisible();
+  await expect(sources).not.toContainText("đã bỏ");
+  await sources.getByRole("button", { name: "Xoá ảnh 2" }).click();
+  await expect(sources.getByRole("button", { name: "Khôi phục ảnh 2" })).toBeVisible();
   await step1.click();
 
   let ready = false;
@@ -81,7 +98,7 @@ test("drop a 10-page ZIP on home, open the chapter while uploading, then Bước
   ready = true;
   await worker;
   const rail = page.getByRole("complementary", { name: "Danh sách trang" });
-  await expect(rail.locator(".status", { hasText: "Xong" })).toHaveCount(10);
+  await expect(rail.locator(".status", { hasText: "Xong" })).toHaveCount(9);
   // Thumbnail là ảnh sạch ký qua FILES_DOMAIN.
   await expect(rail.locator("img").first()).toHaveAttribute("src", /localhost:9100\/.*\/clean\//);
 
