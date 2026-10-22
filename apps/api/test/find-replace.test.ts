@@ -225,7 +225,13 @@ describe("find/replace", () => {
 describe("apply glossary", () => {
   it("uses the merged glossary (series overrides workspace), scoped to regions whose source has the term", async () => {
     const sdb = scoped(db, A.workspaceId);
-    await sdb.insert(glossaryEntries, { seriesId: null, sourceTerm: "검", targetTerm: "gươm" });
+    await sdb.insert(glossaryEntries, {
+      seriesId: null,
+      sourceLang: "ko",
+      targetLang: "vi",
+      sourceTerm: "검",
+      targetTerm: "gươm",
+    });
     await sdb.insert(glossaryEntries, { seriesId: A.seriesId, sourceTerm: "검", targetTerm: "thanh kiếm" });
     const c = await newChapter(2, () => state("Rút Kiếm ra!", "kiếm khác"));
     const pv = await api("/glossary-apply/preview", { rules: [{ source_term: "검", from: "Kiếm" }] }, c.chapterId);
@@ -249,6 +255,18 @@ describe("apply glossary", () => {
     const s = await stateOf(c.ids[1] as string);
     expect(s.state.regions.map((r) => r.translation)).toEqual(["Rút thanh kiếm ra!", "kiếm khác"]);
     await unlock(c.chapterId);
+  });
+
+  it("workspace entries of another language pair are not part of the series glossary → 400 unknown_terms", async () => {
+    await scoped(db, A.workspaceId).insert(glossaryEntries, {
+      sourceLang: "ko",
+      targetLang: "en",
+      sourceTerm: "회장",
+      targetTerm: "chairman",
+    });
+    const res = await api("/glossary-apply/preview", { rules: [{ source_term: "회장", from: "x" }] });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({ error: "unknown_terms", terms: ["회장"] });
   });
 
   it("unknown glossary term → 400", async () => {

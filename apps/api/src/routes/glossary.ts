@@ -1,14 +1,17 @@
 /**
- * Glossary cấp workspace (`series_id` null) và cấp series (ghi đè khi trùng source_term, xem
- * jobs/enqueue.ts translateSettings). Mọi thay đổi tăng `glossary_rev` trong CÙNG transaction (red team #3):
- * entry series → series đó; entry workspace → mọi series của workspace.
+ * Glossary chung (`series_id` null, theo cặp nguồn→đích — route workspace bắt buộc query `source_lang`,
+ * `target_lang`) và cấp series (không gắn cặp; ghi đè entry chung cùng cặp khi trùng source_term, xem
+ * lib/glossary-scope.ts). API là nơi duy nhất đảm bảo "entry chung có cặp, entry series không" (DB không CHECK).
+ * Mọi thay đổi tăng `glossary_rev` trong CÙNG transaction (red team #3): entry series → series đó; entry chung →
+ * mọi series của workspace (không lọc theo cặp: tránh race với PATCH đổi ngôn ngữ series).
  */
 import { glossaryEntries, type Scoped, series } from "@mtl/db";
+import { SOURCE_LANGS, TARGET_LANGS } from "@mtl/shared";
 import { and, eq, isNull, type SQL, sql } from "drizzle-orm";
-import { Hono } from "hono";
+import { type Context, Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { z } from "zod";
-import { parseJson } from "../lib/validate.ts";
+import { parseJson, parseQuery } from "../lib/validate.ts";
 import { type AppEnv, requireWorkspace } from "../middleware/workspace.ts";
 
 export const MAX_IMPORT_ROWS = 5000;
@@ -26,12 +29,22 @@ const ImportBody = z.object({
   mode: z.enum(["merge", "replace"]).default("merge"),
 });
 
+const PairQuery = z.object({ source_lang: z.enum(SOURCE_LANGS), target_lang: z.enum(TARGET_LANGS) });
+
 type EntryRow = typeof glossaryEntries.$inferSelect;
 type EntryIn = z.infer<typeof Entry>;
+/**
+ * Phạm vi một glossary: riêng series, hoặc chung workspace cho một cặp nguồn→đích. Cặp null chỉ có ở entry chung
+ * do bản API cũ ghi (cửa sổ rollback) — không khớp phạm vi nào, ràng buộc unique DB vẫn chặn trùng.
+ */
+type PairScope = { seriesId: null; sourceLang: string | null; targetLang: string | null };
+type Scope = { seriesId: string } | PairScope;
 
 const entryView = (e: EntryRow) => ({
   id: e.id,
   series_id: e.seriesId,
+  source_lang: e.sourceLang,
+  target_lang: e.targetLang,
   source_term: e.sourceTerm,
   target_term: e.targetTerm,
   note: e.note,
@@ -40,8 +53,21 @@ const entryView = (e: EntryRow) => ({
 });
 
 const byTerm = (a: EntryRow, b: EntryRow) => a.sourceTerm.localeCompare(b.sourceTerm);
-const scopeWhere = (seriesId: string | null) =>
-  seriesId ? eq(glossaryEntries.seriesId, seriesId) : isNull(glossaryEntries.seriesId);
+const scopeWhere = (scope: Scope) =>
+  scope.seriesId === null
+    ? (and(
+        isNull(glossaryEntries.seriesId),
+        eq(glossaryEntries.sourceLang, scope.sourceLang as string),
+        eq(glossaryEntries.targetLang, scope.targetLang as string),
+      ) as SQL)
+    : eq(glossaryEntries.seriesId, scope.seriesId);
+/** Cột phạm vi khi ghi: entry series không mang cặp. */
+const scopeValues = (scope: Scope) =>
+  scope.seriesId === null
+    ? { seriesId: null, sourceLang: scope.sourceLang, targetLang: scope.targetLang }
+    : { seriesId: scope.seriesId, sourceLang: null, targetLang: null };
+const scopeOfEntry = (e: EntryRow): Scope =>
+  e.seriesId ? { seriesId: e.seriesId } : { seriesId: null, sourceLang: e.sourceLang, targetLang: e.targetLang };
 
 const conflict = (error: string, message: string) =>
   new HTTPException(409, { res: Response.json({ error, message }, { status: 409 }) });
@@ -72,8 +98,8 @@ async function writeOrConflict<R>(fn: () => Promise<R>): Promise<R> {
   }
 }
 
-async function assertUniqueTerm(tx: Scoped, seriesId: string | null, term: string, exceptId?: string) {
-  const dup = await tx.find(glossaryEntries, and(scopeWhere(seriesId), eq(glossaryEntries.sourceTerm, term)) as SQL);
+async function assertUniqueTerm(tx: Scoped, scope: Scope, term: string, exceptId?: string) {
+  const dup = await tx.find(glossaryEntries, and(scopeWhere(scope), eq(glossaryEntries.sourceTerm, term)) as SQL);
   if (dup && dup.id !== exceptId) throw conflict("duplicate_term", `"${term}" đã có trong glossary này`);
 }
 
@@ -174,37 +200,41 @@ const toEntryIn = (e: EntryRow): EntryIn => ({
 
 export const glossaryRoutes = new Hono<AppEnv>();
 
-/** seriesId từ path (đã kiểm thuộc workspace) hoặc null cho glossary workspace. */
-async function scopeOf(sdb: Scoped, seriesParam: string | undefined): Promise<string | null> {
-  if (seriesParam === undefined) return null;
-  return (await sdb.byId(series, seriesParam, "series")).id;
+/** Glossary chung của cặp trong query (`?source_lang=&target_lang=`); thiếu/sai → 400 invalid_query. */
+function workspaceScope(c: Context<AppEnv>): PairScope {
+  const q = parseQuery(c, PairQuery);
+  return { seriesId: null, sourceLang: q.source_lang, targetLang: q.target_lang };
 }
 
-async function list(sdb: Scoped, seriesId: string | null) {
-  const own = await sdb.select(glossaryEntries, scopeWhere(seriesId));
-  const inherited = seriesId ? await sdb.select(glossaryEntries, scopeWhere(null)) : [];
-  return { entries: own.sort(byTerm).map(entryView), inherited: inherited.sort(byTerm).map(entryView) };
+/** Series từ path (đã kiểm thuộc workspace). */
+const seriesOf = (sdb: Scoped, seriesParam: string) => sdb.byId(series, seriesParam, "series");
+
+/** `inherited`: glossary chung đúng cặp của series (null với route workspace). */
+async function list(sdb: Scoped, scope: Scope, inherited: Scope | null) {
+  const own = await sdb.select(glossaryEntries, scopeWhere(scope));
+  const parent = inherited ? await sdb.select(glossaryEntries, scopeWhere(inherited)) : [];
+  return { entries: own.sort(byTerm).map(entryView), inherited: parent.sort(byTerm).map(entryView) };
 }
 
-async function create(sdb: Scoped, seriesId: string | null, body: EntryIn) {
+async function create(sdb: Scoped, scope: Scope, body: EntryIn) {
   return writeOrConflict(() =>
     sdb.transaction(async (tx) => {
-      await assertUniqueTerm(tx, seriesId, body.source_term);
+      await assertUniqueTerm(tx, scope, body.source_term);
       const row = await tx.insert(glossaryEntries, {
-        seriesId,
+        ...scopeValues(scope),
         sourceTerm: body.source_term,
         targetTerm: body.target_term,
         note: body.note,
         caseSensitive: body.case_sensitive,
       });
-      await bumpGlossaryRev(tx, seriesId);
+      await bumpGlossaryRev(tx, scope.seriesId);
       return row;
     }),
   );
 }
 
-async function exportCsv(sdb: Scoped, seriesId: string | null, filename: string) {
-  const rows = (await sdb.select(glossaryEntries, scopeWhere(seriesId))).sort(byTerm);
+async function exportCsv(sdb: Scoped, scope: Scope, filename: string) {
+  const rows = (await sdb.select(glossaryEntries, scopeWhere(scope))).sort(byTerm);
   return new Response(toCsv(rows.map(toEntryIn)), {
     headers: {
       "content-type": "text/csv; charset=utf-8",
@@ -213,7 +243,7 @@ async function exportCsv(sdb: Scoped, seriesId: string | null, filename: string)
   });
 }
 
-async function importCsv(sdb: Scoped, seriesId: string | null, body: z.infer<typeof ImportBody>) {
+async function importCsv(sdb: Scoped, scope: Scope, body: z.infer<typeof ImportBody>) {
   const { entries, errors } = parseGlossaryCsv(body.csv);
   if (errors.length) {
     throw new HTTPException(400, { res: Response.json({ error: "invalid_csv", errors }, { status: 400 }) });
@@ -222,8 +252,8 @@ async function importCsv(sdb: Scoped, seriesId: string | null, body: z.infer<typ
   if (entries.length > MAX_IMPORT_ROWS) throw new HTTPException(400, { message: `tối đa ${MAX_IMPORT_ROWS} dòng` });
   return writeOrConflict(() =>
     sdb.transaction(async (tx) => {
-      if (body.mode === "replace") await tx.delete(glossaryEntries, scopeWhere(seriesId));
-      const existing = new Map((await tx.select(glossaryEntries, scopeWhere(seriesId))).map((e) => [e.sourceTerm, e]));
+      if (body.mode === "replace") await tx.delete(glossaryEntries, scopeWhere(scope));
+      const existing = new Map((await tx.select(glossaryEntries, scopeWhere(scope))).map((e) => [e.sourceTerm, e]));
       let created = 0;
       let updated = 0;
       for (const e of entries) {
@@ -233,62 +263,73 @@ async function importCsv(sdb: Scoped, seriesId: string | null, body: z.infer<typ
           await tx.update(glossaryEntries, eq(glossaryEntries.id, cur.id), set);
           updated++;
         } else {
-          await tx.insert(glossaryEntries, { seriesId, sourceTerm: e.source_term, ...set });
+          await tx.insert(glossaryEntries, { ...scopeValues(scope), sourceTerm: e.source_term, ...set });
           created++;
         }
       }
-      await bumpGlossaryRev(tx, seriesId);
+      await bumpGlossaryRev(tx, scope.seriesId);
       return { created, updated, mode: body.mode };
     }),
   );
 }
 
-glossaryRoutes.get("/w/:ws/glossary", requireWorkspace(), async (c) => c.json(await list(c.get("sdb"), null)));
-
-glossaryRoutes.post("/w/:ws/glossary", requireWorkspace(), async (c) => {
-  const body = await parseJson(c, Entry);
-  return c.json(entryView(await create(c.get("sdb"), null, body)), 201);
-});
-
-glossaryRoutes.get("/w/:ws/glossary/csv", requireWorkspace(), (c) =>
-  exportCsv(c.get("sdb"), null, "glossary-workspace.csv"),
+// parseQuery chạy trong handler, sau requireWorkspace → người ngoài workspace nhận 403 trước 400.
+glossaryRoutes.get("/w/:ws/glossary", requireWorkspace(), async (c) =>
+  c.json(await list(c.get("sdb"), workspaceScope(c), null)),
 );
 
+glossaryRoutes.post("/w/:ws/glossary", requireWorkspace(), async (c) => {
+  const scope = workspaceScope(c);
+  const body = await parseJson(c, Entry);
+  return c.json(entryView(await create(c.get("sdb"), scope, body)), 201);
+});
+
+glossaryRoutes.get("/w/:ws/glossary/csv", requireWorkspace(), (c) => {
+  const scope = workspaceScope(c);
+  return exportCsv(c.get("sdb"), scope, `glossary-workspace-${scope.sourceLang}-${scope.targetLang}.csv`);
+});
+
 glossaryRoutes.post("/w/:ws/glossary/csv", requireWorkspace(), async (c) => {
+  const scope = workspaceScope(c);
   const body = await parseJson(c, ImportBody);
-  return c.json(await importCsv(c.get("sdb"), null, body));
+  return c.json(await importCsv(c.get("sdb"), scope, body));
 });
 
 glossaryRoutes.get("/w/:ws/series/:seriesId/glossary", requireWorkspace(), async (c) => {
   const sdb = c.get("sdb");
-  return c.json(await list(sdb, await scopeOf(sdb, c.req.param("seriesId"))));
+  const s = await seriesOf(sdb, c.req.param("seriesId"));
+  return c.json(
+    await list(sdb, { seriesId: s.id }, { seriesId: null, sourceLang: s.sourceLang, targetLang: s.targetLang }),
+  );
 });
 
 glossaryRoutes.post("/w/:ws/series/:seriesId/glossary", requireWorkspace(), async (c) => {
   const body = await parseJson(c, Entry);
   const sdb = c.get("sdb");
-  return c.json(entryView(await create(sdb, await scopeOf(sdb, c.req.param("seriesId")), body)), 201);
+  const s = await seriesOf(sdb, c.req.param("seriesId"));
+  return c.json(entryView(await create(sdb, { seriesId: s.id }, body)), 201);
 });
 
 glossaryRoutes.get("/w/:ws/series/:seriesId/glossary/csv", requireWorkspace(), async (c) => {
   const sdb = c.get("sdb");
-  const seriesId = await scopeOf(sdb, c.req.param("seriesId"));
-  return exportCsv(sdb, seriesId, `glossary-series-${seriesId}.csv`);
+  const s = await seriesOf(sdb, c.req.param("seriesId"));
+  return exportCsv(sdb, { seriesId: s.id }, `glossary-series-${s.id}.csv`);
 });
 
 glossaryRoutes.post("/w/:ws/series/:seriesId/glossary/csv", requireWorkspace(), async (c) => {
   const body = await parseJson(c, ImportBody);
   const sdb = c.get("sdb");
-  return c.json(await importCsv(sdb, await scopeOf(sdb, c.req.param("seriesId")), body));
+  const s = await seriesOf(sdb, c.req.param("seriesId"));
+  return c.json(await importCsv(sdb, { seriesId: s.id }, body));
 });
 
-/** Sửa/xoá theo id entry (cả 2 cấp) — rev tăng theo cấp của entry. */
+/** Sửa/xoá theo id entry (cả 2 cấp) — phạm vi (series hoặc cặp) lấy từ entry, không đổi được; rev tăng theo cấp. */
 glossaryRoutes.patch("/w/:ws/glossary/:entryId", requireWorkspace(), async (c) => {
   const body = await parseJson(c, EntryPatch);
   const row = await writeOrConflict(() =>
     c.get("sdb").transaction(async (tx) => {
       const cur = await tx.byId(glossaryEntries, c.req.param("entryId"), "glossary entry");
-      if (body.source_term !== undefined) await assertUniqueTerm(tx, cur.seriesId, body.source_term, cur.id);
+      if (body.source_term !== undefined) await assertUniqueTerm(tx, scopeOfEntry(cur), body.source_term, cur.id);
       const [row] = await tx.update(glossaryEntries, eq(glossaryEntries.id, cur.id), {
         sourceTerm: body.source_term,
         targetTerm: body.target_term,

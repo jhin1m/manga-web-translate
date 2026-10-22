@@ -11,12 +11,13 @@
  */
 import { chapters, glossaryEntries, pageStateHistory, pageStates, pages, type Scoped, series } from "@mtl/db";
 import type { PageState } from "@mtl/shared";
-import { and, eq, inArray, isNull, or, type SQL } from "drizzle-orm";
+import { and, eq, inArray, type SQL } from "drizzle-orm";
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { v7 as uuidv7 } from "uuid";
 import { z } from "zod";
 import { assertChapterLock } from "../lib/chapter-lock.ts";
+import { mergeBySourceTerm, seriesGlossaryWhere } from "../lib/glossary-scope.ts";
 import { parseJson } from "../lib/validate.ts";
 import { type AppEnv, requireWorkspace } from "../middleware/workspace.ts";
 import { pruneHistory } from "./page-state.ts";
@@ -232,20 +233,13 @@ async function undo(sdb: Scoped, chapterId: string, userId: string, batchId: str
   });
 }
 
-/** Glossary đã gộp của series chương (entry series đè entry workspace) → quy tắc thay có phạm vi theo term nguồn. */
+/** Glossary đã gộp của series chương (entry series đè entry chung đúng cặp) → quy tắc thay có phạm vi theo term nguồn. */
 async function glossaryRules(
   sdb: Scoped,
-  seriesId: string,
+  s: typeof series.$inferSelect,
   body: z.infer<typeof GlossaryBody>,
 ): Promise<ReplaceRule[]> {
-  const entries = await sdb.select(
-    glossaryEntries,
-    or(isNull(glossaryEntries.seriesId), eq(glossaryEntries.seriesId, seriesId)) as SQL,
-  );
-  const map = new Map<string, (typeof entries)[number]>();
-  for (const e of [...entries].sort((a, b) => Number(a.seriesId !== null) - Number(b.seriesId !== null))) {
-    map.set(e.sourceTerm, e);
-  }
+  const map = mergeBySourceTerm(await sdb.select(glossaryEntries, seriesGlossaryWhere(s)));
   const unknown = body.rules.filter((r) => !map.has(r.source_term)).map((r) => r.source_term);
   if (unknown.length) {
     throw new HTTPException(400, {
@@ -253,7 +247,7 @@ async function glossaryRules(
     });
   }
   return body.rules.map((r) => {
-    const e = map.get(r.source_term) as (typeof entries)[number];
+    const e = map.get(r.source_term) as typeof glossaryEntries.$inferSelect;
     return {
       find: r.from,
       replace: e.targetTerm.normalize("NFC"),
@@ -301,7 +295,7 @@ findReplaceRoutes.post(`${base}/glossary-apply/preview`, requireWorkspace(), asy
   const sdb = c.get("sdb");
   const ch = await sdb.byId(chapters, c.req.param("chapterId"), "chapter");
   const s = await sdb.byId(series, ch.seriesId, "series");
-  return c.json(preview(await chapterPages(sdb, ch.id), await glossaryRules(sdb, s.id, body)));
+  return c.json(preview(await chapterPages(sdb, ch.id), await glossaryRules(sdb, s, body)));
 });
 
 findReplaceRoutes.post(`${base}/glossary-apply/apply`, requireWorkspace(), async (c) => {
@@ -311,5 +305,5 @@ findReplaceRoutes.post(`${base}/glossary-apply/apply`, requireWorkspace(), async
   const ch = await sdb.byId(chapters, c.req.param("chapterId"), "chapter");
   await assertChapterLock(sdb, ch.id, user.id);
   const s = await sdb.byId(series, ch.seriesId, "series");
-  return c.json(await apply(sdb, ch.id, user.id, await glossaryRules(sdb, s.id, body), body.versions));
+  return c.json(await apply(sdb, ch.id, user.id, await glossaryRules(sdb, s, body), body.versions));
 });

@@ -28,9 +28,10 @@ import {
   type TargetLang,
   type TranslateSettings,
 } from "@mtl/shared";
-import { and, asc, eq, inArray, isNull, or, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
 import { db } from "../db.ts";
+import { mergeBySourceTerm, seriesGlossaryWhere } from "../lib/glossary-scope.ts";
 import { exportKey, ingestKey, type JobKey, pageOpKey, prepareKey, translateKey } from "./idempotency.ts";
 
 type Job = typeof jobs.$inferSelect;
@@ -193,22 +194,11 @@ export async function enqueuePrepare(tx: DbLike, page: Page, s: Series, ch: Chap
   });
 }
 
-/** Snapshot cài đặt dịch: glossary (entry series đè entry workspace), quy tắc xưng hô, font. */
+/** Snapshot cài đặt dịch: glossary (entry series đè entry chung đúng cặp), quy tắc xưng hô, font. */
 export async function translateSettings(tx: DbLike, s: Series): Promise<TranslateSettings> {
-  const entries = await tx
-    .select()
-    .from(glossaryEntries)
-    .where(
-      and(
-        eq(glossaryEntries.workspaceId, s.workspaceId),
-        or(isNull(glossaryEntries.seriesId), eq(glossaryEntries.seriesId, s.id)),
-      ),
-    );
+  const entries = await tx.select().from(glossaryEntries).where(seriesGlossaryWhere(s));
   const glossary: Record<string, string> = {};
-  // Workspace trước, series sau → entry series thắng khi trùng source_term.
-  for (const e of [...entries].sort((a, b) => Number(a.seriesId !== null) - Number(b.seriesId !== null))) {
-    glossary[e.sourceTerm] = e.targetTerm;
-  }
+  for (const [term, e] of mergeBySourceTerm(entries)) glossary[term] = e.targetTerm;
   return {
     glossary,
     source_lang: s.sourceLang,

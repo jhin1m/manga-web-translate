@@ -53,7 +53,12 @@ beforeAll(async () => {
       chapterId: s.chapterId,
     });
     jobOf[s.workspaceId] = j.id;
-    const e = await scoped(db, s.workspaceId).insert(glossaryEntries, { sourceTerm: "검", targetTerm: "kiếm" });
+    const e = await scoped(db, s.workspaceId).insert(glossaryEntries, {
+      sourceLang: "ko",
+      targetLang: "vi",
+      sourceTerm: "검",
+      targetTerm: "kiếm",
+    });
     entryOf[s.workspaceId] = e.id;
     const spare = await scoped(db, s.workspaceId).insert(series, { title: "Series dự phòng" });
     spareSeriesOf[s.workspaceId] = spare.id;

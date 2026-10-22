@@ -13,3 +13,14 @@ export async function parseJson<T extends z.ZodType>(c: Context, schema: T): Pro
   }
   return r.data;
 }
+
+/** Validate query string bằng zod; sai → 400 `invalid_query` kèm danh sách lỗi. */
+export function parseQuery<T extends z.ZodType>(c: Context, schema: T): z.infer<T> {
+  const r = schema.safeParse(c.req.query());
+  if (!r.success) {
+    throw new HTTPException(400, {
+      res: Response.json({ error: "invalid_query", issues: r.error.issues }, { status: 400 }),
+    });
+  }
+  return r.data;
+}
