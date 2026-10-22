@@ -110,7 +110,7 @@ export const PageRail = memo(function PageRail(props: {
                   openMenu(menuAtElement(e.currentTarget), e.currentTarget);
                 }}
               >
-                {img && <img src={img.image.url} alt="" loading="lazy" decoding="async" />}
+                {img && <img className="cw-thumb-img" src={img.image.url} alt="" loading="lazy" decoding="async" />}
                 <span className="cw-thumb-num" aria-hidden="true">
                   {p.ord + 1}
                 </span>

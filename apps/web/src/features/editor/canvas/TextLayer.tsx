@@ -102,6 +102,8 @@ export function TextLayer({
       <Transformer
         ref={trRef}
         rotateEnabled
+        // Núm xoay gần khung → thanh thao tác nổi phía trên khối (block-toolbar.tsx) không che núm.
+        rotateAnchorOffset={20}
         keepRatio={false}
         ignoreStroke
         borderStroke={SELECT_STROKE}

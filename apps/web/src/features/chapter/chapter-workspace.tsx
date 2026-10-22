@@ -29,6 +29,7 @@ import { type PageRect, useOcrRegion } from "../editor/canvas/OcrSelect.tsx";
 import type { SlotImages, SlotProcessing } from "../editor/canvas/PageSlot.tsx";
 import { chapterStore, revealRect } from "../editor/chapter-store.ts";
 import { dialogueFont } from "../editor/fonts.ts";
+import { ConflictList } from "../editor/panels/ConflictList.tsx";
 import { MaskPanel } from "../editor/panels/MaskPanel.tsx";
 import type { ShortcutAction } from "../editor/shortcuts.ts";
 import { editorStore, useEditor } from "../editor/store.ts";
@@ -246,6 +247,14 @@ function Workspace({ ws, seriesId, chapterId, page: searchPage, drawer: searchDr
       revealRect(row.pageId, row.rect);
     },
     [session.session, setError],
+  );
+  // Lưu bị xung đột khi panel đang thu → mở panel (danh sách xung đột ở đầu panel, đổi trang là mất).
+  useEffect(
+    () =>
+      editorStore.subscribe((s, prev) => {
+        if (s.conflicts.length > 0 && prev.conflicts.length === 0 && panelRef.current === null) setPanel("tool");
+      }),
+    [setPanel],
   );
   // Chọn box trên canvas → dòng tương ứng thành dòng hiện tại (bảng cuộn tới); panel đang thu → mở panel công cụ (đang
   // ở Bản dịch / Tìm thì giữ). Bỏ chọn box (bấm nền, Esc) → bỏ dòng hiện tại để panel về thông tin trang; trừ dòng
@@ -618,6 +627,8 @@ function Workspace({ ws, seriesId, chapterId, page: searchPage, drawer: searchDr
     const cs = chapterStore.getState();
     switch (a.type) {
       case "tool":
+        // Chưa có page: chỉ công cụ Chọn (rail cũng tắt các công cụ khác).
+        if (sourceMode && a.tool !== "select") return;
         return void s.setTool(a.tool);
       case "holdOriginalStart":
         return void cs.setHoldOriginal(true);
@@ -718,6 +729,10 @@ function Workspace({ ws, seriesId, chapterId, page: searchPage, drawer: searchDr
         onClose={() => setPanel(null)}
         focus={focusReq}
       >
+        {/* Xung đột khi lưu hiện trên mọi panel (đổi trang là mất danh sách → không được giấu sau panel khác). */}
+        <div className="cw-panel-conflicts">
+          <ConflictList />
+        </div>
         {view === "tool" && (
           <div className="cw-panel-tool">
             {tool === "select" || sourceMode ? (
@@ -775,12 +790,14 @@ function Workspace({ ws, seriesId, chapterId, page: searchPage, drawer: searchDr
         {seen.has("table") && (
           <div className="cw-panel-table" hidden={view !== "table"}>
             <div className="cw-panel-tools">
+              <span className="small">{allRows.length} khối</span>
               <TableFilters value={filter} onChange={setFilter} />
             </div>
             <TextTable rows={rows} total={allRows.length} current={current} activeId={activeId} onPick={pick} />
           </div>
         )}
-        {seen.has("find") && canTools && (
+        {/* Giữ mount cả khi chương chạy lại (Dịch lại…): "Hoàn tác" của lần thay hàng loạt nằm trong state panel. */}
+        {seen.has("find") && (
           <div className="cw-panel-find" hidden={view !== "find"}>
             <fieldset className="cw-seg cw-seg-full" aria-label="Tìm / Thay hoặc Glossary">
               <button type="button" aria-pressed={findTab === "find"} onClick={() => setFindTab("find")}>

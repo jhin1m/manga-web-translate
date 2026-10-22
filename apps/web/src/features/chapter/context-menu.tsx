@@ -42,6 +42,8 @@ export function ContextMenu(props: {
   const { onClose, anchor } = props;
   const closeRef = useRef(onClose);
   closeRef.current = onClose;
+  const anchorRef = useRef(anchor);
+  anchorRef.current = anchor;
 
   // Đo menu rồi kẹp trong viewport (lề 8px) trước khi vẽ.
   useLayoutEffect(() => {
@@ -58,13 +60,17 @@ export function ContextMenu(props: {
   // Focus mục đầu sau khi menu đã đặt chỗ (lúc đo còn `visibility: hidden` → chưa focus được).
   const placed = pos !== null;
   useEffect(() => {
-    if (placed) ref.current?.querySelector<HTMLButtonElement>("button:not(:disabled)")?.focus();
+    if (!placed) return;
+    // Mọi mục đều tắt → focus chính menu để Esc / Tab vẫn đóng được.
+    (ref.current?.querySelector<HTMLButtonElement>("button:not(:disabled)") ?? ref.current)?.focus();
   }, [placed]);
 
   useEffect(() => {
     const close = () => closeRef.current();
+    // Bấm lại phần tử mở menu (nút ⋯) → để nút đó tự đóng menu, không đóng rồi mở lại ngay.
     const outside = (e: PointerEvent) => {
-      if (!ref.current?.contains(e.target as Node)) close();
+      const t = e.target as Node;
+      if (!ref.current?.contains(t) && !anchorRef.current?.contains(t)) close();
     };
     // Cuộn bên trong menu không đóng; cuộn cột trang / trang thì đóng (menu không còn khớp vị trí).
     const scroll = (e: Event) => {
@@ -102,6 +108,7 @@ export function ContextMenu(props: {
       className="cw-ctx-menu"
       role="menu"
       aria-label={props.label}
+      tabIndex={-1}
       style={pos ? { left: pos.left, top: pos.top } : { left: props.at.x, top: props.at.y, visibility: "hidden" }}
       onKeyDown={(e) => {
         if (e.key === "ArrowDown") move(1);
@@ -110,7 +117,11 @@ export function ContextMenu(props: {
         else if (e.key === "End") move("last");
         else if (e.key === "Escape") closeAndReturn();
         else if (e.key === "Tab") onClose();
-        else return;
+        else {
+          // Phím khác (Enter/Space bấm mục) giữ mặc định nhưng không tới phím tắt màn chương (←/→, V/T, Delete…).
+          e.stopPropagation();
+          return;
+        }
         e.preventDefault();
         e.stopPropagation();
       }}

@@ -215,6 +215,19 @@
 .cw-panel-body > [hidden] {
   display: none;
 }
+.cw-panel-conflicts:empty {
+  display: none;
+}
+.cw-panel-conflicts {
+  flex: none;
+  max-height: 40%;
+  overflow-y: auto;
+  padding: var(--sp-2);
+  border-bottom: 1px solid var(--c-line);
+}
+.cw-panel-conflicts > .notice {
+  margin: 0;
+}
 .cw-panel-tool {
   flex: 1;
   min-height: 0;
@@ -344,9 +357,23 @@
 .cw-thumb[data-tone="warn"] {
   border: 2px solid var(--c-warn);
 }
+/* Trang ẩn: chỉ ảnh mờ (số trang giữ tương phản), viền đứt. */
 .cw-thumb[data-tone="hidden"] {
   border-style: dashed;
+}
+.cw-thumb[data-tone="hidden"] .cw-thumb-img {
   opacity: 0.45;
+}
+/* Focus bàn phím khác outline "trang đang mở": vòng tối bên ngoài. */
+.cw-thumb:focus-visible {
+  outline: 2px solid var(--c-fg);
+  outline-offset: 3px;
+}
+.cw-thumb[aria-current="page"]:focus-visible {
+  outline-color: var(--c-accent);
+  box-shadow:
+    0 0 0 5px var(--c-bg),
+    0 0 0 7px var(--c-fg);
 }
 /* Số trang nằm trên ảnh → màu cố định, không theo theme. */
 .cw-thumb-num {

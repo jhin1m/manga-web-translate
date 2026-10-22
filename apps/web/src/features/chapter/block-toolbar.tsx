@@ -14,6 +14,8 @@ import { CopyIcon, PencilIcon, RetranslateIcon, TrashIcon } from "./tool-icons.t
 
 /** Cỡ mặc định trước lần đo đầu (4 nút 32px + vạch ngăn + đệm). */
 const DEFAULT_BAR: Size = { w: 150, h: 38 };
+/** Khoảng cách phía trên khối: chừa núm xoay của Transformer (`rotateAnchorOffset` 20 + núm 8, TextLayer.tsx). */
+const ABOVE_GAP = 32;
 
 export function BlockToolbar(props: {
   /** Page active đang chạy AI → không hiện. */
@@ -43,7 +45,7 @@ export function BlockToolbar(props: {
   });
 
   if (!visible || !box) return null;
-  const pos = blockBarPos(box, view, frame, bar);
+  const pos = blockBarPos(box, view, frame, bar, 8, ABOVE_GAP);
   const reocrOff = !textRegion ? "Khối tự thêm không có vùng OCR để dịch lại" : props.ocrBusy ? "Đang OCR…" : undefined;
   const st = editorStore.getState();
   return (

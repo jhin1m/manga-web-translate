@@ -27,6 +27,15 @@ describe("block toolbar position", () => {
       below: true,
     });
   });
+  it("keeps a larger gap above (rotation handle) but the normal gap below", () => {
+    expect(blockBarPos({ x: 100, y: 200, w: 120, h: 60 }, { scale: 1, x: 0, y: 0 }, frame, bar, 8, 32).top).toBe(
+      200 - 32 - 38,
+    );
+    expect(blockBarPos({ x: 100, y: 50, w: 120, h: 60 }, { scale: 1, x: 0, y: 0 }, frame, bar, 8, 32)).toMatchObject({
+      top: 50 + 60 + 8,
+      below: true,
+    });
+  });
   it("clamps inside the frame horizontally", () => {
     expect(blockBarPos({ x: -50, y: 200, w: 60, h: 60 }, { scale: 1, x: 0, y: 0 }, frame, bar).left).toBe(8);
     expect(blockBarPos({ x: 760, y: 200, w: 60, h: 60 }, { scale: 1, x: 0, y: 0 }, frame, bar).left).toBe(

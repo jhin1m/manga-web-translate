@@ -42,6 +42,8 @@ export function ToolRail(props: {
         aria-label={it.title}
         title={reason ?? it.title}
         aria-pressed={open}
+        // Công cụ đang dùng (kể cả khi panel thu / đang ở Bản dịch, Tìm) — trình đọc màn hình biết công cụ nào đang bật.
+        aria-current={isTool && tool === it.id ? "true" : undefined}
         data-current={isTool && tool === it.id && !open ? "" : undefined}
         disabled={!!reason}
         onClick={() => props.onClick(it.id)}

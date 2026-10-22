@@ -271,6 +271,12 @@ test("hide a page from the thumbnail column (undo, then restore from its menu)",
   const thumbs = pageThumbs(page);
   await expect(thumbs.getByText("3 trang", { exact: true })).toBeVisible();
 
+  // Chuột phải thumbnail → menu; Esc đóng, focus về thumbnail.
+  await pageThumb(page, 2).click({ button: "right" });
+  await expect(page.getByRole("menuitem", { name: "Ẩn trang 2" })).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("menu")).toHaveCount(0);
+  await expect(pageThumb(page, 2)).toBeFocused();
   // Chuột phải thumbnail → "Ẩn trang 2".
   await pageThumb(page, 2).click({ button: "right" });
   await page.getByRole("menuitem", { name: "Ẩn trang 2" }).click();

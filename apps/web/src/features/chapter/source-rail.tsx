@@ -62,7 +62,7 @@ export const SourceRail = memo(function SourceRail(props: {
                   openMenu(menuAtElement(e.currentTarget), e.currentTarget);
                 }}
               >
-                <img src={it.url} alt="" loading="lazy" decoding="async" />
+                <img className="cw-thumb-img" src={it.url} alt="" loading="lazy" decoding="async" />
                 <span className="cw-thumb-num" aria-hidden="true">
                   {it.n}
                 </span>

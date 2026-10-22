@@ -523,6 +523,23 @@ test("tool rail: clicking the open tool collapses the panel and widens the canva
   await expect(page.getByRole("complementary", { name: "Thêm chữ" })).toBeVisible();
   await page.keyboard.press("v");
   await expect(panel).toBeVisible();
+
+  // Ctrl/Cmd+F → panel Tìm, đoạn "Tìm / Thay", focus ô tìm.
+  await page.keyboard.press("ControlOrMeta+f");
+  await expect(page.getByRole("complementary", { name: "Tìm / Thay · Glossary" })).toBeVisible();
+  await expect(page.locator("#fr-find")).toBeFocused();
+
+  // Vừa khung ↔ 100% (góc dưới phải canvas).
+  const zoom = page.locator(".cw-zoom");
+  const fit = zoom.getByRole("button", { name: "Vừa khung", exact: true });
+  const full = zoom.getByRole("button", { name: "100%", exact: true });
+  await expect(fit).toHaveAttribute("aria-pressed", "true");
+  await full.click();
+  await expect(full).toHaveAttribute("aria-pressed", "true");
+  await expect(fit).toHaveAttribute("aria-pressed", "false");
+  await expect(zoom.locator(".mono")).toHaveText("100%");
+  await fit.click();
+  await expect(fit).toHaveAttribute("aria-pressed", "true");
 });
 
 test("floating block toolbar: edit focuses the translation, duplicate adds a free box (undoable), delete removes it", async ({

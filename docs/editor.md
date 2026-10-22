@@ -121,8 +121,9 @@ người đã chỉnh). "Đã xem" → `POST /pages/:id/ai-update/ack {ai_rev}` 
 
 Rail công cụ (`tool-rail.tsx`, hành vi ở `tool-rail-model.ts`): icon công cụ đặt công cụ + mở panel của nó, bấm lại
 icon đang mở → thu panel (công cụ giữ nguyên); "Bản dịch" / "Tìm" chỉ mở/thu panel, không đổi công cụ. Phím V/T/B/E/R
-đổi công cụ: panel công cụ đang mở thì nội dung đổi theo, panel đang thu thì giữ thu. Chọn khối trên canvas khi panel
-thu → mở panel Chọn (đang ở Bản dịch / Tìm thì giữ). Panel đang mở nhớ theo trình duyệt (`localStorage mtl.layout =
+đổi công cụ: panel công cụ đang mở thì nội dung đổi theo, panel đang thu thì giữ thu. Chọn khối khi panel
+thu → mở panel công cụ (thường là Chọn; đang ở Bản dịch / Tìm thì giữ). Lưu bị xung đột khi panel thu → mở panel;
+danh sách xung đột nằm ở đầu mọi panel. Panel đang mở nhớ theo trình duyệt (`localStorage mtl.layout =
 { panel }`, `layout-prefs.ts`). Chỉ xem → mọi công cụ trừ Chọn tắt; chương chưa có page → Chữ / Mask / Tẩy / OCR tắt;
 chương chưa dịch xong → Tìm tắt.
 

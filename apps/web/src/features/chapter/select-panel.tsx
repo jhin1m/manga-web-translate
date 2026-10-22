@@ -6,7 +6,7 @@
  * - Chưa có khối: trang đang xem (trạng thái, cờ, lỗi job) + Dịch lại trang này · Ẩn trang này + "Bỏ chỉnh sửa tay"
  *   khi trang khác bản AI.
  * - Chương chưa có page: ảnh gốc đang xem + Xoá / Khôi phục ảnh (trước Bước 1).
- * AI có bản mới và xung đột khi lưu luôn ở đầu panel (khi có).
+ * AI có bản mới luôn ở đầu panel (khi có); xung đột khi lưu nằm trên mọi panel (chapter-workspace.tsx).
  */
 import type { TextBox } from "@mtl/shared";
 import { useMemo, useState } from "react";
@@ -14,7 +14,6 @@ import { deleteBox, resetToAI } from "../editor/actions.ts";
 import type { FontKit } from "../editor/fonts.ts";
 import { boxOverflow, MIN_SIZE } from "../editor/measure.ts";
 import { AiUpdatePanel } from "../editor/panels/AiUpdatePanel.tsx";
-import { ConflictList } from "../editor/panels/ConflictList.tsx";
 import { AdvancedStyle, BasicStyle } from "../editor/panels/Properties.tsx";
 import { TextField } from "../editor/panels/TextField.tsx";
 import { editorStore, useEditor } from "../editor/store.ts";
@@ -79,7 +78,6 @@ export function SelectPanel(props: SelectPanelProps) {
   return (
     <>
       <AiUpdatePanel ws={props.ws} />
-      <ConflictList />
       {row ? <BlockView {...props} page={page} row={row} /> : <PageView {...props} page={page} />}
     </>
   );

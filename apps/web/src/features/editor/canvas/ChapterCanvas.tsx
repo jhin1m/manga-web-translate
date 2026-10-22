@@ -19,7 +19,7 @@ import { addBox, editText, newTextBox } from "../actions.ts";
 import { chapterStore, effectiveMode, useChapterStore } from "../chapter-store.ts";
 import type { FontKit } from "../fonts.ts";
 import { lineStep } from "../measure.ts";
-import { clampView, contentBox, fitScale, pageStartView, screenToPage } from "../page-layout.ts";
+import { clampView, contentBox, FIT_EDGE, fitScale, pageStartView, screenToPage } from "../page-layout.ts";
 import { editorStore, useEditor, type View } from "../store.ts";
 import { MaskLayer } from "./MaskLayer.tsx";
 import { OcrOverlay, type PageRect } from "./OcrSelect.tsx";
@@ -103,6 +103,26 @@ export const ChapterCanvas = memo(function ChapterCanvas(props: {
     lastFit.current = v;
     editorStore.getState().setView(v);
     setFitted(true);
+  }, [fitted, size, page]);
+
+  // Khung đổi cỡ sau khi người dùng đã động vào khung nhìn (thu/mở panel, panel 288 ↔ 560, đổi trang rồi mới đổi cỡ):
+  // chưa tự zoom → vừa lại theo bề rộng mới, giữ điểm page đang ở mép trên; đã zoom → giữ mức, chỉ kẹp/căn giữa lại.
+  const lastSize = useRef(size);
+  useEffect(() => {
+    const prev = lastSize.current;
+    lastSize.current = size;
+    if (prev.w === size.w && prev.h === size.h) return;
+    const v = editorStore.getState().view;
+    // Chưa vừa lần đầu / chưa ai động vào khung nhìn → effect vừa khung ở trên lo.
+    if (!fitted || size.w === 0 || page.w === 0 || v === lastFit.current) return;
+    const c = contentBox(page, chapterStore.getState().viewMode === "split");
+    if (chapterStore.getState().zoomed) {
+      editorStore.getState().setView(clampView(v, c, size, c.x));
+      return;
+    }
+    const topY = (FIT_EDGE - v.y) / v.scale;
+    const scale = fitScale(c, page, size, MIN_SCALE);
+    editorStore.getState().setView(clampView({ scale, x: 0, y: FIT_EDGE - topY * scale }, c, size, c.x));
   }, [fitted, size, page]);
 
   // Bật/tắt chia đôi: vừa lại theo nội dung mới (trừ khi đã tự zoom), giữ điểm page đang ở giữa khung.
