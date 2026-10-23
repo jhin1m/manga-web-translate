@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 from jsonschema import Draft202012Validator
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, PrivateAttr
 
 # JSON Schema sinh từ zod ở packages/shared (`pnpm schema:emit`) — nguồn duy nhất cho hợp đồng worker ↔ API.
 # Triển khai tách khỏi monorepo (Modal) thì copy thư mục và trỏ MTL_SCHEMA_DIR.
@@ -94,6 +94,11 @@ class Region(BaseModel):
     polarity: Polarity = "dark_on_light"
     mask_source: MaskSource = "none"
     is_sfx: bool = False
+    # Màu nét chữ gốc và màu viền riêng (#rrggbb); None = chưa đo / không có viền → typeset dùng quy tắc cực tính.
+    text_color: str | None = None
+    outline_color: str | None = None
+    # Màu thô đo ở build_text_mask, chờ ảnh sạch để chốt (textcolor.assign_colors); không serialize.
+    _glyph_rgb: tuple[tuple[int, int, int], tuple[int, int, int] | None] | None = PrivateAttr(default=None)
 
 
 class TokenUsage(BaseModel):

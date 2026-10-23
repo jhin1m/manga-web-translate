@@ -179,11 +179,23 @@ export const refreshRegionFromOcr = (regionId: string, ocr: Region, layout: Layo
 const STROKE_BUBBLE = 0.1;
 const STROKE_FREE = 0.12;
 
-/** Viền màu tương phản với chữ, dày theo cỡ chữ (như auto-typeset của worker). */
+/** Ngưỡng độ sáng (Rec.601 luma, 0–255) đổi viền đen ↔ trắng — khớp STROKE_LUMA_THRESHOLD ở worker/mtl_pipeline/textcolor.py. */
+const STROKE_LUMA_THRESHOLD = 128;
+
+/** Độ sáng Rec.601 của màu hex (#rgb | #rrggbb | #rrggbbaa); không đọc được → 0 (chữ tối). */
+function hexLuma(hex: string): number {
+  let h = hex.replace("#", "");
+  if (h.length === 3) h = [...h].map((c) => c + c).join("");
+  if (!/^[0-9a-f]{6}([0-9a-f]{2})?$/i.test(h)) return 0;
+  const [r, g, b] = [0, 2, 4].map((i) => Number.parseInt(h.slice(i, i + 2), 16));
+  return 0.299 * (r ?? 0) + 0.587 * (g ?? 0) + 0.114 * (b ?? 0);
+}
+
+/** Viền màu tương phản với chữ (sáng → đen, tối → trắng), dày theo cỡ chữ (như auto-typeset của worker). */
 export function contrastStroke(fill: string, fontSize: number, kind?: Region["kind"]): NonNullable<TextBox["stroke"]> {
   const ratio = kind === "text_free" ? STROKE_FREE : STROKE_BUBBLE;
   return {
-    color: fill.toLowerCase() === "#ffffff" ? "#000000" : "#ffffff",
+    color: hexLuma(fill) > STROKE_LUMA_THRESHOLD ? "#000000" : "#ffffff",
     width: Math.round(Math.max(1.5, fontSize * ratio) * 10) / 10,
   };
 }

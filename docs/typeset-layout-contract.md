@@ -27,6 +27,9 @@ lệch bbox mực từng dòng ≤ 1px — xem `benchmarks/phase-01-results.md`)
    `scripts/font_glyph_check.py` sinh từ bảng font: nếu `OS/2.fsSelection` có bit `USE_TYPO_METRICS` → `sTypoAscender`
    / `-sTypoDescender`; ngược lại `hhea.ascent` / `-hhea.descent`. **Không** dùng metric trình duyệt
    (`fontBoundingBoxAscent`…) hay của Konva.Text.
+   Font tuỳ chỉnh của workspace (`custom-<8 hex>`) theo **đúng quy tắc này**: API đọc từ file lúc upload
+   (`apps/api/src/lib/font-metrics.ts`, `fontkit`, test parity với manifest) cho editor, worker đọc từ chính file đó
+   bằng `read_metrics`. Id không có file (font đã xoá, hoặc worker không tải được) → cả hai rơi về font thoại mặc định.
    `ascentPx = ascent · size / unitsPerEm`, tương tự `descentPx`.
 3. **Baseline** dòng `i`: `box.y + pad + ascentPx + i · (ascentPx + descentPx) · line_height`.
 4. **Toạ độ x** (pen origin) dòng: `box.x + pad`, cộng `(w − 2·pad − advance)/2` khi `center`, `w − 2·pad − advance`
@@ -66,12 +69,20 @@ lệch bbox mực từng dòng ≤ 1px — xem `benchmarks/phase-01-results.md`)
   dùng hình chữ nhật nội tiếp lòng bóng. Bóng có nhiều vùng chữ được dịch (bóng dính nhau, nhiều cụm chữ) → lòng bóng
   chia Voronoi theo khoảng cách tới bbox từng vùng chữ, mỗi vùng lấy phần của mình (khe `SPLIT_GAP`); vùng OCR rỗng
   không giữ chỗ. Lòng bóng/phần chia nhỏ hơn bbox gốc → dùng bbox gốc.
-- **Viền**: mọi box auto-typeset có viền màu tương phản với chữ (chữ đen → viền trắng, chữ trắng → viền đen),
-  `width = max(1.5, font_size × k)` làm tròn 0.1, `k = 0.1` trong bóng, `0.12` chữ ngoài bóng đè art
-  (`STROKE_BUBBLE`/`STROKE_FREE` ở `typeset.py`; editor dùng cùng công thức `contrastStroke` cho khối chèn OCR /
-  vẽ tay). Viền nằm ngoài glyph, có thể tràn quá `pad` ở cỡ chữ lớn — không tính vào tràn khung.
+- **Màu chữ/viền**: prepare đo từ ảnh gốc `region.text_color` (median dưới mask nét chữ co 1px) và `outline_color`
+  (median dải 3px ngay ngoài nét; `null` = chữ không viền), cả hai `#rrggbb`, optional. Dải được coi là viền khi
+  ΔE (CIE76) so với nền sạch **và** so với màu chữ đều `> 20`. Màu có ΔE `< 12` tới đen/trắng snap về `#000000`/`#ffffff`.
+  Typeset (`style_for`, `textcolor.py`) giữ màu gốc khi tương phản WCAG của chữ **hoặc** viền gốc với nền sạch
+  (median ảnh clean trong vùng đặt chữ) `≥ 3`; không đạt, hoặc region không có `text_color` (trang cũ) → quy tắc cực tính
+  (chữ đen/viền trắng hoặc chữ trắng/viền đen).
+- **Viền**: mọi box auto-typeset có viền màu tương phản với chữ, `width = max(1.5, font_size × k)` làm tròn 0.1,
+  `k = 0.1` trong bóng, `0.12` chữ ngoài bóng đè art (`STROKE_BUBBLE`/`STROKE_FREE` ở `typeset.py`; editor dùng cùng công
+  thức `contrastStroke` cho khối chèn OCR / vẽ tay). Màu viền = `outline_color` gốc nếu tương phản với chữ `≥ 3`; không
+  thì theo độ sáng chữ: luma Rec.601 `> 128` → viền đen, ngược lại viền trắng (`contrast_stroke` ở worker ≡
+  `contrastStroke` ở editor, cùng ngưỡng). Viền nằm ngoài glyph, có thể tràn quá `pad` ở cỡ chữ lớn — không tính vào tràn khung.
 - Thêm font: chép file vào `worker/fonts/` → `cd worker && uv run python scripts/font_glyph_check.py` (sinh manifest)
-  → `pnpm --filter @mtl/web fonts:sync` → thêm id vào `FONT_IDS` (API + web) → `node scripts/typeset-parity.ts`.
+  → `pnpm --filter @mtl/web fonts:sync` (API đọc id từ manifest, web tải `/fonts/manifest.json`; không còn danh sách id riêng cần sửa)
+  → `node scripts/typeset-parity.ts`.
 
 ## Editor (Phase 5)
 

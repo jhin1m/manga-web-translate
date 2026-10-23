@@ -13,6 +13,7 @@ import numpy as np
 
 from .detect import tile_spans
 from .schema import BBox, Polarity, Region
+from .textcolor import glyph_colors
 from .vendor.ctd_pre_post import postprocess_mask, preprocess_img
 from .vendor.ctd_textmask import REFINEMASK_ANNOTATION, refine_mask
 
@@ -116,7 +117,7 @@ def _window(b: BBox, margin: int, page_w: int, page_h: int) -> tuple[int, int, i
 
 
 def build_text_mask(img_rgb: np.ndarray, pred_mask: np.ndarray, regions: list[Region]) -> np.ndarray:
-    """Mask chữ cuối cùng (uint8 0/255) cho mọi vùng chữ; cập nhật polarity/mask_source của region tại chỗ.
+    """Mask chữ cuối cùng (uint8 0/255) cho mọi vùng chữ; cập nhật polarity/mask_source và màu thô của chữ ở region tại chỗ.
 
     SFX chưa biết ở bước này (OCR gắn sau) — pipeline khôi phục vùng SFX sau OCR (pipeline.restore_sfx)."""
     page_h, page_w = img_rgb.shape[:2]
@@ -152,6 +153,7 @@ def build_text_mask(img_rgb: np.ndarray, pred_mask: np.ndarray, regions: list[Re
             r.mask_source = "polarity_fallback" if local.any() else "none"
         if not local.any():
             continue
+        r._glyph_rgb = glyph_colors(img_rgb[b.y : b.y2, b.x : b.x2], local)
         kern = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2 * d + 1, 2 * d + 1))
         # Giãn trong khung box + d để nét sát mép box vẫn phủ kín.
         x0, y0, x1, y1 = _window(b, d, page_w, page_h)

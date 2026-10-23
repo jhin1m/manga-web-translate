@@ -24,6 +24,7 @@ from .ocr import ocr_page
 from .providers.base import LLMProvider
 from .render import render_page, require_raqm
 from .schema import ContextMode, OcrResult, PageAiState, PageText, Region, RegionText
+from .textcolor import assign_colors
 from .textmask import CtdMasker, build_text_mask
 from .translate import SeriesSettings, qualified_id, translate_chapter
 from .typeset import bubble_siblings, font_for, typeset_region
@@ -72,6 +73,7 @@ class Pipeline:
         mask = build_text_mask(img, self.masker.predict(img), regions)
         t2 = time.perf_counter()
         clean, _ = self.inpainter.inpaint(img, mask)
+        assign_colors(regions, clean)
         t3 = time.perf_counter()
         return regions, mask, clean, PrepareTiming(t1 - t0, t2 - t1, t3 - t2, 0.0)
 

@@ -4,4 +4,6 @@
 # (schema additionalProperties: false). API từ chối worker < MIN_PIPELINE_VERSION (426).
 # 0.4.1: settings.narration_font.
 # 0.4.2: export pages[].skipped.
-PIPELINE_VERSION = "0.4.2"
+# 0.5.0: prepare ghi region.text_color/outline_color; typeset giữ màu chữ gốc khi đủ tương phản. Worker < 0.5.0 không
+#        đọc nổi region có màu (schema strict) → không rollback xuống dưới mốc này sau khi đã prepare.
+PIPELINE_VERSION = "0.5.0"

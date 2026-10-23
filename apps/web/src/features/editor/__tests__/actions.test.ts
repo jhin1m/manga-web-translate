@@ -126,6 +126,9 @@ describe("editor actions", () => {
     expect(box?.lines.length).toBeGreaterThan(0);
     expect(box?.stroke).toEqual(contrastStroke("#ffffff", box?.font_size ?? 0, r.kind));
     expect(box?.stroke?.color).toBe("#000000");
+    expect(contrastStroke("#ff0000", 20).color).toBe("#ffffff");
+    expect(contrastStroke("#ffee00", 20).color).toBe("#000000");
+    expect(contrastStroke("#fff", 20).color).toBe("#000000");
     const drawn = newTextBox("x", { x: 0, y: 0, w: 1, h: 1 }, "F", null);
     expect(drawn.w).toBe(8);
     expect(drawn.stroke).toEqual({ color: "#ffffff", width: 2.2 });
