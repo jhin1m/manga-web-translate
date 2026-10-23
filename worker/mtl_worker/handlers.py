@@ -8,14 +8,16 @@ import cv2
 import numpy as np
 
 from mtl_pipeline.images import open_rgb
+from mtl_pipeline.local_ocr import ocr_page_local
 from mtl_pipeline.ocr import ocr_page
-from mtl_pipeline.options import InpaintOptions, PrepareOptions
+from mtl_pipeline.options import LOCAL_OCR_ENGINES, InpaintOptions, PrepareOptions
 from mtl_pipeline.pipeline import restore_sfx
 from mtl_pipeline.providers.base import ProviderError
 from mtl_pipeline.schema import (
     BBox,
     ContextLine,
     OcrItem,
+    OcrResult,
     PageText,
     Region,
     RegionText,
@@ -57,9 +59,16 @@ def _ocr_item_to_shared(it: OcrItem) -> dict[str, Any]:
 # ---- page.prepare (giai đoạn 1) ----
 
 
+def run_ocr(deps: Deps, engine: str, img: np.ndarray, regions: list[Region], source_lang: str) -> OcrResult:
+    """OCR theo cài đặt pipeline: `llm` qua provider (tính token), engine local qua ONNX (usage rỗng)."""
+    if engine in LOCAL_OCR_ENGINES:
+        return ocr_page_local(deps.pipeline.local_ocr(engine, source_lang), img, regions)
+    return ocr_page(deps.provider, img, regions, 0, source_lang)
+
+
 def handle_prepare(ctx: JobContext, deps: Deps) -> dict[str, Any]:
     rev = ctx.outputs["clean"]["rev"]
-    opts = ctx.payload.get("pipeline")
+    opts = PrepareOptions.from_payload(ctx.payload.get("pipeline"))
     img = open_rgb(ctx.download(ctx.inputs["original"]))
     partial = ctx.inputs.get("partial")
     if partial:
@@ -72,11 +81,11 @@ def handle_prepare(ctx: JobContext, deps: Deps) -> dict[str, Any]:
         ctx.report("detect", 0.05)
         # Payload trước khi có reading_order/source_lang (job xếp hàng từ bản cũ) → mặc định manhwa tiếng Hàn.
         rtl = ctx.payload.get("reading_order", "ltr") == "rtl"
-        regions, mask, clean, _ = deps.pipeline.prepare_image(img, rtl, PrepareOptions.from_payload(opts))
+        regions, mask, clean, _ = deps.pipeline.prepare_image(img, rtl, opts)
     ctx.report("ocr", 0.6)
     try:
         # LLM gọi cuối cùng: lỗi provider vẫn giữ được artifact detect/inpaint.
-        ocr = ocr_page(deps.provider, img, regions, 0, ctx.payload.get("source_lang", "ko"))
+        ocr = run_ocr(deps, opts.ocr_engine, img, regions, ctx.payload.get("source_lang", "ko"))
     except ProviderError as e:
         failure = classify_provider_error(e)
         ctx.upload("clean", png_bytes(clean)[0])
@@ -307,7 +316,7 @@ def handle_ocr_region(ctx: JobContext, deps: Deps) -> dict[str, Any]:
     )
     ctx.report("ocr", 0.2)
     source_lang = ctx.payload.get("source_lang", "ko")
-    ocr = ocr_page(deps.provider, img, [region], 0, source_lang)
+    ocr = run_ocr(deps, ctx.payload.get("ocr_engine", "llm"), img, [region], source_lang)
     ctx.add_usage(ocr.usage)
     item = next((it for it in ocr.items if it.id == region.id), OcrItem(id=region.id, empty=True))
     translation, low = "", item.low_conf

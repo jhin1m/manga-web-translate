@@ -28,6 +28,54 @@
       "revision": "b55497aadbfcb9740e1ed16f008268d71b4f3f79",
       "sha256": "4512adab295ee5a5e02ccd1bdf8d45dccbac88309d9cff1532ffd5de876f02a4",
       "optional": true
+    },
+    {
+      "name": "manga_ocr_encoder",
+      "file": "manga-ocr-encoder.onnx",
+      "url": "https://huggingface.co/mayocream/manga-ocr-onnx/resolve/24b12778d85800835e2ca409236de281b8ab7b9f/encoder_model.onnx",
+      "revision": "24b12778d85800835e2ca409236de281b8ab7b9f",
+      "sha256": "15fa8155fe9bc1a7d25d9bb353debaa4def033d0174e907dbd2dd6d995def85f",
+      "optional": true
+    },
+    {
+      "name": "manga_ocr_decoder",
+      "file": "manga-ocr-decoder.onnx",
+      "url": "https://huggingface.co/mayocream/manga-ocr-onnx/resolve/24b12778d85800835e2ca409236de281b8ab7b9f/decoder_model.onnx",
+      "revision": "24b12778d85800835e2ca409236de281b8ab7b9f",
+      "sha256": "ef7765261e9d1cdc34d89356986c2bbc2a082897f753a89605ae80fdfa61f5e8",
+      "optional": true
+    },
+    {
+      "name": "manga_ocr_vocab",
+      "file": "manga-ocr-vocab.txt",
+      "url": "https://huggingface.co/mayocream/manga-ocr-onnx/resolve/24b12778d85800835e2ca409236de281b8ab7b9f/vocab.txt",
+      "revision": "24b12778d85800835e2ca409236de281b8ab7b9f",
+      "sha256": "5cb5c5586d98a2f331d9f8828e4586479b0611bfba5d8c3b6dadffc84d6a36a3",
+      "optional": true
+    },
+    {
+      "name": "paddle_det",
+      "file": "ppocrv6-det-small.onnx",
+      "url": "https://www.modelscope.cn/models/RapidAI/RapidOCR/resolve/v3.10.0/onnx/PP-OCRv6/det/PP-OCRv6_det_small.onnx",
+      "revision": "v3.10.0",
+      "sha256": "090f04abcd9d9a7498bc4ebf677e4cb9bdce1fe4197ddb7e529f1ef44e1ff94f",
+      "optional": true
+    },
+    {
+      "name": "paddle_rec",
+      "file": "ppocrv6-rec-small.onnx",
+      "url": "https://www.modelscope.cn/models/RapidAI/RapidOCR/resolve/v3.10.0/onnx/PP-OCRv6/rec/PP-OCRv6_rec_small.onnx",
+      "revision": "v3.10.0",
+      "sha256": "6f327246b50388f3c176ae304bd95767ea6dc0c9ae92153ef8cbe210b3c14884",
+      "optional": true
+    },
+    {
+      "name": "paddle_rec_korean",
+      "file": "ppocrv5-rec-korean.onnx",
+      "url": "https://www.modelscope.cn/models/RapidAI/RapidOCR/resolve/v3.10.0/onnx/PP-OCRv5/rec/korean_PP-OCRv5_rec_mobile.onnx",
+      "revision": "v3.10.0",
+      "sha256": "cd6e2ea50f6943ca7271eb8c56a877a5a90720b7047fe9c41a2e541a25773c9b",
+      "optional": true
     }
   ]
 }

@@ -20,6 +20,7 @@ from .detect import Detector
 from .fonts import DEFAULT_FONT
 from .images import open_rgb, save_png
 from .inpaint import CompositeInpainter, FloodFillInpainter, Inpainter, LamaInpainter
+from .local_ocr import LocalOcrEngine
 from .models import ensure_model, verify_all
 from .ocr import ocr_page
 from .options import PrepareOptions
@@ -68,6 +69,7 @@ class Pipeline:
         self._lamas: dict[str, LamaInpainter] = {
             "big_lama": LamaInpainter(paths["big_lama"], threads=threads)
         }
+        self._ocr: dict[str, LocalOcrEngine] = {}
         self._lock = threading.Lock()
         self.inpainter = self.inpainter_for("big_lama")
 
@@ -81,6 +83,37 @@ class Pipeline:
                     ensure_model(name), threads=self.threads, output_scale=LAMA_OUTPUT_SCALE[name]
                 )
             return self._lamas[name]
+
+    def local_ocr(self, engine: str, source_lang: str) -> LocalOcrEngine:
+        """Engine OCR local (nạp lười, model optional tải theo lock). PaddleOCR: rec tiếng Hàn riêng, còn lại rec
+        PP-OCRv6 đa ngữ; nối dòng bằng dấu cách cho ko/en, liền cho ja/zh."""
+        # PaddleOCR khác cách nối dòng theo ngôn ngữ → 1 engine / ngôn ngữ (model nhỏ, ~30MB).
+        key = engine if engine == "manga_ocr" else f"{engine}:{source_lang}"
+        with self._lock:
+            if key not in self._ocr:
+                if engine == "manga_ocr":
+                    from .local_ocr.manga_ocr import MangaOcr
+
+                    self._ocr[key] = MangaOcr(
+                        ensure_model("manga_ocr_encoder"),
+                        ensure_model("manga_ocr_decoder"),
+                        ensure_model("manga_ocr_vocab"),
+                        threads=self.threads,
+                    )
+                elif engine == "paddle_ocr":
+                    from .local_ocr.paddle_ocr import PaddleOcr
+
+                    rec = "paddle_rec_korean" if source_lang == "ko" else "paddle_rec"
+                    self._ocr[key] = PaddleOcr(
+                        ensure_model("paddle_det"),
+                        ensure_model(rec),
+                        threads=self.threads,
+                        join=" " if source_lang in ("ko", "en") else "",
+                        vertical=source_lang in ("ja", "zh"),
+                    )
+                else:
+                    raise ValueError(f"OCR engine không hỗ trợ: {engine}")
+            return self._ocr[key]
 
     def inpainter_for(self, name: str = "big_lama", size: int | None = None) -> Inpainter:
         """Flood-fill nền phẳng trước, phần còn lại cho LaMa `name` (cửa sổ gom tối đa `size`)."""

@@ -3,6 +3,7 @@ node_modules/
 !.env.example
 golden/
 worker/models/*.onnx
+worker/models/*.txt
 *.safetensors
 .venv/
 dist/

@@ -102,6 +102,17 @@ class FakePipeline:
         mask = np.zeros(img.shape[:2], np.uint8)
         return regs, mask, img.copy(), None
 
+    def local_ocr(self, engine, source_lang):
+        self.local_args = (engine, source_lang)
+
+        class _Eng:
+            name = engine
+
+            def read(self, crop):
+                return "こんにちは", 0.95
+
+        return _Eng()
+
     def inpainter_for(self, name="big_lama", size=None):
         self.inpaint_args = (name, size)
         pipe = self
@@ -289,3 +300,30 @@ def test_reinpaint_uses_payload_inpainter():
     deps = Deps()
     assert run_job(MaskClient(), job, HANDLERS, deps) == "succeeded"
     assert deps.pipeline.inpaint_args == ("big_lama", 512)
+
+
+class NoLlmProvider(FakeProvider):
+    def ocr_page(self, req):  # pragma: no cover - không được gọi
+        raise AssertionError("OCR local không được gọi LLM")
+
+
+def test_prepare_with_local_ocr_skips_llm_and_reports_no_usage():
+    job = prepare_job()
+    job["payload"] |= {
+        "source_lang": "ja",
+        "pipeline": {
+            "detector": "rtdetr_v2_comic",
+            "detection_threshold": 0.35,
+            "ocr_engine": "manga_ocr",
+            "inpainter": "big_lama",
+            "mask_dilation": None,
+            "inpaint_size": 512,
+        },
+    }
+    c = FakeClient()
+    deps = Deps(NoLlmProvider())
+    assert run_job(c, job, HANDLERS, deps) == "succeeded"
+    assert deps.pipeline.local_args == ("manga_ocr", "ja")
+    result, usage = c.calls[-1][1]
+    assert result["ocr_result"]["items"][0]["source"] == "こんにちは"
+    assert usage is None or (usage["llm_in"] == 0 and usage["calls"] == 0)
