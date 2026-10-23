@@ -175,8 +175,24 @@ def to_regions(dets: list[Detection], page_w: int, page_h: int, rtl: bool = Fals
     return regions
 
 
+def ctd_text_detections(
+    bubbles: list[Detection], blocks: list[tuple[float, float, float, float, float, bool]]
+) -> list[Detection]:
+    """Khối chữ CTD (không phân lớp) → text_bubble khi nằm trong một bóng RT-DETR (≥ 60% diện tích), còn lại text_free."""
+    out = []
+    for x1, y1, x2, y2, sc, seam in blocks:
+        d = Detection(kind="text_free", x1=x1, y1=y1, x2=x2, y2=y2, score=sc, at_seam=seam)
+        if d.area > 0 and any(_intersection(b, d) / d.area >= 0.6 for b in bubbles):
+            d.kind = "text_bubble"
+        out.append(d)
+    return out
+
+
+DEFAULT_SCORE_THRESH = 0.35
+
+
 class Detector:
-    def __init__(self, model_path: Path, score_thresh: float = 0.35, threads: int = 0):
+    def __init__(self, model_path: Path, score_thresh: float = DEFAULT_SCORE_THRESH, threads: int = 0):
         import onnxruntime as ort
 
         from .models import ort_providers
@@ -187,7 +203,7 @@ class Detector:
         self.session = ort.InferenceSession(str(model_path), so, providers=ort_providers())
         self.score_thresh = score_thresh
 
-    def _run_tile(self, tile: np.ndarray) -> list[tuple[int, np.ndarray, float]]:
+    def _run_tile(self, tile: np.ndarray, score_thresh: float) -> list[tuple[int, np.ndarray, float]]:
         h, w = tile.shape[:2]
         # Tiền xử lý theo preprocessor_config.json: resize 640x640, /255, không normalize.
         x = cv2.resize(tile, (INPUT_SIZE, INPUT_SIZE), interpolation=cv2.INTER_LINEAR)
@@ -198,16 +214,25 @@ class Detector:
         return [
             (int(lab), box, float(sc))
             for lab, box, sc in zip(labels[0], boxes[0], scores[0], strict=True)
-            if sc >= self.score_thresh and 0 <= int(lab) < len(CLASSES)
+            if sc >= score_thresh and 0 <= int(lab) < len(CLASSES)
         ]
 
-    def detect(self, img: np.ndarray, rtl: bool = False) -> list[Region]:
-        """img: HxWx3 RGB uint8 → regions theo thứ tự đọc (rtl: phải→trái, xem rtl_order)."""
+    def detect(
+        self,
+        img: np.ndarray,
+        rtl: bool = False,
+        score_thresh: float | None = None,
+        ctd_blocks: list[tuple[float, float, float, float, float, bool]] | None = None,
+    ) -> list[Region]:
+        """img: HxWx3 RGB uint8 → regions theo thứ tự đọc (rtl: phải→trái, xem rtl_order).
+        score_thresh: ngưỡng tin cậy ("Detection threshold"), None = mặc định của detector.
+        ctd_blocks: detector CTD — vùng chữ lấy từ khối CTD, RT-DETR chỉ còn cho bóng thoại."""
+        thresh = self.score_thresh if score_thresh is None else score_thresh
         page_h, page_w = img.shape[:2]
         spans = tile_spans(page_h, page_w)
         dets: list[Detection] = []
         for y0, y1 in spans:
-            for lab, (bx1, by1, bx2, by2), sc in self._run_tile(img[y0:y1]):
+            for lab, (bx1, by1, bx2, by2), sc in self._run_tile(img[y0:y1], thresh):
                 top_cut = y0 > 0 and by1 <= 2
                 bottom_cut = y1 < page_h and by2 >= (y1 - y0) - 2
                 dets.append(
@@ -221,4 +246,7 @@ class Detector:
                         at_seam=top_cut or bottom_cut,
                     )
                 )
+        if ctd_blocks is not None:
+            bubbles = merge_detections([d for d in dets if d.kind == "bubble"])
+            dets = bubbles + ctd_text_detections(bubbles, ctd_blocks)
         return to_regions(merge_detections(dets), page_w, page_h, rtl)

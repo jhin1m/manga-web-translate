@@ -6,13 +6,19 @@ Weights **không commit** (`.gitignore`). Nguồn, revision và sha256 nằm ở
 Tải (chạy từ thư mục `worker/`):
 
 ```sh
-uv run python scripts/fetch_models.py   # tải theo lock + kiểm sha256
+uv run python scripts/fetch_models.py              # tải mọi model theo lock + kiểm sha256
+uv run python scripts/fetch_models.py --required   # chỉ model bắt buộc
 ```
+
+Model *optional* chỉ cần khi Cài đặt nhóm → Pipeline chọn tới (LaMa manga, OCR local): worker không kiểm lúc
+khởi động, lần đầu job cần thì tải đúng URL/revision trong lock (kiểm sha256, sai thì xoá và job lỗi `internal`).
+Modal: tải đủ trước khi `modal volume put` để container không tải lại mỗi lần.
 
 | name | file | dùng cho |
 |---|---|---|
 | `rtdetr_v2_comic` | `rtdetr-v2-comic.onnx` | box bóng / chữ trong bóng / chữ ngoài bóng (ogkalu RT-DETRv2, input 640) |
 | `comic_text_detector` | `comictextdetector.pt.onnx` | mask chữ mức pixel (input 1024, release manga-image-translator) |
-| `big_lama` | `lama_fp32.onnx` | inpaint LaMa (input cố định 512) |
+| `big_lama` | `lama_fp32.onnx` | inpaint LaMa (input cố định 512, output 0..255) |
+| `lama_manga` *(optional)* | `lama-manga.onnx` | inpaint LaMa cho manga — `mayocream/lama-manga-onnx` (Apache-2.0, bản ONNX của dreMaz/AnimeMangaInpainting = "lama漫画" của Saber-Translator); input 512, output 0..1 |
 
 Khi chạy bench/production đặt `HF_HUB_OFFLINE=1`; đổi thư mục model bằng `MTL_MODELS_DIR`.

@@ -14,6 +14,7 @@ import numpy as np
 from .detect import tile_spans
 from .schema import BBox, Polarity, Region
 from .textcolor import glyph_colors
+from .vendor.ctd_blocks import postprocess_yolo
 from .vendor.ctd_pre_post import postprocess_mask, preprocess_img
 from .vendor.ctd_textmask import REFINEMASK_ANNOTATION, refine_mask
 
@@ -91,8 +92,16 @@ class CtdMasker:
         self.session = ort.InferenceSession(str(model_path), so, providers=ort_providers())
 
     def predict(self, img_rgb: np.ndarray) -> np.ndarray:
+        return self.predict_with_blocks(img_rgb, None)[0]
+
+    def predict_with_blocks(
+        self, img_rgb: np.ndarray, block_thresh: float | None
+    ) -> tuple[np.ndarray, list[tuple[float, float, float, float, float, bool]]]:
+        """Mask cả page + (block_thresh khác None) khối chữ CTD theo toạ độ page:
+        [(x1, y1, x2, y2, score, at_seam)] — at_seam: chạm mép cắt tile (để ghép với nửa ở tile kề)."""
         page_h, page_w = img_rgb.shape[:2]
         acc = np.zeros((page_h, page_w), dtype=np.float32)
+        blocks: list[tuple[float, float, float, float, float, bool]] = []
         for y0, y1 in tile_spans(page_h, page_w):
             tile = img_rgb[y0:y1]
             th, tw = tile.shape[:2]
@@ -109,15 +118,34 @@ class CtdMasker:
             seg = seg[: seg.shape[0] - dh, : seg.shape[1] - dw]
             seg = cv2.resize(seg, (tw, th), interpolation=cv2.INTER_LINEAR)
             acc[y0:y1] = np.maximum(acc[y0:y1], seg)
-        return postprocess_mask(acc)
+            if block_thresh is not None:
+                ratio = (tw / (CTD_INPUT - dw), th / (CTD_INPUT - dh))
+                boxes, scores = postprocess_yolo(outs["blk"], block_thresh, resize_ratio=ratio)
+                for (bx1, by1, bx2, by2), sc in zip(boxes, scores, strict=True):
+                    top_cut = y0 > 0 and by1 <= 2
+                    bottom_cut = y1 < page_h and by2 >= th - 2
+                    blocks.append(
+                        (
+                            max(0.0, bx1),
+                            by1 + y0,
+                            min(float(page_w), bx2),
+                            by2 + y0,
+                            float(sc),
+                            top_cut or bottom_cut,
+                        )
+                    )
+        return postprocess_mask(acc), blocks
 
 
 def _window(b: BBox, margin: int, page_w: int, page_h: int) -> tuple[int, int, int, int]:
     return max(0, b.x - margin), max(0, b.y - margin), min(page_w, b.x2 + margin), min(page_h, b.y2 + margin)
 
 
-def build_text_mask(img_rgb: np.ndarray, pred_mask: np.ndarray, regions: list[Region]) -> np.ndarray:
+def build_text_mask(
+    img_rgb: np.ndarray, pred_mask: np.ndarray, regions: list[Region], dilation: int | None = None
+) -> np.ndarray:
     """Mask chữ cuối cùng (uint8 0/255) cho mọi vùng chữ; cập nhật polarity/mask_source và màu thô của chữ ở region tại chỗ.
+    dilation: số px nới mask (cài đặt "Mask dilation"); None = tự động 2–6px theo cạnh ngắn của box.
 
     SFX chưa biết ở bước này (OCR gắn sau) — pipeline khôi phục vùng SFX sau OCR (pipeline.restore_sfx)."""
     page_h, page_w = img_rgb.shape[:2]
@@ -127,7 +155,7 @@ def build_text_mask(img_rgb: np.ndarray, pred_mask: np.ndarray, regions: list[Re
         if r.kind == "bubble" or r.is_sfx:
             continue
         b = r.bbox
-        d = dilation_px(b)
+        d = dilation_px(b) if dilation is None else dilation
         box_pred = pred_mask[b.y : b.y2, b.x : b.x2]
         coverage = float((box_pred > 127).mean()) if box_pred.size else 0.0
         if coverage >= MIN_MODEL_COVERAGE:

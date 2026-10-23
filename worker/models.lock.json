@@ -20,6 +20,14 @@
       "url": "https://huggingface.co/Carve/LaMa-ONNX/resolve/c3c0c9e468934d62e79c329e35d82dd09ff8c444/lama_fp32.onnx",
       "revision": "c3c0c9e468934d62e79c329e35d82dd09ff8c444",
       "sha256": "1faef5301d78db7dda502fe59966957ec4b79dd64e16f03ed96913c7a4eb68d6"
+    },
+    {
+      "name": "lama_manga",
+      "file": "lama-manga.onnx",
+      "url": "https://huggingface.co/mayocream/lama-manga-onnx/resolve/b55497aadbfcb9740e1ed16f008268d71b4f3f79/lama-manga.onnx",
+      "revision": "b55497aadbfcb9740e1ed16f008268d71b4f3f79",
+      "sha256": "4512adab295ee5a5e02ccd1bdf8d45dccbac88309d9cff1532ffd5de876f02a4",
+      "optional": true
     }
   ]
 }

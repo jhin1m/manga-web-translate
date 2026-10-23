@@ -1,7 +1,12 @@
-"""Xoá chữ: flood-fill cho nền phẳng, LaMa (big-lama ONNX, crop 512 quanh mask) cho phần còn lại."""
+"""Xoá chữ: flood-fill cho nền phẳng, LaMa (ONNX, crop 512 quanh mask) cho phần còn lại.
+
+Hai bản LaMa cùng IO (image/mask 1×{3,1}×512×512): `big_lama` (Carve/LaMa-ONNX, ra thang 0..255) và `lama_manga`
+(mayocream/lama-manga-onnx = dreMaz/AnimeMangaInpainting, bản Saber-Translator gọi "lama漫画"; ra thang 0..1).
+"""
 
 from __future__ import annotations
 
+import copy
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
@@ -94,7 +99,13 @@ def group_boxes(boxes: list[tuple[int, int, int, int]], max_side: int) -> list[t
 
 
 class LamaInpainter:
-    def __init__(self, model_path: Path, threads: int = 0):
+    """output_scale: hệ số đưa output model về 0..255 (big_lama 1, lama_manga 255).
+    group_side: cạnh tối đa của cửa sổ gom nhiều thành phần mask vào 1 lượt ("Inpainting size"; mặc định 512 = như
+    trước). Model luôn chạy ở 512×512: cửa sổ lớn hơn bị thu nhỏ (thấy nhiều nền hơn, nét mờ hơn)."""
+
+    def __init__(
+        self, model_path: Path, threads: int = 0, output_scale: float = 1.0, group_side: int = LAMA_SIZE
+    ):
         import onnxruntime as ort
 
         from .models import ort_providers
@@ -103,6 +114,16 @@ class LamaInpainter:
         if threads:
             so.intra_op_num_threads = threads
         self.session = ort.InferenceSession(str(model_path), so, providers=ort_providers())
+        self.output_scale = output_scale
+        self.group_side = group_side
+
+    def sized(self, group_side: int) -> LamaInpainter:
+        """Bản dùng chung session ONNX, khác cạnh cửa sổ gom."""
+        if group_side == self.group_side:
+            return self
+        other = copy.copy(self)
+        other.group_side = group_side
+        return other
 
     @staticmethod
     def crop_window(x: int, y: int, w: int, h: int, img_w: int, img_h: int) -> tuple[int, int, int, int]:
@@ -120,6 +141,8 @@ class LamaInpainter:
         m_r = cv2.resize(crop_mask, (LAMA_SIZE, LAMA_SIZE), interpolation=cv2.INTER_NEAREST)
         x, m = lama_pre_post.prepare(img_r, m_r)
         y = self.session.run(None, {"image": x, "mask": m})[0]
+        if self.output_scale != 1.0:
+            y = y * self.output_scale
         res = lama_pre_post.finalize(y, img_r, m_r)
         return cv2.resize(res, (cw, ch), interpolation=cv2.INTER_CUBIC)
 
@@ -128,7 +151,7 @@ class LamaInpainter:
         img_h, img_w = img.shape[:2]
         # Thành phần gần nhau (các chữ trong cùng bóng) chạy chung 1 lượt LaMa thay vì mỗi chữ 1 lượt.
         boxes = [(c.x, c.y, c.x + c.w, c.y + c.h) for c in components(mask)]
-        for gx0, gy0, gx1, gy1 in group_boxes(boxes, LAMA_SIZE - 2 * LAMA_PAD):
+        for gx0, gy0, gx1, gy1 in group_boxes(boxes, self.group_side - 2 * LAMA_PAD):
             x0, y0, x1, y1 = self.crop_window(gx0, gy0, gx1 - gx0, gy1 - gy0, img_w, img_h)
             # Chỉ inpaint phần mask thuộc nhóm; mask nhóm khác trong cửa sổ để lượt của nhóm đó lo.
             crop_mask = np.zeros((y1 - y0, x1 - x0), np.uint8)

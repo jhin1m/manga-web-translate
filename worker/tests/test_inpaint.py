@@ -69,3 +69,24 @@ def test_flood_fill_uses_roi_and_handles_many_components():
         mask[y - 2 : y + 12, 48:62] = 255
     out, remaining = FloodFillInpainter().inpaint(img, mask)
     assert not remaining.any() and (out[mask > 0] == 240).all()
+
+
+@needs_model("lama_manga")
+def test_lama_manga_output_rescaled_and_only_masked_area_changes():
+    img, mask = _page_with_text((250, 250, 250))
+    img[::4] = 200
+    lama = LamaInpainter(model_file("lama_manga"), output_scale=255.0)
+    out, _ = CompositeInpainter(FloodFillInpainter(), lama).inpaint(img, mask)
+    far = cv2.dilate(mask, np.ones((15, 15), np.uint8)) == 0
+    assert np.array_equal(out[far], img[far])
+    # Thang đúng: vùng đã xoá gần màu nền (200–250), không đen kịt như khi quên nhân 255.
+    assert out[mask > 0].mean() > 150
+    assert (out[mask > 0] < 60).mean() < 0.05
+
+
+def test_sized_lama_shares_session_and_changes_grouping():
+    lama = LamaInpainter.__new__(LamaInpainter)
+    lama.session, lama.output_scale, lama.group_side = object(), 1.0, 512
+    big = lama.sized(1024)
+    assert big.session is lama.session and big.group_side == 1024 and lama.group_side == 512
+    assert lama.sized(512) is lama

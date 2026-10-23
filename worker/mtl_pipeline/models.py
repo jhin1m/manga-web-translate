@@ -1,4 +1,7 @@
-"""Đọc models.lock.json, kiểm sha256 trước khi nạp, từ chối định dạng có thể chứa pickle."""
+"""Đọc models.lock.json, kiểm sha256 trước khi nạp, từ chối định dạng có thể chứa pickle.
+
+Model `optional` (chỉ dùng khi cài đặt pipeline của workspace chọn: LaMa manga, OCR local) không bắt buộc lúc khởi
+động; `ensure_model` tải lazy đúng URL/revision trong lock (kiểm sha256) lần đầu job cần."""
 
 from __future__ import annotations
 
@@ -6,6 +9,7 @@ import hashlib
 import json
 import logging
 import os
+import threading
 from pathlib import Path
 
 from pydantic import BaseModel
@@ -13,7 +17,8 @@ from pydantic import BaseModel
 WORKER_DIR = Path(__file__).resolve().parent.parent
 DEFAULT_LOCK = WORKER_DIR / "models.lock.json"
 DEFAULT_MODELS_DIR = WORKER_DIR / "models"
-SAFE_SUFFIXES = (".onnx", ".safetensors")
+# .txt/.json: tokenizer/vocab dạng văn bản (đọc như dữ liệu, không bao giờ unpickle).
+SAFE_SUFFIXES = (".onnx", ".safetensors", ".txt", ".json")
 
 
 class ModelIntegrityError(RuntimeError):
@@ -26,6 +31,8 @@ class ModelEntry(BaseModel):
     url: str
     revision: str
     sha256: str
+    #: True → không kiểm lúc khởi động; tải lazy khi job cần (ensure_model).
+    optional: bool = False
 
 
 class ModelsLock(BaseModel):
@@ -44,7 +51,7 @@ def load_lock(lock_path: Path = DEFAULT_LOCK) -> ModelsLock:
     lock = ModelsLock.model_validate(json.loads(lock_path.read_text()))
     for m in lock.models:
         if not m.file.endswith(SAFE_SUFFIXES):
-            raise ModelIntegrityError(f"{m.name}: chỉ chấp nhận .onnx/.safetensors, gặp {m.file}")
+            raise ModelIntegrityError(f"{m.name}: chỉ chấp nhận {'/'.join(SAFE_SUFFIXES)}, gặp {m.file}")
     return lock
 
 
@@ -71,10 +78,12 @@ def ort_providers() -> list[str]:
 
 
 def verify_all(lock_path: Path = DEFAULT_LOCK, root: Path | None = None) -> dict[str, Path]:
-    """Kiểm sha256 mọi model trong lock → {name: path}. Gọi một lần khi khởi động."""
+    """Kiểm sha256 mọi model bắt buộc trong lock → {name: path}. Gọi một lần khi khởi động."""
     root = root or models_dir()
     out: dict[str, Path] = {}
     for m in load_lock(lock_path).models:
+        if m.optional:
+            continue
         p = root / m.file
         if not p.is_file():
             raise ModelIntegrityError(f"{m.name}: thiếu file {p} (tải theo worker/models/README.md)")
@@ -83,3 +92,44 @@ def verify_all(lock_path: Path = DEFAULT_LOCK, root: Path | None = None) -> dict
             raise ModelIntegrityError(f"{m.name}: sha256 lệch ({digest} != {m.sha256})")
         out[m.name] = p
     return out
+
+
+def download(m: ModelEntry, dest: Path) -> None:
+    """Tải đúng URL (pin revision) vào file tạm cạnh dest, kiểm sha256 rồi mới đổi tên; sai → xoá, ném lỗi."""
+    import httpx
+
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    tmp = dest.with_suffix(dest.suffix + ".part")
+    with httpx.stream("GET", m.url, follow_redirects=True, timeout=600) as r, tmp.open("wb") as f:
+        r.raise_for_status()
+        for chunk in r.iter_bytes(1 << 20):
+            f.write(chunk)
+    digest = sha256_file(tmp)
+    if digest != m.sha256:
+        tmp.unlink()
+        raise ModelIntegrityError(f"{m.name}: sha256 lệch sau khi tải ({digest} != {m.sha256})")
+    tmp.rename(dest)
+
+
+_ensure_lock = threading.Lock()
+_verified: set[Path] = set()
+
+
+def ensure_model(name: str, lock_path: Path = DEFAULT_LOCK, root: Path | None = None) -> Path:
+    """Đường dẫn model `name` đã kiểm sha256; thiếu file → tải theo lock (log). Mỗi file chỉ kiểm 1 lần/process."""
+    root = root or models_dir()
+    entry = next((m for m in load_lock(lock_path).models if m.name == name), None)
+    if entry is None:
+        raise ModelIntegrityError(f"model {name} không có trong {lock_path.name}")
+    p = root / entry.file
+    with _ensure_lock:
+        if p in _verified:
+            return p
+        if not p.is_file():
+            logging.getLogger("mtl_pipeline").info("tải model %s <- %s", name, entry.url)
+            download(entry, p)
+        digest = sha256_file(p)
+        if digest != entry.sha256:
+            raise ModelIntegrityError(f"{name}: sha256 lệch ({digest} != {entry.sha256})")
+        _verified.add(p)
+    return p

@@ -9,6 +9,7 @@ import numpy as np
 
 from mtl_pipeline.images import open_rgb
 from mtl_pipeline.ocr import ocr_page
+from mtl_pipeline.options import InpaintOptions, PrepareOptions
 from mtl_pipeline.pipeline import restore_sfx
 from mtl_pipeline.providers.base import ProviderError
 from mtl_pipeline.schema import (
@@ -58,6 +59,7 @@ def _ocr_item_to_shared(it: OcrItem) -> dict[str, Any]:
 
 def handle_prepare(ctx: JobContext, deps: Deps) -> dict[str, Any]:
     rev = ctx.outputs["clean"]["rev"]
+    opts = ctx.payload.get("pipeline")
     img = open_rgb(ctx.download(ctx.inputs["original"]))
     partial = ctx.inputs.get("partial")
     if partial:
@@ -70,7 +72,7 @@ def handle_prepare(ctx: JobContext, deps: Deps) -> dict[str, Any]:
         ctx.report("detect", 0.05)
         # Payload trước khi có reading_order/source_lang (job xếp hàng từ bản cũ) → mặc định manhwa tiếng Hàn.
         rtl = ctx.payload.get("reading_order", "ltr") == "rtl"
-        regions, mask, clean, _ = deps.pipeline.prepare_image(img, rtl)
+        regions, mask, clean, _ = deps.pipeline.prepare_image(img, rtl, PrepareOptions.from_payload(opts))
     ctx.report("ocr", 0.6)
     try:
         # LLM gọi cuối cùng: lỗi provider vẫn giữ được artifact detect/inpaint.
@@ -274,7 +276,12 @@ def handle_reinpaint(ctx: JobContext, deps: Deps) -> dict[str, Any]:
         mask[y0:y1, x0:x1] = user[y0 - oy : y1 - oy, x0 - ox : x1 - ox]
     mask = np.where(mask > 0, 255, 0).astype(np.uint8)
     ctx.report("inpaint", 0.3)
-    out, _ = deps.pipeline.inpainter.inpaint(clean, mask) if mask.any() else (clean, None)
+    io = InpaintOptions.from_payload(ctx.payload.get("inpaint"))
+    out, _ = (
+        deps.pipeline.inpainter_for(io.inpainter, io.inpaint_size).inpaint(clean, mask)
+        if mask.any()
+        else (clean, None)
+    )
     ctx.upload("clean", png_bytes(out)[0])
     return {"type": "page.reinpaint", "clean_rev": ctx.outputs["clean"]["rev"]}
 

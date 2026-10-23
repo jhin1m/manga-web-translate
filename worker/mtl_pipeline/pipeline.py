@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import re
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
@@ -18,9 +19,10 @@ import numpy as np
 from .detect import Detector
 from .fonts import DEFAULT_FONT
 from .images import open_rgb, save_png
-from .inpaint import CompositeInpainter, FloodFillInpainter, LamaInpainter
-from .models import verify_all
+from .inpaint import CompositeInpainter, FloodFillInpainter, Inpainter, LamaInpainter
+from .models import ensure_model, verify_all
 from .ocr import ocr_page
+from .options import PrepareOptions
 from .providers.base import LLMProvider
 from .render import render_page, require_raqm
 from .schema import ContextMode, OcrResult, PageAiState, PageText, Region, RegionText
@@ -52,27 +54,54 @@ class PrepareTiming:
         return self.detect + self.mask + self.inpaint
 
 
+# Hệ số đưa output LaMa về 0..255 theo model (xem inpaint.py).
+LAMA_OUTPUT_SCALE = {"big_lama": 1.0, "lama_manga": 255.0}
+
+
 class Pipeline:
     def __init__(self, threads: int = 0):
         require_raqm()
         paths = verify_all()
+        self.threads = threads
         self.detector = Detector(paths["rtdetr_v2_comic"], threads=threads)
         self.masker = CtdMasker(paths["comic_text_detector"], threads=threads)
-        self.inpainter = CompositeInpainter(
-            FloodFillInpainter(), LamaInpainter(paths["big_lama"], threads=threads)
-        )
+        self._lamas: dict[str, LamaInpainter] = {
+            "big_lama": LamaInpainter(paths["big_lama"], threads=threads)
+        }
+        self._lock = threading.Lock()
+        self.inpainter = self.inpainter_for("big_lama")
+
+    def _lama(self, name: str) -> LamaInpainter:
+        """Session LaMa theo tên, nạp lười (model optional tải theo lock khi cần lần đầu)."""
+        with self._lock:
+            if name not in self._lamas:
+                if name not in LAMA_OUTPUT_SCALE:
+                    raise ValueError(f"inpainter không hỗ trợ: {name}")
+                self._lamas[name] = LamaInpainter(
+                    ensure_model(name), threads=self.threads, output_scale=LAMA_OUTPUT_SCALE[name]
+                )
+            return self._lamas[name]
+
+    def inpainter_for(self, name: str = "big_lama", size: int | None = None) -> Inpainter:
+        """Flood-fill nền phẳng trước, phần còn lại cho LaMa `name` (cửa sổ gom tối đa `size`)."""
+        lama = self._lama(name)
+        return CompositeInpainter(FloodFillInpainter(), lama.sized(size) if size else lama)
 
     # ---- giai đoạn 1 ----
 
     def prepare_image(
-        self, img: np.ndarray, rtl: bool = False
+        self, img: np.ndarray, rtl: bool = False, opts: PrepareOptions | None = None
     ) -> tuple[list[Region], np.ndarray, np.ndarray, PrepareTiming]:
+        opts = opts or PrepareOptions()
+        ctd = opts.detector == "comic_text_detector"
         t0 = time.perf_counter()
-        regions = self.detector.detect(img, rtl)
+        # CTD chạy 1 lượt cho cả mask lẫn khối chữ; RT-DETR vẫn cho bóng thoại.
+        pred, blocks = self.masker.predict_with_blocks(img, opts.detection_threshold if ctd else None)
+        regions = self.detector.detect(img, rtl, opts.detection_threshold, blocks if ctd else None)
         t1 = time.perf_counter()
-        mask = build_text_mask(img, self.masker.predict(img), regions)
+        mask = build_text_mask(img, pred, regions, opts.mask_dilation)
         t2 = time.perf_counter()
-        clean, _ = self.inpainter.inpaint(img, mask)
+        clean, _ = self.inpainter_for(opts.inpainter, opts.inpaint_size).inpaint(img, mask)
         assign_colors(regions, clean)
         t3 = time.perf_counter()
         return regions, mask, clean, PrepareTiming(t1 - t0, t2 - t1, t3 - t2, 0.0)

@@ -92,12 +92,26 @@ class FakeClient:
 
 class FakePipeline:
     rtl: bool | None = None
+    opts: Any = None
+    inpaint_args: tuple[str, int | None] | None = None
 
-    def prepare_image(self, img, rtl=False):
+    def prepare_image(self, img, rtl=False, opts=None):
         self.rtl = rtl
+        self.opts = opts
         regs = [Region(id="t0", kind="text_free", bbox=BBox(x=2, y=2, w=40, h=20), score=0.9)]
         mask = np.zeros(img.shape[:2], np.uint8)
         return regs, mask, img.copy(), None
+
+    def inpainter_for(self, name="big_lama", size=None):
+        self.inpaint_args = (name, size)
+        pipe = self
+
+        class _Copy:
+            def inpaint(self, img, mask):
+                pipe.inpainted = True
+                return img.copy(), np.zeros_like(mask)
+
+        return _Copy()
 
 
 class FakeProvider:
@@ -224,3 +238,54 @@ def test_token_file_must_be_private(tmp_path):
         read_token_file(p)
     os.chmod(p, 0o600)
     assert read_token_file(p) == "mtlw_secret"
+
+
+def test_prepare_passes_pipeline_options_old_payload_gets_defaults():
+    from mtl_pipeline.options import PrepareOptions
+
+    deps = Deps()
+    run_job(FakeClient(), prepare_job(), HANDLERS, deps)
+    assert deps.pipeline.opts == PrepareOptions()
+    job = prepare_job()
+    job["payload"]["pipeline"] = {
+        "detector": "comic_text_detector",
+        "detection_threshold": 0.5,
+        "ocr_engine": "llm",
+        "inpainter": "lama_manga",
+        "mask_dilation": 3,
+        "inpaint_size": 768,
+    }
+    deps = Deps()
+    assert run_job(FakeClient(), job, HANDLERS, deps) == "succeeded"
+    assert deps.pipeline.opts == PrepareOptions("comic_text_detector", 0.5, "llm", "lama_manga", 3, 768)
+
+
+def test_reinpaint_uses_payload_inpainter():
+    mask = np.zeros((64, 48), np.uint8)
+    mask[10:20, 10:20] = 255
+
+    class MaskClient(FakeClient):
+        def download(self, url: str) -> bytes:
+            return encode_png(mask) if "mask" in url else PNG
+
+    job = {
+        **prepare_job(),
+        "type": "page.reinpaint",
+        "payload": {
+            "type": "page.reinpaint",
+            "page_id": PAGE,
+            "base_clean_rev": 1,
+            "user_mask_key": "k",
+            "offset": {"x": 0, "y": 0},
+            "inpaint": {"inpainter": "lama_manga", "inpaint_size": 640},
+        },
+        "inputs": {"base_clean": "http://files/clean.png", "user_mask": "http://files/mask.png"},
+        "outputs": {"clean": {"key": "c", "rev": 8, "put": "http://files/clean", "expires_at": "x"}},
+    }
+    deps = Deps()
+    assert run_job(MaskClient(), job, HANDLERS, deps) == "succeeded"
+    assert deps.pipeline.inpaint_args == ("lama_manga", 640)
+    del job["payload"]["inpaint"]
+    deps = Deps()
+    assert run_job(MaskClient(), job, HANDLERS, deps) == "succeeded"
+    assert deps.pipeline.inpaint_args == ("big_lama", 512)
