@@ -99,6 +99,13 @@
       "when": 1792777146846,
       "tag": "0013_workspace_pipeline_settings",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1792778623019,
+      "tag": "0014_proofread_suggestions",
+      "breakpoints": true
     }
   ]
 }

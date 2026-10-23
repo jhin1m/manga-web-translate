@@ -127,6 +127,22 @@ async function handle(token: string, j: Claimed, opts: FakeWorkerOptions) {
     await putWith(out, body);
     return complete(token, j, { type: "chapter.export", key: out.key, bytes: body.byteLength });
   }
+  if (j.type === "chapter.proofread") {
+    // Gợi ý sửa vùng đầu tiên có bản dịch của mỗi trang (worker thật gọi LLM).
+    const pages = (j.inputs as { pages: { page_id: string; regions: { id: string; translation: string }[] }[] }).pages;
+    return complete(token, j, {
+      type: "chapter.proofread",
+      suggestions: pages.flatMap((p) =>
+        p.regions.slice(0, 1).map((r) => ({
+          page_id: p.page_id,
+          region_id: r.id,
+          old: r.translation,
+          suggestion: `${r.translation}, cậu khoẻ không?`,
+          reason: "thiếu câu hỏi thăm theo ngữ cảnh",
+        })),
+      ),
+    });
+  }
   throw new Error(`fake worker: unsupported ${j.type}`);
 }
 

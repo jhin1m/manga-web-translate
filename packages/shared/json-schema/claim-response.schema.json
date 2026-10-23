@@ -21,7 +21,8 @@
               "chapter.translate",
               "page.reinpaint",
               "page.ocr_region",
-              "chapter.export"
+              "chapter.export",
+              "chapter.proofread"
             ]
           },
           "attempt": {
@@ -429,6 +430,91 @@
                   "layout",
                   "quality",
                   "include_untranslated"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "const": "chapter.proofread"
+                  },
+                  "chapter_id": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "page_ids": {
+                    "minItems": 1,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    }
+                  },
+                  "model_tier": {
+                    "type": "string",
+                    "enum": [
+                      "standard",
+                      "premium"
+                    ]
+                  },
+                  "settings": {
+                    "type": "object",
+                    "properties": {
+                      "glossary": {
+                        "type": "object",
+                        "propertyNames": {
+                          "type": "string"
+                        },
+                        "additionalProperties": {
+                          "type": "string"
+                        }
+                      },
+                      "source_lang": {
+                        "type": "string",
+                        "minLength": 2
+                      },
+                      "target_lang": {
+                        "type": "string",
+                        "minLength": 2
+                      },
+                      "pronoun_rules": {
+                        "type": "string"
+                      },
+                      "honorific_policy": {
+                        "type": "string"
+                      },
+                      "style_prompt": {
+                        "type": "string"
+                      },
+                      "font": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "narration_font": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    },
+                    "required": [
+                      "glossary",
+                      "pronoun_rules",
+                      "honorific_policy",
+                      "style_prompt",
+                      "font"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "type",
+                  "chapter_id",
+                  "page_ids",
+                  "model_tier",
+                  "settings"
                 ],
                 "additionalProperties": false
               }

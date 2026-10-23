@@ -2,6 +2,7 @@
 import type { PageState, SourceSkipReason } from "@mtl/shared";
 import { api, wsPath } from "../../lib/api.ts";
 import type { ChapterStatus, ChapterSummary } from "../series/api.ts";
+import type { Suggestion } from "./proofread-model.ts";
 import type { PageStatus } from "./status.ts";
 
 export type JobView = {
@@ -126,6 +127,17 @@ export const retryFailed = (ws: string, ch: string) =>
   api<{ jobs: JobView[] }>(base(ws, ch, "/retry-failed"), { method: "POST" });
 export const retranslate = (ws: string, ch: string, pageIds?: string[]) =>
   api<{ job: JobView }>(base(ws, ch, "/translate"), { method: "POST", body: pageIds ? { page_ids: pageIds } : {} });
+export type ProofreadView = { job: JobView | null; suggestions: Suggestion[] };
+export const proofreadKey = (ws: string, ch: string) => ["chapter", ws, ch, "proofread"] as const;
+export const fetchProofread = (ws: string, ch: string) => api<ProofreadView>(base(ws, ch, "/proofread"));
+export const runProofread = (ws: string, ch: string) =>
+  api<{ job: JobView; created: boolean }>(base(ws, ch, "/proofread"), { method: "POST" });
+export const dismissSuggestion = (ws: string, id: string, dismissed = true) =>
+  api<{ id: string; dismissed: boolean }>(wsPath(ws, `/proofread-suggestions/${id}`), {
+    method: "PATCH",
+    body: { dismissed },
+  });
+
 export const cancelChapter = (ws: string, ch: string) =>
   api<{ cancelled: number }>(base(ws, ch, "/cancel"), { method: "POST" });
 export const lockChapter = (ws: string, ch: string) =>

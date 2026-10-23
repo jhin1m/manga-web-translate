@@ -46,6 +46,22 @@ export function pageOpKey(payload: Extract<JobPayload, { type: "page.reinpaint" 
 }
 
 /**
+ * chapter.proofread: input = version page_state từng page + glossary/settings rev + model → bấm lại khi chưa sửa gì
+ * trả job đang chạy; sửa xong bấm lại là lượt mới.
+ */
+export function proofreadKey(
+  chapterId: string,
+  pages: ReadonlyArray<{ id: string; version: number }>,
+  glossaryRev: number,
+  settingsRev: number,
+  tier: string,
+): JobKey {
+  const items = pages.map((p) => `${p.id}:${p.version}`).sort();
+  const inputRev = sha([items.join(","), glossaryRev, settingsRev, env.PIPELINE_VERSION].join("|"));
+  return { inputRev, idempotencyKey: idempotencyKey("chapter.proofread", chapterId, inputRev, { tier }) };
+}
+
+/**
  * chapter.export: input = trạng thái từng page lúc enqueue (version state + clean_rev + status) → bấm xuất lại khi
  * job cũ còn chạy và chương chưa đổi thì trả job cũ.
  */

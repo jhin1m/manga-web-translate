@@ -8,6 +8,7 @@ import {
   OcrRegionInputs,
   PrepareInputs,
   PresignOutputsResponse,
+  ProofreadInputs,
   ReinpaintInputs,
   TranslateInputs,
   WorkerUsage,
@@ -33,6 +34,7 @@ export const exportedSchemas = {
   "inputs-page-reinpaint": ReinpaintInputs,
   "inputs-page-ocr-region": OcrRegionInputs,
   "inputs-chapter-export": ExportInputs,
+  "inputs-chapter-proofread": ProofreadInputs,
 } as const;
 
 export function buildJsonSchemas(): Record<string, unknown> {

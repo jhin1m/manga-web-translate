@@ -19,4 +19,8 @@ describe("railClick", () => {
   it("bấm công cụ đang chọn khi panel đang là Bản dịch thì mở panel công cụ", () => {
     expect(railClick({ panel: "table", tool: "select" }, "select")).toEqual({ panel: "tool", tool: "select" });
   });
+  it("Hiệu đính bật tắt panel của nó như Bản dịch / Tìm", () => {
+    expect(railClick({ panel: "tool", tool: "text" }, "proofread")).toEqual({ panel: "proofread", tool: "text" });
+    expect(railClick({ panel: "proofread", tool: "text" }, "proofread")).toEqual({ panel: null, tool: "text" });
+  });
 });

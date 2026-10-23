@@ -188,6 +188,41 @@ class TranslateResult(BaseModel):
     usage: list[TokenUsage] = Field(default_factory=list)
 
 
+# ---- AI hiệu đính (chapter.proofread) ----
+
+
+class ProofreadRegion(BaseModel):
+    id: str
+    kind: Literal["text_bubble", "text_free"]
+    source: str
+    translation: str
+
+
+class ProofreadRequest(BaseModel):
+    page_ord: int
+    regions: list[ProofreadRegion]
+    #: Ảnh trang gốc (JPEG) đã thu nhỏ, cắt khúc theo chiều dọc; rỗng khi không gửi ảnh.
+    images: list[bytes] = Field(default_factory=list)
+    source_lang: str = "ko"
+    target_lang: str = "vi"
+    glossary: dict[str, str] = Field(default_factory=dict)
+    pronoun_rules: str = ""
+    honorific_policy: str = DEFAULT_HONORIFIC_POLICY
+    #: Vài dòng nguồn + bản dịch cuối của trang trước (giữ xưng hô nhất quán).
+    context: list[ContextLine] = Field(default_factory=list)
+
+
+class ProofreadItem(BaseModel):
+    id: str
+    suggestion: str
+    reason: str = ""
+
+
+class ProofreadResult(BaseModel):
+    items: list[ProofreadItem]
+    usage: list[TokenUsage] = Field(default_factory=list)
+
+
 # ---- Typeset (hợp đồng layout, xem docs/typeset-layout-contract.md) ----
 
 

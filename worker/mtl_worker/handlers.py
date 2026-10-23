@@ -12,6 +12,7 @@ from mtl_pipeline.local_ocr import ocr_page_local
 from mtl_pipeline.ocr import ocr_page
 from mtl_pipeline.options import LOCAL_OCR_ENGINES, InpaintOptions, PrepareOptions
 from mtl_pipeline.pipeline import restore_sfx
+from mtl_pipeline.proofread import page_images, proofread_page
 from mtl_pipeline.providers.base import ProviderError
 from mtl_pipeline.schema import (
     BBox,
@@ -19,6 +20,8 @@ from mtl_pipeline.schema import (
     OcrItem,
     OcrResult,
     PageText,
+    ProofreadRegion,
+    ProofreadRequest,
     Region,
     RegionText,
     RollingContext,
@@ -355,6 +358,51 @@ def handle_ocr_region(ctx: JobContext, deps: Deps) -> dict[str, Any]:
     }
 
 
+# ---- chapter.proofread ----
+
+CONTEXT_TAIL = 8
+
+
+def handle_proofread(ctx: JobContext, deps: Deps) -> dict[str, Any]:
+    p = ctx.payload
+    settings = _settings(p)
+    provider = deps.provider_for(p.get("model_tier", "standard"))
+    pages_in = sorted(ctx.inputs["pages"], key=lambda pg: pg["ord"])
+    context: list[ContextLine] = []
+    out: list[dict[str, Any]] = []
+    for i, pg in enumerate(pages_in):
+        ctx.report("proofread", 0.05 + 0.9 * i / max(1, len(pages_in)))
+        regions = [ProofreadRegion.model_validate(r) for r in pg["regions"]]
+        if not regions:
+            continue
+        req = ProofreadRequest(
+            page_ord=pg["ord"],
+            regions=regions,
+            images=page_images(open_rgb(ctx.download(pg["image"]))),
+            source_lang=settings.source_lang,
+            target_lang=settings.target_lang,
+            glossary=settings.glossary,
+            pronoun_rules=settings.pronoun_rules,
+            honorific_policy=settings.honorific_policy,
+            context=context,
+        )
+        res = proofread_page(provider, req)
+        ctx.add_usage(res.usage)
+        by_id = {r.id: r for r in regions}
+        for it in res.items:
+            out.append(
+                {
+                    "page_id": pg["page_id"],
+                    "region_id": it.id,
+                    "old": nfc(by_id[it.id].translation),
+                    "suggestion": nfc(it.suggestion),
+                    "reason": nfc(it.reason),
+                }
+            )
+        context = [ContextLine(source=r.source, translation=r.translation) for r in regions][-CONTEXT_TAIL:]
+    return {"type": "chapter.proofread", "suggestions": out}
+
+
 HANDLERS: dict[str, Handler] = {
     "chapter.ingest": handle_ingest,
     "page.prepare": handle_prepare,
@@ -362,6 +410,7 @@ HANDLERS: dict[str, Handler] = {
     "page.reinpaint": handle_reinpaint,
     "page.ocr_region": handle_ocr_region,
     "chapter.export": handle_export,
+    "chapter.proofread": handle_proofread,
 }
 # Loại cần LLM: worker không có provider (--no-llm) thì không khai các loại này.
-LLM_TYPES = {"page.prepare", "chapter.translate", "page.ocr_region"}
+LLM_TYPES = {"page.prepare", "chapter.translate", "page.ocr_region", "chapter.proofread"}

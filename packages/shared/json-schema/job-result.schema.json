@@ -774,6 +774,60 @@
         "bytes"
       ],
       "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "chapter.proofread"
+        },
+        "suggestions": {
+          "maxItems": 2000,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "page_id": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              },
+              "region_id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64
+              },
+              "old": {
+                "type": "string",
+                "maxLength": 4000
+              },
+              "suggestion": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 4000
+              },
+              "reason": {
+                "type": "string",
+                "maxLength": 500
+              }
+            },
+            "required": [
+              "page_id",
+              "region_id",
+              "old",
+              "suggestion",
+              "reason"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "type",
+        "suggestions"
+      ],
+      "additionalProperties": false
     }
   ]
 }

@@ -399,6 +399,38 @@ export const jobs = pgTable(
 );
 
 /**
+ * Gợi ý AI hiệu đính (job chapter.proofread) theo vùng chữ. Không ghi đè bản dịch: editor nhận gợi ý qua đường sửa
+ * chữ thường. `old_text` = bản dịch lúc job đọc → bản hiện tại khác cả cũ lẫn gợi ý = gợi ý lỗi thời. Lần hiệu đính
+ * mới thay toàn bộ gợi ý của chương. `dismissed_at` = người dùng bấm "Bỏ".
+ */
+export const proofreadSuggestions = pgTable(
+  "proofread_suggestions",
+  {
+    id: idPk(),
+    workspaceId: workspaceId(),
+    chapterId: uuid("chapter_id").notNull(),
+    pageId: uuid("page_id").notNull(),
+    jobId: uuid("job_id"),
+    regionId: text("region_id").notNull(),
+    oldText: text("old_text").notNull(),
+    suggestion: text("suggestion").notNull(),
+    reason: text("reason").notNull().default(""),
+    dismissedAt: timestamp("dismissed_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    foreignKey({ columns: [t.workspaceId, t.chapterId], foreignColumns: [chapters.workspaceId, chapters.id] }).onDelete(
+      "cascade",
+    ),
+    foreignKey({ columns: [t.workspaceId, t.pageId], foreignColumns: [pages.workspaceId, pages.id] }).onDelete(
+      "cascade",
+    ),
+    index("proofread_suggestions_chapter_idx").on(t.chapterId),
+    unique("proofread_suggestions_page_region_uq").on(t.pageId, t.regionId),
+  ],
+);
+
+/**
  * Append-only. workspace_id null = chi phí nền tảng (VD GPU rỗi). Giá tính ở server từ số đếm thô.
  * Khử trùng: dòng theo job → unique (job_id, attempt, seq, kind); dòng nền tảng theo dispatch (job_id null) →
  * unique (dispatch_id, kind) — sessions/end gửi lại hoặc reaper ước lượng sau đó không ghi lần 2.

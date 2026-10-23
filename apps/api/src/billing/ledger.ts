@@ -27,6 +27,8 @@ export function maxLlmCalls(payload: JobPayload): number {
       return 2 * payload.page_ids.length + 2;
     case "page.ocr_region":
       return 4;
+    case "chapter.proofread":
+      return 2 * payload.page_ids.length;
     default:
       return 0;
   }

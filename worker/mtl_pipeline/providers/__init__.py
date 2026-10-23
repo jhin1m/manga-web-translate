@@ -10,18 +10,30 @@ DEFAULT_PROVIDER = "gemini"
 COMPARE_PROVIDER = "anthropic"
 
 
-def make_provider(name: str) -> LLMProvider:
-    """Tạo provider theo tên; model đổi qua env MTL_GEMINI_MODEL / MTL_ANTHROPIC_MODEL.
+def make_provider(name: str, tier: str = "standard") -> LLMProvider:
+    """Tạo provider theo tên; model đổi qua env MTL_GEMINI_MODEL / MTL_ANTHROPIC_MODEL. tier="premium" (model AI hiệu
+    đính Premium) dùng MTL_GEMINI_PREMIUM_MODEL / MTL_ANTHROPIC_PREMIUM_MODEL.
 
     Mặc định pin model ID cụ thể (không dùng alias *-latest): giá và nhánh tắt thinking phụ thuộc model."""
+    premium = tier == "premium"
     if name == "gemini":
         from .gemini import GeminiProvider
 
-        return GeminiProvider(model=os.environ.get("MTL_GEMINI_MODEL", "gemini-2.5-flash"))
+        env, default = (
+            ("MTL_GEMINI_PREMIUM_MODEL", "gemini-2.5-pro")
+            if premium
+            else ("MTL_GEMINI_MODEL", "gemini-2.5-flash")
+        )
+        return GeminiProvider(model=os.environ.get(env, default))
     if name == "anthropic":
         from .anthropic import AnthropicProvider
 
-        return AnthropicProvider(model=os.environ.get("MTL_ANTHROPIC_MODEL", "claude-haiku-5-5"))
+        env, default = (
+            ("MTL_ANTHROPIC_PREMIUM_MODEL", "claude-sonnet-5-5")
+            if premium
+            else ("MTL_ANTHROPIC_MODEL", "claude-haiku-5-5")
+        )
+        return AnthropicProvider(model=os.environ.get(env, default))
     raise ValueError(f"provider không hỗ trợ: {name}")
 
 

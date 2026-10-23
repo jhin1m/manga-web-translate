@@ -9,6 +9,7 @@ import {
   LOCAL_OCR_ENGINES,
   type OcrEngine,
   OcrEngineSchema,
+  PROOFREAD_TIERS,
   PrepareOptions,
 } from "./pipeline-settings.ts";
 import { PAGE_FORMATS } from "./series-lang.ts";
@@ -20,12 +21,18 @@ export const JOB_TYPES = [
   "page.reinpaint",
   "page.ocr_region",
   "chapter.export",
+  "chapter.proofread",
 ] as const;
 export const JobType = z.enum(JOB_TYPES);
 export type JobType = z.infer<typeof JobType>;
 
 /** Loại job gọi LLM — circuit breaker bỏ qua khi llm_paused. */
-export const LLM_JOB_TYPES: readonly JobType[] = ["page.prepare", "chapter.translate", "page.ocr_region"];
+export const LLM_JOB_TYPES: readonly JobType[] = [
+  "page.prepare",
+  "chapter.translate",
+  "page.ocr_region",
+  "chapter.proofread",
+];
 /** Loại job tốn tiền — kill-switch ngân sách toàn cục chặn ở claim (hiện trùng LLM_JOB_TYPES). */
 export const PAID_JOB_TYPES: readonly JobType[] = LLM_JOB_TYPES;
 /** Vòng đời 1 lần gọi Modal /drain (bảng dispatches). */
@@ -149,6 +156,14 @@ export const JobPayload = z.discriminatedUnion("type", [
     quality: z.number().int().min(1).max(100),
     include_untranslated: z.boolean(),
   }),
+  z.object({
+    /** AI hiệu đính: đề xuất sửa bản dịch theo khối (không ghi page_state; gợi ý lưu ở proofread_suggestions). */
+    type: z.literal("chapter.proofread"),
+    chapter_id: Uuid,
+    page_ids: z.array(Uuid).min(1),
+    model_tier: z.enum(PROOFREAD_TIERS),
+    settings: TranslateSettings,
+  }),
 ]);
 export type JobPayload = z.infer<typeof JobPayload>;
 
@@ -168,6 +183,16 @@ export const SourceMapEntry = z.object({
   page_y: z.number().int().nonnegative(),
   h: z.number().int().positive(),
 });
+
+/** 1 gợi ý hiệu đính: `old` = bản dịch worker đã thấy lúc claim (để phát hiện gợi ý lỗi thời). */
+export const ProofreadSuggestionOut = z.object({
+  page_id: Uuid,
+  region_id: z.string().min(1).max(64),
+  old: z.string().max(4000),
+  suggestion: z.string().min(1).max(4000),
+  reason: z.string().max(500),
+});
+export type ProofreadSuggestionOut = z.infer<typeof ProofreadSuggestionOut>;
 
 export const JobResult = z.discriminatedUnion("type", [
   z.object({
@@ -191,6 +216,7 @@ export const JobResult = z.discriminatedUnion("type", [
   z.object({ type: z.literal("page.reinpaint"), clean_rev: Rev }),
   z.object({ type: z.literal("page.ocr_region"), region: Region }),
   z.object({ type: z.literal("chapter.export"), key: z.string().min(1), bytes: z.number().int().nonnegative() }),
+  z.object({ type: z.literal("chapter.proofread"), suggestions: z.array(ProofreadSuggestionOut).max(2000) }),
 ]);
 export type JobResult = z.infer<typeof JobResult>;
 

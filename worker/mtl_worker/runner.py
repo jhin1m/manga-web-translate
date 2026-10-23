@@ -68,6 +68,10 @@ class Deps(Protocol):
     @property
     def provider(self) -> LLMProvider: ...
 
+    def provider_for(self, tier: str) -> Any:
+        """Provider theo tier model (AI hiệu đính: standard | premium)."""
+        ...
+
 
 class JobContext:
     def __init__(self, client: WorkerApi, job: dict[str, Any], deadline: Callable[[], bool] | None = None):

@@ -961,3 +961,57 @@ label.cw-field-head {
 .cw-adv[open] > summary {
   margin-bottom: var(--sp-2);
 }
+
+/* ---- Panel AI hiệu đính ---- */
+.cw-proofread {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+}
+.cw-proofread-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.cw-proofread-item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  padding: var(--sp-3) var(--sp-4);
+  border-bottom: 1px solid var(--c-surface-2);
+}
+.cw-proofread-item[data-active] {
+  background: var(--c-surface);
+}
+.cw-proofread-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: 0;
+  font-weight: 600;
+  text-align: left;
+}
+.cw-proofread-diff {
+  display: grid;
+  gap: 2px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.cw-proofread-item[data-state="stale"] .cw-proofread-diff,
+.cw-proofread-item[data-state="applied"] .cw-proofread-diff {
+  opacity: 0.7;
+}
+.cw-proofread-diff del {
+  color: var(--c-fg-muted);
+}
+.cw-proofread-diff ins {
+  text-decoration: none;
+  color: var(--c-fg);
+}
+.cw-proofread-diff ins::before {
+  content: "→ ";
+  color: var(--c-accent-hover);
+}

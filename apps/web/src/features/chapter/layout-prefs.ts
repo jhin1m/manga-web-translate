@@ -5,7 +5,7 @@
 import type { PanelId } from "./tool-rail-model.ts";
 
 const LAYOUT_KEY = "mtl.layout";
-const PANELS: readonly (PanelId | null)[] = ["tool", "table", "find", null];
+const PANELS: readonly (PanelId | null)[] = ["tool", "table", "find", "proofread", null];
 
 export function readPanel(): PanelId | null {
   try {

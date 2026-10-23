@@ -11,6 +11,7 @@ import {
   NotFoundError,
   pageStates,
   pages,
+  proofreadSuggestions,
   scoped,
   series,
   seriesSkipImages,
@@ -42,6 +43,8 @@ let sourceFileA = "";
 const skipImageOf: Record<string, string> = {};
 /** Font tuỳ chỉnh mẫu (route DELETE /fonts/:fontId) — id dạng custom-<8 hex>. */
 const fontOf: Record<string, string> = {};
+/** Gợi ý hiệu đính mẫu (route PATCH /proofread-suggestions/:id). */
+const suggestionOf: Record<string, string> = {};
 
 beforeAll(async () => {
   [A, B] = await Promise.all([seedWorkspace("a"), seedWorkspace("b")]);
@@ -94,6 +97,15 @@ beforeAll(async () => {
     });
     await scoped(db, s.workspaceId).insert(pageStates, { pageId: pid, state: emptyPageState(100, 100) });
     pageOf[s.workspaceId] = pid;
+    suggestionOf[s.workspaceId] = (
+      await scoped(db, s.workspaceId).insert(proofreadSuggestions, {
+        chapterId: s.chapterId,
+        pageId: pid,
+        regionId: "r0",
+        oldText: "cũ",
+        suggestion: "mới",
+      })
+    ).id;
     skipImageOf[s.workspaceId] = (
       await scoped(db, s.workspaceId).insert(seriesSkipImages, {
         seriesId: s.seriesId,
@@ -171,6 +183,7 @@ const BODIES: Record<string, unknown> = {
     base_clean_rev: 1,
   },
   "POST /api/w/:ws/pages/:pageId/ocr-region": { bbox: [0, 0, 10, 10] },
+  "PATCH /api/w/:ws/proofread-suggestions/:suggestionId": { dismissed: true },
   "POST /api/w/:ws/chapters/:chapterId/export": { format: "cbz", layout: "pages" },
   "POST /api/w/:ws/series/:seriesId/ignore-apply/preview": {},
   "POST /api/w/:ws/series/:seriesId/ignore-apply/apply": { versions: {} },
@@ -246,6 +259,9 @@ const RESOURCE_CASES: Record<string, (b: Seed) => Record<string, string>> = {
     imageId: skipImageOf[b.workspaceId] ?? "",
   }),
   "DELETE /api/w/:ws/fonts/:fontId": (b) => ({ fontId: fontOf[b.workspaceId] ?? "" }),
+  "POST /api/w/:ws/chapters/:chapterId/proofread": (b) => ({ chapterId: b.chapterId }),
+  "GET /api/w/:ws/chapters/:chapterId/proofread": (b) => ({ chapterId: b.chapterId }),
+  "PATCH /api/w/:ws/proofread-suggestions/:suggestionId": (b) => ({ suggestionId: suggestionOf[b.workspaceId] ?? "" }),
   "DELETE /api/w/:ws/chapters/:chapterId": (b) => ({ chapterId: spareChapterOf[b.workspaceId] ?? "" }),
   "DELETE /api/w/:ws/series/:seriesId": (b) => ({ seriesId: spareSeriesOf[b.workspaceId] ?? "" }),
 };

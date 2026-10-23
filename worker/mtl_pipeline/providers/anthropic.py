@@ -7,10 +7,20 @@ from typing import Any
 
 import anthropic
 
-from ..schema import OcrRequest, OcrResult, TokenUsage, TranslateRequest, TranslateResult
+from ..schema import (
+    OcrRequest,
+    OcrResult,
+    ProofreadRequest,
+    ProofreadResult,
+    TokenUsage,
+    TranslateRequest,
+    TranslateResult,
+)
 from .base import (
     OCR_MAX_OUTPUT_TOKENS,
     OCR_SCHEMA,
+    PROOFREAD_MAX_OUTPUT_TOKENS,
+    PROOFREAD_SCHEMA,
     TRANSLATE_MAX_OUTPUT_TOKENS,
     TRANSLATE_SCHEMA,
     ProviderError,
@@ -19,8 +29,10 @@ from .base import (
     load_prompt,
     ocr_user_text,
     parse_ocr,
+    parse_proofread,
     parse_retry_after,
     parse_translate,
+    proofread_user_text,
     translate_user_text,
 )
 
@@ -90,3 +102,21 @@ class AnthropicProvider:
             load_prompt("translate_batch"), content, TRANSLATE_SCHEMA, TRANSLATE_MAX_OUTPUT_TOKENS
         )
         return parse_translate(text, usage)
+
+    def proofread_page(self, req: ProofreadRequest) -> ProofreadResult:
+        content: list[dict[str, Any]] = [{"type": "text", "text": proofread_user_text(req)}]
+        for img in req.images:
+            content.append(
+                {
+                    "type": "image",
+                    "source": {
+                        "type": "base64",
+                        "media_type": "image/jpeg",
+                        "data": base64.standard_b64encode(img).decode("ascii"),
+                    },
+                }
+            )
+        text, usage = self._call(
+            load_prompt("proofread_page"), content, PROOFREAD_SCHEMA, PROOFREAD_MAX_OUTPUT_TOKENS
+        )
+        return parse_proofread(text, usage)

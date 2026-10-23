@@ -39,6 +39,7 @@ class RuntimeDeps:
     def __init__(self, provider_name: str | None, threads: int):
         self.provider_name = provider_name
         self.threads = threads
+        self._premium: Any = None
 
     @cached_property
     def pipeline(self) -> Any:
@@ -53,6 +54,18 @@ class RuntimeDeps:
         from mtl_pipeline.providers import make_provider
 
         return make_provider(self.provider_name)
+
+    def provider_for(self, tier: str) -> Any:
+        """standard = provider chung; premium nạp lười 1 lần (model MTL_*_PREMIUM_MODEL)."""
+        if tier != "premium":
+            return self.provider
+        if self._premium is None:
+            if not self.provider_name:
+                raise RuntimeError("worker chạy --no-llm nhưng nhận job cần LLM")
+            from mtl_pipeline.providers import make_provider
+
+            self._premium = make_provider(self.provider_name, "premium")
+        return self._premium
 
 
 def parse_args(argv: list[str] | None) -> argparse.Namespace:

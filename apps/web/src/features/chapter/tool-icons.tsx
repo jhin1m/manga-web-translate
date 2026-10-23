@@ -138,3 +138,11 @@ export const CheckIcon = (p: P) => (
     <path d="M5 12l5 5 9-10" />
   </Icon>
 );
+/** AI hiệu đính: bút + dấu kiểm. */
+export const ProofreadIcon = (p: P) => (
+  <Icon {...p}>
+    <path d="M4 20h4l10-10-4-4L4 16z" />
+    <path d="M13.5 6.5l4 4" />
+    <path d="M15 19l2 2 4-4" />
+  </Icon>
+);

@@ -10,16 +10,29 @@ from typing import Any, Protocol
 from pydantic import ValidationError
 
 from ..langs import lang_label
-from ..schema import ErrorClass, OcrRequest, OcrResult, TokenUsage, TranslateRequest, TranslateResult
+from ..schema import (
+    ErrorClass,
+    OcrRequest,
+    OcrResult,
+    ProofreadRequest,
+    ProofreadResult,
+    TokenUsage,
+    TranslateRequest,
+    TranslateResult,
+)
 
 # Giá USD / 1M token (vào, ra). Phải kiểm lại lúc chạy bench — giá provider thay đổi.
 PRICES_PER_MTOK: dict[str, tuple[float, float]] = {
     "claude-haiku-5-5": (0.10, 0.50),
     "gemini-2.5-flash": (0.30, 2.50),
+    # Premium (AI hiệu đính) — khớp apps/api/src/billing/prices.ts.
+    "gemini-2.5-pro": (1.25, 10.0),
+    "claude-sonnet-5-5": (3.0, 15.0),
 }
 
 OCR_MAX_OUTPUT_TOKENS = 2048
 TRANSLATE_MAX_OUTPUT_TOKENS = 4096
+PROOFREAD_MAX_OUTPUT_TOKENS = 2048
 # Guardrail chi phí (red team #14): token ra thật của 1 call vượt ngưỡng (thinking lọt, model lặp) → lỗi schema
 # không thử lại trong job; hàng đợi tính attempt. Server vẫn clamp riêng (apps/api/src/billing/prices.ts).
 OUTPUT_TOKENS_GUARD = int(os.environ.get("MTL_MAX_OUTPUT_TOKENS_PER_CALL", "2000"))
@@ -66,6 +79,28 @@ TRANSLATE_SCHEMA: dict[str, Any] = {
         "context_notes": {"type": "string"},
     },
     "required": ["items", "context_notes"],
+    "additionalProperties": False,
+}
+
+
+PROOFREAD_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "items": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "id": {"type": "string"},
+                    "suggestion": {"type": "string"},
+                    "reason": {"type": "string"},
+                },
+                "required": ["id", "suggestion", "reason"],
+                "additionalProperties": False,
+            },
+        }
+    },
+    "required": ["items"],
     "additionalProperties": False,
 }
 
@@ -122,6 +157,12 @@ class LLMProvider(Protocol):
     def translate_batch(self, req: TranslateRequest) -> TranslateResult: ...
 
 
+class ProofreadProvider(LLMProvider, Protocol):
+    """Provider có thêm AI hiệu đính (gemini, anthropic)."""
+
+    def proofread_page(self, req: ProofreadRequest) -> ProofreadResult: ...
+
+
 def load_prompt(name: str) -> str:
     return resources.files("mtl_pipeline.prompts").joinpath(f"{name}.md").read_text(encoding="utf-8")
 
@@ -146,6 +187,27 @@ def translate_user_text(req: TranslateRequest) -> str:
         "context": req.context.model_dump() if req.context else None,
     }
     return json.dumps(payload, ensure_ascii=False, sort_keys=True)
+
+
+def proofread_user_text(req: ProofreadRequest) -> str:
+    payload = {
+        "source_lang": lang_label(req.source_lang),
+        "target_lang": lang_label(req.target_lang),
+        "regions": [r.model_dump() for r in req.regions],
+        "glossary": req.glossary,
+        "pronoun_rules": req.pronoun_rules,
+        "honorific_policy": req.honorific_policy,
+        "context": [c.model_dump() for c in req.context],
+    }
+    return json.dumps(payload, ensure_ascii=False, sort_keys=True)
+
+
+def parse_proofread(text: str, usage: TokenUsage) -> ProofreadResult:
+    try:
+        data = json.loads(text)
+        return ProofreadResult.model_validate({"items": data["items"], "usage": [usage]})
+    except (json.JSONDecodeError, KeyError, TypeError, ValidationError) as e:
+        raise ProviderError("schema", f"hiệu đính trả JSON sai hợp đồng: {e}", usage=[usage]) from e
 
 
 def parse_ocr(text: str, usage: TokenUsage) -> OcrResult:

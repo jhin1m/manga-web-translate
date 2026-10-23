@@ -65,6 +65,7 @@ import { readPanel, writePanel } from "./layout-prefs.ts";
 import { PageRail } from "./page-rail.tsx";
 import { needsReview, pageLevel } from "./page-status.ts";
 import { type ChapterCommand, primaryAction } from "./primary-action.ts";
+import { ProofreadPanel } from "./proofread-panel.tsx";
 import { SelectPanel } from "./select-panel.tsx";
 import { ShortcutHelp } from "./shortcut-help.tsx";
 import { SourceRail } from "./source-rail.tsx";
@@ -670,8 +671,9 @@ function Workspace({ ws, seriesId, chapterId, page: searchPage, drawer: searchDr
     else if (readOnly) railDisabled[t] = "Đang chỉ xem";
   }
   if (!canTools) railDisabled.find = "Dùng được khi chương dịch xong";
-  // Panel Tìm nhớ từ lần trước nhưng chương chưa dịch xong → hiện panel công cụ (không đổi lựa chọn đã nhớ).
-  const view = panel === "find" && !canTools ? "tool" : panel;
+  if (!canTools) railDisabled.proofread = "Dùng được khi chương đã dịch (sau Bước 2)";
+  // Panel Tìm / Hiệu đính nhớ từ lần trước nhưng chương chưa dịch xong → hiện panel công cụ (không đổi lựa chọn đã nhớ).
+  const view = (panel === "find" || panel === "proofread") && !canTools ? "tool" : panel;
   const onRail = (t: RailTarget) => {
     const next = railClick({ panel: view, tool }, t);
     if (next.tool !== tool) editorStore.getState().setTool(next.tool);
@@ -863,6 +865,17 @@ function Workspace({ ws, seriesId, chapterId, page: searchPage, drawer: searchDr
             </div>
             <TextTable rows={rows} total={allRows.length} current={current} activeId={activeId} onPick={pick} />
           </div>
+        )}
+        {view === "proofread" && (
+          <ProofreadPanel
+            ws={ws}
+            chapterId={chapterId}
+            status={status}
+            rows={allRows}
+            activeId={activeId}
+            onPick={pick}
+            beforeRun={flush}
+          />
         )}
         {/* Giữ mount cả khi chương chạy lại (Dịch lại…): "Hoàn tác" của lần thay hàng loạt nằm trong state panel. */}
         {seen.has("find") && (

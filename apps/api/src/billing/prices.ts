@@ -5,6 +5,9 @@
 export const LLM_PRICES_PER_MTOK: Readonly<Record<string, { in: number; out: number }>> = {
   "claude-haiku-5-5": { in: 0.1, out: 0.5 },
   "gemini-2.5-flash": { in: 0.3, out: 2.5 },
+  // Model Premium của AI hiệu đính (worker MTL_*_PREMIUM_MODEL) — giá niêm yết, kiểm lại trước khi bật production.
+  "gemini-2.5-pro": { in: 1.25, out: 10 },
+  "claude-sonnet-5-5": { in: 3, out: 15 },
 };
 
 /**

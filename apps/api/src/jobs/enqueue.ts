@@ -38,7 +38,7 @@ import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
 import { db } from "../db.ts";
 import { mergeBySourceTerm, seriesGlossaryWhere } from "../lib/glossary-scope.ts";
-import { exportKey, ingestKey, type JobKey, pageOpKey, prepareKey, translateKey } from "./idempotency.ts";
+import { exportKey, ingestKey, type JobKey, pageOpKey, prepareKey, proofreadKey, translateKey } from "./idempotency.ts";
 
 type Job = typeof jobs.$inferSelect;
 type Page = typeof pages.$inferSelect;
@@ -406,6 +406,41 @@ export async function enqueueExport(tx: DbLike, ws: string, payload: Extract<Job
       payload,
       rows.map((r) => ({ ...r, version: r.version ?? 0 })),
     ),
+    chapterId: ch.id,
+  });
+}
+
+/** Chương đã qua Bước 2 (có trang dịch xong) — mới có bản dịch để hiệu đính. */
+const PROOFREAD_STATUSES = new Set(["review", "done", "partial_failed"]);
+
+/**
+ * AI hiệu đính cả chương: các trang hiện (không ẩn) đã dịch xong (`ready`). Snapshot cài đặt dịch (glossary, xưng hô,
+ * giọng văn) + model theo cài đặt pipeline của workspace. Không đổi trạng thái chương/trang (job chỉ đọc).
+ */
+export async function enqueueProofread(tx: DbLike, ws: string, chapterId: string) {
+  const ch = await lockChapter(tx, ws, chapterId);
+  if (!PROOFREAD_STATUSES.has(ch.status)) {
+    throw conflict("chapter_not_translated", "chương chưa dịch xong hoặc đang chạy — dịch xong rồi hiệu đính");
+  }
+  const s = await seriesOf(tx, ch);
+  const rows = await tx
+    .select({ id: pages.id, version: pageStates.version })
+    .from(pages)
+    .innerJoin(pageStates, eq(pageStates.pageId, pages.id))
+    .where(and(eq(pages.chapterId, ch.id), eq(pages.skipped, false), eq(pages.status, "ready")))
+    .orderBy(asc(pages.ord));
+  if (rows.length === 0) throw conflict("no_translated_pages", "chương chưa có trang đã dịch");
+  const tier = (await pipelineSettingsOf(tx, ws)).proofread_tier;
+  return insertJob(tx, {
+    workspaceId: ws,
+    payload: {
+      type: "chapter.proofread",
+      chapter_id: ch.id,
+      page_ids: rows.map((r) => r.id),
+      model_tier: tier,
+      settings: await translateSettings(tx, s),
+    },
+    key: proofreadKey(ch.id, rows, s.glossaryRev, s.settingsRev, tier),
     chapterId: ch.id,
   });
 }

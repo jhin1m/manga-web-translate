@@ -8,6 +8,7 @@
     "chapter.translate",
     "page.reinpaint",
     "page.ocr_region",
-    "chapter.export"
+    "chapter.export",
+    "chapter.proofread"
   ]
 }

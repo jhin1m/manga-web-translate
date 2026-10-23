@@ -1,12 +1,21 @@
 /**
- * Rail công cụ trái màn chương (64px): Chọn · Chữ · Mask · Tẩy · OCR · ── · Bản dịch · Tìm. Icon + nhãn 11px; nút đang mở
+ * Rail công cụ trái màn chương (64px): Chọn · Chữ · Mask · Tẩy · OCR · ── · Bản dịch · Tìm · Hiệu đính. Icon + nhãn 11px; nút đang mở
  * panel của nó có nền nhấn (`aria-pressed`), công cụ đang chọn mà panel thu / đang ở panel khác chỉ chữ màu nhấn.
  * Hành vi bấm: tool-rail-model.ts `railClick`.
  */
 import type { ReactNode } from "react";
 import type { Tool } from "../editor/store.ts";
-import { EraserIcon, FindIcon, MaskIcon, OcrIcon, SelectIcon, TableIcon, TextIcon } from "./tool-icons.tsx";
-import type { PanelId, RailTarget } from "./tool-rail-model.ts";
+import {
+  EraserIcon,
+  FindIcon,
+  MaskIcon,
+  OcrIcon,
+  ProofreadIcon,
+  SelectIcon,
+  TableIcon,
+  TextIcon,
+} from "./tool-icons.tsx";
+import { isPanelOnly, type PanelId, type RailTarget } from "./tool-rail-model.ts";
 
 type Item = { id: RailTarget; label: string; title: string; icon: ReactNode };
 
@@ -20,6 +29,7 @@ const TOOLS: Item[] = [
 const PANELS: Item[] = [
   { id: "table", label: "Bản dịch", title: "Bản dịch cả chương", icon: <TableIcon /> },
   { id: "find", label: "Tìm", title: "Tìm / Thay · Glossary (Ctrl+F)", icon: <FindIcon /> },
+  { id: "proofread", label: "Hiệu đính", title: "AI hiệu đính", icon: <ProofreadIcon /> },
 ];
 
 export function ToolRail(props: {
@@ -31,7 +41,7 @@ export function ToolRail(props: {
 }) {
   const { panel, tool } = props;
   const button = (it: Item) => {
-    const isTool = it.id !== "table" && it.id !== "find";
+    const isTool = !isPanelOnly(it.id);
     const open = isTool ? panel === "tool" && tool === it.id : panel === it.id;
     const reason = props.disabled[it.id];
     return (

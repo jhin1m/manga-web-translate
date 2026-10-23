@@ -8,7 +8,16 @@
  * Muốn chuyển sang pg-boss: chỉ thay file này, giữ API worker.
  */
 import { randomBytes } from "node:crypto";
-import { chapters, type DbLike, jobs, pageStates, pages, sourceFiles, workspaceSettings } from "@mtl/db";
+import {
+  chapters,
+  type DbLike,
+  jobs,
+  pageStates,
+  pages,
+  proofreadSuggestions,
+  sourceFiles,
+  workspaceSettings,
+} from "@mtl/db";
 import type { ClaimRequest, CompleteRequest, FailRequest, HeartbeatRequest, WorkerUsage } from "@mtl/shared";
 import {
   pageId as derivePageId,
@@ -345,6 +354,49 @@ async function applyResult(t: DbLike, job: Job, attempt: number, result: JobResu
     }
     case "page.ocr_region":
       return undefined; // kết quả nằm ở jobs.result
+    case "chapter.proofread":
+      await applyProofread(t, job, result);
+      return undefined;
+  }
+}
+
+/** So bản dịch bỏ qua khác biệt Unicode / khoảng trắng (gợi ý "sửa" mà chỉ đổi dấu cách = không phải gợi ý). */
+const sameText = (a: string, b: string) =>
+  a.normalize("NFC").replace(/\s+/g, " ").trim() === b.normalize("NFC").replace(/\s+/g, " ").trim();
+
+/**
+ * Gợi ý hiệu đính thay toàn bộ gợi ý cũ của chương. Chặn lại phía server (worker đã lọc): page ngoài job, vùng không
+ * có trong state hiện tại, gợi ý trùng bản cũ, trùng vùng (giữ cái đầu). Không đụng page_state.
+ */
+async function applyProofread(t: DbLike, job: Job, result: Extract<JobResult, { type: "chapter.proofread" }>) {
+  const p = job.payload;
+  if (p.type !== "chapter.proofread") throw new Error("payload mismatch");
+  const states = await t
+    .select({ pageId: pageStates.pageId, state: pageStates.state })
+    .from(pageStates)
+    .where(inArray(pageStates.pageId, p.page_ids));
+  const regionsOf = new Map(states.map((r) => [r.pageId, new Set((r.state?.regions ?? []).map((g) => g.id))]));
+  const seen = new Set<string>();
+  const rows = result.suggestions.filter((sg) => {
+    const key = `${sg.page_id}:${sg.region_id}`;
+    if (seen.has(key) || !regionsOf.get(sg.page_id)?.has(sg.region_id) || sameText(sg.old, sg.suggestion)) return false;
+    seen.add(key);
+    return true;
+  });
+  await t.delete(proofreadSuggestions).where(eq(proofreadSuggestions.chapterId, p.chapter_id));
+  if (rows.length) {
+    await t.insert(proofreadSuggestions).values(
+      rows.map((sg) => ({
+        workspaceId: job.workspaceId,
+        chapterId: p.chapter_id,
+        pageId: sg.page_id,
+        jobId: job.id,
+        regionId: sg.region_id,
+        oldText: sg.old.normalize("NFC"),
+        suggestion: sg.suggestion.normalize("NFC"),
+        reason: sg.reason.normalize("NFC"),
+      })),
+    );
   }
 }
 

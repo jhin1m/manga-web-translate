@@ -1,0 +1,83 @@
+{
+  "$id": "https://mtl.local/schema/inputs-chapter-proofread.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "pages": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "page_id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "ord": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "width": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          },
+          "height": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          },
+          "image": {
+            "type": "string",
+            "format": "uri"
+          },
+          "regions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "text_bubble",
+                    "text_free"
+                  ]
+                },
+                "source": {
+                  "type": "string"
+                },
+                "translation": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "kind",
+                "source",
+                "translation"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "page_id",
+          "ord",
+          "width",
+          "height",
+          "image",
+          "regions"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "pages"
+  ],
+  "additionalProperties": false
+}

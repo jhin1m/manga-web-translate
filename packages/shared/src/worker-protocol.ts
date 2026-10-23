@@ -151,6 +151,30 @@ export const ExportInputs = z.object({
   fonts: JobFonts.optional(),
 });
 
+/**
+ * chapter.proofread: bản dịch hiện tại (page_states lúc claim) của từng vùng chữ đã dịch + ảnh trang gốc (vision).
+ * Vùng không có bản dịch / khớp chữ bỏ qua bị loại. `kind` để LLM biết thoại / lời dẫn.
+ */
+export const ProofreadInputs = z.object({
+  pages: z.array(
+    z.object({
+      page_id: Uuid,
+      ord: z.number().int().nonnegative(),
+      width: z.number().int().positive(),
+      height: z.number().int().positive(),
+      image: Url,
+      regions: z.array(
+        z.object({
+          id: z.string(),
+          kind: z.enum(["text_bubble", "text_free"]),
+          source: z.string(),
+          translation: z.string(),
+        }),
+      ),
+    }),
+  ),
+});
+
 export const ClaimedJob = z.object({
   id: Uuid,
   type: JobType,

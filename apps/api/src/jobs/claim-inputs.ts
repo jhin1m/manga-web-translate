@@ -238,7 +238,43 @@ export async function buildInputs(tx: DbLike, job: Job): Promise<Record<string, 
     }
     case "chapter.export":
       return exportInputs(tx, job, p);
+    case "chapter.proofread":
+      return proofreadInputs(tx, p);
   }
+}
+
+/**
+ * Bản dịch hiện tại (page_state lúc claim, gồm sửa tay) của vùng chữ có bản dịch; bỏ vùng khớp chữ bỏ qua. Ảnh gốc
+ * để LLM nhìn ngữ cảnh (worker tự thu nhỏ). Page đã ẩn / mất sau khi enqueue thì bỏ.
+ */
+async function proofreadInputs(tx: DbLike, p: Extract<JobPayload, { type: "chapter.proofread" }>) {
+  const rows = await tx
+    .select({ page: pages, state: pageStates.state })
+    .from(pages)
+    .innerJoin(pageStates, eq(pageStates.pageId, pages.id))
+    .where(and(eq(pages.chapterId, p.chapter_id), inArray(pages.id, p.page_ids), eq(pages.skipped, false)))
+    .orderBy(asc(pages.ord));
+  const isIgnored = await ignoreMatcherOf(tx, p.chapter_id);
+  return {
+    pages: await Promise.all(
+      rows.map(async ({ page: pg, state }) => ({
+        page_id: pg.id,
+        ord: pg.ord,
+        width: pg.width,
+        height: pg.height,
+        image: await get(pg.originalKey),
+        regions: (state?.regions ?? [])
+          .filter(
+            (r): r is typeof r & { kind: "text_bubble" | "text_free" } =>
+              (r.kind === "text_bubble" || r.kind === "text_free") &&
+              !!r.translation.trim() &&
+              !!r.source_text.trim() &&
+              !isIgnored(r.source_text),
+          )
+          .map((r) => ({ id: r.id, kind: r.kind, source: r.source_text, translation: r.translation })),
+      })),
+    ),
+  };
 }
 
 /**
