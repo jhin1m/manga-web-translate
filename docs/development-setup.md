@@ -14,7 +14,7 @@ pnpm jobs                         # process nền: reaper, kill-switch ngân sá
 
 Worker AI (Python, `worker/`) và token worker: xem [job-queue-worker.md](./job-queue-worker.md).
 
-Mở http://localhost:5180 → đăng nhập owner → "Mời thành viên". MVP chưa gửi mail: link mời (có token đăng ký HMAC) hiện trên UI cho owner/admin và trong log API (`[invite] …`). Người được mời mở `/accept-invite?id=…&token=…` để đăng ký.
+Mở http://localhost:5180 → đăng nhập owner → "Mời thành viên". Link mời (có token đăng ký HMAC) luôn hiện trên UI cho owner/admin. Đặt `SMTP_URL` + `MAIL_FROM` trong `.env` (VD `smtp://localhost:1025` với Mailpit/MailHog) thì API còn gửi email mời (UI có nút "Gửi lại email", link không bị log); không đặt hoặc gửi lỗi → chỉ log API (`[invite] …`). Người được mời mở `/accept-invite?id=…&token=…` để đăng ký.
 
 ## Dev auto-login
 

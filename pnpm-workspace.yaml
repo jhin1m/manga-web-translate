@@ -20,3 +20,4 @@ minimumReleaseAgeExclude:
   - '@aws-sdk/token-providers@3.1153.0'
 allowBuilds:
   esbuild: true
+  re2: true
