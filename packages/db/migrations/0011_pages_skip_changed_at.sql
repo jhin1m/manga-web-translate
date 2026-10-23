@@ -1,0 +1,1 @@
+ALTER TABLE "pages" ADD COLUMN "skip_changed_at" timestamp with time zone;
