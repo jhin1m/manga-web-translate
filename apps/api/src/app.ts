@@ -16,6 +16,7 @@ import { pageStateRoutes } from "./routes/page-state.ts";
 import { pageRoutes } from "./routes/pages.ts";
 import { progressRoutes } from "./routes/progress.ts";
 import { seriesRoutes } from "./routes/series.ts";
+import { seriesIgnoreApplyRoutes } from "./routes/series-ignore-apply.ts";
 import { seriesSkipImageRoutes } from "./routes/series-skip-images.ts";
 import { uploadRoutes } from "./routes/uploads.ts";
 import { workerRoutes } from "./routes/worker.ts";
@@ -44,6 +45,7 @@ export function createApp({ devAutoLogin = envDevLogin() }: { devAutoLogin?: Dev
   app.route("/api", progressRoutes);
   app.route("/api", seriesRoutes);
   app.route("/api", seriesSkipImageRoutes);
+  app.route("/api", seriesIgnoreApplyRoutes);
   app.route("/api", chapterRoutes);
   app.route("/api", pageRoutes);
   app.route("/api", pageStateRoutes);

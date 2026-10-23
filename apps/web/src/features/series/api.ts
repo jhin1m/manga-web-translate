@@ -2,18 +2,6 @@
 import type { PageFormat, SourceLang, TargetLang } from "@mtl/shared/series-lang";
 import { api, wsPath } from "../../lib/api.ts";
 
-export const FONT_IDS = [
-  "Bangers-Regular",
-  "PatrickHand-Regular",
-  "BeVietnamPro-Regular",
-  "BeVietnamPro-Bold",
-  "Anton-Regular",
-  "Baloo2-Variable",
-  "Itim-Regular",
-  "Lexend-Variable",
-  "Mali-Regular",
-] as const;
-
 export type PronounRule = { speaker: string; listener: string; address: string; note: string };
 export type FontSlot = "dialogue" | "narration" | "sfx";
 
@@ -106,6 +94,34 @@ export const learnSkipImage = (ws: string, seriesId: string, from: { source_file
   });
 export const deleteSkipImage = (ws: string, seriesId: string, id: string) =>
   api<void>(wsPath(ws, `/series/${seriesId}/skip-images/${id}`), { method: "DELETE" });
+
+/** Ẩn box khớp chữ bỏ qua trong chương đã dịch (xem trước → áp dụng → hoàn tác theo batch_id). */
+type ChapterRef = { chapter_id: string; number: string; title: string };
+export type IgnoreSkipReason = "locked" | "busy" | "changed";
+export type IgnorePreview = {
+  chapters: (ChapterRef & { boxes: number; pages: number; samples: string[]; versions: Record<string, number> })[];
+  skipped: (ChapterRef & { reason: IgnoreSkipReason; holder_name: string | null })[];
+  total_boxes: number;
+};
+export type IgnoreApplied = {
+  batch_id: string | null;
+  boxes: number;
+  chapters: (ChapterRef & { boxes: number; pages: number })[];
+  skipped: (ChapterRef & { reason: IgnoreSkipReason })[];
+};
+export type IgnoreUndone = {
+  pages: number;
+  chapters: (ChapterRef & { pages: number })[];
+  skipped: (ChapterRef & { reason: IgnoreSkipReason; pages: number })[];
+};
+const ignoreApply = (ws: string, seriesId: string, step: string) =>
+  wsPath(ws, `/series/${seriesId}/ignore-apply/${step}`);
+export const previewIgnoreApply = (ws: string, seriesId: string) =>
+  api<IgnorePreview>(ignoreApply(ws, seriesId, "preview"), { method: "POST", body: {} });
+export const applyIgnoreApply = (ws: string, seriesId: string, versions: Record<string, number>) =>
+  api<IgnoreApplied>(ignoreApply(ws, seriesId, "apply"), { method: "POST", body: { versions } });
+export const undoIgnoreApply = (ws: string, seriesId: string, batchId: string) =>
+  api<IgnoreUndone>(ignoreApply(ws, seriesId, "undo"), { method: "POST", body: { batch_id: batchId } });
 
 /** Số chương gợi ý cho lần upload tiếp theo: lớn nhất + 1. */
 export function nextChapterNumber(chapters: Pick<ChapterSummary, "number">[]): string {

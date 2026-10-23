@@ -6,7 +6,7 @@
  * khớp "Chữ bỏ qua" của series (watermark — không dịch, không box) không thành dòng — trừ khi còn box đang hiện có chữ
  * (chương dịch trước khi thêm mục): giữ dòng để người dùng thấy và xoá chữ đã in.
  */
-import { isIgnoredText, type PageState, type Region, type TextBox } from "@mtl/shared";
+import { compileIgnoreList, type IgnoreMatcher, type PageState, type Region, type TextBox } from "@mtl/shared";
 
 export type RowFlag = "overflow" | "low_conf" | "empty" | "sfx" | "ai_update";
 /** Thoại (trong bóng), chữ nền/dẫn, SFX, khung người tự thêm (không region). */
@@ -59,12 +59,12 @@ export const rowKeyOfBox = (pageId: string, box: Pick<TextBox, "id" | "region_id
 /** Dòng cần người xem (lọc "Chỉ khối cần xem"); SFX chỉ là nhãn. */
 export const needsAttention = (r: Pick<Row, "flags">) => r.flags.some((f) => f !== "sfx");
 
-/** Dòng của 1 page. `overflowOf(box)` = box tràn (đo bằng font đã tải); `ignore` = chữ bỏ qua của series. */
+/** Dòng của 1 page. `overflowOf(box)` = box tràn (đo bằng font đã tải); `isIgnored` = bộ lọc chữ bỏ qua của series. */
 export function pageRows(
   page: RowPage,
   state: PageState | null,
   overflowOf: (b: TextBox) => boolean,
-  ignore: readonly string[] = [],
+  isIgnored: IgnoreMatcher = () => false,
 ): Row[] {
   if (!state) return [];
   const rows: Row[] = [];
@@ -73,7 +73,7 @@ export function pageRows(
   // Box gắn region watermark đã ẩn không thành dòng "Tự thêm" (box đó không hiện / không có chữ).
   const regionIds = new Set(textRegions.map((r) => r.id));
   const printed = (r: Region) => state.text_boxes.some((b) => b.region_id === r.id && !b.hidden && b.text.trim());
-  const regions = textRegions.filter((r) => printed(r) || !isIgnoredText(r.source_text, ignore));
+  const regions = textRegions.filter((r) => printed(r) || !isIgnored(r.source_text));
   for (const r of regions) {
     const linked = state.text_boxes.filter((b) => b.region_id === r.id);
     const flags: RowFlag[] = [];
@@ -135,6 +135,7 @@ export function buildRows(
   memo?: WeakMap<PageState, { ord: number; ai: boolean; rows: Row[] }>,
   ignore: readonly string[] = [],
 ): Row[] {
+  const isIgnored = compileIgnoreList(ignore);
   const out: Row[] = [];
   for (const p of [...pages].sort((a, b) => a.ord - b.ord)) {
     const state = p.id === active.pageId && active.doc ? active.doc : (cache[p.id]?.state ?? null);
@@ -144,7 +145,7 @@ export function buildRows(
       out.push(...hit.rows);
       continue;
     }
-    const rows = pageRows(p, state, overflowOf, ignore);
+    const rows = pageRows(p, state, overflowOf, isIgnored);
     memo?.set(state, { ord: p.ord, ai: p.ai_update_available, rows });
     out.push(...rows);
   }

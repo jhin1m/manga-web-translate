@@ -155,6 +155,29 @@ describe("text table rows", () => {
     // Chương dịch trước khi thêm mục: box watermark còn in chữ → giữ dòng để thấy và xoá.
     s.text_boxes[1] = box("twm", "wm", "Đọc tại discord");
     expect(build(["discord.gg"]).map(([k]) => k)).toEqual(["p:a", "p:wm", "p:b"]);
+    // Box đã ẩn (ẩn hàng loạt theo chữ bỏ qua) → dòng biến mất.
+    s.text_boxes[1] = { ...box("twm", "wm", "Đọc tại discord"), hidden: true };
+    expect(build(["discord.gg"]).map(([k]) => k)).toEqual(["p:a", "p:b"]);
+  });
+
+  it("ignored text also matches across spaces and regex entries", () => {
+    const s: PageState = {
+      ...doc(0),
+      regions: [region("a", "Một"), { ...region("wm", ""), source_text: "Read at DISCORD . GG/abc" }],
+      text_boxes: [box("ta", "a", "Một"), box("twm", "wm", "")],
+    };
+    const keys = (ignore: string[]) =>
+      buildRows(
+        [{ id: "p", ord: 0, ai_update_available: false }],
+        { p: { state: s } },
+        { pageId: null, doc: null },
+        () => false,
+        undefined,
+        ignore,
+      ).map((r) => r.key);
+    expect(keys(["discord.gg"])).toEqual(["p:a"]);
+    expect(keys(["/discord\\s*\\.\\s*gg/"])).toEqual(["p:a"]);
+    expect(keys(["/nothing here/"])).toEqual(["p:a", "p:wm"]);
   });
 
   it("same-kind boxes for 'apply style' skip the source box and hidden boxes", () => {
