@@ -266,6 +266,8 @@ def run_job(
                     raise JobFailure("internal", f"worker không có handler cho {job['type']}")
                 with job_fonts(job["inputs"].get("fonts"), ctx.download):
                     result = handler(ctx, deps)
+                # Kiểm kết quả trước khi lấy usage: sai hợp đồng → fail kèm usage (không mất token đã trả tiền).
+                validate_contract("job-result", result)
                 ctx.check()
             except ImageRejected as e:
                 raise JobFailure("invalid_input", str(e)) from e

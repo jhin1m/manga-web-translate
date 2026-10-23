@@ -40,12 +40,21 @@ def page_images(img_rgb: np.ndarray) -> list[bytes]:
     return out
 
 
-def _norm(s: str) -> str:
-    return " ".join(unicodedata.normalize("NFC", s).split())
+# Trần theo hợp đồng kết quả (packages/shared ProofreadSuggestionOut; zod đếm UTF-16 → cắt lý do dư an toàn).
+MAX_TEXT = 4000
+MAX_REASON = 240
+
+
+def norm_text(s: str) -> str:
+    """So sánh bản dịch: NFC, gộp khoảng trắng trong dòng, bỏ trắng đầu/cuối mỗi dòng — GIỮ xuống dòng tay (`\n`
+    là ngắt dòng cứng của typeset), khớp `sameText` ở API và proofread-model.ts ở web."""
+    lines = unicodedata.normalize("NFC", s).replace("\r\n", "\n").split("\n")
+    return "\n".join(" ".join(ln.split()) for ln in lines).strip()
 
 
 def validate_suggestions(regions: list[ProofreadRegion], items: list[ProofreadItem]) -> list[ProofreadItem]:
-    """Giữ gợi ý đúng id (lần đầu), có nội dung và khác bản dịch hiện tại (bỏ qua khác biệt khoảng trắng/Unicode)."""
+    """Giữ gợi ý đúng id (lần đầu), có nội dung và khác bản dịch hiện tại (bỏ qua khác biệt khoảng trắng/Unicode,
+    không bỏ qua xuống dòng). Bản dịch / gợi ý quá trần hợp đồng → bỏ (không để cả kết quả bị từ chối)."""
     current = {r.id: r.translation for r in regions}
     seen: set[str] = set()
     out = []
@@ -53,10 +62,12 @@ def validate_suggestions(regions: list[ProofreadRegion], items: list[ProofreadIt
         if it.id not in current or it.id in seen:
             continue
         seen.add(it.id)
-        sug = _norm(it.suggestion)
-        if not sug or sug == _norm(current[it.id]):
+        sug = norm_text(it.suggestion)
+        if not sug or sug == norm_text(current[it.id]):
             continue
-        out.append(ProofreadItem(id=it.id, suggestion=sug, reason=_norm(it.reason)[:500]))
+        if len(sug) > MAX_TEXT or len(current[it.id]) > MAX_TEXT:
+            continue
+        out.append(ProofreadItem(id=it.id, suggestion=sug, reason=" ".join(it.reason.split())[:MAX_REASON]))
     return out
 
 

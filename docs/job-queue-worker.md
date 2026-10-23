@@ -175,7 +175,7 @@ chụp vào payload lúc enqueue:
 |---|---|---|
 | `page.prepare` | `pipeline` | `detector`, `detection_threshold`, `ocr_engine` (đã chọn theo `source_lang` của series), `inpainter`, `mask_dilation` (`null` = tự động 2–6px), `inpaint_size` |
 | `page.reinpaint` | `inpaint` | `inpainter`, `inpaint_size` |
-| `page.ocr_region` | `ocr_engine` | OCR vùng tự vẽ theo engine; dịch vẫn qua LLM |
+| `page.ocr_region` | `ocr_engine`, `reading_order` | OCR vùng tự vẽ theo engine; dịch vẫn qua LLM |
 | `chapter.proofread` | `model_tier` | `standard` / `premium` |
 
 - Mặc định (`rtdetr_v2_comic`, 0.35, `llm`, `big_lama`, tự động, 512) = hành vi trước 0.6.0. Field optional: job xếp
@@ -187,7 +187,9 @@ chụp vào payload lúc enqueue:
   = ít lượt, nhìn nhiều nền, nét mờ hơn). `CompositeInpainter` (flood-fill nền phẳng trước) giữ nguyên.
 - OCR local (`manga_ocr` chỉ `ja`, `paddle_ocr` cho `ko/zh/ja/en`; `mtl_pipeline/local_ocr/`): cùng `OcrResult`
   như LLM — crop dưới `MIN_INK_RATIO` → `empty`, thứ tự id theo `text_regions`, độ tin < 0.5 hoặc có mực mà đọc rỗng →
-  `low_conf`; **không nhận SFX** (`is_sfx` luôn false). Không gọi LLM → usage rỗng; breaker LLM và kill-switch ngân sách
+  `low_conf`; **không nhận SFX** (`is_sfx` luôn false). PaddleOCR chỉ đọc khối chữ cao theo cột dọc (tách cột theo
+  hình chiếu mực, phải → trái) khi trang đọc `rtl` (manga Nhật dạng trang); còn lại tách dòng ngang bằng det PP-OCR
+  (manhua / webtoon chữ ngang). Engine local nạp ngay đầu handler (thiếu model → tải / lỗi trước khi tốn công detect). Không gọi LLM → usage rỗng; breaker LLM và kill-switch ngân sách
   bỏ qua `page.prepare` có `pipeline.ocr_engine` local (`isLlmPayload` ở shared, `llmJobSql` ở API). Worker `--no-llm`
   vẫn không nhận `page.prepare` (capability theo loại job).
 - Model mới là entry `optional` trong `worker/models.lock.json` (LaMa manga, MangaOCR encoder/decoder/vocab, PP-OCRv6
@@ -200,12 +202,20 @@ chụp vào payload lúc enqueue:
 `chapter_not_translated`) → job cho mọi trang hiện, `ready`; payload chụp `TranslateSettings` của series + `model_tier`.
 Idempotency theo version page_state + glossary/settings rev + tier. Job chỉ đọc: không đổi trạng thái chương/trang, không
 khoá chương. Inputs lúc claim (`ProofreadInputs`): bản dịch hiện tại (gồm sửa tay) của vùng chữ có bản dịch, bỏ vùng
-khớp chữ bỏ qua, + URL ảnh gốc. Worker (`mtl_pipeline/proofread.py`, prompt `prompts/proofread_page.md`): mỗi trang 1
-call (JSON khối + ảnh gốc thu rộng 640, cắt khúc ≤ 1280px, tối đa 6, JPEG) + 8 dòng cuối trang trước làm ngữ cảnh;
-JSON sai → thử lại 1 lần; lọc gợi ý id lạ / trùng id / rỗng / trùng bản hiện tại. Premium dùng
+khớp chữ bỏ qua, + URL ảnh gốc. Worker (`mtl_pipeline/proofread.py`, prompt `prompts/proofread_page.md`) tải + thu nhỏ
+ảnh mọi trang ngay sau claim (URL ký 10', chương dài gọi LLM lâu hơn), rồi mỗi trang 1 call (JSON khối + ảnh gốc thu
+rộng 640, cắt khúc ≤ 1280px, tối đa 6, JPEG) + 8 dòng cuối trang trước làm ngữ cảnh; JSON sai → thử lại 1 lần, vẫn sai
+(hoặc vượt guard token riêng 3328) → bỏ trang đó, giữ gợi ý trang khác (429 / provider lỗi vẫn ném để hàng đợi
+backoff); lọc gợi ý id lạ / trùng id / rỗng / trùng bản hiện tại (so bỏ khác biệt khoảng trắng trong dòng, **giữ**
+xuống dòng tay) / vượt 4000 ký tự; tối đa 2000 gợi ý. Kết quả được kiểm hợp đồng trước khi lấy usage (sai → fail kèm
+usage, không mất token). Premium dùng
 `MTL_GEMINI_PREMIUM_MODEL` (mặc định `gemini-2.5-pro`, thinking budget 128) / `MTL_ANTHROPIC_PREMIUM_MODEL`.
-Trần call `2 × số trang`. Complete: lọc lại phía server (page ngoài job, vùng không còn, trùng bản cũ, trùng vùng) rồi
-**thay toàn bộ** gợi ý cũ của chương trong `proofread_suggestions` (`old_text` = bản worker đã đọc).
+Trần call `2 × số trang`. Complete (khoá dòng chương → 2 lượt xong cùng lúc chạy tuần tự): lượt cũ xong sau một lượt
+mới hơn đã thành công → bỏ qua; không thì lọc lại phía server (page ngoài job, vùng không còn, trùng bản cũ, trùng
+vùng) rồi **thay toàn bộ** gợi ý cũ của chương trong `proofread_suggestions` (`old_text` = bản worker đã đọc). Job chỉ
+đọc nên không tính là chương "đang bận" khi ingest lại / áp ngược chữ bỏ qua (`notReadOnlyJob`). Dispatcher Modal: khi
+breaker LLM bật vẫn gọi container cho job không gọi LLM (cùng `llmJobSql` với claim); vượt ngân sách thì vẫn dừng mọi
+dispatch (GPU Modal là chi phí thật).
 `GET …/chapters/:id/proofread` = job gần nhất + gợi ý chưa bỏ; `PATCH /api/w/:ws/proofread-suggestions/:id
 {dismissed}` = Bỏ / hoàn tác. Editor: xem [editor.md](./editor.md#ai-hiệu-đính).
 

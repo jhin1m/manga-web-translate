@@ -178,13 +178,16 @@ def to_regions(dets: list[Detection], page_w: int, page_h: int, rtl: bool = Fals
 def ctd_text_detections(
     bubbles: list[Detection], blocks: list[tuple[float, float, float, float, float, bool]]
 ) -> list[Detection]:
-    """Khối chữ CTD (không phân lớp) → text_bubble khi nằm trong một bóng RT-DETR (≥ 60% diện tích), còn lại text_free."""
-    out = []
-    for x1, y1, x2, y2, sc, seam in blocks:
-        d = Detection(kind="text_free", x1=x1, y1=y1, x2=x2, y2=y2, score=sc, at_seam=seam)
+    """Khối chữ CTD (không phân lớp) → ghép nửa khối cắt ở mép tile trước, rồi text_bubble khi nằm trong một bóng
+    RT-DETR (≥ 60% diện tích), còn lại text_free."""
+    raw = [
+        Detection(kind="text_free", x1=x1, y1=y1, x2=x2, y2=y2, score=sc, at_seam=seam)
+        for x1, y1, x2, y2, sc, seam in blocks
+    ]
+    out = merge_detections(raw)
+    for d in out:
         if d.area > 0 and any(_intersection(b, d) / d.area >= 0.6 for b in bubbles):
             d.kind = "text_bubble"
-        out.append(d)
     return out
 
 

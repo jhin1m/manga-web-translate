@@ -3,7 +3,7 @@
  * là sửa bản dịch thường ở editor (PUT page state: khoá chương, version, lịch sử) — không có route riêng.
  */
 import { chapters, jobs, proofreadSuggestions } from "@mtl/db";
-import { and, eq, isNull, type SQL } from "drizzle-orm";
+import { and, eq, isNull, type SQL, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { z } from "zod";
 import { enqueueProofread, inJobTx } from "../jobs/enqueue.ts";
@@ -23,8 +23,15 @@ proofreadRoutes.post("/w/:ws/chapters/:chapterId/proofread", requireWorkspace(),
 proofreadRoutes.get("/w/:ws/chapters/:chapterId/proofread", requireWorkspace(), async (c) => {
   const sdb = c.get("sdb");
   const ch = await sdb.byId(chapters, c.req.param("chapterId"), "chapter");
-  const runs = await sdb.select(jobs, and(eq(jobs.chapterId, ch.id), eq(jobs.type, "chapter.proofread")) as SQL);
-  const last = runs.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0];
+  // Chỉ lượt gần nhất (max created_at), không kéo payload mọi lượt cũ mỗi lần poll.
+  const ofChapter = and(eq(jobs.chapterId, ch.id), eq(jobs.type, "chapter.proofread")) as SQL;
+  const last = await sdb.find(
+    jobs,
+    and(
+      ofChapter,
+      sql`${jobs.createdAt} = (select max(j.created_at) from jobs j where j.chapter_id = ${ch.id} and j.type = 'chapter.proofread')`,
+    ) as SQL,
+  );
   const rows = await sdb.select(
     proofreadSuggestions,
     and(eq(proofreadSuggestions.chapterId, ch.id), isNull(proofreadSuggestions.dismissedAt)) as SQL,

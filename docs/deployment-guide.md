@@ -118,6 +118,8 @@ sudo systemctl enable --now mtl-api mtl-jobs mtl-backup.timer mtl-alert.timer
 2. Biến môi trường worker (tuỳ chọn): `MTL_GEMINI_PREMIUM_MODEL` (mặc định `gemini-2.5-pro`) /
    `MTL_ANTHROPIC_PREMIUM_MODEL` (mặc định `claude-sonnet-5-5`) cho AI hiệu đính Premium. Giá Premium trong
    `apps/api/src/billing/prices.ts` + `worker/mtl_pipeline/providers/base.py` là giá niêm yết — kiểm lại trước khi bật.
+   Lưu ý: model lạ (không có trong bảng, VD đổi `MTL_GEMINI_MODEL`) bị tính theo giá **đắt nhất** bảng — giờ là giá
+   Sonnet ($3 / $15 / 1M token), cao hơn trước ~6×, kill-switch ngân sách sẽ chạm sớm hơn tương ứng.
 3. `.env` API không ghi đè `MIN_PIPELINE_VERSION` thấp hơn 0.6.0 (mặc định `env.ts` = 0.6.0; `PIPELINE_VERSION` giữ
    0.4.0 nên job đã chạy không bị chạy lại). Worker < 0.6.0 nhận 426 ngay khi API mới lên — vì payload có field mới
    (`pipeline`, `inpaint`, `ocr_engine`, job `chapter.proofread`) mà schema worker cũ `additionalProperties: false`.

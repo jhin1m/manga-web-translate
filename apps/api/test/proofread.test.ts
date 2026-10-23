@@ -95,4 +95,33 @@ describe("chapter.proofread", () => {
     const [st] = await db.select().from(pageStates).where(eq(pageStates.pageId, p0.id));
     expect(st?.state?.regions[0]?.translation).toBe("Xin chao");
   });
+
+  it("lượt cũ xong sau lượt mới hơn không đè gợi ý mới", async () => {
+    const sdb = scoped(db, A.workspaceId);
+    const [first] = await sdb.select(pages, eq(pages.chapterId, A.chapterId));
+    const pageIdOf = first?.id ?? "";
+    const runOnce = async () => {
+      const res = await api(`/chapters/${A.chapterId}/proofread`, { method: "POST" });
+      expect(res.status, await res.clone().text()).toBe(202);
+      const [claimed] = await claimJobs(token, { caps: ["chapter.proofread"] });
+      return claimed as Claimed;
+    };
+    const older = await runOnce();
+    // Sửa bản dịch (version đổi) → lượt mới được tạo trong khi lượt cũ còn chạy.
+    await sdb.update(pageStates, eq(pageStates.pageId, pageIdOf), { version: 99 });
+    const newer = await runOnce();
+    expect(newer.id).not.toBe(older.id);
+    const sug = (text: string): JobResult => ({
+      type: "chapter.proofread",
+      suggestions: [{ page_id: pageIdOf, region_id: "t0", old: "x", suggestion: text, reason: "" }],
+    });
+    expect((await complete(token, newer, sug("Bản của lượt mới"), usage(1))).status).toBe(200);
+    expect((await complete(token, older, sug("Bản của lượt cũ"), usage(1))).status).toBe(200);
+    const view = (await (await api(`/chapters/${A.chapterId}/proofread`)).json()) as {
+      job: { id: string };
+      suggestions: { suggestion: string }[];
+    };
+    expect(view.job.id).toBe(newer.id);
+    expect(view.suggestions.map((s) => s.suggestion)).toEqual(["Bản của lượt mới"]);
+  });
 });

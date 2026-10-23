@@ -184,7 +184,9 @@ bản): = bản đã đọc → "Chờ duyệt"; = đề xuất → "Đã nhận
 **Nhận** = mở trang của khối rồi `setRegionTranslation` qua `editorStore.apply` (như gõ ở bảng: 1 bước hoàn tác,
 autosave, version, khoá chương, ngắt dòng lại box; hoàn tác → gợi ý về "Chờ duyệt"). "Nhận tất cả ở trang này" = mọi
 gợi ý chờ duyệt của trang đang mở trong 1 bước hoàn tác (editor chỉ sửa 1 trang mỗi lúc). **Bỏ** =
-`PATCH /proofread-suggestions/:id {dismissed: true}` (ẩn khỏi danh sách). Chỉ xem → Nhận tắt. Sửa sau lần xuất cuối
+`PATCH /proofread-suggestions/:id {dismissed: true}` (ẩn khỏi danh sách). Chỉ xem → Nhận, Bỏ, chạy lại đều tắt (lượt
+mới thay toàn bộ gợi ý, kể cả lượt Bỏ của người khác). Lỗi job viết cho người (`describeJobError`: chờ AI tự thử lại,
+vượt ngân sách, lỗi + "Chi tiết kỹ thuật"); Nhận không được (trang chỉ xem / chưa mở được) → báo tại panel. Sửa sau lần xuất cuối
 → "Xuất lại" như mọi lần sửa khác.
 
 ## Chế độ xem (Xem gốc / Chia đôi) và khung nhìn

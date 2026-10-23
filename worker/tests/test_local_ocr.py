@@ -154,3 +154,29 @@ def test_paddle_real_model_reads_korean_line():
     ocr = PaddleOcr(model_file("paddle_det"), model_file("paddle_rec_korean"), join=" ")
     text, _ = ocr.read(_render("안녕하세요 친구", KO_FONT))
     assert text.replace(" ", "") == "안녕하세요친구"
+
+
+ZH_FONT = Path("/System/Library/Fonts/Supplemental/Songti.ttc")
+
+
+def _render_lines(lines: list[str], font: Path, size=40) -> np.ndarray:
+    f = ImageFont.truetype(str(font), size)
+    w = int(max(f.getlength(t) for t in lines)) + 30
+    img = Image.new("RGB", (w, len(lines) * (size + 14) + 30), "white")
+    d = ImageDraw.Draw(img)
+    for i, t in enumerate(lines):
+        d.text((15, 15 + i * (size + 14)), t, font=f, fill="black")
+    return np.array(img)
+
+
+@_needs("paddle_det", "paddle_rec", font=ZH_FONT)
+def test_paddle_horizontal_zh_in_tall_crop_not_split_into_columns():
+    # Khối chữ ngang cao hơn rộng (manhua): chỉ trang đọc phải→trái mới tách cột dọc.
+    lines = ["你在干什么", "快点过来", "我们走吧", "别害怕", "好的"]
+    crop = _render_lines(lines, ZH_FONT)
+    assert crop.shape[0] >= 1.2 * crop.shape[1]
+    ocr = PaddleOcr(model_file("paddle_det"), model_file("paddle_rec"), join="", vertical=False)
+    text, _ = ocr.read(crop)
+    want = "".join(lines)
+    # Đúng thứ tự dòng (không bị đọc theo cột); cho phép 1 chữ dị thể (别/別).
+    assert len(text) == len(want) and sum(a != b for a, b in zip(text, want, strict=True)) <= 1

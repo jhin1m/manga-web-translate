@@ -102,8 +102,8 @@ class FakePipeline:
         mask = np.zeros(img.shape[:2], np.uint8)
         return regs, mask, img.copy(), None
 
-    def local_ocr(self, engine, source_lang):
-        self.local_args = (engine, source_lang)
+    def local_ocr(self, engine, source_lang, vertical=False):
+        self.local_args = (engine, source_lang, vertical)
 
         class _Eng:
             name = engine
@@ -311,6 +311,7 @@ def test_prepare_with_local_ocr_skips_llm_and_reports_no_usage():
     job = prepare_job()
     job["payload"] |= {
         "source_lang": "ja",
+        "reading_order": "rtl",
         "pipeline": {
             "detector": "rtdetr_v2_comic",
             "detection_threshold": 0.35,
@@ -323,7 +324,21 @@ def test_prepare_with_local_ocr_skips_llm_and_reports_no_usage():
     c = FakeClient()
     deps = Deps(NoLlmProvider())
     assert run_job(c, job, HANDLERS, deps) == "succeeded"
-    assert deps.pipeline.local_args == ("manga_ocr", "ja")
+    assert deps.pipeline.local_args == ("manga_ocr", "ja", True)
     result, usage = c.calls[-1][1]
     assert result["ocr_result"]["items"][0]["source"] == "こんにちは"
     assert usage is None or (usage["llm_in"] == 0 and usage["calls"] == 0)
+
+
+def test_invalid_result_fails_with_usage_kept():
+    # Kết quả sai hợp đồng (bắt ở worker trước khi complete) → fail internal, token đã trả tiền vẫn báo.
+    def bad(ctx, deps):
+        ctx.add_usage(
+            [TokenUsage(provider="fake", model="gemini-2.5-flash", input_tokens=7, output_tokens=3)]
+        )
+        return {"type": "page.prepare", "clean_rev": "x"}
+
+    c = FakeClient()
+    assert run_job(c, prepare_job(), {"page.prepare": bad}, Deps()) == "failed"
+    kind, info = c.calls[-1]
+    assert kind == "fail" and info["error_class"] == "internal" and info["usage"]["llm_in"] == 7

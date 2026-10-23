@@ -8,7 +8,7 @@ import numpy as np
 import pytest
 
 from mtl_pipeline.images import encode_png
-from mtl_pipeline.proofread import page_images, proofread_page, validate_suggestions
+from mtl_pipeline.proofread import norm_text, page_images, proofread_page, validate_suggestions
 from mtl_pipeline.providers import make_provider
 from mtl_pipeline.providers.anthropic import AnthropicProvider
 from mtl_pipeline.providers.base import PROOFREAD_SCHEMA, ProviderError
@@ -109,6 +109,54 @@ def test_schema_error_retried_once_and_usage_kept():
         proofread_page(SeqProvider([ProviderError("rate_limit", "429")]), _req())
 
 
+def _job(
+    page_ids: list[str], regions: list[dict], tier: str = "standard", order: list[str] | None = None
+) -> dict:
+    """Job chapter.proofread; `order` = thứ tự trang trong inputs (worker phải tự xếp theo ord)."""
+    ords = {pid: i for i, pid in enumerate(page_ids)}
+    return {
+        "id": "0192a3b4-c5d6-7e8f-9a0b-1c2d3e4f5a6e",
+        "type": "chapter.proofread",
+        "attempt": 1,
+        "lease_token": "t" * 48,
+        "lease_expires_at": "x",
+        "payload": {
+            "type": "chapter.proofread",
+            "chapter_id": PAGE,
+            "page_ids": page_ids,
+            "model_tier": tier,
+            "settings": {
+                "glossary": {"검": "kiếm"},
+                "source_lang": "ko",
+                "target_lang": "vi",
+                "pronoun_rules": "",
+                "honorific_policy": "giữ",
+                "style_prompt": "",
+                "font": "Bangers-Regular",
+            },
+        },
+        "inputs": {
+            "pages": [
+                {
+                    "page_id": pid,
+                    "ord": ords[pid],
+                    "width": 48,
+                    "height": 64,
+                    "image": f"http://f/{pid}",
+                    "regions": regions,
+                }
+                for pid in (order or page_ids)
+            ]
+        },
+        "outputs": {},
+    }
+
+
+class _ImgClient(FakeClient):
+    def download(self, url):
+        return encode_png(np.full((64, 48, 3), 255, np.uint8))
+
+
 def test_handler_proofreads_each_page_with_context_and_tier():
     prov = SeqProvider(
         [
@@ -127,56 +175,8 @@ def test_handler_proofreads_each_page_with_context_and_tier():
             return prov
 
     page2 = "0192a3b4-c5d6-7e8f-9a0b-1c2d3e4f5a6d"
-    regions = [r.model_dump() for r in REGIONS]
-    job = {
-        "id": "0192a3b4-c5d6-7e8f-9a0b-1c2d3e4f5a6e",
-        "type": "chapter.proofread",
-        "attempt": 1,
-        "lease_token": "t" * 48,
-        "lease_expires_at": "x",
-        "payload": {
-            "type": "chapter.proofread",
-            "chapter_id": PAGE,
-            "page_ids": [PAGE, page2],
-            "model_tier": "premium",
-            "settings": {
-                "glossary": {"검": "kiếm"},
-                "source_lang": "ko",
-                "target_lang": "vi",
-                "pronoun_rules": "",
-                "honorific_policy": "giữ",
-                "style_prompt": "",
-                "font": "Bangers-Regular",
-            },
-        },
-        "inputs": {
-            "pages": [
-                {
-                    "page_id": page2,
-                    "ord": 1,
-                    "width": 48,
-                    "height": 64,
-                    "image": "http://f/2",
-                    "regions": regions,
-                },
-                {
-                    "page_id": PAGE,
-                    "ord": 0,
-                    "width": 48,
-                    "height": 64,
-                    "image": "http://f/1",
-                    "regions": regions,
-                },
-            ]
-        },
-        "outputs": {},
-    }
-
-    class Client(FakeClient):
-        def download(self, url):
-            return encode_png(np.full((64, 48, 3), 255, np.uint8))
-
-    c = Client()
+    job = _job([PAGE, page2], [r.model_dump() for r in REGIONS], tier="premium", order=[page2, PAGE])
+    c = _ImgClient()
     deps = Deps()
     assert run_job(c, job, HANDLERS, deps) == "succeeded"
     assert deps.tiers == ["premium"]
@@ -188,3 +188,34 @@ def test_handler_proofreads_each_page_with_context_and_tier():
         {"page_id": PAGE, "region_id": "t0", "old": "Xin chao", "suggestion": "Xin chào", "reason": "dấu"}
     ]
     assert usage["llm_in"] == 100 and usage["calls"] == 2
+
+
+def test_manual_line_breaks_are_kept_and_count_as_change():
+    regions = [ProofreadRegion(id="t0", kind="text_bubble", source="x", translation="Xin chào\ncậu")]
+    items = [
+        ProofreadItem(id="t0", suggestion="Xin chào,\n  cậu   ơi "),
+    ]
+    [it] = validate_suggestions(regions, items)
+    assert it.suggestion == "Xin chào,\ncậu ơi"
+    # Chỉ khác xuống dòng = vẫn là thay đổi (không bị coi là trùng bản cũ).
+    assert norm_text("A\nB") != norm_text("A B")
+    assert validate_suggestions(regions, [ProofreadItem(id="t0", suggestion="Xin chào cậu")])
+
+
+def test_handler_skips_page_whose_json_stays_invalid():
+    bad = ProviderError("schema", "json hỏng 2 lần", usage=_usage())
+    ok = ProofreadResult(items=[ProofreadItem(id="t0", suggestion="Xin chào", reason="dấu")], usage=_usage())
+    prov = SeqProvider([bad, bad, ok])
+
+    class Deps:
+        def provider_for(self, tier):
+            return prov
+
+    page2 = "0192a3b4-c5d6-7e8f-9a0b-1c2d3e4f5a6d"
+    regions = [r.model_dump() for r in REGIONS]
+    job = _job([PAGE, page2], regions)
+    c = _ImgClient()
+    assert run_job(c, job, HANDLERS, Deps()) == "succeeded"
+    result, usage = c.calls[-1][1]
+    assert [s["page_id"] for s in result["suggestions"]] == [page2]
+    assert usage["calls"] == 3  # token của 2 lần hỏng vẫn tính

@@ -20,7 +20,7 @@ import {
   TEXT_DETECTORS,
 } from "@mtl/shared";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { type ReactNode, useEffect, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import { api, errorMessage, wsPath } from "../../lib/api.ts";
 
 const DETECTOR_LABEL: Record<(typeof TEXT_DETECTORS)[number], string> = {
@@ -41,15 +41,24 @@ const TIER_LABEL: Record<(typeof PROOFREAD_TIERS)[number], string> = {
   premium: "Premium (chất lượng cao hơn)",
 };
 
-/** Nhãn 2 tầng: tiếng Việt + thuật ngữ gốc, dấu ? mang giải thích (title + aria-label đọc được bằng bàn phím). */
+/**
+ * Nhãn 2 tầng: tiếng Việt + thuật ngữ gốc; giải thích nằm ở nút "?" (focus được bằng Tab, hover/focus hiện title) và
+ * gắn vào ô qua `aria-describedby={tipId(id)}` — tên truy cập của ô chỉ là nhãn, không lẫn cả đoạn giải thích.
+ */
+const tipId = (id: string) => `${id}-tip`;
 function Term(props: { htmlFor: string; vi: string; en: string; tip: string }) {
   return (
-    <label htmlFor={props.htmlFor} className="pipe-label">
-      {props.vi} <span className="pipe-term">{props.en}</span>{" "}
-      <span className="pipe-tip" title={props.tip} aria-label={`Giải thích: ${props.tip}`} role="img">
+    <div className="pipe-label">
+      <label htmlFor={props.htmlFor}>
+        {props.vi} <span className="pipe-term">{props.en}</span>
+      </label>
+      <button type="button" className="pipe-tip" title={props.tip} aria-label={`Giải thích: ${props.en}`}>
         ?
+      </button>
+      <span id={tipId(props.htmlFor)} hidden>
+        {props.tip}
       </span>
-    </label>
+    </div>
   );
 }
 
@@ -66,7 +75,13 @@ export function PipelineSettingsForm(props: { ws: string; value: PipelineSetting
   const { ws, canManage } = props;
   const qc = useQueryClient();
   const [f, setF] = useState<PipelineSettings>(props.value);
-  useEffect(() => setF(props.value), [props.value]);
+  // Giá trị server đổi (lưu xong, người khác lưu): chỉ nạp lại khi form chưa sửa dở — không đè chỉnh sửa đang làm.
+  const base = useRef(props.value);
+  useEffect(() => {
+    setF((cur) => (JSON.stringify(cur) === JSON.stringify(base.current) ? props.value : cur));
+    base.current = props.value;
+  }, [props.value]);
+  const [advOpen, setAdvOpen] = useState(false);
   const set = <K extends keyof PipelineSettings>(k: K, v: PipelineSettings[K]) => setF((s) => ({ ...s, [k]: v }));
   const save = useMutation({
     mutationFn: (pipeline: PipelineSettings) =>
@@ -79,6 +94,8 @@ export function PipelineSettingsForm(props: { ws: string; value: PipelineSetting
     <form
       className="settings-form"
       aria-label="Cài đặt pipeline"
+      // Ô nâng cao sai mà mục đang thu → mở ra để trình duyệt chỉ được chỗ lỗi.
+      onInvalidCapture={() => setAdvOpen(true)}
       onSubmit={(e) => {
         e.preventDefault();
         save.mutate(f);
@@ -89,7 +106,7 @@ export function PipelineSettingsForm(props: { ws: string; value: PipelineSetting
         xử lý không tự chạy lại.
         {!canManage && " Chỉ chủ nhóm / quản trị viên sửa được."}
       </p>
-      <fieldset disabled={!canManage} className="pipe-fields">
+      <fieldset disabled={!canManage || save.isPending} className="pipe-fields">
         <Group legend="Phát hiện chữ">
           <Term
             htmlFor="p-detector"
@@ -97,7 +114,12 @@ export function PipelineSettingsForm(props: { ws: string; value: PipelineSetting
             en="Text detector"
             tip="Model tìm vị trí chữ trên trang. RT-DETR tìm cả bóng thoại lẫn chữ; CTD tìm khối chữ sát hơn với chữ nhỏ / chữ dọc, bóng thoại vẫn lấy từ RT-DETR."
           />
-          <select id="p-detector" value={f.detector} onChange={(e) => set("detector", e.target.value as never)}>
+          <select
+            id="p-detector"
+            aria-describedby={tipId("p-detector")}
+            value={f.detector}
+            onChange={(e) => set("detector", e.target.value as never)}
+          >
             {TEXT_DETECTORS.map((d) => (
               <option key={d} value={d}>
                 {DETECTOR_LABEL[d]}
@@ -122,6 +144,7 @@ export function PipelineSettingsForm(props: { ws: string; value: PipelineSetting
                 />
                 <select
                   id={`p-ocr-${lang}`}
+                  aria-describedby={tipId(`p-ocr-${lang}`)}
                   value={f.ocr_engines[lang]}
                   onChange={(e) => set("ocr_engines", { ...f.ocr_engines, [lang]: e.target.value as OcrEngine })}
                 >
@@ -143,7 +166,12 @@ export function PipelineSettingsForm(props: { ws: string; value: PipelineSetting
             en="Inpainter"
             tip="Model vẽ lại nền sau khi xoá chữ (nền phẳng luôn tô màu trực tiếp trước). LaMa manga giữ nét screentone / nét vẽ manga tốt hơn; Big LaMa hợp ảnh màu, nền chi tiết."
           />
-          <select id="p-inpainter" value={f.inpainter} onChange={(e) => set("inpainter", e.target.value as never)}>
+          <select
+            id="p-inpainter"
+            aria-describedby={tipId("p-inpainter")}
+            value={f.inpainter}
+            onChange={(e) => set("inpainter", e.target.value as never)}
+          >
             {INPAINTERS.map((m) => (
               <option key={m} value={m}>
                 {INPAINTER_LABEL[m]}
@@ -161,6 +189,7 @@ export function PipelineSettingsForm(props: { ws: string; value: PipelineSetting
           />
           <select
             id="p-proofread"
+            aria-describedby={tipId("p-proofread")}
             value={f.proofread_tier}
             onChange={(e) => set("proofread_tier", e.target.value as never)}
           >
@@ -172,7 +201,7 @@ export function PipelineSettingsForm(props: { ws: string; value: PipelineSetting
           </select>
         </Group>
 
-        <details className="settings-group pipe-adv">
+        <details className="settings-group pipe-adv" open={advOpen} onToggle={(e) => setAdvOpen(e.currentTarget.open)}>
           <summary>Nâng cao</summary>
           <div className="grid-3">
             <div>
@@ -184,8 +213,9 @@ export function PipelineSettingsForm(props: { ws: string; value: PipelineSetting
               />
               <input
                 id="p-threshold"
+                aria-describedby={tipId("p-threshold")}
                 type="number"
-                step={0.05}
+                step="any"
                 min={DETECTION_THRESHOLD.min}
                 max={DETECTION_THRESHOLD.max}
                 required
@@ -202,6 +232,7 @@ export function PipelineSettingsForm(props: { ws: string; value: PipelineSetting
               />
               <input
                 id="p-dilation"
+                aria-describedby={tipId("p-dilation")}
                 type="number"
                 step={1}
                 min={MASK_DILATION.min}
@@ -220,8 +251,9 @@ export function PipelineSettingsForm(props: { ws: string; value: PipelineSetting
               />
               <input
                 id="p-size"
+                aria-describedby={tipId("p-size")}
                 type="number"
-                step={64}
+                step={1}
                 min={INPAINT_SIZE.min}
                 max={INPAINT_SIZE.max}
                 required

@@ -11,8 +11,8 @@
  */
 import { createHmac } from "node:crypto";
 import { type DbLike, dispatches, jobs, runtimeFlags, workspaceSettings } from "@mtl/db";
-import { JOB_TYPES, type JobType, LLM_JOB_TYPES, type SessionsEndRequest } from "@mtl/shared";
-import { and, eq, inArray, lt, lte, sql } from "drizzle-orm";
+import type { JobType, SessionsEndRequest } from "@mtl/shared";
+import { and, eq, inArray, lt, lte, not, type SQL, sql } from "drizzle-orm";
 import type { z } from "zod";
 import { budgetStatus } from "../billing/budget.ts";
 import { recordDispatchUsage } from "../billing/ledger.ts";
@@ -22,6 +22,7 @@ import { env } from "../env.ts";
 import { sendAlert } from "../lib/alert.ts";
 import { isLlmPaused } from "./breaker.ts";
 import { JobHttpError } from "./errors.ts";
+import { llmJobSql } from "./llm-job-filter.ts";
 
 export const DISPATCH_INTERVAL_MS = 5_000;
 export const DISPATCH_PENDING_S = 120;
@@ -58,7 +59,7 @@ export const callModalDrain: DrainCall = async (dispatchId) => {
 /** Tuổi (giây) job đủ điều kiện claim lâu nhất; null khi không có. `mode` bỏ trống = mọi workspace. */
 export async function oldestQueuedAgeS(
   t: DbLike,
-  opts: { mode?: "mac" | "modal"; types?: readonly JobType[] } = {},
+  opts: { mode?: "mac" | "modal"; types?: readonly JobType[]; where?: SQL } = {},
 ): Promise<number | null> {
   const [row] = await t
     .select({ age: sql<string | null>`extract(epoch from now() - min(${jobs.runAfter}))` })
@@ -70,6 +71,7 @@ export async function oldestQueuedAgeS(
         lte(jobs.runAfter, sql`now()`),
         opts.types ? inArray(jobs.type, [...opts.types]) : undefined,
         opts.mode ? sql`coalesce(${workspaceSettings.workerMode}, 'mac') = ${opts.mode}` : undefined,
+        opts.where,
       ),
     );
   return row?.age == null ? null : Number(row.age);
@@ -124,8 +126,8 @@ async function decide(t: DbLike): Promise<Decision> {
   if (bo?.until && bo.until > new Date()) return done("backoff");
   if ((await budgetStatus(t)).exceeded) return done("budget");
 
-  const types = (await isLlmPaused(t)) ? JOB_TYPES.filter((c) => !LLM_JOB_TYPES.includes(c)) : JOB_TYPES;
-  const age = await oldestQueuedAgeS(t, { mode: "modal", types });
+  // Breaker LLM bật: vẫn dispatch cho job không gọi LLM (gồm page.prepare OCR local) — cùng điều kiện với claim.
+  const age = await oldestQueuedAgeS(t, { mode: "modal", where: (await isLlmPaused(t)) ? not(llmJobSql) : undefined });
   if (age === null) return done("idle");
   const open = await t
     .select({ status: dispatches.status, n: sql<number>`count(*)::int` })

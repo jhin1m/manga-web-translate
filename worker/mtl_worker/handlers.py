@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 import cv2
@@ -59,19 +60,31 @@ def _ocr_item_to_shared(it: OcrItem) -> dict[str, Any]:
     }
 
 
+log = logging.getLogger("mtl_worker")
+
 # ---- page.prepare (giai đoạn 1) ----
 
 
-def run_ocr(deps: Deps, engine: str, img: np.ndarray, regions: list[Region], source_lang: str) -> OcrResult:
-    """OCR theo cài đặt pipeline: `llm` qua provider (tính token), engine local qua ONNX (usage rỗng)."""
-    if engine in LOCAL_OCR_ENGINES:
-        return ocr_page_local(deps.pipeline.local_ocr(engine, source_lang), img, regions)
+def local_engine(deps: Deps, engine: str, source_lang: str, rtl: bool) -> Any:
+    """Engine OCR local (None = OCR qua LLM). Gọi ĐẦU handler: thiếu model → tải / lỗi nạp lộ ra trước khi tốn công
+    detect + inpaint."""
+    return deps.pipeline.local_ocr(engine, source_lang, rtl) if engine in LOCAL_OCR_ENGINES else None
+
+
+def run_ocr(deps: Deps, local: Any, img: np.ndarray, regions: list[Region], source_lang: str) -> OcrResult:
+    """OCR theo cài đặt pipeline: engine local qua ONNX (usage rỗng), không thì LLM qua provider (tính token)."""
+    if local is not None:
+        return ocr_page_local(local, img, regions)
     return ocr_page(deps.provider, img, regions, 0, source_lang)
 
 
 def handle_prepare(ctx: JobContext, deps: Deps) -> dict[str, Any]:
     rev = ctx.outputs["clean"]["rev"]
     opts = PrepareOptions.from_payload(ctx.payload.get("pipeline"))
+    # Payload trước khi có reading_order/source_lang (job xếp hàng từ bản cũ) → mặc định manhwa tiếng Hàn.
+    rtl = ctx.payload.get("reading_order", "ltr") == "rtl"
+    source_lang = ctx.payload.get("source_lang", "ko")
+    local = local_engine(deps, opts.ocr_engine, source_lang, rtl)
     img = open_rgb(ctx.download(ctx.inputs["original"]))
     partial = ctx.inputs.get("partial")
     if partial:
@@ -82,13 +95,11 @@ def handle_prepare(ctx: JobContext, deps: Deps) -> dict[str, Any]:
         mask = open_gray(ctx.download(partial["mask"]))
     else:
         ctx.report("detect", 0.05)
-        # Payload trước khi có reading_order/source_lang (job xếp hàng từ bản cũ) → mặc định manhwa tiếng Hàn.
-        rtl = ctx.payload.get("reading_order", "ltr") == "rtl"
         regions, mask, clean, _ = deps.pipeline.prepare_image(img, rtl, opts)
     ctx.report("ocr", 0.6)
     try:
         # LLM gọi cuối cùng: lỗi provider vẫn giữ được artifact detect/inpaint.
-        ocr = run_ocr(deps, opts.ocr_engine, img, regions, ctx.payload.get("source_lang", "ko"))
+        ocr = run_ocr(deps, local, img, regions, source_lang)
     except ProviderError as e:
         failure = classify_provider_error(e)
         ctx.upload("clean", png_bytes(clean)[0])
@@ -319,7 +330,9 @@ def handle_ocr_region(ctx: JobContext, deps: Deps) -> dict[str, Any]:
     )
     ctx.report("ocr", 0.2)
     source_lang = ctx.payload.get("source_lang", "ko")
-    ocr = run_ocr(deps, ctx.payload.get("ocr_engine", "llm"), img, [region], source_lang)
+    rtl = ctx.payload.get("reading_order", "ltr") == "rtl"
+    local = local_engine(deps, ctx.payload.get("ocr_engine", "llm"), source_lang, rtl)
+    ocr = run_ocr(deps, local, img, [region], source_lang)
     ctx.add_usage(ocr.usage)
     item = next((it for it in ocr.items if it.id == region.id), OcrItem(id=region.id, empty=True))
     translation, low = "", item.low_conf
@@ -361,24 +374,25 @@ def handle_ocr_region(ctx: JobContext, deps: Deps) -> dict[str, Any]:
 # ---- chapter.proofread ----
 
 CONTEXT_TAIL = 8
+MAX_SUGGESTIONS = 2000  # = trần JobResult chapter.proofread
 
 
 def handle_proofread(ctx: JobContext, deps: Deps) -> dict[str, Any]:
     p = ctx.payload
     settings = _settings(p)
     provider = deps.provider_for(p.get("model_tier", "standard"))
-    pages_in = sorted(ctx.inputs["pages"], key=lambda pg: pg["ord"])
+    pages_in = [pg for pg in sorted(ctx.inputs["pages"], key=lambda pg: pg["ord"]) if pg["regions"]]
+    # Tải + thu nhỏ ảnh mọi trang ngay sau claim: URL ký có hạn (10'), chương dài gọi LLM tuần tự lâu hơn thế.
+    images = {pg["page_id"]: page_images(open_rgb(ctx.download(pg["image"]))) for pg in pages_in}
     context: list[ContextLine] = []
     out: list[dict[str, Any]] = []
     for i, pg in enumerate(pages_in):
         ctx.report("proofread", 0.05 + 0.9 * i / max(1, len(pages_in)))
         regions = [ProofreadRegion.model_validate(r) for r in pg["regions"]]
-        if not regions:
-            continue
         req = ProofreadRequest(
             page_ord=pg["ord"],
             regions=regions,
-            images=page_images(open_rgb(ctx.download(pg["image"]))),
+            images=images[pg["page_id"]],
             source_lang=settings.source_lang,
             target_lang=settings.target_lang,
             glossary=settings.glossary,
@@ -386,7 +400,19 @@ def handle_proofread(ctx: JobContext, deps: Deps) -> dict[str, Any]:
             honorific_policy=settings.honorific_policy,
             context=context,
         )
-        res = proofread_page(provider, req)
+        try:
+            res = proofread_page(provider, req)
+        except ProviderError as e:
+            if e.error_class != "schema":
+                raise  # 429 / provider lỗi: để hàng đợi backoff (usage các trang trước đã ghi)
+            # JSON sai cả lần thử lại / vượt guard token: bỏ trang này, giữ gợi ý các trang khác (gợi ý độc lập
+            # theo trang — fail cả job là tính tiền lại mọi trang).
+            ctx.add_usage(e.usage)
+            log.warning("hiệu đính bỏ trang ord=%s: %s", pg["ord"], e)
+            context = [ContextLine(source=r.source, translation=r.translation) for r in regions][
+                -CONTEXT_TAIL:
+            ]
+            continue
         ctx.add_usage(res.usage)
         by_id = {r.id: r for r in regions}
         for it in res.items:
@@ -400,7 +426,7 @@ def handle_proofread(ctx: JobContext, deps: Deps) -> dict[str, Any]:
                 }
             )
         context = [ContextLine(source=r.source, translation=r.translation) for r in regions][-CONTEXT_TAIL:]
-    return {"type": "chapter.proofread", "suggestions": out}
+    return {"type": "chapter.proofread", "suggestions": out[:MAX_SUGGESTIONS]}
 
 
 HANDLERS: dict[str, Handler] = {

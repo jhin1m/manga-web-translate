@@ -1000,10 +1000,6 @@ label.cw-field-head {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
-.cw-proofread-item[data-state="stale"] .cw-proofread-diff,
-.cw-proofread-item[data-state="applied"] .cw-proofread-diff {
-  opacity: 0.7;
-}
 .cw-proofread-diff del {
   color: var(--c-fg-muted);
 }

@@ -9,11 +9,12 @@
 import type { PageState } from "@mtl/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Draft } from "immer";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { errorMessage } from "../../lib/api.ts";
 import { setRegionTranslation } from "../editor/actions.ts";
 import { editorStore, useEditor } from "../editor/store.ts";
-import { dismissSuggestion, fetchProofread, proofreadKey, runProofread } from "./api.ts";
+import { dismissSuggestion, fetchProofread, type JobView, proofreadKey, runProofread } from "./api.ts";
+import { describeJobError, ERROR_CLASS } from "./job-error.ts";
 import {
   STATE_LABEL,
   type Suggestion,
@@ -27,7 +28,28 @@ const ACTIVE = new Set(["queued", "running", "paused_budget"]);
 /** Chương đã qua Bước 2 (khớp API enqueueProofread). */
 const TRANSLATED = new Set(["review", "done", "partial_failed"]);
 
-type Item = Suggestion & { row: Row | undefined; state: SuggestionState; pageNo: number };
+type Item = Suggestion & { row: Row | undefined; state: SuggestionState; pageNo: number | null };
+
+const headId = (id: string) => `pf-head-${id}`;
+/** Sau Nhận / Bỏ nút vừa bấm biến mất → focus về tiêu đề khối (không rơi về <body>). */
+const focusHead = (id: string) => requestAnimationFrame(() => document.getElementById(headId(id))?.focus());
+
+/** Câu báo trạng thái lượt hiệu đính cho người (lỗi thô của provider chỉ trong "Chi tiết kỹ thuật"). */
+function jobNotice(job: JobView | null): { text: string; tone: "info" | "danger"; raw: string | null } | null {
+  if (!job) return null;
+  if (job.status === "paused_budget")
+    return { text: "Tạm dừng vì vượt ngân sách AI — tự chạy tiếp khi ngân sách mở lại.", tone: "info", raw: null };
+  const d = describeJobError(job);
+  if (d?.waiting) return { text: d.text, tone: "info", raw: null };
+  if (job.status === "failed")
+    return {
+      text: `Lần hiệu đính gần nhất lỗi: ${ERROR_CLASS[job.error_class ?? "internal"] ?? job.error_class}. Bấm "Hiệu đính lại cả chương" để chạy lại.`,
+      tone: "danger",
+      raw: job.error,
+    };
+  if (job.status === "cancelled") return { text: "Lần hiệu đính gần nhất đã huỷ.", tone: "info", raw: null };
+  return null;
+}
 
 export function ProofreadPanel(props: {
   ws: string;
@@ -55,6 +77,7 @@ export function ProofreadPanel(props: {
     onSettled: refresh,
   });
   const dismiss = useMutation({ mutationFn: (id: string) => dismissSuggestion(ws, id), onSettled: refresh });
+  const [acceptError, setAcceptError] = useState<string | null>(null);
 
   const byKey = useMemo(() => new Map(rows.map((r) => [r.key, r])), [rows]);
   const items: Item[] = useMemo(() => {
@@ -62,24 +85,34 @@ export function ProofreadPanel(props: {
     const pageOrd = new Map(rows.map((r) => [r.pageId, r.ord]));
     return sortSuggestions(q.data?.suggestions ?? [], pageOrd, rowIndex).map((s) => {
       const row = byKey.get(`${s.page_id}:${s.region_id}`);
-      const pageNo = (pageOrd.get(s.page_id) ?? 0) + 1;
+      const ord = pageOrd.get(s.page_id);
+      const pageNo = ord === undefined ? null : ord + 1;
       return { ...s, row, state: suggestionState(s, row?.translation), pageNo };
     });
   }, [q.data, rows, byKey]);
 
   const job = q.data?.job ?? null;
   const running = !!job && ACTIVE.has(job.status);
-  const canRun = TRANSLATED.has(props.status ?? "") && !running;
+  // Chỉ xem (người khác giữ khoá…) → không chạy lại / bỏ: lượt mới thay toàn bộ gợi ý (cả lượt Bỏ) của chương.
+  const canRun = TRANSLATED.has(props.status ?? "") && !running && !readOnly;
+  const notice = running && job?.status === "running" ? null : jobNotice(job);
   const pendingHere = items.filter((it) => it.page_id === activeId && it.state === "pending" && it.row?.regionId);
   const pendingTotal = items.filter((it) => it.state === "pending").length;
 
   /** Nhận 1 gợi ý: mở trang của khối (lưu trang cũ trước) rồi sửa bản dịch như gõ tay. */
   const accept = async (it: Item) => {
     if (!it.row?.regionId) return;
+    setAcceptError(null);
     await props.onPick(it.row);
     const s = editorStore.getState();
-    if (s.pageId !== it.page_id || !s.layout || s.readOnly) return;
+    if (s.pageId !== it.page_id || !s.layout || s.readOnly) {
+      setAcceptError(
+        s.readOnly ? "Trang đang chỉ xem — chưa nhận được gợi ý." : "Chưa mở được trang của khối — thử lại.",
+      );
+      return;
+    }
     s.apply(setRegionTranslation(it.row.regionId, it.suggestion, s.layout));
+    focusHead(it.id);
   };
   /** Nhận mọi gợi ý chờ duyệt của trang đang mở — 1 bước hoàn tác. */
   const acceptAllHere = () => {
@@ -110,25 +143,36 @@ export function ProofreadPanel(props: {
           </button>
         )}
         <span className="muted small" role="status">
-          {running
-            ? `AI đang đọc bản dịch… ${Math.round((job?.progress ?? 0) * 100)}%`
-            : items.length
-              ? `${pendingTotal} gợi ý chờ duyệt / ${items.length}`
-              : ""}
+          {running ? "AI đang đọc bản dịch…" : items.length ? `${pendingTotal} gợi ý chờ duyệt / ${items.length}` : ""}
         </span>
+        {running && job?.status === "running" && (
+          <span className="muted small" aria-hidden="true">
+            {Math.round(job.progress * 100)}%
+          </span>
+        )}
       </div>
-      {run.isError && (
+      {[run.error, dismiss.error, q.error].filter(Boolean).map((e) => (
+        <p key={String(e)} className="notice danger cw-pad" role="alert">
+          {errorMessage(e)}
+        </p>
+      ))}
+      {acceptError && (
         <p className="notice danger cw-pad" role="alert">
-          {errorMessage(run.error)}
+          {acceptError}
         </p>
       )}
-      {job && (job.status === "failed" || job.status === "cancelled") && !running && (
-        <p className="notice danger cw-pad" role="alert">
-          Lần hiệu đính gần nhất {job.status === "failed" ? "lỗi" : "đã huỷ"}
-          {job.error ? `: ${job.error.slice(0, 200)}` : ""}. Bấm "Hiệu đính lại cả chương" để chạy lại.
-        </p>
+      {notice && (
+        <div className={`notice cw-pad ${notice.tone}`}>
+          {notice.text}
+          {notice.raw && (
+            <details className="cw-error-raw">
+              <summary>Chi tiết kỹ thuật</summary>
+              <pre>{notice.raw}</pre>
+            </details>
+          )}
+        </div>
       )}
-      {!items.length && !running && (
+      {!items.length && !running && !q.isError && (
         <p className="muted small cw-pad">
           {job?.status === "succeeded"
             ? "AI không thấy khối nào cần sửa (hoặc mọi gợi ý đã được bỏ)."
@@ -145,12 +189,13 @@ export function ProofreadPanel(props: {
           >
             <button
               type="button"
+              id={headId(it.id)}
               className="cw-proofread-head btn-ghost"
               disabled={!it.row}
               onClick={() => it.row && void props.onPick(it.row)}
               title="Mở khối này trên ảnh"
             >
-              Trang {it.pageNo} · Khối {it.row?.index ?? "?"}
+              Trang {it.pageNo ?? "?"} · Khối {it.row?.index ?? "?"}
               <span
                 className="status"
                 data-tone={it.state === "pending" ? "warn" : it.state === "applied" ? "ok" : "idle"}
@@ -179,8 +224,12 @@ export function ProofreadPanel(props: {
                 <button
                   type="button"
                   className="btn-ghost"
-                  disabled={dismiss.isPending}
-                  onClick={() => dismiss.mutate(it.id)}
+                  disabled={dismiss.isPending || readOnly}
+                  onClick={() => {
+                    const i = items.indexOf(it);
+                    const next = items[i + 1] ?? items[i - 1];
+                    dismiss.mutate(it.id, { onSuccess: () => next && focusHead(next.id) });
+                  }}
                 >
                   Bỏ
                 </button>

@@ -96,19 +96,25 @@ def verify_all(lock_path: Path = DEFAULT_LOCK, root: Path | None = None) -> dict
 
 def download(m: ModelEntry, dest: Path) -> None:
     """Tải đúng URL (pin revision) vào file tạm cạnh dest, kiểm sha256 rồi mới đổi tên; sai → xoá, ném lỗi."""
+    import tempfile
+
     import httpx
 
     dest.parent.mkdir(parents=True, exist_ok=True)
-    tmp = dest.with_suffix(dest.suffix + ".part")
-    with httpx.stream("GET", m.url, follow_redirects=True, timeout=600) as r, tmp.open("wb") as f:
-        r.raise_for_status()
-        for chunk in r.iter_bytes(1 << 20):
-            f.write(chunk)
-    digest = sha256_file(tmp)
-    if digest != m.sha256:
-        tmp.unlink()
-        raise ModelIntegrityError(f"{m.name}: sha256 lệch sau khi tải ({digest} != {m.sha256})")
-    tmp.rename(dest)
+    # Tên tạm riêng mỗi lần: nhiều process chung thư mục model (Modal volume, 2 worker Mac) không ghi đè nhau.
+    fd, name = tempfile.mkstemp(prefix=dest.name + ".", suffix=".part", dir=dest.parent)
+    tmp = Path(name)
+    try:
+        with httpx.stream("GET", m.url, follow_redirects=True, timeout=600) as r, os.fdopen(fd, "wb") as f:
+            r.raise_for_status()
+            for chunk in r.iter_bytes(1 << 20):
+                f.write(chunk)
+        digest = sha256_file(tmp)
+        if digest != m.sha256:
+            raise ModelIntegrityError(f"{m.name}: sha256 lệch sau khi tải ({digest} != {m.sha256})")
+        tmp.replace(dest)  # nguyên tử; process khác tải xong trước thì file giống hệt
+    finally:
+        tmp.unlink(missing_ok=True)
 
 
 _ensure_lock = threading.Lock()

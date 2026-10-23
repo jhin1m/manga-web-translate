@@ -77,7 +77,7 @@ def main() -> int:
                     from mtl_pipeline.local_ocr import ocr_page_local
 
                     t1 = time.perf_counter()
-                    res = ocr_page_local(pipe.local_ocr(args.ocr, args.lang), img, regions)
+                    res = ocr_page_local(pipe.local_ocr(args.ocr, args.lang, args.rtl), img, regions)
                     row["ocr_s"] = round(time.perf_counter() - t1, 2)
                     row["ocr"] = {it.id: it.source for it in res.items if not it.empty}
                     truth = labels.get(src.name, {})

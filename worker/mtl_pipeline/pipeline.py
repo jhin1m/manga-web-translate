@@ -84,11 +84,12 @@ class Pipeline:
                 )
             return self._lamas[name]
 
-    def local_ocr(self, engine: str, source_lang: str) -> LocalOcrEngine:
+    def local_ocr(self, engine: str, source_lang: str, vertical: bool = False) -> LocalOcrEngine:
         """Engine OCR local (nạp lười, model optional tải theo lock). PaddleOCR: rec tiếng Hàn riêng, còn lại rec
-        PP-OCRv6 đa ngữ; nối dòng bằng dấu cách cho ko/en, liền cho ja/zh."""
-        # PaddleOCR khác cách nối dòng theo ngôn ngữ → 1 engine / ngôn ngữ (model nhỏ, ~30MB).
-        key = engine if engine == "manga_ocr" else f"{engine}:{source_lang}"
+        PP-OCRv6 đa ngữ; nối dòng bằng dấu cách cho ko/en, liền cho ja/zh. vertical: trang đọc phải→trái (manga
+        Nhật dạng trang) → khối chữ cao đọc theo cột dọc; còn lại (manhua, webtoon) luôn tách dòng ngang."""
+        # PaddleOCR khác cách nối dòng / chiều chữ theo ngôn ngữ → 1 engine / (ngôn ngữ, chiều) (model nhỏ, ~30MB).
+        key = engine if engine == "manga_ocr" else f"{engine}:{source_lang}:{int(vertical)}"
         with self._lock:
             if key not in self._ocr:
                 if engine == "manga_ocr":
@@ -109,7 +110,7 @@ class Pipeline:
                         ensure_model(rec),
                         threads=self.threads,
                         join=" " if source_lang in ("ko", "en") else "",
-                        vertical=source_lang in ("ja", "zh"),
+                        vertical=vertical and source_lang in ("ja", "zh"),
                     )
                 else:
                     raise ValueError(f"OCR engine không hỗ trợ: {engine}")
@@ -130,7 +131,10 @@ class Pipeline:
         t0 = time.perf_counter()
         # CTD chạy 1 lượt cho cả mask lẫn khối chữ; RT-DETR vẫn cho bóng thoại.
         pred, blocks = self.masker.predict_with_blocks(img, opts.detection_threshold if ctd else None)
-        regions = self.detector.detect(img, rtl, opts.detection_threshold, blocks if ctd else None)
+        # CTD: ngưỡng áp cho khối chữ CTD; bóng RT-DETR giữ ngưỡng mặc định (ngưỡng thấp sinh bóng rác cả trang).
+        regions = self.detector.detect(
+            img, rtl, None if ctd else opts.detection_threshold, blocks if ctd else None
+        )
         t1 = time.perf_counter()
         mask = build_text_mask(img, pred, regions, opts.mask_dilation)
         t2 = time.perf_counter()

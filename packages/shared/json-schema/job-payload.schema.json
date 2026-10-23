@@ -343,6 +343,13 @@
             "manga_ocr",
             "paddle_ocr"
           ]
+        },
+        "reading_order": {
+          "type": "string",
+          "enum": [
+            "ltr",
+            "rtl"
+          ]
         }
       },
       "required": [

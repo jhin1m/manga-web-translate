@@ -14,7 +14,7 @@ import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { v7 as uuidv7 } from "uuid";
 import { z } from "zod";
-import { inJobTx, lockChapter } from "../jobs/enqueue.ts";
+import { inJobTx, lockChapter, notReadOnlyJob } from "../jobs/enqueue.ts";
 import {
   applyBatch,
   chapterBatchHistory,
@@ -77,6 +77,7 @@ async function chaptersWithBusy(sdb: Scoped, seriesId: string) {
             chs.map((c) => c.id),
           ),
           inArray(jobs.status, [...ACTIVE_JOB_STATUSES]),
+          notReadOnlyJob,
         ) as SQL,
       )
     : [];
@@ -110,7 +111,7 @@ function withChapter<T>(
     const t = scoped(tx, ws);
     const running = await t.select(
       jobs,
-      and(eq(jobs.chapterId, chapterId), inArray(jobs.status, [...ACTIVE_JOB_STATUSES])) as SQL,
+      and(eq(jobs.chapterId, chapterId), inArray(jobs.status, [...ACTIVE_JOB_STATUSES]), notReadOnlyJob) as SQL,
     );
     if (running.length) return { ok: false, reason: "busy" };
     return { ok: true, value: await fn(t) };

@@ -28,7 +28,7 @@ import {
   LLM_JOB_TYPES,
   storageKeys,
 } from "@mtl/shared";
-import { and, asc, eq, inArray, lte, not, sql } from "drizzle-orm";
+import { and, asc, eq, gt, inArray, lte, ne, not, sql } from "drizzle-orm";
 import type { z } from "zod";
 import { budgetStatus, pauseQueuedPaidJobs } from "../billing/budget.ts";
 import { recordServerUsage, recordUsage, type WorkerKind } from "../billing/ledger.ts";
@@ -40,7 +40,7 @@ import { head } from "../storage.ts";
 import { isLlmPaused, recordProviderError } from "./breaker.ts";
 import { buildInputs, claimOutputNames, outputKey, type PresignedOutput, presignOutputs } from "./claim-inputs.ts";
 import { markDispatchClaimed } from "./dispatcher.ts";
-import { chapterHasUserEdits, createIngestedPages, refreshChapter } from "./enqueue.ts";
+import { chapterHasUserEdits, createIngestedPages, lockChapter, refreshChapter } from "./enqueue.ts";
 import { decideFailure, JobHttpError, leaseLost } from "./errors.ts";
 import { llmJobSql } from "./llm-job-filter.ts";
 import { writeAiState } from "./page-state-writer.ts";
@@ -360,9 +360,19 @@ async function applyResult(t: DbLike, job: Job, attempt: number, result: JobResu
   }
 }
 
-/** So bản dịch bỏ qua khác biệt Unicode / khoảng trắng (gợi ý "sửa" mà chỉ đổi dấu cách = không phải gợi ý). */
-const sameText = (a: string, b: string) =>
-  a.normalize("NFC").replace(/\s+/g, " ").trim() === b.normalize("NFC").replace(/\s+/g, " ").trim();
+/**
+ * So bản dịch bỏ qua khác biệt Unicode / khoảng trắng trong dòng (gợi ý "sửa" mà chỉ đổi dấu cách = không phải gợi
+ * ý) nhưng giữ xuống dòng tay (`\n` = ngắt dòng cứng khi typeset). Khớp `norm_text` ở worker và web.
+ */
+const normText = (s: string) =>
+  s
+    .normalize("NFC")
+    .replace(/\r\n/g, "\n")
+    .split("\n")
+    .map((ln) => ln.replace(/\s+/g, " ").trim())
+    .join("\n")
+    .trim();
+const sameText = (a: string, b: string) => normText(a) === normText(b);
 
 /**
  * Gợi ý hiệu đính thay toàn bộ gợi ý cũ của chương. Chặn lại phía server (worker đã lọc): page ngoài job, vùng không
@@ -371,6 +381,24 @@ const sameText = (a: string, b: string) =>
 async function applyProofread(t: DbLike, job: Job, result: Extract<JobResult, { type: "chapter.proofread" }>) {
   const p = job.payload;
   if (p.type !== "chapter.proofread") throw new Error("payload mismatch");
+  // Khoá dòng chương: 2 lượt hiệu đính complete cùng lúc chạy tuần tự (không đụng unique (page, region)).
+  await lockChapter(t, job.workspaceId, p.chapter_id);
+  // Lượt cũ xong sau lượt mới hơn đã nhận kết quả → bỏ (không đè gợi ý mới + lượt Bỏ của người dùng).
+  const [newer] = await t
+    .select({ id: jobs.id })
+    .from(jobs)
+    .where(
+      and(
+        eq(jobs.chapterId, p.chapter_id),
+        eq(jobs.type, "chapter.proofread"),
+        eq(jobs.status, "succeeded"),
+        ne(jobs.id, job.id),
+        // So trong SQL: Date của JS mất micro giây của timestamptz.
+        gt(jobs.createdAt, sql`(select j.created_at from jobs j where j.id = ${job.id})`),
+      ),
+    )
+    .limit(1);
+  if (newer) return;
   const states = await t
     .select({ pageId: pageStates.pageId, state: pageStates.state })
     .from(pageStates)

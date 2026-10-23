@@ -147,6 +147,8 @@ export const JobPayload = z.discriminatedUnion("type", [
     target_lang: z.string().min(2).optional(),
     /** OCR engine theo cài đặt workspace (0.6.0). Thiếu → llm. Dịch vẫn qua LLM. */
     ocr_engine: OcrEngineSchema.optional(),
+    /** Thứ tự đọc của chương (0.6.0): `rtl` → OCR local đọc khối chữ cao theo cột dọc. Thiếu → ltr. */
+    reading_order: z.enum(["ltr", "rtl"]).optional(),
   }),
   z.object({
     type: z.literal("chapter.export"),

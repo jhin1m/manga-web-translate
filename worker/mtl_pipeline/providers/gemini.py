@@ -21,6 +21,7 @@ from .base import (
     OCR_MAX_OUTPUT_TOKENS,
     OCR_SCHEMA,
     PROOFREAD_MAX_OUTPUT_TOKENS,
+    PROOFREAD_OUTPUT_TOKENS_GUARD,
     PROOFREAD_SCHEMA,
     TRANSLATE_MAX_OUTPUT_TOKENS,
     TRANSLATE_SCHEMA,
@@ -66,7 +67,9 @@ class GeminiProvider:
             temperature=0.2,
         )
 
-    def _call(self, contents: list[Any], config: types.GenerateContentConfig) -> tuple[str, TokenUsage]:
+    def _call(
+        self, contents: list[Any], config: types.GenerateContentConfig, guard: int | None = None
+    ) -> tuple[str, TokenUsage]:
         try:
             resp = self.client.models.generate_content(model=self.model, contents=contents, config=config)
         except errors.APIError as e:
@@ -88,7 +91,7 @@ class GeminiProvider:
             # Token thinking tính tiền như output.
             output_tokens=((um.candidates_token_count or 0) + (um.thoughts_token_count or 0)) if um else 0,
         )
-        guard_output_tokens(usage)
+        guard_output_tokens(usage, guard)
         if not resp.text:
             raise ProviderError("schema", "gemini trả rỗng", usage=[usage])
         return resp.text, usage
@@ -113,5 +116,5 @@ class GeminiProvider:
         for img in req.images:
             contents.append(types.Part.from_bytes(data=img, mime_type="image/jpeg"))
         config = self._config(load_prompt("proofread_page"), PROOFREAD_SCHEMA, PROOFREAD_MAX_OUTPUT_TOKENS)
-        text, usage = self._call(contents, config)
+        text, usage = self._call(contents, config, PROOFREAD_OUTPUT_TOKENS_GUARD)
         return parse_proofread(text, usage)

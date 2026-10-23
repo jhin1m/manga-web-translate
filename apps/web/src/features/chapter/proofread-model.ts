@@ -16,7 +16,19 @@ export type Suggestion = {
 };
 export type SuggestionState = "pending" | "applied" | "stale";
 
-const norm = (t: string) => t.normalize("NFC").replace(/\s+/g, " ").trim();
+/**
+ * So bản dịch: NFC, gộp khoảng trắng trong dòng, giữ xuống dòng tay (`\n` = ngắt dòng cứng khi typeset) — khớp
+ * `norm_text` (worker) và `sameText` (API). Sửa riêng xuống dòng sau khi tạo gợi ý = khối đã đổi → lỗi thời.
+ */
+export const normText = (t: string) =>
+  t
+    .normalize("NFC")
+    .replace(/\r\n/g, "\n")
+    .split("\n")
+    .map((ln) => ln.replace(/\s+/g, " ").trim())
+    .join("\n")
+    .trim();
+const norm = normText;
 
 export function suggestionState(
   s: Pick<Suggestion, "old" | "suggestion">,

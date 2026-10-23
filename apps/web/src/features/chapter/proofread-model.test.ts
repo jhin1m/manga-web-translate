@@ -8,6 +8,11 @@ describe("suggestionState", () => {
     expect(suggestionState(s, "Xin chao")).toBe("pending");
     expect(suggestionState(s, " Xin  chào ")).toBe("applied");
   });
+  it("xuống dòng tay là khác biệt thật (không gộp như dấu cách)", () => {
+    const br = { old: "Xin chào\ncậu", suggestion: "Xin chào\ncậu ơi" };
+    expect(suggestionState(br, "Xin chào\n  cậu ")).toBe("pending");
+    expect(suggestionState(br, "Xin chào cậu")).toBe("stale");
+  });
   it("lỗi thời khi khối đã bị sửa khác hoặc không còn", () => {
     expect(suggestionState(s, "Chào bạn")).toBe("stale");
     expect(suggestionState(s, undefined)).toBe("stale");

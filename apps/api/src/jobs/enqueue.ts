@@ -34,7 +34,7 @@ import {
   type TargetLang,
   type TranslateSettings,
 } from "@mtl/shared";
-import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, ne, sql } from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
 import { db } from "../db.ts";
 import { mergeBySourceTerm, seriesGlossaryWhere } from "../lib/glossary-scope.ts";
@@ -65,6 +65,12 @@ const activeStatus = sql`${jobs.status} in (${sql.join(
   ACTIVE_JOB_STATUSES.map((s) => sql`${s}`),
   sql`, `,
 )})`;
+
+/**
+ * Job chỉ đọc chương (AI hiệu đính): không tính là chương "đang bận" khi ingest lại / áp ngược chữ bỏ qua — gợi ý của
+ * nó tự lỗi thời / bị lọc nếu trang đổi.
+ */
+export const notReadOnlyJob = ne(jobs.type, "chapter.proofread");
 
 /** Insert theo idempotency_key; job active cùng key đã có → trả job đó (`created: false`). */
 export async function insertJob(
@@ -152,7 +158,7 @@ export async function enqueueIngest(
   const [busy] = await tx
     .select({ id: jobs.id })
     .from(jobs)
-    .where(and(eq(jobs.chapterId, ch.id), activeStatus))
+    .where(and(eq(jobs.chapterId, ch.id), activeStatus, notReadOnlyJob))
     .limit(1);
   if (busy) throw conflict("chapter_busy", "chương còn job đang chạy — huỷ hoặc chờ xong rồi ingest lại");
   if (await chapterHasUserEdits(tx, ch.id)) {
@@ -355,7 +361,10 @@ export async function enqueueReinpaint(
 export async function enqueueOcrRegion(
   tx: DbLike,
   ws: string,
-  input: Omit<Extract<JobPayload, { type: "page.ocr_region" }>, "source_lang" | "target_lang" | "ocr_engine">,
+  input: Omit<
+    Extract<JobPayload, { type: "page.ocr_region" }>,
+    "source_lang" | "target_lang" | "ocr_engine" | "reading_order"
+  >,
 ) {
   const page = await pageIn(tx, ws, input.page_id);
   const [ch] = await tx
@@ -369,6 +378,7 @@ export async function enqueueOcrRegion(
     source_lang: s.sourceLang,
     target_lang: s.targetLang,
     ocr_engine: ocrEngineFor(await pipelineSettingsOf(tx, ws), s.sourceLang),
+    reading_order: readingOrder(s.sourceLang, ch.ingestMode),
   };
   return insertJob(tx, {
     workspaceId: ws,

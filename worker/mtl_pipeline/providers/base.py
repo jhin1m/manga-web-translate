@@ -32,7 +32,9 @@ PRICES_PER_MTOK: dict[str, tuple[float, float]] = {
 
 OCR_MAX_OUTPUT_TOKENS = 2048
 TRANSLATE_MAX_OUTPUT_TOKENS = 4096
-PROOFREAD_MAX_OUTPUT_TOKENS = 2048
+PROOFREAD_MAX_OUTPUT_TOKENS = 3072
+# Trang dày chữ (~25 khối) + thinking tối thiểu của 2.5 Pro vượt guard chung 2000 → guard riêng (server clamp 4096/call).
+PROOFREAD_OUTPUT_TOKENS_GUARD = PROOFREAD_MAX_OUTPUT_TOKENS + 256
 # Guardrail chi phí (red team #14): token ra thật của 1 call vượt ngưỡng (thinking lọt, model lặp) → lỗi schema
 # không thử lại trong job; hàng đợi tính attempt. Server vẫn clamp riêng (apps/api/src/billing/prices.ts).
 OUTPUT_TOKENS_GUARD = int(os.environ.get("MTL_MAX_OUTPUT_TOKENS_PER_CALL", "2000"))

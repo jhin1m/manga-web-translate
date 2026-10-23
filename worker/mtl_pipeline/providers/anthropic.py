@@ -20,6 +20,7 @@ from .base import (
     OCR_MAX_OUTPUT_TOKENS,
     OCR_SCHEMA,
     PROOFREAD_MAX_OUTPUT_TOKENS,
+    PROOFREAD_OUTPUT_TOKENS_GUARD,
     PROOFREAD_SCHEMA,
     TRANSLATE_MAX_OUTPUT_TOKENS,
     TRANSLATE_SCHEMA,
@@ -44,7 +45,14 @@ class AnthropicProvider:
         self.model = model
         self.client = client if client is not None else anthropic.Anthropic(max_retries=0)
 
-    def _call(self, system: str, content: list[dict[str, Any]], schema: dict[str, Any], max_tokens: int):
+    def _call(
+        self,
+        system: str,
+        content: list[dict[str, Any]],
+        schema: dict[str, Any],
+        max_tokens: int,
+        guard: int | None = None,
+    ):
         try:
             params: dict[str, Any] = {
                 "model": self.model,
@@ -73,7 +81,7 @@ class AnthropicProvider:
             input_tokens=resp.usage.input_tokens,
             output_tokens=resp.usage.output_tokens,
         )
-        guard_output_tokens(usage)
+        guard_output_tokens(usage, guard)
         if resp.stop_reason in ("refusal", "max_tokens"):
             raise ProviderError("schema", f"anthropic dừng với {resp.stop_reason}", usage=[usage])
         text = next((b.text for b in resp.content if b.type == "text"), "")
@@ -117,6 +125,10 @@ class AnthropicProvider:
                 }
             )
         text, usage = self._call(
-            load_prompt("proofread_page"), content, PROOFREAD_SCHEMA, PROOFREAD_MAX_OUTPUT_TOKENS
+            load_prompt("proofread_page"),
+            content,
+            PROOFREAD_SCHEMA,
+            PROOFREAD_MAX_OUTPUT_TOKENS,
+            PROOFREAD_OUTPUT_TOKENS_GUARD,
         )
         return parse_proofread(text, usage)
