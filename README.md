@@ -19,7 +19,7 @@ OCR (Bước 1), dịch theo ngữ cảnh cả chương + tự chèn chữ (Bư�
   series này" → chương sau tự bỏ ảnh giống, dHash); gợi ý "Có thể là credit" theo khổ ảnh; danh sách chữ watermark bỏ
   qua theo series (không gửi LLM, không chèn chữ).
 - **Series**: ngôn ngữ nguồn `ko | ja | zh | en` → đích `vi | en | id | es | pt | fr`, định dạng strip / từng trang,
-  kính ngữ, quy tắc xưng hô, giọng văn, font mặc định theo loại chữ, model Standard / Premium.
+  kính ngữ, quy tắc xưng hô, giọng văn, font mặc định theo loại chữ (kèm font tuỳ chỉnh upload ở Cài đặt nhóm), model Standard / Premium.
 - **Glossary**: chung theo cặp ngôn ngữ + riêng series, CSV, áp glossary hàng loạt; tìm & thay có hoàn tác.
 - **Xuất**: ZIP PNG / CBZ, theo trang hoặc cắt lại đúng slice gốc; cảnh báo trước khi xuất.
 - **Vận hành**: hàng đợi job có fencing, worker Python pull-only (Mac local hoặc Modal GPU), kill-switch ngân sách,
@@ -98,32 +98,30 @@ Mọi test tự động hiện dùng worker giả lập; chưa có số đo vớ
 
 ### Phải làm
 
-- [ ] **Deploy**: chạy migration mới (`0009_series_skip_images`, `0010_series_ignore_text`); worker Mac/Modal phải lên
-      pipeline **0.4.2** cùng lúc API (`MIN_PIPELINE_VERSION`), không thì hàng đợi dừng.
+- [ ] **Deploy**: chạy migration mới (`0009_series_skip_images`, `0010_series_ignore_text`, `0011_pages_skip_changed_at`, `0012_workspace_fonts`);
+      worker Mac/Modal phải lên pipeline **0.5.1** (font tuỳ chỉnh) **trước** khi deploy API (`MIN_PIPELINE_VERSION`),
+      không thì hàng đợi dừng; VPS cần dựng được addon `re2` — xem checklist ở `docs/deployment-guide.md` mục 4.
 - [ ] **Rà giấy phép** trước khi thương mại hoá / công khai rộng: MVP được dùng code + model + font mở bất kể license
       (GPL/AGPL…); repo chưa có file `LICENSE`.
 - [ ] **Phase 8 — trước khi mở đăng ký công khai**: quota theo workspace (402), BYOK, ma trận role chi tiết, admin nền
       tảng, takedown, ToS.
 - [ ] **Phase 9 — Chrome extension** (phác thảo, sau MVP).
-- [ ] Gửi email lời mời (hiện link mời chỉ hiện trên UI cho owner/admin và trong log API).
+- [ ] Thử email lời mời với SMTP thật (đã gửi qua `SMTP_URL`/`MAIL_FROM`, test dùng transport giả; link vẫn hiện trên UI).
 
 ### Chức năng còn thiếu
 
 - [ ] Tự đổi màu chữ theo màu nền.
-- [ ] Thêm font tuỳ chỉnh trong cài đặt (hiện chỉ font có sẵn trong `worker/fonts`).
-- [ ] Ẩn/khôi phục trang sau khi đã xuất chưa đánh dấu "cần xuất lại".
 - [ ] AI phân loại ảnh credit / quảng cáo (hiện chỉ học theo dHash + gợi ý theo khổ ảnh); credit cùng khổ đã bị ghép
-      vào trang lớn sau Bước 1 chỉ ẩn được cả trang; logo watermark dạng hình; regex cho chữ bỏ qua; áp danh sách chữ bỏ
-      qua ngược cho chương đã dịch.
+      vào trang lớn sau Bước 1 chỉ ẩn được cả trang; logo watermark dạng hình.
 - [ ] Đích CJK / Thái, chữ dọc khi typeset; dịch SFX + font SFX; phân loại thoại theo nghĩa (suy nghĩ, hét, khung dẫn).
 - [ ] Tự nhận ngôn ngữ nguồn từ ảnh; OCR local (manga-ocr, RapidOCR) thay LLM.
-- [ ] Sắp xếp tay thứ tự file khi upload (hiện natural sort theo tên); thumbnail do server sinh.
+- [ ] Thumbnail do server sinh (thứ tự ảnh trước Bước 1 đã sắp tay được: kéo-thả / menu / Alt+↑↓).
 - [ ] Glossary: chuyển / sao chép entry giữa các cặp ngôn ngữ, cột cặp ngôn ngữ trong CSV.
 - [ ] Chống phát lại dispatch Modal triệt để (lưu `dispatch_id` đã nhận).
 
 ### Giới hạn đã biết
 
-- Watermark: URL bị OCR tách bằng dấu cách (`discord . gg`) không khớp; watermark detector không bắt thì còn trên ảnh.
+- Watermark: watermark detector không bắt thì còn trên ảnh.
 - Credit cùng mẫu nhưng đổi chữ (đổi tên người dịch) có thể không khớp ảnh đã học.
 - Ảnh rất cao (> 16k px) có thể không tính được dấu nhận dạng trên Safari → ảnh đó không tự bỏ (upload vẫn chạy).
 - Free-tier Gemini hết hạn mức → job tự thử lại tới ~4 giờ trước khi báo lỗi.

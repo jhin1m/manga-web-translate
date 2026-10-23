@@ -26,3 +26,9 @@ def test_font_covers_every_target_language(font_id: str):
         lang: "".join(missing_glyphs(font_path(font_id), chars)) for lang, chars in TARGET_CHARS.items()
     }
     assert {k: v for k, v in missing.items() if v} == {}
+
+
+def test_vietnamese_chars_match_shared_golden_list():
+    """Danh sách chữ Việt dùng chung với API (packages/shared vietnameseChars) — cùng file vàng."""
+    golden = (FONTS_DIR / "vietnamese-chars.txt").read_text(encoding="utf-8").strip()
+    assert vietnamese_chars() == golden

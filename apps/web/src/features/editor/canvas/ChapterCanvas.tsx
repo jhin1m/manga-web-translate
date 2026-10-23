@@ -17,7 +17,7 @@ import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { Stage as KStage, Layer } from "react-konva";
 import { addBox, editText, newTextBox } from "../actions.ts";
 import { chapterStore, effectiveMode, useChapterStore } from "../chapter-store.ts";
-import type { FontKit } from "../fonts.ts";
+import { canvasFont, type FontKit } from "../fonts.ts";
 import { lineStep } from "../measure.ts";
 import { clampView, contentBox, FIT_EDGE, fitScale, pageStartView, screenToPage } from "../page-layout.ts";
 import { editorStore, useEditor, type View } from "../store.ts";
@@ -352,7 +352,7 @@ function TextEditOverlay({ kit }: { kit: FontKit }) {
         width: box.w * k,
         height: box.h * k,
         transform: `rotate(${box.rotation}deg)`,
-        font: `${box.font_size * k}px "${box.font_family}"`,
+        font: canvasFont(box.font_family, box.font_size * k),
         lineHeight: `${lineStep(kit.metrics(box.font_family), box.font_size, box.line_height) * k}px`,
         padding: box.pad * k,
         textAlign: box.align,

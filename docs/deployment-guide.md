@@ -28,6 +28,11 @@ sudo -u mtl install -m 600 /dev/null /srv/mtl/shared/.env   # điền theo mục
 docker compose -f /srv/mtl/repo/infra/docker-compose.prod.yml --env-file /srv/mtl/shared/.env -p mtl up -d --wait
 ```
 
+API phụ thuộc `re2` (addon native, khớp regex chữ bỏ qua). `pnpm install` tải binary dựng sẵn từ GitHub Releases
+(`uhop/node-re2`, có linux x64/arm64 và macOS arm64 cho Node 24) — VPS cần ra được `github.com`; không tải được thì
+rơi về `node-gyp` và cần `python3`, `make`, `g++` (`build-essential`). `re2` đã nằm trong `allowBuilds` của
+`pnpm-workspace.yaml` (pnpm mặc định chặn script cài đặt). Nâng major Node: kiểm binary tương ứng (ABI) có sẵn trước.
+
 `mtl` cần quyền `sudo systemctl restart mtl-api mtl-jobs` và `sudo systemctl reload caddy` (sudoers chỉ 2 lệnh này).
 
 ## 2. Biến môi trường (`/srv/mtl/shared/.env`, quyền 600)
@@ -46,6 +51,7 @@ Như `.env.example` + giá trị production. File được đọc bởi Node, sy
 | `DISPATCHER_ENABLED`, `MODAL_DRAIN_URL`, `MODAL_DRAIN_SECRET` (≥ 32) | Modal, xem mục 5 |
 | `MODAL_MAX_CONTAINERS=2`, `MODAL_SCALEDOWN_S=60`, `MODAL_MAX_LIFETIME_S=3600` | **khớp** `worker/modal_app.py` |
 | `ALERT_NTFY_URL=https://ntfy.sh/<topic-ngẫu-nhiên>` | kênh cảnh báo duy nhất |
+| `SMTP_URL=smtps://user:pass@host:465`, `MAIL_FROM='MTL <no-reply@<domain>>'` | tuỳ chọn: gửi email lời mời (`MAIL_FROM` bắt buộc khi có `SMTP_URL`). Dùng SMTP của nhà cung cấp đã verify domain (SPF/DKIM) kẻo vào spam; mật khẩu có ký tự đặc biệt phải URL-encode. Không đặt / gửi lỗi → lời mời vẫn tạo, link nằm trên UI và log API |
 | `BACKUP_S3_ENDPOINT/ACCESS_KEY/SECRET_KEY`, `BACKUP_BUCKET` | đích backup ở nhà cung cấp **khác** |
 | Caddy: `APP_DOMAIN`, `FILES_DOMAIN`, `ORIGIN_CERT`, `ORIGIN_KEY`, `MTL_ROOT=/srv/mtl` | `systemctl edit caddy` → `EnvironmentFile=` |
 
@@ -75,11 +81,31 @@ sudo systemctl enable --now mtl-api mtl-jobs mtl-backup.timer mtl-alert.timer
 - Migration chỉ thêm (additive) nên rollback app không cần down DB; down tay ở `packages/db/migrations-down/`.
   Rollback app qua 0006 (glossary theo cặp): không nhập CSV "thay toàn bộ" ở glossary chung — bản cũ xoá entry mọi
   cặp (xem [export-and-batch-edit.md](./export-and-batch-edit.md#glossary)).
+- **Thứ tự khi nâng lên pipeline 0.5.1 (font tuỳ chỉnh)**: (1) cập nhật worker Mac + image Modal lên 0.5.1 trước —
+  worker mới vẫn nhận job cũ vì `inputs.fonts` là optional; (2) rồi deploy API với `MIN_PIPELINE_VERSION=0.5.1`
+  (mặc định trong `env.ts`; nếu `.env` có ghi đè thì sửa). Đảo thứ tự (hoặc để worker cũ chạy) → worker < 0.5.1 nhận
+  426 và hàng đợi dừng; worker cũ nhận input có `fonts` sẽ lỗi hợp đồng schema nên API mới không được cấp cho nó.
+  Rollback API về bản không biết font tuỳ chỉnh vẫn chạy với worker 0.5.1 (không gửi `fonts` → chỉ font gói sẵn).
+  Worker cache font tại `~/.cache/mtl-worker/fonts` (đổi bằng `MTL_FONT_CACHE_DIR`), tên file = sha256 nên xoá thư mục
+  này là an toàn.
+- **Không rollback worker xuống < 0.5.0 một chiều**: trang đã prepare bằng worker ≥ 0.5.0 lưu `text_color`/`outline_color`
+  trong region; schema input của worker cũ có `additionalProperties: false` nên chúng từ chối cả dịch lẫn thử lại prepare
+  (partial) của các trang đó, kể cả khi hạ `MIN_PIPELINE_VERSION`. Muốn quay lại phải chạy lại Bước 1 trên worker mới
+  hoặc xoá kết quả prepare của các trang.
 - Mỗi lần dừng vì ngân sách tăng `provider_retries` (để số attempt trên dây không trùng ledger) → job bị dừng/mở lại
   > 20 lần sẽ `failed` ở lỗi provider kế tiếp.
 - Container chết không báo chiếm slot `active` tới khi reaper ước lượng (~`MAX_LIFETIME + SCALEDOWN`); trong lúc đó
   dispatcher không scale-up quá `MODAL_MAX_CONTAINERS`.
 - Khẩn cấp: `DISPATCHER_ENABLED=false` (chỉ worker Mac, đổi `worker_mode` workspace), hoặc kill-switch = đặt ngưỡng 0.
+
+**Checklist release "small-features-batch"** (migration 0011 `pages_skip_changed_at` + 0012 `workspace_fonts`, pipeline 0.5.1):
+
+1. Worker trước: cập nhật worker Mac + deploy lại image Modal (`PIPELINE_VERSION` 0.5.1); thử `uv run mtl-worker --once`.
+2. VPS: `re2` dựng được (mục 1: ra được `github.com` hoặc có `build-essential` + `python3`); `.env` có/không `SMTP_URL` + `MAIL_FROM` (cùng có hoặc cùng không).
+3. `.env` không ghi đè `MIN_PIPELINE_VERSION` thấp hơn 0.5.1 (mặc định trong `env.ts` đã là 0.5.1; `PIPELINE_VERSION` giữ 0.4.0).
+4. `infra/deploy.sh <ref>`: `pnpm db:migrate` tự chạy 0011 + 0012 (additive; down tay `0011_*.down.sql`, `0012_*.down.sql`).
+5. Smoke tay: `/w/<ws>/settings` upload 1 font TTF; mời thành viên (có SMTP: mail tới, "Gửi lại email"); dịch + xuất 1 chương dùng font nhóm.
+6. Rollback: API/web quay về được (migration additive); worker **không** hạ xuống < 0.5.0 (xem bullet trên).
 
 Log: `journalctl -u mtl-api -o cat` (JSON mỗi request: method, path, status, ms — không query/header/body),
 `journalctl -u mtl-jobs`.

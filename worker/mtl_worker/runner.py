@@ -21,6 +21,7 @@ from mtl_pipeline.providers.base import LLMProvider, ProviderError
 from mtl_pipeline.schema import BBox, ContractError, Region, TokenUsage, validate_contract
 
 from .client import LeaseLost, WorkerApi
+from .job_fonts import job_fonts
 
 log = logging.getLogger("mtl_worker")
 
@@ -218,6 +219,8 @@ def region_to_shared(r: Region) -> dict[str, Any]:
         "bbox": [r.bbox.x, r.bbox.y, r.bbox.w, r.bbox.h],
         "polarity": r.polarity,
         "bubble_id": r.bubble_id,
+        "text_color": r.text_color,
+        "outline_color": r.outline_color,
     }
 
 
@@ -230,6 +233,8 @@ def region_from_shared(d: dict[str, Any], is_sfx: bool = False) -> Region:
         score=1.0,
         bubble_id=d.get("bubble_id"),
         polarity=d["polarity"],
+        text_color=d.get("text_color"),
+        outline_color=d.get("outline_color"),
         is_sfx=is_sfx,
     )
 
@@ -255,7 +260,8 @@ def run_job(
                 handler = handlers.get(job["type"])
                 if handler is None:
                     raise JobFailure("internal", f"worker không có handler cho {job['type']}")
-                result = handler(ctx, deps)
+                with job_fonts(job["inputs"].get("fonts"), ctx.download):
+                    result = handler(ctx, deps)
                 ctx.check()
             except ImageRejected as e:
                 raise JobFailure("invalid_input", str(e)) from e

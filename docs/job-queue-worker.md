@@ -81,14 +81,30 @@ trả `queued` (giữ attempts) hoặc `failed` khi hết lượt.
   series đã học lúc tạo chương); commit kiểm lại bộ ảnh trong transaction, đổi giữa chừng → 409 `sources_changed`.
 - Trang `pages.skipped`: không vào `chapter.translate` (Bước 2, retry, dịch lại), không làm `context_lines`, không
   tính trạng thái chương; `chapter.export` nhận `pages[].skipped` (pipeline 0.4.2).
-- **Chữ bỏ qua** (`series.ignore_text`, Cài đặt series → "Chữ bỏ qua (watermark)"; ≤ 50 mục, 3–100 ký tự tính trên
-  dạng đã chuẩn hoá): lúc claim `chapter.translate`, item OCR chứa một mục (NFC, không phân biệt hoa/thường, bỏ
-  `http(s)://`, gộp khoảng trắng — `packages/shared/src/ignore-text.ts`) được gửi `empty: true` → worker không dịch,
-  không đặt box (ảnh đã sạch từ Bước 1). `ocr_result` trong DB không đổi → bỏ mục rồi dịch lại là dịch vùng đó bình
-  thường. Dòng khớp cũng bị bỏ khỏi `context_lines` (cả `page.ocr_region`; vùng người dùng tự vẽ thì vẫn dịch). Đổi
-  danh sách tăng `glossary_rev` (khoá job dịch), **không** `settings_rev` (nằm trong khoá prepare → thử lại trang lỗi
-  sẽ chạy lại Bước 1). Chương đã dịch không bị sửa ngược: bảng văn bản ẩn dòng khớp, trừ khi box còn in chữ. URL bị
-  OCR tách bằng dấu cách (`discord . gg`) hoặc watermark detector không bắt thì không khớp / còn trên ảnh.
+- **Chữ bỏ qua** (`series.ignore_text`, Cài đặt series → "Chữ bỏ qua (watermark)"; ≤ 50 mục): lúc claim
+  `chapter.translate`, item OCR khớp một mục được gửi `empty: true` → worker không dịch, không đặt box (ảnh đã sạch từ
+  Bước 1). `ocr_result` trong DB không đổi → bỏ mục rồi dịch lại là dịch vùng đó bình thường. Dòng khớp cũng bị bỏ khỏi
+  `context_lines` (cả `page.ocr_region`; vùng người dùng tự vẽ thì vẫn dịch). Đổi danh sách tăng `glossary_rev` (khoá
+  job dịch), **không** `settings_rev` (nằm trong khoá prepare → thử lại trang lỗi sẽ chạy lại Bước 1). Quy tắc khớp
+  (`compileIgnoreList`, `packages/shared/src/ignore-text.ts`, dùng chung api + bảng văn bản):
+  - Mục thường: NFC, không phân biệt hoa/thường, bỏ `http(s)://`, **bỏ mọi khoảng trắng cả hai phía** (`discord . gg`
+    khớp mục `discord.gg`); 3–100 ký tự tính trên dạng đã bỏ khoảng trắng.
+  - Mục `/mẫu/` là regex, cờ cố định `iu`, chạy trên chữ đã chuẩn hoá (khoảng trắng gộp thành 1 dấu cách). **API khớp
+    bằng RE2** (package `re2`, thời gian tuyến tính nên mẫu như `/\w*\w*\w*\w*!/` không thể làm treo claim job hay
+    xem trước / áp ngược); web dùng `RegExp` gốc (form nhập, ẩn dòng ở bảng văn bản). Dialect = tập con RE2: **không** có
+    tham chiếu ngược (`\1`..`\9`, `\k<tên>`) và lookahead/lookbehind (`(?=`, `(?!`, `(?<=`, `(?<!`); có nhóm
+    `(?:…)`, nhóm đặt tên `(?<n>…)`, `\b`, `\d\s\w`, lớp ký tự, `{n,m}`, `\p{L}`. Form/API từ chối (400, lỗi theo
+    dòng) regex dùng cú pháp trên, RE2 không biên dịch được (API kiểm bằng cách dựng thật bằng RE2), dài > 100 ký tự
+    (cả hai dấu `/`) hoặc khớp chuỗi rỗng. Thêm hai chốt vì web chạy RegExp gốc (backtracking): lượng từ lồng nhau kiểu
+    `(a+)+` / `(.*)*` và quá 5 lượng từ `*` / `+` / `{n,}` trong một mẫu bị từ chối — áp ở cả form lẫn API để hai bên
+    cùng coi một mục là hợp lệ hay không.
+  - Danh sách đã lưu từ trước: mục dạng `/…/` giờ là regex (trước đây là chữ thường, kể cả dấu `/`), và mục ngắn hơn 3
+    ký tự sau khi bỏ khoảng trắng (vd `a b`) không còn hợp lệ. Lưu cài đặt series khi còn mục như vậy bị từ chối (400)
+    kèm lỗi theo dòng cho tới khi sửa hoặc xoá mục đó; mục cũ đang lưu trong DB vẫn được đọc (mục không hợp lệ bị bỏ
+    qua lúc so khớp).
+  - Chương đã dịch không tự đổi khi sửa danh sách: bảng văn bản ẩn dòng khớp, trừ khi box còn in chữ. Muốn ẩn box đã
+    đặt: Cài đặt series → "Ẩn chữ khớp trong chương đã dịch…" (xem `docs/export-and-batch-edit.md`). Watermark
+    detector không bắt thì chữ còn trên ảnh.
 
 ## Ingest strip / pages
 
@@ -121,7 +137,31 @@ xếp hàng trước pipeline 0.4.0 thiếu → worker mặc định `ko` → `v
 **mọi** worker 0.3.x nhận 426 ngay khi API mới lên → cập nhật worker Mac/Modal cùng lúc deploy API, không thì hàng
 đợi dừng hẳn. Từ 0.4.1 (`settings.narration_font`) `MIN_PIPELINE_VERSION = 0.4.1` cho worker; API `PIPELINE_VERSION`
 (muối input_rev) vẫn 0.4.0 nên job đã chạy không bị chạy lại. 0.4.2 (`chapter.export` `pages[].skipped`, trang đã
-ẩn) nâng `MIN_PIPELINE_VERSION = 0.4.2` cùng lý do.
+ẩn) nâng `MIN_PIPELINE_VERSION = 0.4.2` cùng lý do. 0.5.0: `page.prepare` ghi thêm `ocr_result.regions[].text_color` /
+`outline_color` (optional, `#rrggbb`) đo từ ảnh gốc; `chapter.translate` dùng chúng để đặt màu chữ/viền
+(xem `docs/typeset-layout-contract.md`). Schema `regions[]` của `inputs-chapter-translate` và `page.prepare` partial có
+`additionalProperties: false` nên worker < 0.5.0 từ chối region có `text_color`/`outline_color` (lỗi hợp đồng) dù trường
+là optional: trang đã prepare bằng ≥ 0.5.0 không dịch được trên worker cũ, và `MIN_PIPELINE_VERSION` phải ≥ 0.5.0 khi
+API gửi các trường này (hiện 0.5.1). Chiều ngược lại ổn: trang bước 1 cũ không có màu rơi về quy tắc cực tính. 0.5.1 (`inputs.fonts` của translate/export, xem mục Font tuỳ chỉnh)
+nâng `MIN_PIPELINE_VERSION = 0.5.1`: schema input có `additionalProperties: false` nên worker cũ không đọc nổi job có
+font, và worker cũ cũng không biết fallback font tuỳ chỉnh. API `PIPELINE_VERSION` (muối input_rev) không đổi.
+
+## Font tuỳ chỉnh (pipeline 0.5.1)
+
+`inputs.fonts: [{id, url, sha256}]` (optional) có ở `chapter.translate` và `chapter.export`; liệt kê font `custom-*`
+của **workspace job** mà job dùng, dựng lúc claim (`fontInputs` ở `jobs/claim-inputs.ts`, URL presigned GET: translate
+10', export 15'):
+
+- translate: `settings.font` + `settings.narration_font` của payload (snapshot lúc enqueue);
+- export: `font_family` của mọi box ở trang được vẽ chữ + font mặc định hiện tại của series.
+
+Id gói sẵn, của workspace khác hoặc đã xoá (box cũ còn tham chiếu — xoá font chỉ bị chặn khi là mặc định series) bị
+bỏ khỏi danh sách. Worker (`mtl_worker/job_fonts.py`) tải mỗi font vào cache `~/.cache/mtl-worker/fonts/<sha256>`
+(`MTL_FONT_CACHE_DIR` để đổi), kiểm sha256 và đọc thử bằng fontTools, rồi đăng ký `id → file` trong suốt job
+(`use_fonts` ở `mtl_pipeline/fonts.py`; file không đuôi, Pillow/fontTools đọc theo nội dung). `font_path` /
+`metrics_for` tra registry trước `worker/fonts`; id không biết → font thoại mặc định (`DEFAULT_FONT`) + log, không
+làm hỏng job. Font sai hash / không đọc được bị bỏ qua và fallback tương tự; lỗi mạng khi tải ném ra để job thử lại.
+Worker chỉ tải URL có trong inputs.
 
 ## Xuất chương
 

@@ -15,6 +15,7 @@ import {
   series,
   seriesSkipImages,
   sourceFiles,
+  workspaceFonts,
 } from "@mtl/db";
 import { emptyPageState, pageId } from "@mtl/shared";
 import { eq } from "drizzle-orm";
@@ -39,6 +40,8 @@ const spareSourceOf: Record<string, string> = {};
 let sourceFileA = "";
 /** Ảnh credit đã học của series mẫu (route skip-images). */
 const skipImageOf: Record<string, string> = {};
+/** Font tuỳ chỉnh mẫu (route DELETE /fonts/:fontId) — id dạng custom-<8 hex>. */
+const fontOf: Record<string, string> = {};
 
 beforeAll(async () => {
   [A, B] = await Promise.all([seedWorkspace("a"), seedWorkspace("b")]);
@@ -100,6 +103,21 @@ beforeAll(async () => {
         thumbKey: `ws/${s.workspaceId}/series/${s.seriesId}/skip/tenant.png`,
       })
     ).id;
+    const fontId = `custom-${s.workspaceId.slice(-8)}`;
+    await scoped(db, s.workspaceId).insert(workspaceFonts, {
+      fontId,
+      name: "Font mẫu",
+      fileKey: `ws/${s.workspaceId}/fonts/tenant-fixture`,
+      sha256: s.workspaceId.replaceAll("-", "").padEnd(64, "0"),
+      bytes: 1,
+      unitsPerEm: 1000,
+      ascent: 900,
+      descent: 200,
+      metricsSource: "hhea",
+      viComplete: true,
+      missing: [],
+    });
+    fontOf[s.workspaceId] = fontId;
   }
   const f = await scoped(db, A.workspaceId).insert(sourceFiles, {
     chapterId: A.chapterId,
@@ -129,10 +147,15 @@ const BODIES: Record<string, unknown> = {
   "PATCH /api/w/:ws/chapters/:chapterId": { number: "99" },
   "POST /api/w/:ws/chapters/:chapterId/translate": {},
   "PATCH /api/w/:ws/chapters/:chapterId/source-files/:fileId": { skip: "user" },
+  get "PUT /api/w/:ws/chapters/:chapterId/source-files/order"() {
+    return { ids: [spareSourceOf[A.workspaceId]] };
+  },
   // Ảnh dự phòng của A không có hash → own trả 409 no_hash (qua được tra series + ảnh).
   get "POST /api/w/:ws/series/:seriesId/skip-images"() {
     return { source_file_id: spareSourceOf[A.workspaceId] };
   },
+  "POST /api/w/:ws/fonts/upload-url": { bytes: 1024 },
+  "POST /api/w/:ws/fonts": { key: "ws/x/fonts/x" },
   "POST /api/w/:ws/glossary": { source_term: "마법", target_term: "ma pháp" },
   "POST /api/w/:ws/series/:seriesId/glossary": { source_term: "마법", target_term: "phép thuật" },
   "PATCH /api/w/:ws/glossary/:entryId": { note: "tên kiếm" },
@@ -148,6 +171,9 @@ const BODIES: Record<string, unknown> = {
   },
   "POST /api/w/:ws/pages/:pageId/ocr-region": { bbox: [0, 0, 10, 10] },
   "POST /api/w/:ws/chapters/:chapterId/export": { format: "cbz", layout: "pages" },
+  "POST /api/w/:ws/series/:seriesId/ignore-apply/preview": {},
+  "POST /api/w/:ws/series/:seriesId/ignore-apply/apply": { versions: {} },
+  "POST /api/w/:ws/series/:seriesId/ignore-apply/undo": { batch_id: "00000000-0000-7000-8000-000000000000" },
   "POST /api/w/:ws/chapters/:chapterId/find-replace/preview": { find: "chào", replace: "xin chào" },
   "POST /api/w/:ws/chapters/:chapterId/find-replace/apply": { find: "chào", replace: "xin chào", versions: {} },
   "POST /api/w/:ws/chapters/:chapterId/find-replace/undo": { batch_id: "00000000-0000-7000-8000-000000000000" },
@@ -175,6 +201,7 @@ const RESOURCE_CASES: Record<string, (b: Seed) => Record<string, string>> = {
     chapterId: spareChapterOf[b.workspaceId] ?? "",
     fileId: spareSourceOf[b.workspaceId] ?? "",
   }),
+  "PUT /api/w/:ws/chapters/:chapterId/source-files/order": (b) => ({ chapterId: spareChapterOf[b.workspaceId] ?? "" }),
   // presign trước commit: commit (own) loại source file giả (không có object) khỏi chương A.
   "POST /api/w/:ws/chapters/:chapterId/presign": (b) => ({ chapterId: b.chapterId }),
   "POST /api/w/:ws/chapters/:chapterId/commit": (b) => ({ chapterId: b.chapterId }),
@@ -202,6 +229,9 @@ const RESOURCE_CASES: Record<string, (b: Seed) => Record<string, string>> = {
   "GET /api/w/:ws/chapters/:chapterId/exports": (b) => ({ chapterId: b.chapterId }),
   "GET /api/w/:ws/exports/:jobId": (b) => ({ jobId: jobOf[b.workspaceId] ?? "" }),
   "GET /api/w/:ws/exports/:jobId/download": (b) => ({ jobId: jobOf[b.workspaceId] ?? "" }),
+  "POST /api/w/:ws/series/:seriesId/ignore-apply/preview": (b) => ({ seriesId: b.seriesId }),
+  "POST /api/w/:ws/series/:seriesId/ignore-apply/apply": (b) => ({ seriesId: b.seriesId }),
+  "POST /api/w/:ws/series/:seriesId/ignore-apply/undo": (b) => ({ seriesId: b.seriesId }),
   "POST /api/w/:ws/chapters/:chapterId/find-replace/preview": (b) => ({ chapterId: b.chapterId }),
   "POST /api/w/:ws/chapters/:chapterId/find-replace/apply": (b) => ({ chapterId: b.chapterId }),
   "POST /api/w/:ws/chapters/:chapterId/find-replace/undo": (b) => ({ chapterId: b.chapterId }),
@@ -214,6 +244,7 @@ const RESOURCE_CASES: Record<string, (b: Seed) => Record<string, string>> = {
     seriesId: b.seriesId,
     imageId: skipImageOf[b.workspaceId] ?? "",
   }),
+  "DELETE /api/w/:ws/fonts/:fontId": (b) => ({ fontId: fontOf[b.workspaceId] ?? "" }),
   "DELETE /api/w/:ws/chapters/:chapterId": (b) => ({ chapterId: spareChapterOf[b.workspaceId] ?? "" }),
   "DELETE /api/w/:ws/series/:seriesId": (b) => ({ seriesId: spareSeriesOf[b.workspaceId] ?? "" }),
 };

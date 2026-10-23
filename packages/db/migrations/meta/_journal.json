@@ -85,6 +85,13 @@
       "when": 1792760726563,
       "tag": "0011_pages_skip_changed_at",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1792762954834,
+      "tag": "0012_workspace_fonts",
+      "breakpoints": true
     }
   ]
 }

@@ -9,6 +9,7 @@ import { chapterRoutes } from "./routes/chapters.ts";
 import { type DevLogin, devAuthRoutes } from "./routes/dev-auth.ts";
 import { exportRoutes } from "./routes/export.ts";
 import { findReplaceRoutes } from "./routes/find-replace.ts";
+import { fontRoutes } from "./routes/fonts.ts";
 import { glossaryRoutes } from "./routes/glossary.ts";
 import { healthRoutes } from "./routes/health.ts";
 import { jobRoutes } from "./routes/jobs.ts";
@@ -52,6 +53,7 @@ export function createApp({ devAutoLogin = envDevLogin() }: { devAutoLogin?: Dev
   app.route("/api", glossaryRoutes);
   app.route("/api", exportRoutes);
   app.route("/api", findReplaceRoutes);
+  app.route("/api", fontRoutes);
 
   // Worker (Bearer token worker, không cookie) — giao thức có fencing, xem jobs/queue.ts.
   app.route("/worker/v1", workerRoutes);

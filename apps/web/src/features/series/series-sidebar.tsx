@@ -6,16 +6,15 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { type FormEvent, useState } from "react";
 import { errorMessage } from "../../lib/api.ts";
+import { fontLabel, useWorkspaceFonts } from "../fonts/api.ts";
 import { createEntry, fetchGlossary, glossaryKey } from "../glossary/api.ts";
 import type { Series } from "./api.ts";
 
 const RECENT_TERMS = 5;
 
-/** "PatrickHand-Regular" → "PatrickHand"; chưa chọn → mặc định hệ thống. */
-const fontName = (id: string | undefined) => (id ? id.replace(/-(Regular|Variable|Bold)$/, "") : "Mặc định");
-
 export function SeriesSidebar({ ws, series }: { ws: string; series: Series }) {
   const rule = series.pronoun_rules[0];
+  const custom = useWorkspaceFonts(ws).data;
   return (
     <aside aria-label="Cài đặt dịch của series" className="series-side">
       <section className="card">
@@ -27,9 +26,11 @@ export function SeriesSidebar({ ws, series }: { ws: string; series: Series }) {
         </div>
         <dl>
           <dt>Font thoại</dt>
-          <dd>{fontName(series.default_fonts.dialogue)}</dd>
+          <dd>{fontLabel(series.default_fonts.dialogue, custom)}</dd>
           <dt>Font dẫn truyện</dt>
-          <dd>{series.default_fonts.narration ? fontName(series.default_fonts.narration) : "Giống font thoại"}</dd>
+          <dd>
+            {series.default_fonts.narration ? fontLabel(series.default_fonts.narration, custom) : "Giống font thoại"}
+          </dd>
           <dt>Xưng hô chính</dt>
           <dd>{rule ? `${rule.speaker} → ${rule.listener}: ${rule.address}` : "Chưa đặt"}</dd>
           <dt>Giọng văn</dt>

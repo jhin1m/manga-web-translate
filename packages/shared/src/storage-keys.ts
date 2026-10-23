@@ -16,6 +16,8 @@ export const storageKeys = {
   export: (ws: string, ch: string, jobId: string, ext: "zip" | "cbz") => `ws/${ws}/ch/${ch}/export/${jobId}.${ext}`,
   /** Bản sao ảnh credit series đã học (còn khi chương nguồn bị xoá); xoá series dọn cả `ws/{ws}/series/{id}/`. */
   seriesSkip: (ws: string, series: string, id: string, ext: string) => `ws/${ws}/series/${series}/skip/${id}.${ext}`,
+  /** Font tuỳ chỉnh của workspace (TTF/OTF): presigned POST ghi thẳng vào đây, API kiểm rồi giữ nguyên key. */
+  font: (ws: string, uploadId: string) => `ws/${ws}/fonts/${uploadId}`,
 } as const;
 
 /** Key có thuộc workspace không — chặn ký URL cho key của workspace khác. */

@@ -33,12 +33,12 @@ const Env = z.object({
     .default("0.4.0"),
   /**
    * Worker có pipeline_version thấp hơn → claim trả 426. 0.4.1: worker hiểu settings.narration_font.
-   * 0.4.2: export pages[].skipped.
+   * 0.4.2: export pages[].skipped. 0.5.1: translate/export inputs.fonts (font tuỳ chỉnh của workspace).
    */
   MIN_PIPELINE_VERSION: z
     .string()
     .regex(/^\d+\.\d+\.\d+$/)
-    .default("0.4.2"),
+    .default("0.5.1"),
   /**
    * Kill-switch ngân sách toàn cục (USD, cộng usage_ledger.cost_usd mọi workspace + chi phí nền tảng, ngày/tháng
    * theo UTC). Bắt buộc ở production; 0 = chặn mọi job tốn tiền. Không đặt (dev/test) = không giới hạn.

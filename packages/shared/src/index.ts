@@ -4,4 +4,5 @@ export * from "./job.ts";
 export * from "./page-state.ts";
 export * from "./series-lang.ts";
 export * from "./storage-keys.ts";
+export * from "./vietnamese-chars.ts";
 export * from "./worker-protocol.ts";

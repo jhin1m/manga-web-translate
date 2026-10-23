@@ -137,7 +137,7 @@ function BlockView(props: SelectPanelProps & { page: ProgressPage; row: Row }) {
       )}
       {box ? (
         <>
-          <BasicStyle fonts={props.kit?.ids ?? []} />
+          <BasicStyle fonts={props.kit?.ids ?? []} customFonts={props.kit?.custom ?? []} />
           <details className="cw-adv">
             <summary>Kiểu chữ nâng cao</summary>
             <AdvancedStyle>
