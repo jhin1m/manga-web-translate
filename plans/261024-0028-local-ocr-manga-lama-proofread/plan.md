@@ -1,6 +1,6 @@
 ---
 title: "Cài đặt pipeline + OCR local + LaMa manga + AI hiệu đính"
-status: in-progress
+status: completed
 branch: feat/pipeline-settings-local-ocr-proofread
 brief: goal-brief.md
 ---
@@ -13,11 +13,11 @@ Chạy không người trực theo [goal-brief.md](./goal-brief.md). Quyết đ�
 
 | # | Phase | Status | Phụ thuộc |
 |---|---|---|---|
-| 1 | [Hợp đồng cài đặt pipeline + DB + API + UI](./phase-01-pipeline-settings.md) | pending | — |
-| 2 | [LaMa manga + detector CTD + tham số inpaint/mask](./phase-02-lama-manga-detector.md) | pending | 1 |
-| 3 | [OCR local: manga-ocr + PaddleOCR (ONNX)](./phase-03-local-ocr.md) | pending | 1 |
-| 4 | [AI hiệu đính (chapter.proofread)](./phase-04-ai-proofread.md) | pending | 1 |
-| 5 | [Docs, README, deploy checklist, review, báo cáo](./phase-05-docs-review-report.md) | pending | 2,3,4 |
+| 1 | [Hợp đồng cài đặt pipeline + DB + API + UI](./phase-01-pipeline-settings.md) | completed | — |
+| 2 | [LaMa manga + detector CTD + tham số inpaint/mask](./phase-02-lama-manga-detector.md) | completed | 1 |
+| 3 | [OCR local: manga-ocr + PaddleOCR (ONNX)](./phase-03-local-ocr.md) | completed | 1 |
+| 4 | [AI hiệu đính (chapter.proofread)](./phase-04-ai-proofread.md) | completed | 1 |
+| 5 | [Docs, README, deploy checklist, review, báo cáo](./phase-05-docs-review-report.md) | completed | 2,3,4 |
 
 ## Hợp đồng chốt (dùng chung mọi phase)
 

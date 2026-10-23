@@ -1,7 +1,7 @@
 ---
 phase: 3
 title: "OCR local: manga-ocr + PaddleOCR (ONNX)"
-status: pending
+status: completed
 priority: P1
 effort: "4h"
 dependencies: [1]

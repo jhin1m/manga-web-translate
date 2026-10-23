@@ -1,7 +1,7 @@
 ---
 phase: 4
 title: "AI hiệu đính (chapter.proofread)"
-status: pending
+status: completed
 priority: P1
 effort: "5h"
 dependencies: [1]

@@ -1,7 +1,7 @@
 ---
 phase: 5
 title: "Docs, README, deploy checklist, review, báo cáo"
-status: pending
+status: completed
 priority: P2
 effort: "2h"
 dependencies: [2, 3, 4]

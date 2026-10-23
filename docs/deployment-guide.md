@@ -129,7 +129,9 @@ sudo systemctl enable --now mtl-api mtl-jobs mtl-backup.timer mtl-alert.timer
 5. Smoke tay: Cài đặt nhóm → Pipeline (owner/admin) lưu được; chương tiếng Nhật với OCR = MangaOCR chạy Bước 1 không
    tốn token (Hoạt động/ledger không có `llm_tokens_*` của `page.prepare`); "Hiệu đính" trên rail chạy và Nhận được 1
    gợi ý; workspace không cấu hình → Bước 1 cho kết quả như trước.
-6. Rollback: API/web quay về được (migration additive) **miễn worker giữ 0.6.0** (worker mới đọc được payload cũ);
+6. Token worker tạo với danh sách capability tường minh (không có `chapter.proofread`): worker 0.6.0 mặc định khai mọi
+   loại job → claim 400 `capability_not_allowed`. Chạy worker với `--capabilities` khớp token, hoặc cấp lại token.
+7. Rollback: API/web quay về được (migration additive) **miễn worker giữ 0.6.0** (worker mới đọc được payload cũ);
    job đang xếp hàng có field mới không chạy được trên worker cũ. Gợi ý hiệu đính còn trong DB không ảnh hưởng bản cũ.
 
 Log: `journalctl -u mtl-api -o cat` (JSON mỗi request: method, path, status, ms — không query/header/body),

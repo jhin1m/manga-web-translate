@@ -1,7 +1,7 @@
 ---
 phase: 1
 title: "Hợp đồng cài đặt pipeline + DB + API + UI"
-status: pending
+status: completed
 priority: P1
 effort: "3h"
 dependencies: []

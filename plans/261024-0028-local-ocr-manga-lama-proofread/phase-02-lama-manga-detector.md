@@ -1,7 +1,7 @@
 ---
 phase: 2
 title: "LaMa manga + detector CTD + tham số inpaint/mask"
-status: pending
+status: completed
 priority: P1
 effort: "3h"
 dependencies: [1]
