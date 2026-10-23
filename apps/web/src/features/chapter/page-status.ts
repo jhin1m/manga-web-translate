@@ -35,14 +35,33 @@ export const needsReview = (p: { status: PageStatus; ai_update_available: boolea
 
 type ThumbPage = Pick<ProgressPage, "ord" | "status" | "skipped" | "ai_update_available" | "cut_flag" | "job">;
 
-/** Nhãn + viền thumbnail cột trang; trang bình thường (Chờ dịch / Đang xử lý / Xong) không có nhãn. */
-export type ThumbMark = { tone: "hidden" | "danger" | "warn"; label: "Đã ẩn" | "Lỗi" | "Chờ AI" | "Cần xem" } | null;
+/**
+ * Nhãn + viền thumbnail cột trang; trang yên (Chờ dịch / Xong) không có nhãn. Trang đang chạy AI có nhãn bước + `progress`
+ * (0..1, null khi job còn xếp hàng) để vẽ thanh tiến độ trong thumbnail.
+ */
+export type ThumbMark =
+  | { tone: "hidden" | "danger" | "warn"; label: "Đã ẩn" | "Lỗi" | "Chờ AI" | "Cần xem" }
+  | { tone: "busy"; label: string; progress: number | null }
+  | null;
 
-/** Ưu tiên: ẩn > lỗi > chờ AI tự thử lại > cần xem (AI có bản mới, tràn khung) > bình thường. */
+const BUSY_STEP: Partial<Record<PageStatus, string>> = {
+  pending: "Bước 1",
+  preparing: "Bước 1",
+  translating: "Đang dịch",
+};
+
+/** Ưu tiên: ẩn > lỗi > chờ AI tự thử lại > đang xử lý > cần xem (AI có bản mới, tràn khung) > bình thường. */
 export function thumbMark(p: ThumbPage, overflow: boolean): ThumbMark {
   if (p.skipped) return { tone: "hidden", label: "Đã ẩn" };
   if (p.status === "failed") return { tone: "danger", label: "Lỗi" };
   if (waitingOnProvider(p.job)) return { tone: "warn", label: "Chờ AI" };
+  const step = BUSY_STEP[p.status];
+  if (step) {
+    const running = p.job?.status === "running";
+    const progress = running ? Math.min(1, Math.max(0, p.job?.progress ?? 0)) : null;
+    const label = progress === null ? `${step} · chờ` : `${step} · ${Math.round(progress * 100)}%`;
+    return { tone: "busy", label, progress };
+  }
   if (needsReview(p, overflow)) return { tone: "warn", label: "Cần xem" };
   return null;
 }
@@ -69,6 +88,6 @@ export function thumbAria(p: ThumbPage, overflow: boolean): string {
 /** Title thumbnail: câu lỗi job (nếu có) hoặc cờ chi tiết; trang hiện thêm gợi ý menu chuột phải. */
 export function thumbTitle(p: ThumbPage, overflow: boolean): string {
   const detail = describeJobError(p.job)?.text ?? thumbFlags(p, overflow).join(" · ");
-  const hint = p.skipped ? "Bấm hoặc chuột phải: khôi phục trang" : "Chuột phải: ẩn trang";
+  const hint = p.skipped ? "Bấm hoặc chuột phải: khôi phục trang" : "Chuột phải: xoá (ẩn) trang";
   return detail ? `${detail}\n${hint}` : hint;
 }

@@ -305,4 +305,12 @@ test("hide a page from the thumbnail column (undo, then restore from its menu)",
   await page.getByRole("menuitem", { name: "Khôi phục trang 2" }).click();
   await expect(thumbs.getByText("3 trang", { exact: true })).toBeVisible();
   await expect(thumbs.getByRole("button", { name: /Đã ẩn/ })).toHaveCount(0);
+
+  // Nút góc thumbnail (hiện khi rê chuột): xoá rồi khôi phục không qua menu.
+  await pageThumb(page, 3).hover();
+  await thumbs.getByRole("button", { name: "Xoá (ẩn) trang 3" }).click();
+  await expect(thumbs.getByRole("button", { name: "Trang 3 · Đã ẩn", exact: true })).toBeVisible();
+  await thumbs.getByRole("button", { name: "Khôi phục trang 3" }).click();
+  await expect(thumbs.getByText("3 trang", { exact: true })).toBeVisible();
+  await expect(thumbs.getByRole("button", { name: /Đã ẩn/ })).toHaveCount(0);
 });

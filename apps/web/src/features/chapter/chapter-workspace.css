@@ -320,6 +320,7 @@
   padding: var(--sp-3) 0 var(--sp-4);
 }
 .cw-thumb-item {
+  position: relative;
   flex: none;
   display: flex;
   flex-direction: column;
@@ -356,6 +357,9 @@
 }
 .cw-thumb[data-tone="warn"] {
   border: 2px solid var(--c-warn);
+}
+.cw-thumb[data-tone="busy"] {
+  border: 2px solid var(--c-info);
 }
 /* Trang ẩn: chỉ ảnh mờ (số trang giữ tương phản), viền đứt. */
 .cw-thumb[data-tone="hidden"] {
@@ -406,6 +410,91 @@
 .cw-thumb-mark[data-tone="warn"] {
   color: var(--c-warn);
   background: var(--c-warn-weak);
+}
+.cw-thumb-mark[data-tone="busy"] {
+  color: var(--c-info);
+}
+.cw-thumbs-busy {
+  color: var(--c-info);
+}
+
+/* Thanh tiến độ AI: đáy thumbnail (trang) hoặc đầu cột (cắt trang). Chưa có % (job còn xếp hàng) → nhấp nháy. */
+.cw-thumb-bar {
+  display: block;
+  width: 100%;
+  height: 4px;
+  background: var(--c-surface-2);
+}
+.cw-thumb .cw-thumb-bar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+}
+.cw-thumbs-head .cw-thumb-bar {
+  width: 72px;
+  height: 3px;
+  border-radius: 2px;
+  overflow: hidden;
+}
+.cw-thumb-bar-fill {
+  display: block;
+  height: 100%;
+  background: var(--c-info);
+  transition: width 0.4s ease;
+}
+.cw-thumb-bar[data-wait] .cw-thumb-bar-fill {
+  animation: cw-thumb-wait 1.4s ease-in-out infinite;
+}
+@keyframes cw-thumb-wait {
+  50% {
+    opacity: 0.25;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cw-thumb-bar-fill {
+    transition: none;
+  }
+  .cw-thumb-bar[data-wait] .cw-thumb-bar-fill {
+    animation: none;
+    opacity: 0.5;
+  }
+}
+
+/* Nút xoá / khôi phục ở góc trên thumbnail: hiện khi rê chuột hoặc focus trong mục; màn cảm ứng luôn hiện. */
+.cw-thumb-act {
+  position: absolute;
+  top: 4px;
+  /* Mục có thể rộng hơn thumbnail 72px (nhãn dưới) và thumbnail canh giữa → bám mép phải thumbnail. */
+  right: calc(50% - 32px);
+  width: 24px;
+  height: 24px;
+  min-height: 0;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--c-line-strong);
+  border-radius: 4px;
+  background: var(--c-bg);
+  color: var(--c-fg-muted);
+  opacity: 0;
+}
+.cw-thumb-item:hover .cw-thumb-act,
+.cw-thumb-item:focus-within .cw-thumb-act {
+  opacity: 1;
+}
+@media (hover: none) {
+  .cw-thumb-act {
+    opacity: 1;
+  }
+}
+.cw-thumb-act:hover {
+  color: var(--c-fg);
+  border-color: var(--c-fg-subtle);
+}
+.cw-thumb-act[data-danger]:hover {
+  color: var(--c-danger);
+  border-color: var(--c-danger);
 }
 
 /* Menu nổi (chuột phải thumbnail, "⋯" thanh trên). */

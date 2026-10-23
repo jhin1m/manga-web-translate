@@ -481,6 +481,10 @@ function Workspace({ ws, seriesId, chapterId, page: searchPage, drawer: searchDr
   const sourceId = sources.some((it) => it.id === sourcePick) ? sourcePick : (sources[0]?.id ?? null);
   const sourceIdx = sources.findIndex((it) => it.id === sourceId);
   const sourcesEditable = status === "draft" || (status === "partial_failed" && pages.length === 0);
+  // Bước 1 đang cắt trang → cột ảnh gốc hiện tiến độ job ingest (null = còn xếp hàng).
+  const ingestJob = data.progress?.jobs.find((j) => j.type === "chapter.ingest" && j.status === "running");
+  const cutting =
+    status === "ingesting" ? (ingestJob ? Math.min(1, Math.max(0, ingestJob.progress)) : null) : undefined;
   // Chưa có page thì chỉ dùng được công cụ Chọn (panel Chọn = ảnh gốc đang xem).
   useEffect(() => {
     if (sourceMode && editorStore.getState().tool !== "select") editorStore.getState().setTool("select");
@@ -930,6 +934,7 @@ function Workspace({ ws, seriesId, chapterId, page: searchPage, drawer: searchDr
           items={sources}
           activeId={sourceId}
           editable={sourcesEditable}
+          cutting={cutting}
           onPick={setSourcePick}
           onSkip={skipSource}
         />

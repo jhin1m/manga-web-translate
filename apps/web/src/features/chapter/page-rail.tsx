@@ -1,14 +1,16 @@
 /**
  * Cột trang bên phải canvas (112px): thumbnail (ảnh sạch/ảnh gốc, tải lười) + số trang. Trạng thái = viền + nhãn ngắn
- * chỉ khi có vấn đề (Đã ẩn / Lỗi / Chờ AI / Cần xem — page-status.ts `thumbMark`); tên truy cập luôn đủ trạng thái.
- * Trang ẩn nằm đúng vị trí theo số trang (mờ). Nút "Cần xem k" lọc trang lỗi / AI có bản mới / tràn khung. Bấm = kích
- * hoạt page và cuộn canvas tới; ẩn / khôi phục trang qua menu chuột phải (Shift+F10 / phím Menu khi đang focus), bấm
- * trang ẩn cũng mở menu. Số trang giữ số gốc (ord + 1) — trang ẩn để lại lỗ số, khớp bảng văn bản và Tìm/Thay.
+ * khi đang chạy AI (Bước 1 / Đang dịch + thanh %) hoặc có vấn đề (Đã ẩn / Lỗi / Chờ AI / Cần xem — page-status.ts
+ * `thumbMark`); tên truy cập luôn đủ trạng thái. Trang ẩn nằm đúng vị trí theo số trang (mờ). Nút "Cần xem k" lọc trang
+ * lỗi / AI có bản mới / tràn khung. Bấm = kích hoạt page và cuộn canvas tới; xoá (ẩn) / khôi phục trang bằng nút góc
+ * thumbnail (hiện khi rê chuột / focus, khi sửa được) hoặc menu chuột phải (Shift+F10 / phím Menu), bấm trang ẩn cũng mở
+ * menu. Số trang giữ số gốc (ord + 1) — trang ẩn để lại lỗ số, khớp bảng văn bản và Tìm/Thay.
  */
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import type { PageImage, ProgressPage } from "./api.ts";
 import { ContextMenu, isMenuKey, type MenuAt, menuAtElement } from "./context-menu.tsx";
 import { needsReview, thumbAria, thumbMark, thumbTitle } from "./page-status.ts";
+import { TrashIcon, UndoIcon } from "./tool-icons.tsx";
 
 const LOCK_HINT = "Cần giữ khoá chương (chương không đang chạy)";
 
@@ -111,10 +113,31 @@ export const PageRail = memo(function PageRail(props: {
                 }}
               >
                 {img && <img className="cw-thumb-img" src={img.image.url} alt="" loading="lazy" decoding="async" />}
+                {mark?.tone === "busy" && (
+                  <span className="cw-thumb-bar" data-wait={mark.progress === null || undefined} aria-hidden="true">
+                    <span
+                      className="cw-thumb-bar-fill"
+                      style={{ width: `${Math.round((mark.progress ?? 1) * 100)}%` }}
+                    />
+                  </span>
+                )}
                 <span className="cw-thumb-num" aria-hidden="true">
                   {p.ord + 1}
                 </span>
               </button>
+              {/* Trang cuối còn hiện không ẩn được (API 409 last_page) → không hiện nút xoá. */}
+              {props.editable && (p.skipped || props.pages.length > 1) && (
+                <button
+                  type="button"
+                  className="cw-thumb-act"
+                  data-danger={!p.skipped || undefined}
+                  aria-label={p.skipped ? `Khôi phục trang ${p.ord + 1}` : `Xoá (ẩn) trang ${p.ord + 1}`}
+                  title={p.skipped ? "Khôi phục trang" : "Xoá trang — không dịch, không xuất, khôi phục được"}
+                  onClick={() => props.onSkip(p, !p.skipped)}
+                >
+                  {p.skipped ? <UndoIcon size={14} /> : <TrashIcon size={14} />}
+                </button>
+              )}
               {mark && (
                 <span className="cw-thumb-mark" data-tone={mark.tone} aria-hidden="true">
                   {mark.label}

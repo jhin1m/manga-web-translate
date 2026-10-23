@@ -35,6 +35,24 @@ describe("page level", () => {
     expect(thumbMark({ ...base, status: "failed", skipped: true, job: null }, true)?.label).toBe("Đã ẩn");
   });
 
+  it("busy pages show the AI step with job progress, queued jobs without a percentage", () => {
+    const busy = (status: PageStatus, j: Parameters<typeof thumbMark>[0]["job"]) =>
+      thumbMark({ ...base, status, job: j }, true);
+    expect(busy("preparing", job({ status: "running", error_class: null, progress: 0.6 } as never))).toEqual({
+      tone: "busy",
+      label: "Bước 1 · 60%",
+      progress: 0.6,
+    });
+    expect(busy("pending", null)).toEqual({ tone: "busy", label: "Bước 1 · chờ", progress: null });
+    expect(busy("translating", job({ status: "running", error_class: null, progress: 2 } as never))?.label).toBe(
+      "Đang dịch · 100%",
+    );
+    // Lỗi tạm của AI vẫn ưu tiên "Chờ AI"; trang chờ dịch không có nhãn.
+    expect(busy("translating", job({}))?.label).toBe("Chờ AI");
+    expect(busy("prepared", null)?.label).toBe("Cần xem");
+    expect(thumbMark({ ...base, status: "prepared", job: null }, false)).toBeNull();
+  });
+
   it("thumbnail accessible name always carries the state", () => {
     expect(thumbAria({ ...base, job: null }, false)).toBe("Trang 3 · Xong");
     expect(thumbAria({ ...base, status: "prepared", job: null }, false)).toBe("Trang 3 · Chờ dịch");
