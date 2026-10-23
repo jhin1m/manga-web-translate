@@ -42,9 +42,8 @@ tử) — đổi sang class `cw-kind`, không sửa test; chạy lại xanh.
 
 ## Câu hỏi mở
 
-1. L7: tách `--c-info` (VD xanh trung tính) khỏi màu nhấn để "Đang xử lý" / outline trang đang mở khác viền "Cần xem"?
-   Brief hiện đặt `--c-info` = nhấn.
-2. Tên series dài ở đầu trang series: giữ xuống dòng (hiện đủ) hay cắt "…" + `title` như dòng nghiệm thu plan?
+1. ~~L7: tách `--c-info` khỏi màu nhấn?~~ Owner giao tuỳ chọn (23/10): `--c-info` = `#2f6690` (xanh lam dịu, 5.8:1).
+2. ~~Tên series dài ở đầu trang series?~~ Owner chốt (23/10): cắt "…" 1 dòng + `title`; e2e kiểm.
 3. Panel tự mở khi chọn khối (plan mục 7): nay mở sau khi nhả chuột — owner thử tay xem có muốn bỏ hẳn tự mở không.
 4. Màn chương chưa có bề rộng tối thiểu / `@media` (report câu 5): ~1280px còn ~544px cho canvas khi panel 560px mở;
    chưa xử lý, chờ owner chốt màn nhỏ nhất cần hỗ trợ.
