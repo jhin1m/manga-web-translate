@@ -11,8 +11,8 @@ OCR (Bước 1), dịch theo ngữ cảnh cả chương + tự chèn chữ (Bư�
 - **Upload**: thả ảnh lẻ / ZIP ở home hoặc màn series → tự đoán series + số chương, upload nền (song song, thử lại, tải
   tiếp sau khi đóng tab). Cột ảnh gốc hiện ngay khi đang tải; xoá / khôi phục và sắp lại thứ tự ảnh trước Bước 1
   (kéo-thả, menu chuột phải, Alt+↑/↓, có hoàn tác).
-- **Pipeline 2 bước**: Bước 1 = ghép slice → cắt trang theo detector → xoá chữ (inpaint) + OCR bằng LLM, song song theo
-  trang. Bước 2 = dịch tuần tự theo chương (ngữ cảnh cuộn), auto-typeset theo hợp đồng layout dùng chung web ↔ server;
+- **Pipeline 2 bước**: Bước 1 = ghép slice → cắt trang theo detector → xoá chữ (inpaint) + OCR (LLM hoặc local),
+  song song theo trang. Bước 2 = dịch tuần tự theo chương (ngữ cảnh cuộn), auto-typeset theo hợp đồng layout dùng chung web ↔ server;
   màu chữ / viền lấy theo chữ gốc (đỏ, vàng viền nâu…), không đủ tương phản thì về đen / trắng.
 - **Editor** (react-konva): xem từng trang, sửa box chữ, undo/redo, autosave có version + khôi phục bản nháp, vẽ mask
   để xoá chữ lại, OCR lại vùng tự vẽ, Xem gốc / Chia đôi, bảng văn bản cả chương, khoá chương theo người sửa; rail
@@ -24,6 +24,14 @@ OCR (Bước 1), dịch theo ngữ cảnh cả chương + tự chèn chữ (Bư�
 - **Series**: ngôn ngữ nguồn `ko | ja | zh | en` → đích `vi | en | id | es | pt | fr`, định dạng strip / từng trang,
   kính ngữ, quy tắc xưng hô, giọng văn, font mặc định theo loại chữ (dropdown xem trước bằng chính font đó),
   model Standard / Premium.
+- **Cài đặt pipeline** (Cài đặt nhóm → Pipeline, owner/admin; nhãn tiếng Việt + thuật ngữ gốc + tooltip): detector
+  (RT-DETR v2 comic / Comic Text Detector), OCR engine theo ngôn ngữ nguồn (AI LLM / **MangaOCR** cho tiếng Nhật /
+  **PaddleOCR** cho Hàn–Trung–Nhật–Anh, cả hai chạy local bằng ONNX, không tốn token, không tính ngân sách), model xoá
+  chữ (Big LaMa / **LaMa manga**), model AI hiệu đính (Standard / Premium); "Nâng cao": ngưỡng tin cậy, nới mask, cỡ
+  vùng xoá chữ. Mặc định = hành vi cũ; cài đặt được chụp vào job lúc chạy (Bước 1, xoá chữ lại, OCR vùng tự vẽ).
+- **AI hiệu đính**: rail công cụ → "Hiệu đính" chạy cho cả chương đã dịch (bản dịch hiện tại + glossary + xưng hô /
+  giọng văn của series + ảnh trang) → gợi ý theo khối (cũ → mới, lý do), Nhận / Bỏ từng cái, "Nhận tất cả" ở trang
+  đang mở. Không tự ghi đè: Nhận = sửa bản dịch thường (hoàn tác, autosave, version); khối đã sửa khác → "Lỗi thời".
 - **Nhóm**: invite-only, mời thành viên qua email SMTP (không cấu hình thì gửi link trên UI); font tuỳ chỉnh TTF/OTF
   upload ở Cài đặt nhóm hoặc ngay trong dropdown font mặc định của series, dùng trong editor, font mặc định series,
   auto-typeset và bản xuất.
@@ -102,6 +110,11 @@ Mọi test tự động hiện dùng worker giả lập; chưa có số đo vớ
       soi mắt parity chữ Konva ↔ render.py trên 5 trang.
 - [ ] **Luồng dịch với worker LLM thật**: watermark trong danh sách bỏ qua không vào prompt và không có box; trang ẩn
       không bị dịch; xuất `original_slices` khi có trang ẩn (mở zip kiểm số file / thứ tự).
+- [ ] **OCR local + LaMa manga + AI hiệu đính** (đã đo smoke trên 2 trang manga mẫu, xem
+      `plans/reports/overnight-261024-0028-local-ocr-manga-lama-proofread-report.md`): CER MangaOCR / PaddleOCR trên
+      golden set thật (KO strip cho PaddleOCR tiếng Hàn, JA trang cho MangaOCR); AI hiệu đính với LLM thật (chất lượng
+      gợi ý, chi phí/chương Standard vs Premium, giá Premium trong bảng giá); LaMa manga vs Big LaMa trên nền
+      screentone thật; tải lazy model trên Modal.
 - [ ] **Đợt tính năng nhỏ (kiểm tay)**: soi ≥ 3 trang thật có chữ màu (màu chữ dịch khớp tông gốc, đọc rõ); parity
       chữ Konva ↔ render.py với font tuỳ chỉnh; gửi email lời mời qua SMTP thật (Gmail app password / Brevo) và bấm
       link đăng ký; kéo-thả sắp ảnh trên Safari; màn series hiện "Xuất lại" sau khi ẩn trang ở chương đã xuất.
@@ -109,9 +122,11 @@ Mọi test tự động hiện dùng worker giả lập; chưa có số đo vớ
 ### Phải làm
 
 - [ ] **Deploy**: chạy migration mới (`0009_series_skip_images`, `0010_series_ignore_text`,
-      `0011_pages_skip_changed_at`, `0012_workspace_fonts`); worker Mac/Modal phải lên pipeline **0.5.1** (font tuỳ
-      chỉnh) **trước** khi deploy API (`MIN_PIPELINE_VERSION`), không thì hàng đợi dừng; VPS cần dựng được
-      addon `re2` — xem checklist ở `docs/deployment-guide.md` mục 4.
+      `0011_pages_skip_changed_at`, `0012_workspace_fonts`, `0013_workspace_pipeline_settings`,
+      `0014_proofread_suggestions`); worker Mac/Modal phải lên pipeline **0.6.0** (cài đặt pipeline, OCR local, AI hiệu
+      đính) **trước** khi deploy API (`MIN_PIPELINE_VERSION`), không thì hàng đợi dừng; tải model optional mới
+      (`fetch_models.py`) vào volume Modal; VPS cần dựng được addon `re2` — xem checklist ở
+      `docs/deployment-guide.md` mục 4.
 - [ ] **Rà giấy phép** trước khi thương mại hoá / công khai rộng: MVP được dùng code + model + font mở bất kể license
       (GPL/AGPL…); repo chưa có file `LICENSE`.
 - [ ] **Phase 8 — trước khi mở đăng ký công khai**: quota theo workspace (402), BYOK, ma trận role chi tiết, admin nền
@@ -123,7 +138,7 @@ Mọi test tự động hiện dùng worker giả lập; chưa có số đo vớ
 - [ ] AI phân loại ảnh credit / quảng cáo (hiện chỉ học theo dHash + gợi ý theo khổ ảnh); credit cùng khổ đã bị ghép
       vào trang lớn sau Bước 1 chỉ ẩn được cả trang; logo watermark dạng hình.
 - [ ] Đích CJK / Thái, chữ dọc khi typeset; dịch SFX + font SFX; phân loại thoại theo nghĩa (suy nghĩ, hét, khung dẫn).
-- [ ] Tự nhận ngôn ngữ nguồn từ ảnh; OCR local (manga-ocr, RapidOCR) thay LLM.
+- [ ] Tự nhận ngôn ngữ nguồn từ ảnh. OCR local chưa nhận SFX (mọi vùng coi là chữ thường → bị xoá + dịch).
 - [ ] Thumbnail do server sinh (thứ tự ảnh trước Bước 1 đã sắp tay được: kéo-thả / menu / Alt+↑↓).
 - [ ] Xem trước font trong dropdown Font của editor (mới có ở cài đặt series).
 - [ ] Glossary: chuyển / sao chép entry giữa các cặp ngôn ngữ, cột cặp ngôn ngữ trong CSV.
@@ -136,4 +151,8 @@ Mọi test tự động hiện dùng worker giả lập; chưa có số đo vớ
 - Ảnh rất cao (> 16k px) có thể không tính được dấu nhận dạng trên Safari → ảnh đó không tự bỏ (upload vẫn chạy).
 - Xem trước font trong danh sách thả xuống cần Chrome/Edge 135+ (`appearance: base-select`); Safari / Firefox chỉ hiện
   font ở ô đang chọn.
+- PaddleOCR với chữ dọc (ja/zh) tách cột theo hình chiếu mực — cột sát nhau / chữ nhỏ trên nền art có thể đọc sai
+  hoặc rỗng (→ "Cần soát"); manga tiếng Nhật nên dùng MangaOCR.
+- Bóng thoại bán trong suốt / chữ có viền trắng dày: nới mask mặc định (2–6px) còn để vệt viền — tăng "Nới mask" ở
+  Cài đặt nhóm → Pipeline → Nâng cao (VD 10–12px).
 - Free-tier Gemini hết hạn mức → job tự thử lại tới ~4 giờ trước khi báo lỗi.

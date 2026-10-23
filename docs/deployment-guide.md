@@ -107,6 +107,29 @@ sudo systemctl enable --now mtl-api mtl-jobs mtl-backup.timer mtl-alert.timer
 5. Smoke tay: `/w/<ws>/settings` upload 1 font TTF; mời thành viên (có SMTP: mail tới, "Gửi lại email"); dịch + xuất 1 chương dùng font nhóm.
 6. Rollback: API/web quay về được (migration additive); worker **không** hạ xuống < 0.5.0 (xem bullet trên).
 
+**Checklist release "pipeline-settings-local-ocr-proofread"** (migration 0013 `workspace_pipeline_settings` + 0014
+`proofread_suggestions`, pipeline 0.6.0):
+
+1. Worker trước: `cd worker && uv sync && uv run python scripts/fetch_models.py` (tải thêm model *optional*: LaMa manga
+   ~207MB, MangaOCR ~460MB, PaddleOCR ~45MB — sha256 theo `models.lock.json`; `--required` để bỏ qua) → cập nhật worker
+   Mac (`PIPELINE_VERSION` 0.6.0) → Modal: `modal volume put mtl-models models/ /` rồi `modal deploy modal_app.py`.
+   Thiếu model optional thì worker tự tải lần đầu job cần (lazy, kiểm sha256) — trên Modal mỗi container tải lại, nên
+   nạp sẵn vào volume. Không thêm dependency Python (chỉ onnxruntime + opencv có sẵn).
+2. Biến môi trường worker (tuỳ chọn): `MTL_GEMINI_PREMIUM_MODEL` (mặc định `gemini-2.5-pro`) /
+   `MTL_ANTHROPIC_PREMIUM_MODEL` (mặc định `claude-sonnet-5-5`) cho AI hiệu đính Premium. Giá Premium trong
+   `apps/api/src/billing/prices.ts` + `worker/mtl_pipeline/providers/base.py` là giá niêm yết — kiểm lại trước khi bật.
+3. `.env` API không ghi đè `MIN_PIPELINE_VERSION` thấp hơn 0.6.0 (mặc định `env.ts` = 0.6.0; `PIPELINE_VERSION` giữ
+   0.4.0 nên job đã chạy không bị chạy lại). Worker < 0.6.0 nhận 426 ngay khi API mới lên — vì payload có field mới
+   (`pipeline`, `inpaint`, `ocr_engine`, job `chapter.proofread`) mà schema worker cũ `additionalProperties: false`.
+4. `infra/deploy.sh <ref>`: `pnpm db:migrate` chạy 0013 (cột `workspace_settings.pipeline`, mặc định `{}` = hành vi cũ)
+   + 0014 (bảng `proofread_suggestions`, nới `jobs_type_chk` thêm `chapter.proofread`). Down tay: `0013_*.down.sql`,
+   `0014_*.down.sql` (0014 xoá job `chapter.proofread` trước khi khôi phục check cũ).
+5. Smoke tay: Cài đặt nhóm → Pipeline (owner/admin) lưu được; chương tiếng Nhật với OCR = MangaOCR chạy Bước 1 không
+   tốn token (Hoạt động/ledger không có `llm_tokens_*` của `page.prepare`); "Hiệu đính" trên rail chạy và Nhận được 1
+   gợi ý; workspace không cấu hình → Bước 1 cho kết quả như trước.
+6. Rollback: API/web quay về được (migration additive) **miễn worker giữ 0.6.0** (worker mới đọc được payload cũ);
+   job đang xếp hàng có field mới không chạy được trên worker cũ. Gợi ý hiệu đính còn trong DB không ảnh hưởng bản cũ.
+
 Log: `journalctl -u mtl-api -o cat` (JSON mỗi request: method, path, status, ms — không query/header/body),
 `journalctl -u mtl-jobs`.
 

@@ -1,5 +1,7 @@
 # Model weights
 
+Nguồn + license: [`../THIRD_PARTY.md`](../THIRD_PARTY.md).
+
 Weights **không commit** (`.gitignore`). Nguồn, revision và sha256 nằm ở [`../models.lock.json`](../models.lock.json);
 `mtl_pipeline/models.py` kiểm sha256 khi khởi động và từ chối mọi file không phải `.onnx`/`.safetensors`.
 

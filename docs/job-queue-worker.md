@@ -144,7 +144,8 @@ xếp hàng trước pipeline 0.4.0 thiếu → worker mặc định `ko` → `v
 là optional: trang đã prepare bằng ≥ 0.5.0 không dịch được trên worker cũ, và `MIN_PIPELINE_VERSION` phải ≥ 0.5.0 khi
 API gửi các trường này (hiện 0.5.1). Chiều ngược lại ổn: trang bước 1 cũ không có màu rơi về quy tắc cực tính. 0.5.1 (`inputs.fonts` của translate/export, xem mục Font tuỳ chỉnh)
 nâng `MIN_PIPELINE_VERSION = 0.5.1`: schema input có `additionalProperties: false` nên worker cũ không đọc nổi job có
-font, và worker cũ cũng không biết fallback font tuỳ chỉnh. API `PIPELINE_VERSION` (muối input_rev) không đổi.
+font, và worker cũ cũng không biết fallback font tuỳ chỉnh. API `PIPELINE_VERSION` (muối input_rev) không đổi. 0.6.0
+(cài đặt pipeline trong payload, job `chapter.proofread`, xem mục dưới) nâng `MIN_PIPELINE_VERSION = 0.6.0` cùng lý do.
 
 ## Font tuỳ chỉnh (pipeline 0.5.1)
 
@@ -162,6 +163,51 @@ bỏ khỏi danh sách. Worker (`mtl_worker/job_fonts.py`) tải mỗi font vào
 `metrics_for` tra registry trước `worker/fonts`; id không biết → font thoại mặc định (`DEFAULT_FONT`) + log, không
 làm hỏng job. Font sai hash / không đọc được bị bỏ qua và fallback tương tự; lỗi mạng khi tải ném ra để job thử lại.
 Worker chỉ tải URL có trong inputs.
+
+## Cài đặt pipeline (pipeline 0.6.0)
+
+Cài đặt nhóm → Pipeline (`PUT /api/w/:ws/settings/pipeline`, owner/admin; `GET /api/w/:ws` trả `settings.pipeline`)
+lưu ở `workspace_settings.pipeline` (jsonb, `{}` = mặc định). Hợp đồng: `packages/shared/src/pipeline-settings.ts`
+(`PipelineSettings`, `resolvePipelineSettings` đọc từng key hợp lệ, key lỗi → mặc định). Worker không đọc DB — API
+chụp vào payload lúc enqueue:
+
+| Job | Field | Nội dung |
+|---|---|---|
+| `page.prepare` | `pipeline` | `detector`, `detection_threshold`, `ocr_engine` (đã chọn theo `source_lang` của series), `inpainter`, `mask_dilation` (`null` = tự động 2–6px), `inpaint_size` |
+| `page.reinpaint` | `inpaint` | `inpainter`, `inpaint_size` |
+| `page.ocr_region` | `ocr_engine` | OCR vùng tự vẽ theo engine; dịch vẫn qua LLM |
+| `chapter.proofread` | `model_tier` | `standard` / `premium` |
+
+- Mặc định (`rtdetr_v2_comic`, 0.35, `llm`, `big_lama`, tự động, 512) = hành vi trước 0.6.0. Field optional: job xếp
+  hàng trước đó thiếu → worker dùng mặc định. `prepareInputRev` chỉ trộn hash tuỳ chọn khi **khác** mặc định → page /
+  job cũ giữ input_rev (không bị coi là lỗi thời ở "Chạy lại trang lỗi").
+- `comic_text_detector`: khối chữ lấy từ output `blk` của CTD (cùng lượt với mask, hậu xử lý YOLO + NMS port từ
+  manga-image-translator), bóng thoại vẫn từ RT-DETR; khối nằm ≥ 60% trong bóng → `text_bubble`, còn lại `text_free`.
+- `inpaint_size` = cạnh tối đa cửa sổ gom nhiều thành phần mask vào 1 lượt LaMa (model luôn chạy 512×512; lớn hơn
+  = ít lượt, nhìn nhiều nền, nét mờ hơn). `CompositeInpainter` (flood-fill nền phẳng trước) giữ nguyên.
+- OCR local (`manga_ocr` chỉ `ja`, `paddle_ocr` cho `ko/zh/ja/en`; `mtl_pipeline/local_ocr/`): cùng `OcrResult`
+  như LLM — crop dưới `MIN_INK_RATIO` → `empty`, thứ tự id theo `text_regions`, độ tin < 0.5 hoặc có mực mà đọc rỗng →
+  `low_conf`; **không nhận SFX** (`is_sfx` luôn false). Không gọi LLM → usage rỗng; breaker LLM và kill-switch ngân sách
+  bỏ qua `page.prepare` có `pipeline.ocr_engine` local (`isLlmPayload` ở shared, `llmJobSql` ở API). Worker `--no-llm`
+  vẫn không nhận `page.prepare` (capability theo loại job).
+- Model mới là entry `optional` trong `worker/models.lock.json` (LaMa manga, MangaOCR encoder/decoder/vocab, PP-OCRv6
+  det/rec, PP-OCRv5 rec tiếng Hàn): không kiểm lúc khởi động; lần đầu job cần → `ensure_model` tải đúng URL/revision,
+  kiểm sha256 (lỗi → job `internal`, thử lại). `scripts/fetch_models.py` mặc định tải cả model optional.
+
+## AI hiệu đính (`chapter.proofread`)
+
+`POST /api/w/:ws/chapters/:id/proofread` (chương `review` / `done` / `partial_failed`, khác → 409
+`chapter_not_translated`) → job cho mọi trang hiện, `ready`; payload chụp `TranslateSettings` của series + `model_tier`.
+Idempotency theo version page_state + glossary/settings rev + tier. Job chỉ đọc: không đổi trạng thái chương/trang, không
+khoá chương. Inputs lúc claim (`ProofreadInputs`): bản dịch hiện tại (gồm sửa tay) của vùng chữ có bản dịch, bỏ vùng
+khớp chữ bỏ qua, + URL ảnh gốc. Worker (`mtl_pipeline/proofread.py`, prompt `prompts/proofread_page.md`): mỗi trang 1
+call (JSON khối + ảnh gốc thu rộng 640, cắt khúc ≤ 1280px, tối đa 6, JPEG) + 8 dòng cuối trang trước làm ngữ cảnh;
+JSON sai → thử lại 1 lần; lọc gợi ý id lạ / trùng id / rỗng / trùng bản hiện tại. Premium dùng
+`MTL_GEMINI_PREMIUM_MODEL` (mặc định `gemini-2.5-pro`, thinking budget 128) / `MTL_ANTHROPIC_PREMIUM_MODEL`.
+Trần call `2 × số trang`. Complete: lọc lại phía server (page ngoài job, vùng không còn, trùng bản cũ, trùng vùng) rồi
+**thay toàn bộ** gợi ý cũ của chương trong `proofread_suggestions` (`old_text` = bản worker đã đọc).
+`GET …/chapters/:id/proofread` = job gần nhất + gợi ý chưa bỏ; `PATCH /api/w/:ws/proofread-suggestions/:id
+{dismissed}` = Bỏ / hoàn tác. Editor: xem [editor.md](./editor.md#ai-hiệu-đính).
 
 ## Xuất chương
 

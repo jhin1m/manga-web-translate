@@ -141,13 +141,13 @@ người đã chỉnh). "Đã xem" → `POST /pages/:id/ai-update/ack {ai_rev}` 
 ## Panel ngữ cảnh và thanh nổi
 
 Rail công cụ (`tool-rail.tsx`, hành vi ở `tool-rail-model.ts`): icon công cụ đặt công cụ + mở panel của nó, bấm lại
-icon đang mở → thu panel (công cụ giữ nguyên); "Bản dịch" / "Tìm" chỉ mở/thu panel, không đổi công cụ. Phím V/T/B/E/R
+icon đang mở → thu panel (công cụ giữ nguyên); "Bản dịch" / "Tìm" / "Hiệu đính" chỉ mở/thu panel, không đổi công cụ. Phím V/T/B/E/R
 đổi công cụ: panel công cụ đang mở thì nội dung đổi theo, panel đang thu thì giữ thu. Chọn khối khi panel
 thu → mở panel công cụ (thường là Chọn; đang ở Bản dịch / Tìm thì giữ; chọn bằng chuột thì mở sau khi nhả chuột để
 không làm lệch khối đang kéo). Lưu bị xung đột khi panel thu → mở panel;
 danh sách xung đột nằm ở đầu mọi panel; thu panel khi còn xung đột → băng cảnh báo báo số mục + nút "Xem". Panel đang mở nhớ theo trình duyệt (`localStorage mtl.layout =
 { panel }`, `layout-prefs.ts`). Chỉ xem → mọi công cụ trừ Chọn tắt (cả phím T/B/E/R); chương chưa có page → Chữ / Mask / Tẩy / OCR tắt;
-chương chưa dịch xong → Tìm tắt.
+chương chưa dịch xong → Tìm, Hiệu đính tắt.
 
 - **Chọn** (`select-panel.tsx`): có khối — "Trang n · Khối i / tổng · Loại" (loại chỉ đọc), Gốc (OCR), Bản dịch
   (`#cw-translation`, cùng nguồn với bảng), cảnh báo tràn khung, font / cỡ / tự khớp, "Kiểu chữ nâng cao" (thu gọn:
@@ -161,6 +161,8 @@ chương chưa dịch xong → Tìm tắt.
 - **Tìm** (560px): segmented "Tìm / Thay" | "Glossary" — xem [export-and-batch-edit.md](./export-and-batch-edit.md).
   Hai đoạn giữ trạng thái khi đổi qua lại / thu panel (kết quả xem trước không mất).
 
+- **Hiệu đính** (560px, `proofread-panel.tsx`): xem mục [AI hiệu đính](#ai-hiệu-đính).
+
 **Thanh nổi cạnh khối** (`block-toolbar.tsx`, `role="toolbar"` "Thao tác khối"): Sửa chữ (mở panel Chọn + focus ô
 Bản dịch; Enter / double-click vẫn sửa trực tiếp trên ảnh) · Dịch lại khối · Nhân đôi khối (`actions.duplicateBox`:
 id mới, lệch +16px, cùng chữ/kiểu, `region_id = null` → dòng "Tự thêm", 1 bước undo, chỉ ở client tới lần lưu) · Xoá
@@ -171,6 +173,19 @@ dưới khối, kẹp trong bề ngang canvas, theo khối khi cuộn/zoom.
 **Bảng văn bản** (`text-table/`): 1 dòng / khối (cột #, Tr., Gốc, Dịch sửa tại chỗ, Loại, Tình trạng),
 ảo hoá; bấm dòng → mở trang + chọn khối trên ảnh; Enter / Shift+Enter dòng sau / trước (xuyên trang), Alt+Enter xuống
 dòng trong ô, Esc bỏ focus; đồng bộ 2 chiều với canvas và panel Chọn.
+
+## AI hiệu đính
+
+Panel "Hiệu đính" của rail (`proofread-panel.tsx`, trạng thái thuần ở `proofread-model.ts`): "Chạy AI hiệu đính" /
+"Hiệu đính lại cả chương" (lưu hết trước, `POST …/proofread`; tắt khi chương chưa qua Bước 2 hoặc đang chạy; poll 2,5s
+khi job chạy) → danh sách gợi ý theo trang rồi thứ tự khối: "Trang n · Khối i" (bấm = mở trang + chọn khối), bản AI
+đã đọc (gạch) → đề xuất, lý do, Nhận · Bỏ. Trạng thái suy từ bản dịch hiện tại của khối (cùng nguồn với bảng văn
+bản): = bản đã đọc → "Chờ duyệt"; = đề xuất → "Đã nhận"; khác cả hai / khối không còn → "Lỗi thời" (chỉ Bỏ).
+**Nhận** = mở trang của khối rồi `setRegionTranslation` qua `editorStore.apply` (như gõ ở bảng: 1 bước hoàn tác,
+autosave, version, khoá chương, ngắt dòng lại box; hoàn tác → gợi ý về "Chờ duyệt"). "Nhận tất cả ở trang này" = mọi
+gợi ý chờ duyệt của trang đang mở trong 1 bước hoàn tác (editor chỉ sửa 1 trang mỗi lúc). **Bỏ** =
+`PATCH /proofread-suggestions/:id {dismissed: true}` (ẩn khỏi danh sách). Chỉ xem → Nhận tắt. Sửa sau lần xuất cuối
+→ "Xuất lại" như mọi lần sửa khác.
 
 ## Chế độ xem (Xem gốc / Chia đôi) và khung nhìn
 
