@@ -192,6 +192,26 @@ describe("upload manager", () => {
     expect(m.uploadedIds("ch-9")).toEqual(new Set(["f0", "f1", "f2"]));
   });
 
+  it("resume matches dropped files by creation order even after the user reordered the images", async () => {
+    const { deps, calls } = fakeServer();
+    const m = createUploadManager(deps);
+    // Tạo theo thứ tự f0 < f1 < f2 (uuid v7); người dùng kéo ảnh cuối lên đầu → ord đổi, id không đổi.
+    const chapter = {
+      id: "ch-7",
+      source_files: [
+        { id: "f2", ord: 0, bytes: 20 },
+        { id: "f0", ord: 1, bytes: 10 },
+        { id: "f1", ord: 2, bytes: 11 },
+      ],
+    };
+    const r = m.resumeChapter({ ws: "w", chapter, pages: [png("1.png"), png("2.png", 11), png("3.png", 20)] });
+    expect(r.uploading).toBe(3);
+    await settled(m, "ch-7");
+    expect(m.localFiles("ch-7").size).toBe(3);
+    expect([...m.localFiles("ch-7").keys()]).toEqual(["f0", "f1", "f2"]);
+    expect(calls.post.sort()).toEqual(["f0", "f1", "f2"]);
+  });
+
   it("progress ticks keep the per-file map object; only status changes replace it", async () => {
     let release = () => {};
     const gate = new Promise<void>((r) => {

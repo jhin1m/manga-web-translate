@@ -25,11 +25,18 @@ export const RegionKind = z.enum(["bubble", "text_bubble", "text_free"]);
 export const Polarity = z.enum(["dark_on_light", "light_on_dark"]);
 export const RegionFlag = z.enum(["sfx", "empty", "low_conf"]);
 
+/** Màu chữ/viền gốc do worker đo ở bước 1: #rrggbb. */
+const RegionColor = z.string().regex(/^#[0-9a-fA-F]{6}$/);
+
 export const Region = z.object({
   id: z.string().min(1),
   kind: RegionKind,
   bbox: BBox,
   polarity: Polarity,
+  /** Màu nét chữ gốc; thiếu (trang bước 1 cũ) → typeset theo cực tính. */
+  text_color: RegionColor.nullable().optional(),
+  /** Màu viền riêng của chữ gốc; null = chữ không viền. */
+  outline_color: RegionColor.nullable().optional(),
   source_text: NfcText,
   translation: NfcText,
   confidence: z.number().min(0).max(1),

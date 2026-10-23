@@ -7,7 +7,7 @@
 import { expect, test } from "@playwright/test";
 import { WEB_URL } from "./env.ts";
 import { PNG_1PX } from "./fake-worker.ts";
-import { login, state } from "./helpers.ts";
+import { apiReadyChapter, login, state } from "./helpers.ts";
 
 test("delete a whole series from its home row, after an explicit confirm", async ({ page }) => {
   await login(page);
@@ -113,7 +113,7 @@ test("new series picks source language; settings edit target language, page form
   // Chữ bỏ qua (watermark): dòng quá ngắn báo lỗi tại dòng, chặn lưu; sửa xong lưu được, mục trùng gộp lại.
   const ignore = page.getByLabel("Chữ bỏ qua (watermark)");
   await ignore.fill("discord.gg/nhom\nab");
-  await expect(page.getByText("Dòng 2: mỗi mục 3–100 ký tự (không tính http://).")).toBeVisible();
+  await expect(page.getByText("Dòng 2: mỗi mục 3–100 ký tự (không tính http:// và dấu cách).")).toBeVisible();
   await expect(page.getByRole("button", { name: "Lưu cài đặt" })).toBeDisabled();
   await ignore.fill("discord.gg/nhom\nDISCORD.GG/NHOM\nNhóm Mèo");
   await page.getByRole("button", { name: "Lưu cài đặt" }).click();
@@ -130,6 +130,94 @@ test("new series picks source language; settings edit target language, page form
   };
   expect([s.source_lang, s.target_lang, s.page_format]).toEqual(["ja", "en", "strip"]);
   expect(s.ignore_text).toEqual(["discord.gg/nhom", "Nhóm Mèo"]);
+});
+
+test("ignored text hides matching boxes of translated chapters after a preview, and undo brings them back", async ({
+  page,
+}) => {
+  await login(page);
+  const ws = state.workspaceId;
+  const headers = { origin: WEB_URL };
+  const first = await apiReadyChapter(page, "4101");
+  const second = await apiReadyChapter(page, "4102");
+  const pageIdOf = async (chapterId: string) => {
+    const p = (await (await page.request.get(`/api/w/${ws}/chapters/${chapterId}/progress`)).json()) as {
+      pages: { id: string }[];
+    };
+    return p.pages[0]?.id as string;
+  };
+  const hiddenBoxes = async (chapterId: string) => {
+    const r = (await (await page.request.get(`/api/w/${ws}/pages/${await pageIdOf(chapterId)}`)).json()) as {
+      state: { text_boxes: { hidden: boolean }[] };
+    };
+    return r.state.text_boxes.filter((b) => b.hidden).length;
+  };
+  const setIgnore = (ignore_text: string[]) =>
+    page.request.patch(`/api/w/${ws}/series/${state.seriesId}`, { headers, data: { ignore_text } });
+  // Worker giả chỉ trả vùng (không box): người dùng đặt chữ lên vùng t0 như khi sửa tay.
+  const placeBox = async (chapterId: string) => {
+    const pageId = await pageIdOf(chapterId);
+    const cur = (await (await page.request.get(`/api/w/${ws}/pages/${pageId}`)).json()) as {
+      version: number;
+      state: Record<string, unknown>;
+    };
+    const box = {
+      id: "wm",
+      region_id: "t0",
+      x: 40,
+      y: 40,
+      w: 120,
+      h: 50,
+      rotation: 0,
+      text: "Xin chào",
+      lines: ["Xin chào"],
+      font_family: "PatrickHand-Regular",
+      font_size: 22,
+      line_height: 1.15,
+      pad: 4,
+      letter_spacing: 0,
+      align: "center",
+      fill: "#000000",
+      stroke: null,
+      auto_fit: false,
+      hidden: false,
+    };
+    expect((await page.request.post(`/api/w/${ws}/chapters/${chapterId}/lock`, { headers })).ok()).toBe(true);
+    const put = await page.request.put(`/api/w/${ws}/pages/${pageId}/state`, {
+      headers: { ...headers, "if-match": `"${cur.version}"` },
+      data: { state: { ...cur.state, text_boxes: [box] } },
+    });
+    expect(put.ok()).toBe(true);
+    expect((await page.request.delete(`/api/w/${ws}/chapters/${chapterId}/lock`, { headers })).ok()).toBe(true);
+  };
+  await placeBox(first);
+  await placeBox(second);
+  expect(await hiddenBoxes(first)).toBe(0);
+
+  try {
+    // Fake worker OCR "안녕하세요": mục có dấu cách chen giữa vẫn khớp (so khớp bỏ dấu cách).
+    expect((await setIgnore(["안녕 하세요"])).status()).toBe(200);
+    await page.goto(`/w/${ws}/s/${state.seriesId}?tab=settings`);
+    const section = page.getByRole("region", { name: "Ẩn chữ khớp trong chương đã dịch" });
+    await section.getByRole("button", { name: "Ẩn chữ khớp trong chương đã dịch…" }).click();
+    await expect(section.getByText(/^Sẽ ẩn \d+ box ở \d+ chương/)).toBeVisible();
+    await expect(section.getByText("Chương 4101")).toBeVisible();
+    await expect(section.getByText("Chương 4102")).toBeVisible();
+    expect(await hiddenBoxes(first)).toBe(0);
+
+    await section.getByRole("button", { name: /^Ẩn \d+ box$/ }).click();
+    const done = section.getByRole("status");
+    await expect(done).toContainText(/Đã ẩn \d+ box ở \d+ chương/);
+    expect(await hiddenBoxes(first)).toBeGreaterThan(0);
+    expect(await hiddenBoxes(second)).toBeGreaterThan(0);
+
+    await done.getByRole("button", { name: "Hoàn tác" }).click();
+    await expect(done).toContainText(/Đã hoàn tác \d+ trang ở \d+ chương/);
+    expect(await hiddenBoxes(first)).toBe(0);
+    expect(await hiddenBoxes(second)).toBe(0);
+  } finally {
+    await setIgnore([]);
+  }
 });
 
 test("a very long series name is truncated with a full-name title and never overlaps the status column", async ({

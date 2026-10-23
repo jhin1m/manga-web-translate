@@ -11,6 +11,7 @@ import numpy as np
 from .fonts import metrics_for
 from .render import line_advance, nfc
 from .schema import BBox, Region, Stroke, TextBox
+from .textcolor import MIN_CONTRAST, RGB, contrast_ratio, contrast_stroke, median_rgb, parse_hex, to_hex
 
 MIN_SIZE = 10
 MAX_SIZE = 64
@@ -179,13 +180,39 @@ def font_for(region: Region, dialogue: str, narration: str) -> str:
     return narration if region.kind == "text_free" else dialogue
 
 
-def style_for(region: Region, size: float) -> tuple[str, Stroke]:
-    """Chữ luôn có viền màu tương phản (chất lettering manga). Chữ ngoài bóng đè art cần viền dày hơn để đọc được."""
+def style_for(region: Region, size: float, bg_rgb: RGB | None = None) -> tuple[str, Stroke]:
+    """Chữ luôn có viền màu tương phản (chất lettering manga). Chữ ngoài bóng đè art cần viền dày hơn để đọc được.
+
+    Có màu chữ gốc (text_color) và đọc được trên nền sạch (chữ hoặc viền gốc tương phản ≥ MIN_CONTRAST) → giữ màu gốc;
+    ngược lại rơi về quy tắc cực tính."""
     light = region.polarity == "light_on_dark"
     ratio = STROKE_FREE if region.kind == "text_free" else STROKE_BUBBLE
-    return ("#ffffff" if light else "#000000"), Stroke(
-        color="#000000" if light else "#ffffff", width=round(max(1.5, size * ratio), 1)
+    width = round(max(1.5, size * ratio), 1)
+    original = _original_colors(region, bg_rgb)
+    if original is not None:
+        fill, outline = original
+        stroke = (
+            outline
+            if outline and contrast_ratio(parse_hex(outline), parse_hex(fill)) >= MIN_CONTRAST
+            else None
+        )
+        return fill, Stroke(color=stroke or contrast_stroke(parse_hex(fill)), width=width)
+    return ("#ffffff" if light else "#000000"), Stroke(color="#000000" if light else "#ffffff", width=width)
+
+
+def _original_colors(region: Region, bg_rgb: RGB | None) -> tuple[str, str | None] | None:
+    """(fill, outline) của chữ gốc nếu dùng được trên nền `bg_rgb`; không thì None."""
+    if region.text_color is None or bg_rgb is None:
+        return None
+    try:
+        fill = parse_hex(region.text_color)
+        outline = parse_hex(region.outline_color) if region.outline_color else None
+    except ValueError:
+        return None
+    readable = contrast_ratio(fill, bg_rgb) >= MIN_CONTRAST or (
+        outline is not None and contrast_ratio(outline, bg_rgb) >= MIN_CONTRAST
     )
+    return (to_hex(fill), to_hex(outline) if outline else None) if readable else None
 
 
 def typeset_region(
@@ -201,7 +228,10 @@ def typeset_region(
     text_h = block_height(font_id, size, len(lines)) + 2 * PAD
     # Căn giữa theo chiều dọc: box ôm khối chữ, đặt giữa vùng khả dụng.
     y = rect.y + max(0.0, (rect.h - text_h) / 2)
-    fill, stroke = style_for(region, size)
+    bg = None
+    if region.text_color is not None:
+        bg = median_rgb(clean_rgb[rect.y : rect.y + rect.h, rect.x : rect.x + rect.w])
+    fill, stroke = style_for(region, size, bg)
     return TextBox(
         id=f"tb-{region.id}",
         region_id=region.id,

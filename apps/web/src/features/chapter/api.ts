@@ -105,6 +105,12 @@ export const setSourceSkip = (ws: string, ch: string, fileId: string, skip: "use
     method: "PATCH",
     body: { skip },
   });
+/** Đổi thứ tự ảnh gốc trước Bước 1: `ids` = cả bộ ảnh theo thứ tự mới (400 `source_set_mismatch` khi lệch bộ). */
+export const setSourceOrder = (ws: string, ch: string, ids: string[]) =>
+  api<{ source_files: ChapterDetail["source_files"] }>(base(ws, ch, "/source-files/order"), {
+    method: "PUT",
+    body: { ids },
+  });
 export const fetchChapterStates = (ws: string, ch: string) => api<{ pages: PageStateRow[] }>(base(ws, ch, "/states"));
 
 export type Rejected = { id: string; ord: number; reason: "missing" | "too_large" | "type_mismatch" };

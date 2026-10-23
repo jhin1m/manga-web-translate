@@ -5,6 +5,7 @@ import {
   emptyPageState,
   idempotencyKey,
   JOB_TYPES,
+  JobFonts,
   JobPayload,
   keyBelongsToWorkspace,
   PageState,
@@ -80,12 +81,51 @@ describe("PageState", () => {
     const nfd = "ế".normalize("NFD");
     expect(PageState.safeParse({ ...s, text_boxes: [{ ...box, text: nfd }] }).success).toBe(false);
   });
+
+  it("region colors are optional (older pages) but must be #rrggbb when present", () => {
+    const s = emptyPageState(800, 1200);
+    const region = {
+      id: "r1",
+      kind: "text_bubble",
+      bbox: [0, 0, 10, 10],
+      polarity: "dark_on_light",
+      source_text: "a",
+      translation: "b",
+      confidence: 1,
+      flags: [],
+    };
+    const parse = (extra: object) => PageState.safeParse({ ...s, regions: [{ ...region, ...extra }] }).success;
+    expect(parse({})).toBe(true);
+    expect(parse({ text_color: "#c81414", outline_color: null })).toBe(true);
+    expect(parse({ text_color: "#c81414", outline_color: "#000000" })).toBe(true);
+    expect(parse({ text_color: "red" })).toBe(false);
+    expect(parse({ text_color: "#c81414", outline_color: "#fff" })).toBe(false);
+  });
 });
 
 describe("JobPayload", () => {
   it("covers every JobType", () => {
     const covered = JobPayload.options.map((o) => o.shape.type.value);
     expect([...covered].sort()).toEqual([...JOB_TYPES].sort());
+  });
+});
+
+describe("JobFonts", () => {
+  const sha256 = "a".repeat(64);
+  const url = "https://files.example/font";
+
+  it("accepts only custom-<8 hex> ids, never a bundled font id or a path", () => {
+    expect(JobFonts.safeParse([{ id: "custom-0a1b2c3d", url, sha256 }]).success).toBe(true);
+    for (const id of [
+      "Bangers-Regular",
+      "custom-0A1B2C3D",
+      "custom-0a1b2c3",
+      "custom-0a1b2c3d/../x",
+      "../custom-0a1b2c3d",
+      "",
+    ]) {
+      expect(JobFonts.safeParse([{ id, url, sha256 }]).success, id).toBe(false);
+    }
   });
 });
 

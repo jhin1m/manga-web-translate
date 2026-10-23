@@ -101,6 +101,13 @@ export const PrepareInputs = z.object({
   /** Artifact trước LLM của attempt trước (cùng prepare_input_rev) → bỏ qua detect/inpaint. */
   partial: z.object({ clean: Url, mask: Url, regions: z.array(OcrRegion) }).nullable(),
 });
+/**
+ * Font tuỳ chỉnh (`custom-*`) mà job dùng: worker tải về, kiểm sha256 rồi đăng ký id → file. Id không có ở đây
+ * (font gói sẵn, font đã xoá) → font gói sẵn hoặc fallback font thoại mặc định. Optional: API bản cũ (rollback) không gửi.
+ */
+export const JobFonts = z.array(
+  z.object({ id: z.string().regex(/^custom-[0-9a-f]{8}$/), url: Url, sha256: z.string().regex(/^[0-9a-f]{64}$/) }),
+);
 export const TranslateInputs = z.object({
   pages: z.array(
     z.object({
@@ -114,6 +121,7 @@ export const TranslateInputs = z.object({
   ),
   /** context=neighbors: nguồn + bản dịch trang n−1, nguồn trang n+1. */
   context_lines: z.array(ContextLine),
+  fonts: JobFonts.optional(),
 });
 export const ReinpaintInputs = z.object({ base_clean: Url, user_mask: Url });
 export const OcrRegionInputs = z.object({ original: Url, context_lines: z.array(ContextLine) });
@@ -140,6 +148,7 @@ export const ExportInputs = z.object({
   ),
   /** Slice gốc theo thứ tự upload — tên file khi xuất layout `original_slices`. */
   sources: z.array(z.object({ source_file_id: Uuid, ord: z.number().int().nonnegative() })),
+  fonts: JobFonts.optional(),
 });
 
 export const ClaimedJob = z.object({

@@ -6,7 +6,7 @@
  */
 import { chapters, pages, scoped, sourceFiles } from "@mtl/db";
 import { storageKeys } from "@mtl/shared";
-import { and, eq, type SQL } from "drizzle-orm";
+import { and, eq, ne, type SQL, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { z } from "zod";
@@ -90,7 +90,7 @@ pageRoutes.patch("/w/:ws/pages/:pageId", requireWorkspace(), async (c) => {
   const ws = c.get("workspaceId");
   const page = await sdb.byId(pages, c.req.param("pageId"), "page");
   await assertChapterLock(sdb, page.chapterId, c.get("user").id);
-  const row = await inJobTx(async (tx) => {
+  await inJobTx(async (tx) => {
     const ch = await lockChapter(tx, ws, page.chapterId);
     if (ch.status === "ingesting" || ch.status === "processing") {
       throw conflict("chapter_busy", "chương đang xử lý — chờ xong rồi xoá / khôi phục trang");
@@ -100,9 +100,12 @@ pageRoutes.patch("/w/:ws/pages/:pageId", requireWorkspace(), async (c) => {
       const visible = await t.select(pages, and(eq(pages.chapterId, ch.id), eq(pages.skipped, false)) as SQL);
       if (visible.every((p) => p.id === page.id)) throw conflict("last_page", "không xoá được trang cuối cùng");
     }
-    const [r] = await t.update(pages, eq(pages.id, page.id), { skipped: body.skipped });
+    // Chỉ đổi (và đánh dấu mốc theo đồng hồ DB) khi giá trị thật sự khác; PATCH lặp lại là no-op.
+    await tx
+      .update(pages)
+      .set({ skipped: body.skipped, skipChangedAt: sql`now()` })
+      .where(and(eq(pages.workspaceId, ws), eq(pages.id, page.id), ne(pages.skipped, body.skipped)));
     await refreshChapter(tx, ws, ch.id);
-    return r;
   });
-  return c.json({ id: page.id, skipped: row?.skipped ?? body.skipped });
+  return c.json({ id: page.id, skipped: body.skipped });
 });

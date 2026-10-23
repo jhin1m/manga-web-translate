@@ -6,7 +6,10 @@ import { APIError } from "better-auth/api";
 import { organization } from "better-auth/plugins";
 import { db } from "./db.ts";
 import { env } from "./env.ts";
+import { inviteEmail } from "./lib/invite-email.ts";
+import { recordInviteMail } from "./lib/invite-mail-status.ts";
 import { invitationLink, verifyInvitationToken } from "./lib/invite-token.ts";
+import { describeMailError, sendMail } from "./lib/mailer.ts";
 
 /** Header client gửi khi đăng ký từ link mời — bắt buộc: id khớp lời mời còn hạn của đúng email + token HMAC của id. */
 export const INVITATION_HEADER = "x-invitation-id";
@@ -71,9 +74,27 @@ export const auth = betterAuth({
       allowUserToCreateOrganization: false,
       invitationExpiresIn: INVITATION_TTL_S,
       cancelPendingInvitationsOnReInvite: true,
-      sendInvitationEmail: async ({ id, email, organization: org }) => {
-        // MVP chưa gửi mail: log link (owner/admin cũng lấy được qua GET /api/w/:ws/invitations/:id/link).
-        console.info(`[invite] ${email} → workspace "${org.name}": ${invitationLink(id)}`);
+      sendInvitationEmail: async ({ id, email, role, organization: org, inviter, invitation: inv }) => {
+        const link = invitationLink(id);
+        // Link chứa token đăng ký → chỉ log khi không gửi được mail; lời mời luôn được tạo dù mail lỗi.
+        try {
+          const mail = inviteEmail({
+            to: email,
+            workspaceName: org.name,
+            inviterName: inviter.user.name || inviter.user.email,
+            role,
+            link,
+            expiresAt: new Date(inv.expiresAt),
+          });
+          const sent = await sendMail(mail);
+          recordInviteMail(id, sent);
+          if (sent) return;
+        } catch (err) {
+          recordInviteMail(id, false);
+          console.error(`[invite] gửi email tới ${email} lỗi: ${describeMailError(err)}`);
+        }
+        // Owner/admin cũng lấy được link qua GET /api/w/:ws/invitations/:id/link.
+        console.info(`[invite] ${email} → workspace "${org.name}": ${link}`);
       },
       organizationHooks: {
         afterCreateOrganization: async ({ organization: org }) => {

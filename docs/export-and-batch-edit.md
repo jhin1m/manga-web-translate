@@ -29,6 +29,7 @@ Render phía server bằng chính `worker/mtl_pipeline/render.py` (một rendere
 - **Trang đã ẩn** (`pages.skipped`, xem [editor.md](./editor.md)): `ExportInputs.pages[].skipped`. Layout `pages`
   bỏ trang ẩn, file vẫn đánh số liên tục `001…n`; `original_slices` bỏ slice nằm trọn trong trang ẩn, slice vắt qua
   trang ẩn giữ pixel gốc ở đoạn đó. Hết trang hiện → 409 `no_pages`. Tìm/Thay và Áp glossary không đọc/ghi trang ẩn.
+  Ẩn / khôi phục trang sau lần xuất thành công cuối ghi `pages.skip_changed_at` (giờ DB) → chương hiện "Xuất lại" (`reexport`).
 - **Tải nền**: worker tải hết ảnh nền ra thư mục tạm trước khi render (URL ký 15', render chương dài có thể lâu hơn).
   Tên file `{ord+1}` đệm ≥ 3 chữ số (đủ chữ số khi > 999 ảnh).
 - **Ảnh**: `png_zip` luôn PNG; `cbz` quality 100 → PNG, < 100 → JPEG. Zip ghi ra file tạm (entry STORED), CBZ có
@@ -55,6 +56,22 @@ Chữ thường (không regex), phạm vi trong 1 chương, thay trong `region.t
 Apply = 1 transaction: mỗi page ghi bản cũ vào `page_state_history` với chung `batch_id`, version +1,
 `state_origin = user` (job AI sau đó không ghi đè, xem luật AI-không-ghi-đè). Undo khôi phục khi version hiện tại =
 version lúc áp + 1. History giữ 50 bản/page — batch quá cũ có thể không còn (404).
+
+## Ẩn chữ bỏ qua trong chương đã dịch (Cài đặt series → "Ẩn chữ khớp trong chương đã dịch…")
+
+Dùng lại lõi sửa hàng loạt của find/replace (`apps/api/src/lib/batch-edit.ts`): phép sửa là hàm thuần
+`state → {state, matches}`; preview/apply/undo, history và `batch_id` như trên. Phép này đặt `hidden = true` cho box
+chưa ẩn có `region_id` trỏ vào vùng có `source_text` khớp danh sách chữ bỏ qua đã **lưu** của series (box không gắn
+vùng khớp không bị đụng; không xoá box, không đổi bản dịch). Page bị đổi → chương vào "cần xuất lại".
+
+| API (`/api/w/:ws/series/:seriesId/ignore-apply/…`) | Ghi chú |
+|---|---|
+| `preview` `{}` | → `{chapters: [{chapter_id, number, boxes, pages, samples, versions}], skipped: [{chapter_id, reason, holder_name}], total_boxes}`; `reason`: `locked` (người khác giữ khoá) / `busy` (có job hoạt động) |
+| `apply` `{versions}` | `versions` gộp từ preview; → `{batch_id, boxes, chapters, skipped}` (`batch_id` null nếu không chương nào được áp); `reason` thêm `changed` (page đổi sau preview) |
+| `undo` `{batch_id}` | → `{pages, chapters, skipped}`; chương bị người khác khoá → `locked`; page đã sửa tiếp → bỏ qua (`changed`, kèm số trang) thay vì 409; không còn bản ghi nào của batch → 410 `batch_not_found` |
+
+Khác find/replace: không cần người dùng giữ khoá sẵn — mỗi chương lấy khoá riêng ngay trước khi ghi và nhả sau (giữ
+nguyên nếu chính mình đang giữ), 1 transaction/chương; chương bị bỏ qua không làm hỏng chương khác.
 
 ## Glossary
 

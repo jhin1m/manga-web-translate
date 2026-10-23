@@ -3,6 +3,8 @@ import { sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { z } from "zod";
 import { auth } from "../auth.ts";
+import { inviteMailSent } from "../lib/invite-mail-status.ts";
+import { mailEnabled } from "../lib/mailer.ts";
 import { parseJson } from "../lib/validate.ts";
 import { pendingInvitationLink } from "../lib/workspace-admin.ts";
 import { type AppEnv, requireSession, requireWorkspace } from "../middleware/workspace.ts";
@@ -41,8 +43,8 @@ workspaceRoutes.patch("/w/:ws/settings", requireWorkspace("admin"), async (c) =>
   return c.json({ settings: { worker_mode: saved.workerMode } });
 });
 
-/** Link mời có token đăng ký — chỉ owner/admin (member thấy invitation id qua better-auth nhưng không có token). */
+/** Link mời có token đăng ký (+ cờ mail đã bật và kết quả lần gửi gần nhất để UI báo đúng) — chỉ owner/admin (member thấy invitation id qua better-auth nhưng không có token). */
 workspaceRoutes.get("/w/:ws/invitations/:invitationId/link", requireWorkspace("admin"), async (c) => {
   const link = await pendingInvitationLink(c.get("workspaceId"), c.req.param("invitationId"));
-  return c.json({ link });
+  return c.json({ link, mail_enabled: mailEnabled(), mail_sent: inviteMailSent(c.req.param("invitationId")) });
 });

@@ -9,19 +9,25 @@ OCR (Bước 1), dịch theo ngữ cảnh cả chương + tự chèn chữ (Bư�
 ## Tính năng hiện có
 
 - **Upload**: thả ảnh lẻ / ZIP ở home hoặc màn series → tự đoán series + số chương, upload nền (song song, thử lại, tải
-  tiếp sau khi đóng tab). Cột ảnh gốc hiện ngay khi đang tải; xoá / khôi phục ảnh trước Bước 1.
+  tiếp sau khi đóng tab). Cột ảnh gốc hiện ngay khi đang tải; xoá / khôi phục và sắp lại thứ tự ảnh trước Bước 1
+  (kéo-thả, menu chuột phải, Alt+↑/↓, có hoàn tác).
 - **Pipeline 2 bước**: Bước 1 = ghép slice → cắt trang theo detector → xoá chữ (inpaint) + OCR bằng LLM, song song theo
-  trang. Bước 2 = dịch tuần tự theo chương (ngữ cảnh cuộn), auto-typeset theo hợp đồng layout dùng chung web ↔ server.
+  trang. Bước 2 = dịch tuần tự theo chương (ngữ cảnh cuộn), auto-typeset theo hợp đồng layout dùng chung web ↔ server;
+  màu chữ / viền lấy theo chữ gốc (đỏ, vàng viền nâu…), không đủ tương phản thì về đen / trắng.
 - **Editor** (react-konva): xem từng trang, sửa box chữ, undo/redo, autosave có version + khôi phục bản nháp, vẽ mask
   để xoá chữ lại, OCR lại vùng tự vẽ, Xem gốc / Chia đôi, bảng văn bản cả chương, khoá chương theo người sửa; rail
   công cụ + 1 panel theo công cụ, thanh nổi cạnh khối, cột thumbnail trang.
 - **Bỏ rác**: ẩn trang sau Bước 1 (không dịch, không xuất, khôi phục được); học ảnh credit theo series ("Luôn bỏ ở
   series này" → chương sau tự bỏ ảnh giống, dHash); gợi ý "Có thể là credit" theo khổ ảnh; danh sách chữ watermark bỏ
-  qua theo series (không gửi LLM, không chèn chữ).
+  qua theo series (không gửi LLM, không chèn chữ; khớp bỏ qua dấu cách, mục `/regex/` chạy RE2 ở API); áp ngược danh
+  sách cho chương đã dịch (xem trước → ẩn box → hoàn tác).
 - **Series**: ngôn ngữ nguồn `ko | ja | zh | en` → đích `vi | en | id | es | pt | fr`, định dạng strip / từng trang,
   kính ngữ, quy tắc xưng hô, giọng văn, font mặc định theo loại chữ, model Standard / Premium.
+- **Nhóm**: invite-only, mời thành viên qua email SMTP (không cấu hình thì gửi link trên UI); font tuỳ chỉnh TTF/OTF
+  upload ở Cài đặt nhóm, dùng trong editor, font mặc định series, auto-typeset và bản xuất.
 - **Glossary**: chung theo cặp ngôn ngữ + riêng series, CSV, áp glossary hàng loạt; tìm & thay có hoàn tác.
-- **Xuất**: ZIP PNG / CBZ, theo trang hoặc cắt lại đúng slice gốc; cảnh báo trước khi xuất.
+- **Xuất**: ZIP PNG / CBZ, theo trang hoặc cắt lại đúng slice gốc; cảnh báo trước khi xuất; sửa / dịch lại / ẩn hay
+  khôi phục trang sau lần xuất cuối → chương hiện "Xuất lại".
 - **Vận hành**: hàng đợi job có fencing, worker Python pull-only (Mac local hoặc Modal GPU), kill-switch ngân sách,
   backup Postgres + MinIO, `/healthz` — xem [deployment-guide.md](./docs/deployment-guide.md).
 
@@ -94,36 +100,36 @@ Mọi test tự động hiện dùng worker giả lập; chưa có số đo vớ
       soi mắt parity chữ Konva ↔ render.py trên 5 trang.
 - [ ] **Luồng dịch với worker LLM thật**: watermark trong danh sách bỏ qua không vào prompt và không có box; trang ẩn
       không bị dịch; xuất `original_slices` khi có trang ẩn (mở zip kiểm số file / thứ tự).
+- [ ] **Đợt tính năng nhỏ (kiểm tay)**: soi ≥ 3 trang thật có chữ màu (màu chữ dịch khớp tông gốc, đọc rõ); parity
+      chữ Konva ↔ render.py với font tuỳ chỉnh; gửi email lời mời qua SMTP thật (Gmail app password / Brevo) và bấm
+      link đăng ký; kéo-thả sắp ảnh trên Safari; màn series hiện "Xuất lại" sau khi ẩn trang ở chương đã xuất.
 - [ ] **Ngôn ngữ nguồn ngoài tiếng Hàn** (ja/zh/en) mới chỉ ghi chú "chưa kiểm định kỹ" — cần thử chương thật.
 
 ### Phải làm
 
-- [ ] **Deploy**: chạy migration mới (`0009_series_skip_images`, `0010_series_ignore_text`); worker Mac/Modal phải lên
-      pipeline **0.4.2** cùng lúc API (`MIN_PIPELINE_VERSION`), không thì hàng đợi dừng.
+- [ ] **Deploy**: chạy migration mới (`0009_series_skip_images`, `0010_series_ignore_text`,
+      `0011_pages_skip_changed_at`, `0012_workspace_fonts`); worker Mac/Modal phải lên pipeline **0.5.1** (font tuỳ
+      chỉnh) **trước** khi deploy API (`MIN_PIPELINE_VERSION`), không thì hàng đợi dừng; VPS cần dựng được
+      addon `re2` — xem checklist ở `docs/deployment-guide.md` mục 4.
 - [ ] **Rà giấy phép** trước khi thương mại hoá / công khai rộng: MVP được dùng code + model + font mở bất kể license
       (GPL/AGPL…); repo chưa có file `LICENSE`.
 - [ ] **Phase 8 — trước khi mở đăng ký công khai**: quota theo workspace (402), BYOK, ma trận role chi tiết, admin nền
       tảng, takedown, ToS.
 - [ ] **Phase 9 — Chrome extension** (phác thảo, sau MVP).
-- [ ] Gửi email lời mời (hiện link mời chỉ hiện trên UI cho owner/admin và trong log API).
 
 ### Chức năng còn thiếu
 
-- [ ] Tự đổi màu chữ theo màu nền.
-- [ ] Thêm font tuỳ chỉnh trong cài đặt (hiện chỉ font có sẵn trong `worker/fonts`).
-- [ ] Ẩn/khôi phục trang sau khi đã xuất chưa đánh dấu "cần xuất lại".
 - [ ] AI phân loại ảnh credit / quảng cáo (hiện chỉ học theo dHash + gợi ý theo khổ ảnh); credit cùng khổ đã bị ghép
-      vào trang lớn sau Bước 1 chỉ ẩn được cả trang; logo watermark dạng hình; regex cho chữ bỏ qua; áp danh sách chữ bỏ
-      qua ngược cho chương đã dịch.
+      vào trang lớn sau Bước 1 chỉ ẩn được cả trang; logo watermark dạng hình.
 - [ ] Đích CJK / Thái, chữ dọc khi typeset; dịch SFX + font SFX; phân loại thoại theo nghĩa (suy nghĩ, hét, khung dẫn).
 - [ ] Tự nhận ngôn ngữ nguồn từ ảnh; OCR local (manga-ocr, RapidOCR) thay LLM.
-- [ ] Sắp xếp tay thứ tự file khi upload (hiện natural sort theo tên); thumbnail do server sinh.
+- [ ] Thumbnail do server sinh (thứ tự ảnh trước Bước 1 đã sắp tay được: kéo-thả / menu / Alt+↑↓).
 - [ ] Glossary: chuyển / sao chép entry giữa các cặp ngôn ngữ, cột cặp ngôn ngữ trong CSV.
 - [ ] Chống phát lại dispatch Modal triệt để (lưu `dispatch_id` đã nhận).
 
 ### Giới hạn đã biết
 
-- Watermark: URL bị OCR tách bằng dấu cách (`discord . gg`) không khớp; watermark detector không bắt thì còn trên ảnh.
+- Watermark: watermark detector không bắt thì còn trên ảnh.
 - Credit cùng mẫu nhưng đổi chữ (đổi tên người dịch) có thể không khớp ảnh đã học.
 - Ảnh rất cao (> 16k px) có thể không tính được dấu nhận dạng trên Safari → ảnh đó không tự bỏ (upload vẫn chạy).
 - Free-tier Gemini hết hạn mức → job tự thử lại tới ~4 giờ trước khi báo lỗi.

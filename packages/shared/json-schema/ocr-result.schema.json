@@ -49,6 +49,28 @@
               "light_on_dark"
             ]
           },
+          "text_color": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^#[0-9a-fA-F]{6}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "outline_color": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^#[0-9a-fA-F]{6}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "bubble_id": {
             "anyOf": [
               {

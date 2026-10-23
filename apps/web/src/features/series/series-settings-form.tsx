@@ -8,10 +8,10 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { type FormEvent, useState } from "react";
 import { errorMessage } from "../../lib/api.ts";
+import { useBundledFontIds, useWorkspaceFonts } from "../fonts/api.ts";
 import { fetchGlossary, glossaryKey } from "../glossary/api.ts";
 import {
   deleteSeries,
-  FONT_IDS,
   type FontSlot,
   type PronounRule,
   patchSeries,
@@ -19,6 +19,7 @@ import {
   type SeriesSettings,
   seriesKeys,
 } from "./api.ts";
+import { IgnoreApplySection } from "./ignore-apply-section.tsx";
 import { parseIgnoreText } from "./ignore-text-input.ts";
 import {
   addressPlaceholder,
@@ -56,6 +57,8 @@ const toForm = (s: Series): Form => ({
 export function SeriesSettingsForm({ ws, series }: { ws: string; series: Series }) {
   const qc = useQueryClient();
   const [f, setF] = useState<Form>(() => toForm(series));
+  const bundled = useBundledFontIds();
+  const custom = useWorkspaceFonts(ws);
   const [saved, setSaved] = useState<string | null>(null);
   const [ignoreRaw, setIgnoreRaw] = useState(() => series.ignore_text.join("\n"));
   const ignore = parseIgnoreText(ignoreRaw);
@@ -206,8 +209,18 @@ export function SeriesSettingsForm({ ws, series }: { ws: string; series: Series 
         ) : (
           <span className="hint">
             Mỗi dòng 1 mục. Vùng chữ chứa mục nào thì không dịch, không chèn chữ (chương đã dịch không đổi). Dùng URL
-            hoặc tên nhóm cụ thể — mục chung chung dễ bỏ nhầm thoại.
+            hoặc tên nhóm cụ thể — mục chung chung dễ bỏ nhầm thoại. Bỏ qua dấu cách khi so khớp; bọc mục trong dấu /
+            {"(vd /discord\\s*\\.\\s*gg/)"} để dùng regex, không phân biệt hoa/thường.
           </span>
+        )}
+        {series.ignore_text.length > 0 && (
+          <IgnoreApplySection
+            ws={ws}
+            seriesId={series.id}
+            disabledReason={
+              ignoreRaw !== series.ignore_text.join("\n") ? "Lưu cài đặt trước để áp danh sách mới." : null
+            }
+          />
         )}
       </fieldset>
 
@@ -228,11 +241,20 @@ export function SeriesSettingsForm({ ws, series }: { ws: string; series: Series 
                 }}
               >
                 <option value="">{empty}</option>
-                {FONT_IDS.map((id) => (
+                {(bundled.data ?? []).map((id) => (
                   <option key={id} value={id}>
                     {id}
                   </option>
                 ))}
+                {(custom.data ?? []).length > 0 && (
+                  <optgroup label="Font của nhóm">
+                    {(custom.data ?? []).map((font) => (
+                      <option key={font.id} value={font.id}>
+                        {font.name}
+                      </option>
+                    ))}
+                  </optgroup>
+                )}
               </select>
               {hint && <span className="hint">{hint}</span>}
             </div>

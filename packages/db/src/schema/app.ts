@@ -175,6 +175,33 @@ export const seriesSkipImages = pgTable(
   ],
 );
 
+/**
+ * Font tuỳ chỉnh của workspace (TTF/OTF đã qua kiểm tra). `font_id` (`custom-<8 hex>`) là định danh dùng chung ở
+ * series.default_fonts, TextBox.font_family và job; metrics đọc từ file lúc upload theo đúng quy tắc của worker.
+ */
+export const workspaceFonts = pgTable(
+  "workspace_fonts",
+  {
+    id: idPk(),
+    workspaceId: workspaceId(),
+    fontId: text("font_id").notNull().unique(),
+    name: text("name").notNull(),
+    fileKey: text("file_key").notNull(),
+    sha256: text("sha256").notNull(),
+    bytes: integer("bytes").notNull(),
+    unitsPerEm: integer("units_per_em").notNull(),
+    ascent: integer("ascent").notNull(),
+    descent: integer("descent").notNull(),
+    metricsSource: text("metrics_source").notNull(),
+    viComplete: boolean("vi_complete").notNull(),
+    /** Chữ Việt font không có (rỗng khi viComplete). */
+    missing: text("missing").array().notNull().default(sql`'{}'::text[]`),
+    createdBy: text("created_by"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [unique("workspace_fonts_ws_sha_uq").on(t.workspaceId, t.sha256)],
+);
+
 export const pages = pgTable(
   "pages",
   {
@@ -199,6 +226,8 @@ export const pages = pgTable(
     cutFlag: boolean("cut_flag").notNull().default(false),
     /** Người dùng xoá (ẩn) trang: không dịch, không tính trạng thái chương, không xuất — khôi phục được. */
     skipped: boolean("skipped").notNull().default(false),
+    /** Lần cuối `skipped` đổi giá trị (giờ DB) — ẩn/khôi phục sau lần xuất cuối thì chương cần xuất lại. */
+    skipChangedAt: timestamp("skip_changed_at", { withTimezone: true }),
     status: text("status").$type<PageStatus>().notNull().default("pending"),
     ...timestamps,
   },

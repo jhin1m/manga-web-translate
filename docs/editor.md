@@ -38,6 +38,13 @@ upload (`source-rail.tsx`, `use-source-images.ts`): ảnh thả trong tab hiện
 `source_files.skip = 'user'` (giữ hàng để hoàn tác và để tải tiếp khớp bộ file); commit/ingest bỏ ảnh `skip`, nút
 Bước 1 đếm ảnh còn dùng. Người khác giữ khoá → 423; đã có page → 409.
 
+Đổi thứ tự ảnh (cùng điều kiện `editable`, thứ tự này là thứ tự Bước 1 ghép/cắt): kéo-thả thumbnail (vạch xanh báo chỗ
+thả), menu chuột phải "Đưa lên đầu / Lên 1 / Xuống 1 / Đưa xuống cuối", hoặc Alt+↑/↓ trên thumbnail đang focus (focus đi
+theo ảnh). Cập nhật lạc quan, lỗi → trả thứ tự cũ + toast; toast "Đã đổi thứ tự" có "Hoàn tác". Ảnh đã xoá vẫn giữ chỗ.
+`PUT …/chapters/:id/source-files/order {ids}`: `ids` phải đúng bộ source file của chương (thiếu / thừa / trùng → 400
+`source_set_mismatch`), ghi `ord = vị trí`; cùng guard với PATCH skip (423 người khác giữ khoá, 409 `chapter_not_draft`).
+Ingest đọc theo `ord` nên worker không đổi. Kéo-thả HTML5 gốc không chạy trên màn cảm ứng — dùng menu.
+
 **Sau Bước 1** "Ẩn trang n" ở menu chuột phải thumbnail hoặc "Ẩn trang này" ở panel Chọn (chưa chọn khối) ẩn trang
 (`PATCH /pages/:id {skipped}`, cần giữ khoá; chương đang chạy → 409 `chapter_busy`; trang hiện cuối cùng → 409
 `last_page`). Trang ẩn giữ dữ liệu, hiện mờ "Đã ẩn" đúng vị trí trong cột thumbnail; bấm hoặc chuột phải → "Khôi phục
@@ -95,6 +102,15 @@ fill đè. Ngắt dòng/khớp cỡ (`measure.ts`) cùng thuật toán `worker/m
 người gõ = xuống dòng. Box có `text` mà `lines` rỗng (find/replace, áp glossary để renderer ngắt lại) → vẽ theo
 `layoutBox` lúc hiển thị, không ghi state; export phía server làm y hệt (`render.ensure_lines`). Font: `apps/web/public/fonts/` là bản sao `worker/fonts/` —
 `pnpm --filter @mtl/web fonts:sync` sau khi đổi font; `pnpm test` của web fail nếu lệch.
+
+**Font của nhóm** (Cài đặt nhóm → tab Font, `/w/$ws/settings`, owner/admin upload TTF/OTF ≤ 10MB, ≤ 20 font): `loadFonts(fetchCustom)` ở
+`fonts.ts` nạp thêm từng font bằng `FontFace(font_id, url(presigned))` (`font_id` = `custom-<8 hex>`), metric
+(`units_per_em/ascent/descent`) lấy từ API — API đọc bằng fontkit theo đúng quy tắc `read_metrics` của worker (test parity
+với manifest). Danh sách lấy tươi mỗi phiên chương (`staleTime: 0`) nên URL còn hạn; font nạp lỗi (URL hết hạn) → lấy lại danh sách
+1 lần rồi nạp lại; không lấy được font nhóm thì editor vẫn chạy với font gói sẵn. Panel Chọn liệt kê thêm nhóm "Font của nhóm".
+Box có font không biết (font nhóm đã xoá, state cũ): metric theo font thoại mặc định và `canvasFont` có family dự phòng là font đó
+(`"<font_id>", "<mặc định>"`) nên đo và vẽ nhất quán, không lỗi; select hiện `<id> (thiếu)`. Font thoại mặc định của series dùng
+được khi là font gói sẵn hoặc font nhóm đã nạp (`kit.knows`).
 
 Cờ "tràn khung" (bảng văn bản, cột thumbnail, panel Chọn, cảnh báo xuất) dùng chung `boxOverflow` trong `measure.ts`, có dung
 sai `max(2px, 4% cạnh box theo trục tràn)`: box auto_fit do render.py chọn cỡ, đo lại ở trình duyệt lệch vài phần

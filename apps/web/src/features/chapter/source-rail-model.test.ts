@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { SourceFileImage } from "./api.ts";
-import { creditHints, sourceCounts, sourceItems, sourceLabel, stepSource } from "./source-rail-model.ts";
+import { creditHints, moveItem, sourceCounts, sourceItems, sourceLabel, stepSource } from "./source-rail-model.ts";
 
 const file = (
   id: string,
@@ -85,5 +85,27 @@ describe("source rail model", () => {
     expect(stepSource(items, "c", 1)).toBeUndefined();
     expect(stepSource(items, "a", -1)).toBeUndefined();
     expect(stepSource(items, null, 1)).toBe("a");
+  });
+});
+
+describe("moveItem", () => {
+  const ids = ["a", "b", "c", "d"];
+
+  it("moves forward, backward, to the ends, and never mutates the input", () => {
+    expect(moveItem(ids, 0, 2)).toEqual(["b", "c", "a", "d"]);
+    expect(moveItem(ids, 3, 1)).toEqual(["a", "d", "b", "c"]);
+    expect(moveItem(ids, 2, 0)).toEqual(["c", "a", "b", "d"]);
+    expect(moveItem(ids, 1, 3)).toEqual(["a", "c", "d", "b"]);
+    expect(ids).toEqual(["a", "b", "c", "d"]);
+  });
+
+  it("clamps the target and returns the same array when nothing changes", () => {
+    expect(moveItem(ids, 1, -5)).toEqual(["b", "a", "c", "d"]);
+    expect(moveItem(ids, 1, 99)).toEqual(["a", "c", "d", "b"]);
+    expect(moveItem(ids, 2, 2)).toBe(ids);
+    expect(moveItem(ids, 0, -1)).toBe(ids);
+    expect(moveItem(ids, 3, 9)).toBe(ids);
+    expect(moveItem(ids, 7, 0)).toBe(ids);
+    expect(moveItem([], 0, 0)).toEqual([]);
   });
 });

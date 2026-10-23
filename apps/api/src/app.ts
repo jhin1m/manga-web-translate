@@ -9,6 +9,7 @@ import { chapterRoutes } from "./routes/chapters.ts";
 import { type DevLogin, devAuthRoutes } from "./routes/dev-auth.ts";
 import { exportRoutes } from "./routes/export.ts";
 import { findReplaceRoutes } from "./routes/find-replace.ts";
+import { fontRoutes } from "./routes/fonts.ts";
 import { glossaryRoutes } from "./routes/glossary.ts";
 import { healthRoutes } from "./routes/health.ts";
 import { jobRoutes } from "./routes/jobs.ts";
@@ -16,6 +17,7 @@ import { pageStateRoutes } from "./routes/page-state.ts";
 import { pageRoutes } from "./routes/pages.ts";
 import { progressRoutes } from "./routes/progress.ts";
 import { seriesRoutes } from "./routes/series.ts";
+import { seriesIgnoreApplyRoutes } from "./routes/series-ignore-apply.ts";
 import { seriesSkipImageRoutes } from "./routes/series-skip-images.ts";
 import { uploadRoutes } from "./routes/uploads.ts";
 import { workerRoutes } from "./routes/worker.ts";
@@ -44,12 +46,14 @@ export function createApp({ devAutoLogin = envDevLogin() }: { devAutoLogin?: Dev
   app.route("/api", progressRoutes);
   app.route("/api", seriesRoutes);
   app.route("/api", seriesSkipImageRoutes);
+  app.route("/api", seriesIgnoreApplyRoutes);
   app.route("/api", chapterRoutes);
   app.route("/api", pageRoutes);
   app.route("/api", pageStateRoutes);
   app.route("/api", glossaryRoutes);
   app.route("/api", exportRoutes);
   app.route("/api", findReplaceRoutes);
+  app.route("/api", fontRoutes);
 
   // Worker (Bearer token worker, không cookie) — giao thức có fencing, xem jobs/queue.ts.
   app.route("/worker/v1", workerRoutes);

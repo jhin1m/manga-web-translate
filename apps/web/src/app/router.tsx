@@ -27,6 +27,7 @@ import { errorMessage } from "../lib/api.ts";
 import { setCurrentWs, useCurrentWorkspace } from "../lib/current-workspace.ts";
 import { AcceptInvitePage } from "../routes/accept-invite.tsx";
 import { LoginPage } from "../routes/login.tsx";
+import { WorkspaceSettingsPage } from "../routes/workspace-settings.tsx";
 import { MembersPage, WorkspacePickerPage } from "../routes/workspaces.tsx";
 import { AppShell, useWorkspace } from "./app-shell.tsx";
 import { AuthGate } from "./layout.tsx";
@@ -186,6 +187,12 @@ const glossaryRoute = createRoute({
 
 const membersRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "members", component: MembersPage });
 
+const workspaceSettingsRoute = createRoute({
+  getParentRoute: () => workspaceRoute,
+  path: "settings",
+  component: WorkspaceSettingsPage,
+});
+
 // ---- Path cũ → path mới (giữ bookmark/link cũ). ----
 const legacySeriesListRoute = createRoute({
   getParentRoute: () => workspaceRoute,
@@ -249,6 +256,7 @@ export const routeTree = rootRoute.addChildren([
       seriesRoute,
       glossaryRoute,
       membersRoute,
+      workspaceSettingsRoute,
       legacySeriesListRoute,
       legacySeriesRoute,
       legacySeriesSettingsRoute,

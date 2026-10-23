@@ -327,6 +327,26 @@
   align-items: center;
   gap: 3px;
 }
+/* Kéo-thả đổi thứ tự: ảnh đang kéo mờ đi, vạch xanh ở khe sẽ thả. */
+.cw-thumb-item[data-dragging] {
+  opacity: 0.4;
+}
+.cw-thumb-item[data-drop]::before {
+  content: "";
+  position: absolute;
+  left: -2px;
+  right: -2px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--c-accent);
+  pointer-events: none;
+}
+.cw-thumb-item[data-drop="before"]::before {
+  top: calc(var(--sp-3) / -2 - 1.5px);
+}
+.cw-thumb-item[data-drop="after"]::before {
+  bottom: calc(var(--sp-3) / -2 - 1.5px);
+}
 .cw-thumb {
   position: relative;
   width: 72px;

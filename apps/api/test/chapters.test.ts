@@ -377,6 +377,78 @@ describe("skip source files before step 1", () => {
   });
 });
 
+describe("reorder source files before step 1", () => {
+  async function draftChapter(n: number, number: string) {
+    const files = Array.from({ length: n }, (_, i) => ({
+      name: `${i + 1}.png`,
+      content_type: "image/png",
+      bytes: PNG_1PX.length,
+    }));
+    const created = await json<{ chapter: { id: string }; files: Upload[] }>(
+      await api("/chapters", { method: "POST", body: { series_id: A.seriesId, number, files } }),
+      201,
+    );
+    await Promise.all(created.files.map((f) => postFile(f, PNG_1PX)));
+    return { ch: created.chapter.id, ids: created.files.map((f) => f.id) };
+  }
+  const reorder = (ch: string, ids: string[], cookie?: string) =>
+    api(`/chapters/${ch}/source-files/order`, { method: "PUT", body: { ids }, ...(cookie ? { cookie } : {}) });
+  const listed = async (ch: string) =>
+    (await json<{ source_files: { id: string }[] }>(await api(`/chapters/${ch}`), 200)).source_files.map((f) => f.id);
+
+  it("rewrites ord, keeps skipped images in place, and ingest follows the new order", async () => {
+    const { ch, ids } = await draftChapter(3, "8");
+    const [a, b, c] = ids as [string, string, string];
+    await json(await api(`/chapters/${ch}/source-files/${b}`, { method: "PATCH", body: { skip: "user" } }), 200);
+    const res = await json<{ source_files: { id: string; ord: number; skip: string | null }[] }>(
+      await reorder(ch, [c, b, a]),
+      200,
+    );
+    expect(res.source_files.map((f) => [f.id, f.ord, f.skip])).toEqual([
+      [c, 0, null],
+      [b, 1, "user"],
+      [a, 2, null],
+    ]);
+    expect(await listed(ch)).toEqual([c, b, a]);
+
+    await json(await api(`/chapters/${ch}/commit`, { method: "POST", body: {} }), 202);
+    const ij = (await claimFor(ch, "chapter.ingest")).find((j) => j.payload.chapter_id === ch) as Claimed;
+    expect((ij.inputs as { sources: { source_file_id: string }[] }).sources.map((s) => s.source_file_id)).toEqual([
+      c,
+      a,
+    ]);
+    await json(await api(`/chapters/${ch}/cancel`, { method: "POST", body: {} }), 200);
+  });
+
+  it("rejects a missing, extra, duplicate or foreign id with 400 and leaves the order alone", async () => {
+    const { ch, ids } = await draftChapter(3, "8.1");
+    const other = await draftChapter(1, "8.2");
+    const [a, b, c] = ids as [string, string, string];
+    const bad = [[a, b], [a, b, c, other.ids[0] as string], [a, a, b], [a, b, other.ids[0] as string], []];
+    for (const list of bad) {
+      const res = await reorder(ch, list as string[]);
+      expect(res.status, JSON.stringify(list)).toBe(400);
+    }
+    expect((await json<{ error: string }>(await reorder(ch, [a, b]), 400)).error).toBe("source_set_mismatch");
+    expect((await api(`/chapters/${ch}/source-files/order`, { method: "PUT", body: { ids: ["x"] } })).status).toBe(400);
+    expect(await listed(ch)).toEqual([a, b, c]);
+  });
+
+  it("refuses once the chapter is past step 1 (409, like skip) and while someone else holds the lock (423)", async () => {
+    const { ch, ids } = await draftChapter(2, "8.3");
+    const [a, b] = ids as [string, string];
+    await json(await api(`/chapters/${ch}/lock`, { method: "POST" }), 200);
+    expect((await reorder(ch, [b, a], memberCookie)).status).toBe(423);
+    expect((await api(`/chapters/${ch}/lock`, { method: "DELETE" })).status).toBe(204);
+
+    await json(await api(`/chapters/${ch}/commit`, { method: "POST", body: {} }), 202);
+    const res = await reorder(ch, [b, a]);
+    expect(res.status).toBe(409);
+    expect((await res.json()) as { error: string }).toMatchObject({ error: "chapter_not_draft" });
+    await json(await api(`/chapters/${ch}/cancel`, { method: "POST", body: {} }), 200);
+  });
+});
+
 describe("hide pages after step 1", () => {
   /** Job loại `type` của đúng chương này (test khác có thể để lại job đang chờ). */
   const claimOwn = async (ch: string, type: string) =>
@@ -521,6 +593,9 @@ describe("ignored text (watermark) per series", () => {
     expect((await patch(["http://a"])).status).toBe(400);
     expect((await patch(["ắ".normalize("NFD")])).status).toBe(400);
     expect((await patch(["x".repeat(101)])).status).toBe(400);
+    // RE2 không có tham chiếu ngược / lookaround.
+    expect((await patch(["/(abc)\\1/"])).status).toBe(400);
+    expect((await patch(["/foo(?=bar)/"])).status).toBe(400);
     expect((await patch(Array.from({ length: 51 }, (_, i) => `mục ${i}`))).status).toBe(400);
     const t1 = await json<typeof s>(await patch([" discord.gg ", "DISCORD.GG", "Asura Scans"]), 200);
     expect(t1).toMatchObject({
@@ -728,6 +803,63 @@ describe("recent chapters", () => {
     );
     expect(d.chapters.find((c) => c.id === clean)).toMatchObject({ exported: true, reexport: false });
     expect(d.chapters.find((c) => c.id === retranslated)).toMatchObject({ exported: false, reexport: true });
+  });
+
+  it("hiding or restoring a page after the last export needs re-export; a no-op PATCH does not", async () => {
+    const R = await seedWorkspace("reexport-skip");
+    const sdb = scoped(db, R.workspaceId);
+    const ch = await sdb.insert(chapters, { seriesId: R.seriesId, number: "1", status: "review" });
+    const ids: [string, string] = [pageId(ch.id, 1, 0), pageId(ch.id, 1, 1)];
+    for (const [ord, id] of ids.entries()) {
+      await sdb.insert(pages, {
+        id,
+        chapterId: ch.id,
+        ord,
+        width: 10,
+        height: 10,
+        originalKey: `ws/${R.workspaceId}/ch/${ch.id}/ingest/1/${ord}.png`,
+        originalSha256: "ab".repeat(32),
+        status: "ready",
+      });
+      await sdb.insert(pageStates, {
+        pageId: id,
+        state: emptyPageState(10, 10),
+        updatedAt: new Date(Date.now() - 30 * 60_000),
+      });
+    }
+    const exportAt = (min: number) =>
+      sdb.insert(jobs, {
+        type: "chapter.export",
+        status: "succeeded",
+        payload: { type: "chapter.export" } as never,
+        inputRev: "x",
+        idempotencyKey: uniq("export"),
+        chapterId: ch.id,
+        createdAt: new Date(Date.now() - min * 60_000),
+      });
+    const hide = (pageId: string, skipped: boolean) =>
+      call(`/api/w/${R.workspaceId}/pages/${pageId}`, { method: "PATCH", cookie: R.cookie, body: { skipped } });
+    const reexport = async () =>
+      (
+        await json<{ chapters: { id: string; reexport: boolean }[] }>(
+          await call(`/api/w/${R.workspaceId}/series/${R.seriesId}`, { cookie: R.cookie }),
+          200,
+        )
+      ).chapters.find((c) => c.id === ch.id)?.reexport;
+    await json(await call(`/api/w/${R.workspaceId}/chapters/${ch.id}/lock`, { method: "POST", cookie: R.cookie }), 200);
+
+    await exportAt(20);
+    expect(await reexport()).toBe(false);
+    await json(await hide(ids[0], true), 200);
+    expect(await reexport()).toBe(true);
+    await json(await hide(ids[0], false), 200);
+    expect(await reexport()).toBe(true);
+
+    // Xuất lại sau lần đổi cuối → hết cờ; PATCH cùng giá trị không bật lại.
+    await exportAt(-1);
+    expect(await reexport()).toBe(false);
+    await json(await hide(ids[0], false), 200);
+    expect(await reexport()).toBe(false);
   });
 
   it("series detail and list carry page_counts / exported / next_number", async () => {

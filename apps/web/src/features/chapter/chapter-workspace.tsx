@@ -68,7 +68,7 @@ import { type ChapterCommand, primaryAction } from "./primary-action.ts";
 import { SelectPanel } from "./select-panel.tsx";
 import { ShortcutHelp } from "./shortcut-help.tsx";
 import { SourceRail } from "./source-rail.tsx";
-import { type SourceItem, sourceCounts, stepSource } from "./source-rail-model.ts";
+import { moveItem, type SourceItem, sourceCounts, stepSource } from "./source-rail-model.ts";
 import { SourceViewer } from "./source-viewer.tsx";
 import { chapterChip, isChapterSettled } from "./status.ts";
 import { filterRows, KIND_LABEL, type Row, rowKeyOfBox, sameKindBoxIds, type TableFilter } from "./text-table/rows.ts";
@@ -77,7 +77,7 @@ import { OcrToolView, TextToolView } from "./tool-panels.tsx";
 import { ToolRail } from "./tool-rail.tsx";
 import { isWidePanel, PANEL_TITLE, type PanelId, type RailTarget, railClick } from "./tool-rail-model.ts";
 import { useChapterData } from "./use-chapter-data.ts";
-import { useSetSourceSkip, useSourceImages } from "./use-source-images.ts";
+import { useReorderSources, useSetSourceSkip, useSourceImages } from "./use-source-images.ts";
 
 const URL_SYNC_MS = 400;
 /** Thông báo kết quả (info) tự ẩn sau chừng này; lỗi giữ tới khi đóng. */
@@ -98,7 +98,7 @@ type Notice = {
   untilStable?: boolean;
   actions?: { label: string; run(): void }[];
   /** Nhóm thông báo — "skip": khôi phục ảnh/trang chỉ đóng thông báo "Đã xoá / Đã ẩn…", không đụng lỗi khác. */
-  key?: "skip";
+  key?: "skip" | "reorder";
 };
 
 /** Dịch chương mà có ảnh bị loại: giữ tới khi chương chạy xong lượt xử lý vừa bắt đầu. */
@@ -543,6 +543,37 @@ function Workspace({ ws, seriesId, chapterId, page: searchPage, drawer: searchDr
       ),
     [sourceSkip.mutate, notify, alwaysSkip],
   );
+  const sourceReorder = useReorderSources(ws, chapterId, (e) => notify({ tone: "danger", text: errorMessage(e) }));
+  /** Đưa ảnh `id` tới vị trí `to` (0-based); toast "Hoàn tác" trả đúng thứ tự trước đó. */
+  const moveSource = useCallback(
+    (id: string, to: number) => {
+      const before = sources.map((it) => it.id);
+      const ids = moveItem(before, before.indexOf(id), to);
+      if (ids === before) return;
+      sourceReorder.mutate(
+        { ids },
+        {
+          onSuccess: () =>
+            notify({
+              tone: "info",
+              key: "reorder",
+              text: "Đã đổi thứ tự.",
+              actions: [
+                {
+                  label: "Hoàn tác",
+                  run: () =>
+                    sourceReorder.mutate(
+                      { ids: before },
+                      { onSuccess: () => setNotice((n) => (n?.key === "reorder" ? null : n)) },
+                    ),
+                },
+              ],
+            }),
+        },
+      );
+    },
+    [sources, sourceReorder.mutate, notify],
+  );
   // ---- Xoá (ẩn) / khôi phục trang sau Bước 1 ----
   const pagesEditable = session.lockEnabled && session.lock.state.status === "held";
   const pageSkip = useMutation({
@@ -601,7 +632,9 @@ function Workspace({ ws, seriesId, chapterId, page: searchPage, drawer: searchDr
   );
   const idx = pages.findIndex((p) => p.id === activeId);
   const activeMeta = pages[idx];
-  const defaultFont = kit ? dialogueFont(kit.manifest, series.data?.default_fonts.dialogue) : "Bangers-Regular";
+  const defaultFont = kit
+    ? dialogueFont(kit.manifest, series.data?.default_fonts.dialogue, kit.knows)
+    : "Bangers-Regular";
   const ocr = useOcrRegion(ws, activeId ?? "", defaultFont, { w: activeMeta?.width ?? 0, h: activeMeta?.height ?? 0 });
   const ocrStart = ocr.start;
   const onOcr = useCallback((r: PageRect) => void ocrStart(r), [ocrStart]);
@@ -937,6 +970,7 @@ function Workspace({ ws, seriesId, chapterId, page: searchPage, drawer: searchDr
           cutting={cutting}
           onPick={setSourcePick}
           onSkip={skipSource}
+          onMove={moveSource}
         />
       ) : (
         <PageRail

@@ -1,29 +1,24 @@
 /**
  * Find/replace chữ thường (không regex) trong một chương và "áp lại glossary" vào bản dịch có sẵn (không gọi LLM).
  *
- * Luồng chung: preview (không cần khoá) → danh sách khớp + `versions` của các page bị ảnh hưởng → apply gửi lại
- * `versions` (bắt buộc đã xem trước): page đổi sau preview → 409 `preview_stale`. Apply cần khoá chương (423), chạy
- * 1 transaction: mỗi page ghi bản cũ vào `page_state_history` với chung `batch_id`, version +1. Hoàn tác = khôi phục
- * theo `batch_id`, chỉ khi các page chưa bị sửa tiếp (version hiện tại = version lúc áp + 1), không thì 409.
+ * Luồng chung (lõi ở lib/batch-edit.ts): preview (không cần khoá) → apply gửi lại `versions` (bắt buộc đã xem trước,
+ * page đổi sau preview → 409 `preview_stale`) → hoàn tác theo `batch_id` (409 nếu page đã bị sửa tiếp). Apply và hoàn
+ * tác cần khoá chương (423).
  *
  * Thay trong `region.translation` và `text_box.text`; box bị đổi có `lines: []` → renderer (editor + export) ngắt
  * lại theo typesetter (docs/typeset-layout-contract.md, trường `lines[]`).
  */
-import { chapters, glossaryEntries, pageStateHistory, pageStates, pages, type Scoped, series } from "@mtl/db";
+import { chapters, glossaryEntries, type Scoped, series } from "@mtl/db";
 import type { PageState } from "@mtl/shared";
-import { and, eq, inArray, type SQL } from "drizzle-orm";
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
-import { v7 as uuidv7 } from "uuid";
 import { z } from "zod";
+import { applyBatch, chapterPages, httpError, previewPages, undoBatch } from "../lib/batch-edit.ts";
 import { assertChapterLock } from "../lib/chapter-lock.ts";
 import { mergeBySourceTerm, seriesGlossaryWhere } from "../lib/glossary-scope.ts";
 import { parseJson } from "../lib/validate.ts";
 import { type AppEnv, requireWorkspace } from "../middleware/workspace.ts";
-import { pruneHistory } from "./page-state.ts";
 
-/** Trần danh sách khớp trả về (tổng `total` vẫn đếm đủ). */
-export const MAX_PREVIEW_MATCHES = 1000;
 const MAX_RULES = 200;
 
 const Term = z
@@ -113,127 +108,6 @@ export function applyRules(state: PageState, rules: ReplaceRule[]): { state: Pag
   return { state: { ...state, regions, text_boxes: boxes }, matches };
 }
 
-// ---- DB ----
-
-type PageRow = { id: string; ord: number; version: number; state: PageState };
-
-const httpError = (status: 404 | 409, body: Record<string, unknown>) =>
-  new HTTPException(status, { res: Response.json(body, { status }) });
-
-async function chapterPages(sdb: Scoped, chapterId: string): Promise<PageRow[]> {
-  // Trang ẩn không bị tìm / thay / áp glossary.
-  const ps = await sdb.select(pages, and(eq(pages.chapterId, chapterId), eq(pages.skipped, false)) as SQL);
-  if (ps.length === 0) return [];
-  const ord = new Map(ps.map((p) => [p.id, p.ord]));
-  const states = await sdb.select(
-    pageStates,
-    inArray(
-      pageStates.pageId,
-      ps.map((p) => p.id),
-    ),
-  );
-  return states
-    .filter((s): s is typeof s & { state: PageState } => s.state !== null)
-    .map((s) => ({ id: s.pageId, ord: ord.get(s.pageId) ?? 0, version: s.version, state: s.state }))
-    .sort((a, b) => a.ord - b.ord);
-}
-
-function preview(rows: PageRow[], rules: ReplaceRule[]) {
-  const matches: (Match & { page_id: string; ord: number })[] = [];
-  const versions: Record<string, number> = {};
-  for (const p of rows) {
-    const r = applyRules(p.state, rules);
-    if (!r.matches.length) continue;
-    versions[p.id] = p.version;
-    for (const m of r.matches) matches.push({ ...m, page_id: p.id, ord: p.ord });
-  }
-  const total = matches.reduce((n, m) => n + m.count, 0);
-  return {
-    matches: matches.slice(0, MAX_PREVIEW_MATCHES),
-    total,
-    truncated: matches.length > MAX_PREVIEW_MATCHES,
-    versions,
-  };
-}
-
-/** Ghi các page có khớp trong 1 transaction; page đổi so với preview (hoặc khớp mới xuất hiện) → 409. */
-async function apply(
-  sdb: Scoped,
-  chapterId: string,
-  userId: string,
-  rules: ReplaceRule[],
-  versions: Record<string, number>,
-) {
-  return sdb.transaction(async (tx) => {
-    const rows = await chapterPages(tx, chapterId);
-    const results = rows.map((p) => ({ p, r: applyRules(p.state, rules) })).filter((x) => x.r.matches.length);
-    const stale = results.filter(({ p }) => versions[p.id] !== p.version).map(({ p }) => p.id);
-    if (stale.length) throw httpError(409, { error: "preview_stale", pages: stale });
-    const batchId = uuidv7();
-    let replaced = 0;
-    for (const { p, r } of results) {
-      const [row] = await tx.update(
-        pageStates,
-        and(eq(pageStates.pageId, p.id), eq(pageStates.version, p.version)) as SQL,
-        { state: r.state, version: p.version + 1, stateOrigin: "user", updatedBy: `user:${userId}` },
-      );
-      if (!row) throw httpError(409, { error: "preview_stale", pages: [p.id] });
-      await tx.insert(pageStateHistory, {
-        pageId: p.id,
-        version: p.version,
-        state: p.state,
-        actor: `user:${userId}`,
-        batchId,
-      });
-      await pruneHistory(tx, p.id);
-      replaced += r.matches.reduce((n, m) => n + m.count, 0);
-    }
-    return { batch_id: batchId, pages: results.length, replaced };
-  });
-}
-
-/** Khôi phục state trước batch; page đã bị sửa tiếp (hoặc đã hoàn tác) → 409, không ghi gì. */
-async function undo(sdb: Scoped, chapterId: string, userId: string, batchId: string) {
-  return sdb.transaction(async (tx) => {
-    const own = new Set((await tx.select(pages, eq(pages.chapterId, chapterId))).map((p) => p.id));
-    const hist = (await tx.select(pageStateHistory, eq(pageStateHistory.batchId, batchId))).filter((h) =>
-      own.has(h.pageId),
-    );
-    if (hist.length === 0) throw httpError(404, { error: "batch_not_found" });
-    const cur = new Map(
-      (
-        await tx.select(
-          pageStates,
-          inArray(
-            pageStates.pageId,
-            hist.map((h) => h.pageId),
-          ),
-        )
-      ).map((s) => [s.pageId, s]),
-    );
-    const conflicts = hist.filter((h) => cur.get(h.pageId)?.version !== h.version + 1).map((h) => h.pageId);
-    if (conflicts.length) throw httpError(409, { error: "undo_conflict", pages: conflicts });
-    for (const h of hist) {
-      const now = cur.get(h.pageId);
-      if (!now) continue;
-      const [row] = await tx.update(
-        pageStates,
-        and(eq(pageStates.pageId, h.pageId), eq(pageStates.version, now.version)) as SQL,
-        { state: h.state, version: now.version + 1, stateOrigin: "user", updatedBy: `user:${userId}` },
-      );
-      if (!row) throw httpError(409, { error: "undo_conflict", pages: [h.pageId] });
-      await tx.insert(pageStateHistory, {
-        pageId: h.pageId,
-        version: now.version,
-        state: now.state,
-        actor: `user:${userId}`,
-      });
-      await pruneHistory(tx, h.pageId);
-    }
-    return { pages: hist.length };
-  });
-}
-
 /** Glossary đã gộp của series chương (entry series đè entry chung đúng cặp) → quy tắc thay có phạm vi theo term nguồn. */
 async function glossaryRules(
   sdb: Scoped,
@@ -258,6 +132,21 @@ async function glossaryRules(
   });
 }
 
+/** Quy tắc thay → phép sửa page của lõi sửa hàng loạt. */
+const transformOf = (rules: ReplaceRule[]) => (state: PageState) => applyRules(state, rules);
+
+/** Apply của find/replace + glossary: `replaced` = số chỗ đã thay. */
+async function applyRulesToChapter(
+  sdb: Scoped,
+  chapterId: string,
+  userId: string,
+  rules: ReplaceRule[],
+  versions: Record<string, number>,
+) {
+  const { changed, ...rest } = await applyBatch(sdb, chapterId, userId, transformOf(rules), versions);
+  return { ...rest, replaced: changed };
+}
+
 const findRule = (b: z.infer<typeof FindBody>): ReplaceRule[] => [
   { find: b.find, replace: b.replace, caseSensitive: b.case_sensitive },
 ];
@@ -269,7 +158,7 @@ findReplaceRoutes.post(`${base}/find-replace/preview`, requireWorkspace(), async
   const body = await parseJson(c, FindBody);
   const sdb = c.get("sdb");
   const ch = await sdb.byId(chapters, c.req.param("chapterId"), "chapter");
-  return c.json(preview(await chapterPages(sdb, ch.id), findRule(body)));
+  return c.json(previewPages(await chapterPages(sdb, ch.id), transformOf(findRule(body))));
 });
 
 findReplaceRoutes.post(`${base}/find-replace/apply`, requireWorkspace(), async (c) => {
@@ -278,7 +167,7 @@ findReplaceRoutes.post(`${base}/find-replace/apply`, requireWorkspace(), async (
   const user = c.get("user");
   const ch = await sdb.byId(chapters, c.req.param("chapterId"), "chapter");
   await assertChapterLock(sdb, ch.id, user.id);
-  return c.json(await apply(sdb, ch.id, user.id, findRule(body), body.versions));
+  return c.json(await applyRulesToChapter(sdb, ch.id, user.id, findRule(body), body.versions));
 });
 
 /** Hoàn tác 1 batch (find/replace hoặc áp glossary). */
@@ -288,7 +177,9 @@ findReplaceRoutes.post(`${base}/find-replace/undo`, requireWorkspace(), async (c
   const user = c.get("user");
   const ch = await sdb.byId(chapters, c.req.param("chapterId"), "chapter");
   await assertChapterLock(sdb, ch.id, user.id);
-  return c.json(await undo(sdb, ch.id, user.id, body.batch_id));
+  const r = await undoBatch(sdb, ch.id, user.id, body.batch_id, "fail");
+  if (!r.found) throw httpError(404, { error: "batch_not_found" });
+  return c.json({ pages: r.restored });
 });
 
 findReplaceRoutes.post(`${base}/glossary-apply/preview`, requireWorkspace(), async (c) => {
@@ -296,7 +187,7 @@ findReplaceRoutes.post(`${base}/glossary-apply/preview`, requireWorkspace(), asy
   const sdb = c.get("sdb");
   const ch = await sdb.byId(chapters, c.req.param("chapterId"), "chapter");
   const s = await sdb.byId(series, ch.seriesId, "series");
-  return c.json(preview(await chapterPages(sdb, ch.id), await glossaryRules(sdb, s, body)));
+  return c.json(previewPages(await chapterPages(sdb, ch.id), transformOf(await glossaryRules(sdb, s, body))));
 });
 
 findReplaceRoutes.post(`${base}/glossary-apply/apply`, requireWorkspace(), async (c) => {
@@ -306,5 +197,5 @@ findReplaceRoutes.post(`${base}/glossary-apply/apply`, requireWorkspace(), async
   const ch = await sdb.byId(chapters, c.req.param("chapterId"), "chapter");
   await assertChapterLock(sdb, ch.id, user.id);
   const s = await sdb.byId(series, ch.seriesId, "series");
-  return c.json(await apply(sdb, ch.id, user.id, await glossaryRules(sdb, s, body), body.versions));
+  return c.json(await applyRulesToChapter(sdb, ch.id, user.id, await glossaryRules(sdb, s, body), body.versions));
 });

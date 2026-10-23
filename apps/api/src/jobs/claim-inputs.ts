@@ -2,11 +2,11 @@
  * Dựng `inputs` (presigned GET) và `outputs` (presigned PUT, TTL ≤ lease còn lại) cho job vừa claim.
  * Hình dạng theo packages/shared/src/worker-protocol.ts (*Inputs).
  */
-import { chapters, type DbLike, type jobs, pageStates, pages, series, sourceFiles } from "@mtl/db";
+import { chapters, type DbLike, type jobs, pageStates, pages, scoped, series, sourceFiles } from "@mtl/db";
 import {
   EXPORT_FILE,
   EXPORT_OBJECT_TAG,
-  isIgnoredText,
+  type IgnoreMatcher,
   type JobPayload,
   keyBelongsToWorkspace,
   type OcrResult,
@@ -15,6 +15,8 @@ import {
 } from "@mtl/shared";
 import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
+import { resolveCustomFonts } from "../lib/fonts.ts";
+import { compileIgnoreListRe2 } from "../lib/ignore-text.ts";
 import { MAX_GET_TTL_S, MAX_PUT_TTL_S, presignGet, presignPut } from "../storage.ts";
 
 type Job = typeof jobs.$inferSelect;
@@ -89,37 +91,37 @@ async function pageById(tx: DbLike, id: string): Promise<Page> {
 }
 
 /** Chữ bỏ qua (watermark) của series chứa chương — đọc lúc claim để đổi danh sách có hiệu lực ngay lần dịch kế. */
-async function ignoreListOf(tx: DbLike, chapterId: string): Promise<string[]> {
+async function ignoreMatcherOf(tx: DbLike, chapterId: string): Promise<IgnoreMatcher> {
   const [r] = await tx
     .select({ list: series.ignoreText })
     .from(chapters)
     .innerJoin(series, eq(series.id, chapters.seriesId))
     .where(eq(chapters.id, chapterId));
-  return r?.list ?? [];
+  return compileIgnoreListRe2(r?.list ?? []);
 }
 
 /** Vùng OCR khớp chữ bỏ qua → `empty` (worker không dịch, không đặt box; ảnh đã sạch từ Bước 1). Không sửa DB. */
-const withoutIgnored = (ocr: OcrResult, ignore: readonly string[]): OcrResult =>
-  ignore.length
-    ? { ...ocr, items: ocr.items.map((it) => (isIgnoredText(it.source, ignore) ? { ...it, empty: true } : it)) }
-    : ocr;
+export const withoutIgnored = (ocr: OcrResult, isIgnored: IgnoreMatcher): OcrResult => ({
+  ...ocr,
+  items: ocr.items.map((it) => (isIgnored(it.source) ? { ...it, empty: true } : it)),
+});
 
 /** Dòng ngữ cảnh của 1 page: nguồn OCR (+ bản dịch từ state hiện tại nếu `withTranslation`), bỏ chữ bỏ qua. */
 function pageLines(
   ocr: OcrResult | null,
   state: PageState | null,
   withTranslation: boolean,
-  ignore: readonly string[] = [],
+  isIgnored: IgnoreMatcher = () => false,
 ) {
   if (!ocr) return [];
   const tr = new Map((state?.regions ?? []).map((r) => [r.id, r.translation]));
   return ocr.items
-    .filter((it) => !it.empty && !it.is_sfx && it.source.trim() && !isIgnoredText(it.source, ignore))
+    .filter((it) => !it.empty && !it.is_sfx && it.source.trim() && !isIgnored(it.source))
     .map((it) => ({ source: it.source, translation: withTranslation ? (tr.get(it.id) ?? "") : "" }));
 }
 
 /** context=neighbors: với mỗi đoạn page liên tiếp được dịch lại, lấy trang ngay trước (nguồn + dịch) và ngay sau (nguồn). */
-async function neighborLines(tx: DbLike, chapterId: string, targetIds: string[], ignore: readonly string[]) {
+async function neighborLines(tx: DbLike, chapterId: string, targetIds: string[], isIgnored: IgnoreMatcher) {
   const all = await tx
     .select({ id: pages.id, ord: pages.ord, ocr: pages.ocrResult, state: pageStates.state })
     .from(pages)
@@ -133,10 +135,16 @@ async function neighborLines(tx: DbLike, chapterId: string, targetIds: string[],
     if (target.has(p.id)) return;
     const prevIsTarget = i > 0 && target.has(all[i - 1]?.id ?? "");
     const nextIsTarget = i + 1 < all.length && target.has(all[i + 1]?.id ?? "");
-    if (nextIsTarget) lines.push(...pageLines(p.ocr, p.state, true, ignore).slice(-MAX_CONTEXT_LINES / 2));
-    else if (prevIsTarget) lines.push(...pageLines(p.ocr, p.state, false, ignore).slice(0, MAX_CONTEXT_LINES / 2));
+    if (nextIsTarget) lines.push(...pageLines(p.ocr, p.state, true, isIgnored).slice(-MAX_CONTEXT_LINES / 2));
+    else if (prevIsTarget) lines.push(...pageLines(p.ocr, p.state, false, isIgnored).slice(0, MAX_CONTEXT_LINES / 2));
   });
   return lines.slice(0, MAX_CONTEXT_LINES);
+}
+
+/** Font tuỳ chỉnh của workspace trong `ids` → `{id, url, sha256}` (id gói sẵn / đã xoá / lạ bị bỏ, worker fallback). */
+async function fontInputs(tx: DbLike, ws: string, ids: Iterable<string | undefined>, ttl: number) {
+  const refs = await resolveCustomFonts(scoped(tx, ws), ids);
+  return Promise.all(refs.map(async (f) => ({ id: f.id, url: await presignGet(f.file_key, ttl), sha256: f.sha256 })));
 }
 
 export async function buildInputs(tx: DbLike, job: Job): Promise<Record<string, unknown>> {
@@ -183,7 +191,13 @@ export async function buildInputs(tx: DbLike, job: Job): Promise<Record<string, 
         .from(pages)
         .where(and(eq(pages.chapterId, p.chapter_id), inArray(pages.id, p.page_ids)))
         .orderBy(asc(pages.ord));
-      const ignore = await ignoreListOf(tx, p.chapter_id);
+      const isIgnored = await ignoreMatcherOf(tx, p.chapter_id);
+      const fonts = await fontInputs(
+        tx,
+        job.workspaceId,
+        [p.settings.font, p.settings.narration_font],
+        INPUT_GET_TTL_S,
+      );
       return {
         pages: await Promise.all(
           rows.map(async (pg) => {
@@ -193,12 +207,13 @@ export async function buildInputs(tx: DbLike, job: Job): Promise<Record<string, 
               ord: pg.ord,
               width: pg.width,
               height: pg.height,
-              ocr_result: withoutIgnored(pg.ocrResult, ignore),
+              ocr_result: withoutIgnored(pg.ocrResult, isIgnored),
               clean: await get(storageKeys.clean(job.workspaceId, pg.id, pg.cleanRev)),
             };
           }),
         ),
-        context_lines: p.context === "neighbors" ? await neighborLines(tx, p.chapter_id, p.page_ids, ignore) : [],
+        context_lines: p.context === "neighbors" ? await neighborLines(tx, p.chapter_id, p.page_ids, isIgnored) : [],
+        fonts,
       };
     }
     case "page.reinpaint": {
@@ -213,10 +228,12 @@ export async function buildInputs(tx: DbLike, job: Job): Promise<Record<string, 
       const [st] = await tx.select().from(pageStates).where(eq(pageStates.pageId, page.id));
       return {
         original: await get(page.originalKey),
-        context_lines: pageLines(page.ocrResult, st?.state ?? null, true, await ignoreListOf(tx, page.chapterId)).slice(
-          0,
-          MAX_CONTEXT_LINES,
-        ),
+        context_lines: pageLines(
+          page.ocrResult,
+          st?.state ?? null,
+          true,
+          await ignoreMatcherOf(tx, page.chapterId),
+        ).slice(0, MAX_CONTEXT_LINES),
       };
     }
     case "chapter.export":
@@ -248,7 +265,19 @@ async function exportInputs(tx: DbLike, job: Job, p: Extract<JobPayload, { type:
     .where(and(eq(sourceFiles.chapterId, p.chapter_id), eq(sourceFiles.workspaceId, job.workspaceId)))
     .orderBy(asc(sourceFiles.ord));
   const sign = (key: string) => presignGet(key, MAX_GET_TTL_S);
+  const [defaults] = await tx
+    .select({ fonts: series.defaultFonts })
+    .from(chapters)
+    .innerJoin(series, eq(series.id, chapters.seriesId))
+    .where(eq(chapters.id, p.chapter_id));
+  const fontIds = new Set<string | undefined>([defaults?.fonts.dialogue, defaults?.fonts.narration]);
+  for (const { page: pg, state } of rows) {
+    if (!pg.skipped && pg.status === "ready" && pg.cleanRev !== null) {
+      for (const b of state?.text_boxes ?? []) fontIds.add(b.font_family);
+    }
+  }
   return {
+    fonts: await fontInputs(tx, job.workspaceId, fontIds, MAX_GET_TTL_S),
     chapter: { series_title: ch.seriesTitle, number: ch.number, title: ch.title },
     pages: await Promise.all(
       rows.map(async ({ page: pg, state }) => {

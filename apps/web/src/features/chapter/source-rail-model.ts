@@ -1,6 +1,6 @@
 /**
  * Rail ảnh gốc (chương chưa có page): mục theo thứ tự upload, nhãn trạng thái tải / bỏ qua / gợi ý credit, đếm và
- * bước ←/→. Thuần, không gọi API.
+ * bước ←/→, đổi chỗ. Thuần, không gọi API.
  */
 import type { SourceSkipReason } from "@mtl/shared";
 import type { ItemStatus } from "../upload/upload-queue.ts";
@@ -86,6 +86,15 @@ export const sourceCounts = (items: SourceItem[]) => {
   const skipped = items.filter((it) => it.skip !== null).length;
   return { total: items.length, skipped, active: items.length - skipped };
 };
+
+/** Chuyển phần tử `from` tới vị trí `to` (kẹp trong danh sách); không đổi gì → trả đúng mảng đầu vào. */
+export function moveItem<T>(items: T[], from: number, to: number): T[] {
+  const target = Math.max(0, Math.min(items.length - 1, to));
+  if (from === target || from < 0 || from >= items.length) return items;
+  const next = [...items];
+  next.splice(target, 0, ...next.splice(from, 1));
+  return next;
+}
 
 /** Ảnh kế bên theo thứ tự rail (gồm cả ảnh bỏ qua — vẫn xem được để khôi phục). */
 export function stepSource(items: SourceItem[], currentId: string | null, dir: -1 | 1): string | undefined {

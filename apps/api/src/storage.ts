@@ -117,6 +117,12 @@ export async function readPrefix(key: string, n: number): Promise<Uint8Array> {
   return bytes ?? new Uint8Array();
 }
 
+/** Đọc cả object vào bộ nhớ (chỉ cho file nhỏ đã kiểm kích thước bằng `head`). */
+export async function readObject(key: string): Promise<Uint8Array> {
+  const r = await internal.send(new GetObjectCommand({ Bucket, Key: key }));
+  return (await r.Body?.transformToByteArray()) ?? new Uint8Array();
+}
+
 /** Chép object trong bucket (server-side, không tải về). */
 export async function copyObject(from: string, to: string): Promise<void> {
   const source = `${Bucket}/${from}`.split("/").map(encodeURIComponent).join("/");

@@ -8,11 +8,13 @@
  * (apps/api/src/jobs/page-state-writer.ts) — giữ khoá thì lần dịch đầu chỉ hiện cờ "AI có bản mới".
  */
 import { emptyPageState, type PageState } from "@mtl/shared";
+import { useQueryClient } from "@tanstack/react-query";
 import { type Draft, produce } from "immer";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { errorMessage } from "../../lib/api.ts";
 import { lockChapter, unlockChapter } from "../chapter/api.ts";
 import { serial, useChapterLock } from "../chapter/use-chapter-lock.ts";
+import { fetchFonts, fontKeys } from "../fonts/api.ts";
 import { fetchPageDetail, type PageDetail, putPageState } from "./api.ts";
 import { type ChapterStore, chapterStore } from "./chapter-store.ts";
 import { type FontKit, loadFonts } from "./fonts.ts";
@@ -264,12 +266,14 @@ const loadedOf = (d: PageDetail): LoadedPage => ({
   ai: { state: d.ai_state, rev: d.ai_rev, available: d.ai_update_available },
 });
 
-function useFontKit() {
+/** Font gói sẵn + font của workspace (danh sách lấy tươi mỗi phiên để URL presigned còn hạn). */
+function useFontKit(ws: string) {
+  const qc = useQueryClient();
   const [kit, setKit] = useState<FontKit | null>(null);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
     let live = true;
-    loadFonts()
+    loadFonts(() => qc.fetchQuery({ queryKey: fontKeys.list(ws), queryFn: () => fetchFonts(ws), staleTime: 0 }))
       .then((k) => {
         if (!live) return;
         setKit(k);
@@ -279,7 +283,7 @@ function useFontKit() {
     return () => {
       live = false;
     };
-  }, []);
+  }, [qc, ws]);
   return { kit, error };
 }
 
@@ -311,7 +315,7 @@ export function useChapterSession(opts: {
   refetchProgress(): Promise<boolean | undefined>;
 }) {
   const { ws, chapterId, settled, pageIds } = opts;
-  const { kit, error: fontError } = useFontKit();
+  const { kit, error: fontError } = useFontKit(ws);
   const queue = pendingQueue();
   const [error, setError] = useState<string | null>(null);
   const [paused, setPaused] = useState(false);

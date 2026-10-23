@@ -129,6 +129,9 @@ function AccountMenu({ ws }: { ws: string }) {
         <Link to="/w/$ws/members" params={{ ws }}>
           Thành viên
         </Link>
+        <Link to="/w/$ws/settings" params={{ ws }}>
+          Cài đặt nhóm
+        </Link>
         <button type="button" onClick={() => void signOut()}>
           Đăng xuất
         </button>

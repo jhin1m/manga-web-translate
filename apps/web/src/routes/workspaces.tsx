@@ -60,11 +60,36 @@ export function MembersPage() {
   );
 }
 
+/** `mail_sent`: true = đã gửi, false = gửi lỗi / chưa cấu hình, null = server không có ghi nhận (vd vừa khởi động lại). */
+type LinkInfo = { link: string; mail_enabled: boolean; mail_sent: boolean | null };
+
 function InviteForm({ ws }: { ws: string }) {
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<"member" | "admin">("member");
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Lời mời vừa tạo, có thể gửi lại email (chỉ khi server bật mail).
+  const [last, setLast] = useState<{ id: string; email: string; role: "member" | "admin" } | null>(null);
+  const [resending, setResending] = useState(false);
+
+  /** Lấy link (có token đăng ký) + kết quả gửi mail; câu thông báo đổi theo việc mail thật sự đã gửi hay chưa. */
+  async function report(id: string, to: string, inviteRole: "member" | "admin", verb: string) {
+    try {
+      const { link, mail_enabled, mail_sent } = await api<LinkInfo>(`/api/w/${ws}/invitations/${id}/link`);
+      setMessage(
+        !mail_enabled
+          ? `Đã mời ${to}. Gửi link này cho họ: ${link}`
+          : mail_sent === true
+            ? `${verb} email mời tới ${to}. Không nhận được? Gửi link này cho họ: ${link}`
+            : mail_sent === false
+              ? `Đã mời ${to} nhưng gửi email không thành công. Gửi link này cho họ: ${link}`
+              : `Đã mời ${to}; chưa xác nhận được email đã gửi. Nếu họ không nhận được, gửi link này: ${link}`,
+      );
+      setLast(mail_enabled ? { id, email: to, role: inviteRole } : null);
+    } catch (e) {
+      setError(errorMessage(e));
+    }
+  }
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -72,14 +97,27 @@ function InviteForm({ ws }: { ws: string }) {
     setError(null);
     const { data, error: err } = await authClient.organization.inviteMember({ email, role, organizationId: ws });
     if (err) return setError(err.message ?? "Không mời được");
-    // MVP chưa gửi mail: lấy link có token đăng ký để owner/admin tự chuyển cho người được mời.
-    try {
-      const { link } = await api<{ link: string }>(`/api/w/${ws}/invitations/${data?.id ?? ""}/link`);
-      setMessage(`Đã mời ${email}. Gửi link này cho họ: ${link}`);
-    } catch (e) {
-      setError(errorMessage(e));
-    }
+    await report(data?.id ?? "", email, role, "Đã gửi");
     setEmail("");
+  }
+
+  async function resend() {
+    if (!last) return;
+    setMessage(null);
+    setError(null);
+    setResending(true);
+    try {
+      const { data, error: err } = await authClient.organization.inviteMember({
+        email: last.email,
+        role: last.role,
+        organizationId: ws,
+        resend: true,
+      });
+      if (err) return setError(err.message ?? "Không gửi lại được");
+      await report(data?.id ?? last.id, last.email, last.role, "Đã gửi lại");
+    } finally {
+      setResending(false);
+    }
   }
 
   return (
@@ -106,6 +144,13 @@ function InviteForm({ ws }: { ws: string }) {
       {message && (
         <p className="notice info mono" style={{ wordBreak: "break-all" }}>
           {message}
+        </p>
+      )}
+      {last && (
+        <p>
+          <button type="button" disabled={resending} onClick={() => void resend()}>
+            Gửi lại email
+          </button>
         </p>
       )}
       {error && <p className="error">{error}</p>}

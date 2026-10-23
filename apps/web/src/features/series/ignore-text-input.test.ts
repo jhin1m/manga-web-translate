@@ -10,9 +10,20 @@ describe("ignore text input", () => {
   });
 
   it("points at the first line that is too short or too long", () => {
-    expect(parseIgnoreText("discord.gg\n\nab").error).toBe("Dòng 3: mỗi mục 3–100 ký tự (không tính http://).");
-    expect(parseIgnoreText("x".repeat(101)).error).toBe("Dòng 1: mỗi mục 3–100 ký tự (không tính http://).");
-    expect(parseIgnoreText("http://a").error).toBe("Dòng 1: mỗi mục 3–100 ký tự (không tính http://).");
+    expect(parseIgnoreText("discord.gg\n\nab").error).toBe(
+      "Dòng 3: mỗi mục 3–100 ký tự (không tính http:// và dấu cách).",
+    );
+    expect(parseIgnoreText("x".repeat(101)).error).toBe(
+      "Dòng 1: mỗi mục 3–100 ký tự (không tính http:// và dấu cách).",
+    );
+    expect(parseIgnoreText("http://a").error).toBe("Dòng 1: mỗi mục 3–100 ký tự (không tính http:// và dấu cách).");
+  });
+
+  it("points at regex lines that do not compile, nest quantifiers or are too long", () => {
+    expect(parseIgnoreText("discord.gg\n/(ab/").error).toBe("Dòng 2: regex không hợp lệ.");
+    expect(parseIgnoreText("/(a+)+/").error).toMatch(/^Dòng 1: regex có lượng từ lồng nhau/);
+    expect(parseIgnoreText(`/${"a".repeat(99)}/`).error).toMatch(/^Dòng 1: regex dài tối đa 100/);
+    expect(parseIgnoreText("/discord\\s*\\.\\s*gg/").error).toBeNull();
   });
 
   it("caps the list at 50 entries", () => {

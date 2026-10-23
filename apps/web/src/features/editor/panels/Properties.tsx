@@ -31,7 +31,14 @@ function useBoxStyle() {
   return { box, readOnly, style };
 }
 
-export function BasicStyle({ fonts }: { fonts: string[] }) {
+/** `fonts`: font gói sẵn; `customFonts`: font của nhóm (nhóm riêng trong select). */
+export function BasicStyle({
+  fonts,
+  customFonts = [],
+}: {
+  fonts: string[];
+  customFonts?: { id: string; name: string }[];
+}) {
   const { box, readOnly, style } = useBoxStyle();
   if (!box) return null;
   return (
@@ -44,12 +51,23 @@ export function BasicStyle({ fonts }: { fonts: string[] }) {
             value={box.font_family}
             onChange={(e) => style("font_family", { font_family: e.target.value })}
           >
-            {!fonts.includes(box.font_family) && <option value={box.font_family}>{box.font_family} (thiếu)</option>}
+            {!fonts.includes(box.font_family) && !customFonts.some((f) => f.id === box.font_family) && (
+              <option value={box.font_family}>{box.font_family} (thiếu)</option>
+            )}
             {fonts.map((f) => (
               <option key={f} value={f}>
                 {f}
               </option>
             ))}
+            {customFonts.length > 0 && (
+              <optgroup label="Font của nhóm">
+                {customFonts.map((f) => (
+                  <option key={f.id} value={f.id}>
+                    {f.name}
+                  </option>
+                ))}
+              </optgroup>
+            )}
           </select>
         </div>
         <div>

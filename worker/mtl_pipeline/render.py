@@ -18,6 +18,7 @@ import unicodedata
 from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from functools import lru_cache
+from pathlib import Path
 from typing import Any
 
 import cv2
@@ -47,9 +48,14 @@ def nfc(s: str) -> str:
 
 
 @lru_cache(maxsize=256)
-def load_font(font_id: str, size: float) -> ImageFont.FreeTypeFont:
+def _load(path: Path, size: float) -> ImageFont.FreeTypeFont:
     require_raqm()
-    return ImageFont.truetype(str(font_path(font_id)), size, layout_engine=ImageFont.Layout.RAQM)
+    return ImageFont.truetype(str(path), size, layout_engine=ImageFont.Layout.RAQM)
+
+
+def load_font(font_id: str, size: float) -> ImageFont.FreeTypeFont:
+    # Cache theo file (không theo id): id → file đổi giữa các job (font tuỳ chỉnh đăng ký / fallback).
+    return _load(font_path(font_id), size)
 
 
 @dataclass(frozen=True)
