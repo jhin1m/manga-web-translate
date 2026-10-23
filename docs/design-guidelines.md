@@ -39,7 +39,7 @@ bóng thoại, chữ chèn trên ảnh không đổi theo bảng màu. Chưa có
 | Viền | `--c-line` `#e3dccd`, `--c-line-strong` `#cbc1ad` | input dùng `line-strong` |
 | Chữ | `--c-fg` `#2a2620`, `--c-fg-muted` `#6b6357`, `--c-fg-subtle` `#7a7264` | cả 3 đạt ≥ 4.5:1 trên `--c-bg` (subtle 4.52:1) |
 | Nhấn | `--c-accent` `#c2501b`, `--c-accent-hover` `#a8430f`, `--c-accent-weak` `#f6e3d6` | nền nút chính (chữ trắng 4.71:1), viền/icon/focus, thanh tiến độ. **Chữ** màu nhấn (link, tab/nút đang chọn) dùng `--c-accent-hover` — `#c2501b` trên nền chỉ 4.48:1 |
-| Trạng thái | `--c-ok` `#1d7a3e`, `--c-warn` `#a15c00`, `--c-danger` `#b42318`, `--c-info` = nhấn | |
+| Trạng thái | `--c-ok` `#1d7a3e`, `--c-warn` `#a15c00`, `--c-danger` `#b42318`, `--c-info` `#2f6690` | `info` (đang xử lý, thông báo) là xanh lam dịu, tách khỏi cam nhấn và vàng `warn`; 5.8:1 trên `--c-bg` |
 | Nền nhãn trạng thái | `--c-warn-weak` `#fdf0dc`, `--c-danger-weak` `#fbe7e4` | nhãn "Cần xem" / "Lỗi" (chữ warn 4.62:1, danger 5.53:1), cảnh báo tràn khung |
 | Chữ | `--font-ui` (Be Vietnam Pro → Inter → system), `--font-mono` | cỡ `--fs-xs` 12 … `--fs-xl` 20; mặc định 14px |
 | Khoảng cách | `--sp-1`…`--sp-6` (4, 8, 12, 16, 24, 32) | lưới 4px |

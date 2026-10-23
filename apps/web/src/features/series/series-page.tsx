@@ -89,7 +89,7 @@ function SeriesHead({ series }: { series: SeriesDetail }) {
         {series.title.trim().charAt(0).toUpperCase()}
       </div>
       <div className="series-head-text">
-        <h1>{series.title}</h1>
+        <h1 title={series.title}>{series.title}</h1>
         <span className="muted">
           {langShort(series.source_lang)} → {langShort(series.target_lang)} · {series.chapters.length} chương ·{" "}
           {exported} đã xuất

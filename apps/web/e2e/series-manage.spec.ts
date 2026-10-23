@@ -174,7 +174,13 @@ test("a very long series name is truncated with a full-name title and never over
   // Trang series + thanh trên màn chương: không tràn ngang.
   await page.setViewportSize({ width: 1568, height: 800 });
   await page.goto(`/w/${state.workspaceId}/s/${s.id}`);
-  await expect(page.getByRole("heading", { name: title })).toBeVisible();
+  const heading = page.getByRole("heading", { name: title });
+  await expect(heading).toBeVisible();
+  await expect(heading).toHaveAttribute("title", title);
+  // Cắt "…" trên 1 dòng: chữ dài hơn khung, không xuống dòng.
+  expect(await heading.evaluate((h) => h.scrollWidth > h.clientWidth && getComputedStyle(h).textOverflow)).toBe(
+    "ellipsis",
+  );
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.goto(`/w/${state.workspaceId}/s/${s.id}/c/${chapterId}`);
   const back = page.locator(".cw-back");

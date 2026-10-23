@@ -29,7 +29,7 @@
   --c-warn-weak: #fdf0dc;
   --c-danger: #b42318;
   --c-danger-weak: #fbe7e4;
-  --c-info: #c2501b;
+  --c-info: #2f6690; /* xanh lam dịu: "đang xử lý" tách hẳn khỏi cam nhấn và vàng cảnh báo */
   --c-focus: #c2501b;
 
   /* Chữ */

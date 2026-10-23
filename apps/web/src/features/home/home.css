@@ -367,12 +367,15 @@ label.file-pick input {
   display: flex;
   flex-direction: column;
   gap: 2px;
+  flex: 1;
   min-width: 0;
 }
-/* Tên series dài (kể cả không dấu cách) xuống dòng thay vì tràn ngang. */
+/* Tên series dài cắt "…" trên 1 dòng; tên đầy đủ ở `title`. */
 .series-head h1 {
   font-size: 22px;
-  overflow-wrap: anywhere;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .chips {
   border: 0;
