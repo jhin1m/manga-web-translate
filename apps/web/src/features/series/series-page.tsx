@@ -44,7 +44,12 @@ const useSeries = (ws: string, seriesId: string) =>
       query.state.data?.chapters.some((c) => c.status === "ingesting" || c.status === "processing") ? 5000 : false,
   });
 
-export function SeriesPage(props: { ws: string; seriesId: string; tab?: SeriesTab; canDeleteSeries: boolean }) {
+export function SeriesPage(props: {
+  ws: string;
+  seriesId: string;
+  tab?: SeriesTab /** owner/admin: xoá series, tải font nhóm. */;
+  canManage: boolean;
+}) {
   const { ws, seriesId, tab = "chapters" } = props;
   const q = useSeries(ws, seriesId);
   const s = q.data;
@@ -63,9 +68,14 @@ export function SeriesPage(props: { ws: string; seriesId: string; tab?: SeriesTa
             {/* key: dựng lại form khi dữ liệu server đổi rev (sau khi lưu). */}
             {tab === "settings" && (
               <div className="tab-panel">
-                <SeriesSettingsForm key={`${s.id}:${s.settings_rev}`} ws={ws} series={s} />
+                <SeriesSettingsForm
+                  key={`${s.id}:${s.settings_rev}`}
+                  ws={ws}
+                  series={s}
+                  canUploadFont={props.canManage}
+                />
                 <SkipImagesSection ws={ws} seriesId={s.id} />
-                {props.canDeleteSeries && <DeleteSeries ws={ws} series={s} />}
+                {props.canManage && <DeleteSeries ws={ws} series={s} />}
               </div>
             )}
             {tab === "glossary" && (

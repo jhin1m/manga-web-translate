@@ -513,6 +513,29 @@ label.file-pick input {
   padding: var(--sp-2) var(--sp-4) var(--sp-4);
   min-width: 0;
 }
+/* Dropdown font: option vẽ bằng chính font của nó. Popup gốc (macOS, Safari, Firefox) bỏ qua font của option →
+   bật `base-select` (Chrome/Edge 135+) để popup tự vẽ; nơi khác chỉ ô chọn hiện font đang chọn. */
+.font-select option,
+.font-select optgroup {
+  font-family: var(--font-ui);
+}
+@supports (appearance: base-select) {
+  .font-select,
+  .font-select::picker(select) {
+    appearance: base-select;
+  }
+  .font-select::picker(select) {
+    max-height: 320px;
+    border: 1px solid var(--c-line-strong);
+    border-radius: var(--radius);
+    background: var(--c-bg);
+    color: var(--c-fg);
+  }
+  .font-select option {
+    padding: 4px 8px;
+    font-size: 1.15em;
+  }
+}
 .settings-group legend {
   padding: 0 var(--sp-1);
   font-weight: 600;

@@ -1,14 +1,22 @@
 /**
  * Form cài đặt dịch của series (chia nhóm Chung / Dịch / Font / Xưng hô): ngôn ngữ, định dạng truyện, kính ngữ, tier
  * model, giọng văn, chữ bỏ qua (watermark),
- * font mặc định, quy tắc xưng hô theo cặp nhân vật. Server tăng settings_rev khi trường ảnh hưởng dịch đổi. Kèm vùng
+ * font mặc định (owner/admin tải font nhóm ngay trong dropdown), quy tắc xưng hô theo cặp nhân vật. Server tăng settings_rev khi trường ảnh hưởng dịch đổi. Kèm vùng
  * xoá series. Dùng ở `?tab=settings` của màn series.
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { type FormEvent, useState } from "react";
+import { type CSSProperties, type FormEvent, useEffect, useRef, useState } from "react";
 import { errorMessage } from "../../lib/api.ts";
-import { useBundledFontIds, useWorkspaceFonts } from "../fonts/api.ts";
+import { loadFonts } from "../editor/fonts.ts";
+import {
+  FONT_ACCEPT,
+  fontKeys,
+  uploadCheckedFont,
+  useBundledFontIds,
+  useWorkspaceFonts,
+  type WorkspaceFont,
+} from "../fonts/api.ts";
 import { fetchGlossary, glossaryKey } from "../glossary/api.ts";
 import {
   deleteSeries,
@@ -39,6 +47,12 @@ const FONT_SLOTS: { slot: FontSlot; label: string; empty: string; hint?: string 
   { slot: "narration", label: "Dẫn truyện", empty: "Giống font thoại", hint: "Áp dụng cho chữ ngoài bóng." },
 ];
 
+/** Giá trị option "Tải font lên…" — không phải font id (font nhóm là `custom-…`, font gói sẵn là tên file). */
+const UPLOAD_OPTION = "__upload__";
+
+/** Vẽ tên font bằng chính font đó (FontFace family = font id); chưa nạp xong → font giao diện. */
+const fontPreview = (id: string): CSSProperties => ({ fontFamily: `"${id}", var(--font-ui)` });
+
 /** Chữ bỏ qua sửa ở ô riêng (chuỗi nhiều dòng), ghép vào lúc lưu. */
 type Form = Omit<SeriesSettings, "ignore_text"> & { title: string };
 
@@ -54,11 +68,24 @@ const toForm = (s: Series): Form => ({
   llm_tier: s.llm_tier,
 });
 
-export function SeriesSettingsForm({ ws, series }: { ws: string; series: Series }) {
+export function SeriesSettingsForm({
+  ws,
+  series,
+  canUploadFont,
+}: {
+  ws: string;
+  series: Series;
+  canUploadFont: boolean;
+}) {
   const qc = useQueryClient();
   const [f, setF] = useState<Form>(() => toForm(series));
   const bundled = useBundledFontIds();
   const custom = useWorkspaceFonts(ws);
+  // Nạp font gói sẵn + font nhóm vào trình duyệt để dropdown xem trước được (lỗi → chỉ mất preview).
+  const customFonts = custom.data;
+  useEffect(() => {
+    loadFonts(customFonts && (() => Promise.resolve(customFonts))).catch(() => {});
+  }, [customFonts]);
   const [saved, setSaved] = useState<string | null>(null);
   const [ignoreRaw, setIgnoreRaw] = useState(() => series.ignore_text.join("\n"));
   const ignore = parseIgnoreText(ignoreRaw);
@@ -88,6 +115,24 @@ export function SeriesSettingsForm({ ws, series }: { ws: string; series: Series 
     setSaved(null);
     setF((cur) => ({ ...cur, [k]: v }));
   };
+  const setFont = (slot: FontSlot, id: string) => {
+    const next = { ...f.default_fonts };
+    if (id) next[slot] = id;
+    else delete next[slot];
+    set("default_fonts", next);
+  };
+  // Tải font từ dropdown: chọn "Tải font lên…" → mở chọn file cho đúng ô; xong thì chọn font mới (chưa lưu).
+  const fileInput = useRef<HTMLInputElement>(null);
+  const uploadSlot = useRef<FontSlot>("dialogue");
+  const upload = useMutation({
+    mutationFn: ({ file }: { file: File; slot: FontSlot }) => uploadCheckedFont(ws, file, custom.data?.length ?? 0),
+    onSuccess: (font, { slot }) => {
+      // Thêm ngay vào danh sách để select có option khớp giá trị mới trước khi refetch xong.
+      qc.setQueryData<WorkspaceFont[]>(fontKeys.list(ws), (cur) => [...(cur ?? []), font]);
+      void qc.invalidateQueries({ queryKey: fontKeys.list(ws) });
+      setFont(slot, font.id);
+    },
+  });
   const setRule = (i: number, patch: Partial<PronounRule>) =>
     set(
       "pronoun_rules",
@@ -232,34 +277,63 @@ export function SeriesSettingsForm({ ws, series }: { ws: string; series: Series 
               <label htmlFor={`s-font-${slot}`}>{label}</label>
               <select
                 id={`s-font-${slot}`}
+                className="font-select"
+                style={f.default_fonts[slot] ? fontPreview(f.default_fonts[slot]) : undefined}
                 value={f.default_fonts[slot] ?? ""}
+                disabled={upload.isPending}
                 onChange={(e) => {
-                  const next = { ...f.default_fonts };
-                  if (e.target.value) next[slot] = e.target.value;
-                  else delete next[slot];
-                  set("default_fonts", next);
+                  if (e.target.value !== UPLOAD_OPTION) return setFont(slot, e.target.value);
+                  uploadSlot.current = slot;
+                  fileInput.current?.click();
                 }}
               >
                 <option value="">{empty}</option>
                 {(bundled.data ?? []).map((id) => (
-                  <option key={id} value={id}>
+                  <option key={id} value={id} style={fontPreview(id)}>
                     {id}
                   </option>
                 ))}
                 {(custom.data ?? []).length > 0 && (
                   <optgroup label="Font của nhóm">
                     {(custom.data ?? []).map((font) => (
-                      <option key={font.id} value={font.id}>
+                      <option key={font.id} value={font.id} style={fontPreview(font.id)}>
                         {font.name}
                       </option>
                     ))}
                   </optgroup>
                 )}
+                {canUploadFont && <option value={UPLOAD_OPTION}>+ Tải font lên…</option>}
               </select>
               {hint && <span className="hint">{hint}</span>}
             </div>
           ))}
         </div>
+        {canUploadFont && (
+          <input
+            ref={fileInput}
+            type="file"
+            hidden
+            accept={FONT_ACCEPT}
+            aria-label="Chọn file font"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              e.target.value = "";
+              if (file) upload.mutate({ file, slot: uploadSlot.current });
+            }}
+          />
+        )}
+        {upload.isPending && <span className="hint">Đang tải font lên…</span>}
+        {upload.error && (
+          <span className="small error" role="alert">
+            {errorMessage(upload.error)}
+          </span>
+        )}
+        {upload.isSuccess && (
+          <span className="hint" role="status">
+            Đã thêm font {upload.data.name} vào font của nhóm
+            {upload.data.vi_complete ? "" : " (thiếu một số dấu tiếng Việt)"}. Bấm Lưu cài đặt để dùng làm mặc định.
+          </span>
+        )}
       </fieldset>
 
       <fieldset className="settings-group">

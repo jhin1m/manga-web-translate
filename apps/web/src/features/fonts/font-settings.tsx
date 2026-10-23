@@ -7,15 +7,14 @@ import { ApiError, errorMessage } from "../../lib/api.ts";
 import { TrashIcon } from "../home/row-icons.tsx";
 import {
   deleteFont,
+  FONT_ACCEPT,
   fontKeys,
-  MAX_FONT_BYTES,
   MAX_WORKSPACE_FONTS,
-  uploadFont,
+  uploadCheckedFont,
   useWorkspaceFonts,
   type WorkspaceFont,
 } from "./api.ts";
 
-const FONT_EXT = /\.(ttf|otf)$/i;
 const MISSING_SHOWN = 12;
 
 const sizeLabel = (bytes: number) =>
@@ -29,14 +28,6 @@ function deleteError(e: unknown): string {
   return errorMessage(e);
 }
 
-/** Lỗi trước khi gửi: đuôi file, dung lượng, số font. */
-function precheck(file: File, count: number): string | null {
-  if (!FONT_EXT.test(file.name)) return "Chỉ nhận font .ttf hoặc .otf (không nhận WOFF/WOFF2).";
-  if (file.size > MAX_FONT_BYTES) return "Font tối đa 10MB.";
-  if (count >= MAX_WORKSPACE_FONTS) return `Mỗi nhóm tối đa ${MAX_WORKSPACE_FONTS} font. Xoá bớt font không dùng.`;
-  return null;
-}
-
 export function FontSettings({ ws, canManage }: { ws: string; canManage: boolean }) {
   const qc = useQueryClient();
   const q = useWorkspaceFonts(ws);
@@ -44,11 +35,7 @@ export function FontSettings({ ws, canManage }: { ws: string; canManage: boolean
   const fonts = q.data ?? [];
 
   const upload = useMutation({
-    mutationFn: async (file: File) => {
-      const bad = precheck(file, fonts.length);
-      if (bad) throw new Error(bad);
-      return uploadFont(ws, file);
-    },
+    mutationFn: (file: File) => uploadCheckedFont(ws, file, fonts.length),
     onSuccess: refresh,
   });
   const del = useMutation({ mutationFn: (id: string) => deleteFont(ws, id), onSuccess: refresh });
@@ -65,7 +52,7 @@ export function FontSettings({ ws, canManage }: { ws: string; canManage: boolean
           <input
             id="font-file"
             type="file"
-            accept=".ttf,.otf,font/ttf,font/otf"
+            accept={FONT_ACCEPT}
             aria-label="Chọn file font"
             disabled={upload.isPending}
             onChange={(e) => {

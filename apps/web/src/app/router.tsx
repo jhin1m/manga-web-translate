@@ -123,7 +123,7 @@ export const seriesRoute = createRoute({
     const { ws, seriesId } = seriesRoute.useParams();
     const { tab } = seriesRoute.useSearch();
     const { role } = useWorkspace();
-    return <SeriesPage ws={ws} seriesId={seriesId} tab={tab} canDeleteSeries={role !== "member"} />;
+    return <SeriesPage ws={ws} seriesId={seriesId} tab={tab} canManage={role !== "member"} />;
   },
 });
 

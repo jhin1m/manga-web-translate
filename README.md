@@ -22,9 +22,11 @@ OCR (Bước 1), dịch theo ngữ cảnh cả chương + tự chèn chữ (Bư�
   qua theo series (không gửi LLM, không chèn chữ; khớp bỏ qua dấu cách, mục `/regex/` chạy RE2 ở API); áp ngược danh
   sách cho chương đã dịch (xem trước → ẩn box → hoàn tác).
 - **Series**: ngôn ngữ nguồn `ko | ja | zh | en` → đích `vi | en | id | es | pt | fr`, định dạng strip / từng trang,
-  kính ngữ, quy tắc xưng hô, giọng văn, font mặc định theo loại chữ, model Standard / Premium.
+  kính ngữ, quy tắc xưng hô, giọng văn, font mặc định theo loại chữ (dropdown xem trước bằng chính font đó),
+  model Standard / Premium.
 - **Nhóm**: invite-only, mời thành viên qua email SMTP (không cấu hình thì gửi link trên UI); font tuỳ chỉnh TTF/OTF
-  upload ở Cài đặt nhóm, dùng trong editor, font mặc định series, auto-typeset và bản xuất.
+  upload ở Cài đặt nhóm hoặc ngay trong dropdown font mặc định của series, dùng trong editor, font mặc định series,
+  auto-typeset và bản xuất.
 - **Glossary**: chung theo cặp ngôn ngữ + riêng series, CSV, áp glossary hàng loạt; tìm & thay có hoàn tác.
 - **Xuất**: ZIP PNG / CBZ, theo trang hoặc cắt lại đúng slice gốc; cảnh báo trước khi xuất; sửa / dịch lại / ẩn hay
   khôi phục trang sau lần xuất cuối → chương hiện "Xuất lại".
@@ -124,6 +126,7 @@ Mọi test tự động hiện dùng worker giả lập; chưa có số đo vớ
 - [ ] Đích CJK / Thái, chữ dọc khi typeset; dịch SFX + font SFX; phân loại thoại theo nghĩa (suy nghĩ, hét, khung dẫn).
 - [ ] Tự nhận ngôn ngữ nguồn từ ảnh; OCR local (manga-ocr, RapidOCR) thay LLM.
 - [ ] Thumbnail do server sinh (thứ tự ảnh trước Bước 1 đã sắp tay được: kéo-thả / menu / Alt+↑↓).
+- [ ] Xem trước font trong dropdown Font của editor (mới có ở cài đặt series).
 - [ ] Glossary: chuyển / sao chép entry giữa các cặp ngôn ngữ, cột cặp ngôn ngữ trong CSV.
 - [ ] Chống phát lại dispatch Modal triệt để (lưu `dispatch_id` đã nhận).
 
@@ -132,4 +135,6 @@ Mọi test tự động hiện dùng worker giả lập; chưa có số đo vớ
 - Watermark: watermark detector không bắt thì còn trên ảnh.
 - Credit cùng mẫu nhưng đổi chữ (đổi tên người dịch) có thể không khớp ảnh đã học.
 - Ảnh rất cao (> 16k px) có thể không tính được dấu nhận dạng trên Safari → ảnh đó không tự bỏ (upload vẫn chạy).
+- Xem trước font trong danh sách thả xuống cần Chrome/Edge 135+ (`appearance: base-select`); Safari / Firefox chỉ hiện
+  font ở ô đang chọn.
 - Free-tier Gemini hết hạn mức → job tự thử lại tới ~4 giờ trước khi báo lỗi.
