@@ -1,0 +1,551 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<title>Màn chương — đề xuất</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600&amp;family=Patrick+Hand&amp;display=swap">
+<style>
+body{margin:0}
+*{box-sizing:border-box}
+a{color:var(--accent)}a:hover{color:var(--accent-hover)}
+button{font:inherit;color:inherit;cursor:pointer}
+button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.ib{width:36px;height:36px;display:inline-flex;align-items:center;justify-content:center;border:0;background:transparent;border-radius:4px;color:var(--fg2)}
+.ib:hover{background:var(--surface2)}
+.tool{width:52px;height:52px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;border:0;border-radius:6px;font-size:11px;line-height:1.1}
+.tool:hover{background:var(--surface2)}
+.btn{height:32px;padding:0 12px;border:1px solid var(--line-strong);background:var(--bg);border-radius:4px;font-size:13px;display:inline-flex;align-items:center;gap:6px}
+.btn:hover{background:var(--surface)}
+.btn-primary{height:32px;padding:0 14px;border:1px solid var(--accent);background:var(--accent);color:var(--on-accent);border-radius:4px;font-size:13px;font-weight:500}
+.btn-primary:hover{background:var(--accent-hover)}
+.lbl{font-size:12px;color:var(--muted);margin:0 0 4px}
+.field{width:100%;border:1px solid var(--line-strong);border-radius:4px;padding:7px 9px;font:inherit;font-size:13px;background:var(--bg);color:var(--fg)}
+.bubble{position:absolute;display:flex;align-items:center;justify-content:center;text-align:center;background:#fff;border:2px solid #1a1a1a;padding:4px 9%;font-family:"Patrick Hand",cursive;line-height:1.08;color:#111;cursor:pointer}
+.bubble:hover{box-shadow:0 0 0 2px var(--accent-weak)}
+.thumb{position:relative;width:72px;height:100px;padding:0;background:#fff;border-radius:3px;overflow:hidden;flex-shrink:0}
+.row{display:grid;grid-template-columns:28px 32px minmax(0,1fr) minmax(0,1fr) 84px;gap:8px;align-items:start;padding:8px 12px;border:0;border-bottom:1px solid var(--surface2);background:transparent;text-align:left;font-size:12.5px;width:100%}
+.row:hover{background:var(--surface)}
+.seg{flex:1;height:30px;border:0;border-radius:3px;font-size:13px}
+.hint{font-size:12.5px;color:var(--muted);line-height:1.5;margin:0}
+</style>
+</helmet>
+
+<div style="{{themeVars}} width: 100%; overflow-x: auto; background: var(--bg); color-scheme: {{scheme}};">
+<div style="min-width: 1180px; height: 860px; display: flex; flex-direction: column; font-family: 'Be Vietnam Pro', Inter, system-ui, sans-serif; font-size: 14px; color: var(--fg); background: var(--bg);">
+
+  <!-- Thanh trên: điều hướng · tên chương · trạng thái · 1 nút chính -->
+  <header style="height: 52px; flex-shrink: 0; display: flex; align-items: center; gap: 12px; padding: 0 12px 0 8px; border-bottom: 1px solid var(--line);">
+    <a href="#" style="display: inline-flex; align-items: center; gap: 4px; color: var(--muted); font-size: 13px; text-decoration: none; padding: 6px;">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"></path></svg>
+      Human_Natural_Enemy
+    </a>
+    <h1 style="margin: 0; font-size: 17px; font-weight: 600;">Chương 1</h1>
+    <span role="status" style="display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--fg2); background: var(--surface); border: 1px solid var(--line); border-radius: 999px; padding: 3px 10px;">
+      <span style="width: 7px; height: 7px; border-radius: 50%; background: var(--accent);"></span>
+      Chờ duyệt · 1 cần xem · 1 lỗi
+    </span>
+    <span style="display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--muted);">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="1.5"></rect><path d="M8 11V8a4 4 0 0 1 8 0v3"></path></svg>
+      Đã lưu
+    </span>
+    <div style="flex-grow: 1;"></div>
+    <button type="button" class="ib" aria-label="Hoàn tác (Ctrl+Z)" title="Hoàn tác (Ctrl+Z)">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14L4 9l5-5"></path><path d="M4 9h11a5 5 0 0 1 0 10h-3"></path></svg>
+    </button>
+    <button type="button" class="ib" aria-label="Làm lại (Ctrl+Shift+Z)" title="Làm lại (Ctrl+Shift+Z)">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 14l5-5-5-5"></path><path d="M20 9H9a5 5 0 0 0 0 10h3"></path></svg>
+    </button>
+    <span style="width: 1px; height: 20px; background: var(--line);"></span>
+    <button type="button" onClick="{{toggleOrig}}" aria-pressed="{{origPressed}}" title="Xem ảnh gốc (giữ phím O)" style="{{origBtnStyle}}">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+      Xem gốc
+    </button>
+    <button type="button" class="ib" aria-label="Hoạt động" title="Hoạt động">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h4l3-8 4 16 3-8h4"></path></svg>
+    </button>
+    <button type="button" class="ib" aria-label="Thêm: Dịch lại cả chương, Chạy lại trang lỗi, Chia đôi gốc/dịch, Phím tắt" title="Dịch lại cả chương · Chạy lại trang lỗi · Chia đôi · Phím tắt">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.6"></circle><circle cx="12" cy="12" r="1.6"></circle><circle cx="19" cy="12" r="1.6"></circle></svg>
+    </button>
+    <button type="button" class="btn-primary">Xuất</button>
+  </header>
+
+  <div style="flex-grow: 1; min-height: 0; display: flex;">
+
+    <!-- Rail công cụ: mỗi icon mở đúng 1 panel; bấm lại để thu panel -->
+    <nav aria-label="Công cụ" style="width: 64px; flex-shrink: 0; border-right: 1px solid var(--line); display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 8px 0;">
+      <button type="button" class="tool" onClick="{{go.select}}" style="{{rail.select}}" aria-label="Chọn (V)" title="Chọn (V)">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 3l14 7-6 2-2 6z"></path></svg>
+        Chọn
+      </button>
+      <button type="button" class="tool" onClick="{{go.text}}" style="{{rail.text}}" aria-label="Thêm chữ (T)" title="Thêm chữ (T)">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 7V5h14v2"></path><path d="M12 5v14"></path><path d="M9 19h6"></path></svg>
+        Chữ
+      </button>
+      <button type="button" class="tool" onClick="{{go.mask}}" style="{{rail.mask}}" aria-label="Mask xoá chữ (B)" title="Mask xoá chữ (B)">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 3l3 3-9 9-3-3z"></path><path d="M9 12l-3 3c-1 1-1 3-3 4 3 1 5 0 6-1l3-3"></path></svg>
+        Mask
+      </button>
+      <button type="button" class="tool" onClick="{{go.erase}}" style="{{rail.erase}}" aria-label="Tẩy (E)" title="Tẩy (E)">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 4l5 5-10 10H6l-3-3z"></path><path d="M13 19h8"></path></svg>
+        Tẩy
+      </button>
+      <button type="button" class="tool" onClick="{{go.ocr}}" style="{{rail.ocr}}" aria-label="OCR vùng (R)" title="OCR vùng (R)">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8V5h3"></path><path d="M17 5h3v3"></path><path d="M20 16v3h-3"></path><path d="M7 19H4v-3"></path><path d="M8 10h8"></path><path d="M8 14h5"></path></svg>
+        OCR
+      </button>
+      <span style="width: 32px; height: 1px; background: var(--line); margin: 4px 0;"></span>
+      <button type="button" class="tool" onClick="{{go.table}}" style="{{rail.table}}" aria-label="Bản dịch cả chương" title="Bản dịch cả chương">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h16"></path><path d="M4 12h16"></path><path d="M4 18h10"></path></svg>
+        Bản dịch
+      </button>
+      <button type="button" class="tool" onClick="{{go.find}}" style="{{rail.find}}" aria-label="Tìm, thay và glossary" title="Tìm / Thay · Glossary">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="6"></circle><path d="M20 20l-4.5-4.5"></path></svg>
+        Tìm
+      </button>
+    </nav>
+
+    <!-- Panel ngữ cảnh: chỉ hiện nội dung của công cụ đang chọn -->
+    <sc-if value="{{panelOpen}}" hint-placeholder-val="{{true}}">
+    <aside aria-label="{{panelTitle}}" style="{{panelStyle}}">
+      <div style="height: 44px; flex-shrink: 0; display: flex; align-items: center; gap: 8px; padding: 0 8px 0 16px; border-bottom: 1px solid var(--surface2);">
+        <h2 style="margin: 0; font-size: 14px; font-weight: 600; flex-grow: 1;">{{panelTitle}}</h2>
+        <button type="button" class="ib" onClick="{{closePanel}}" aria-label="Thu panel" title="Thu panel">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12"></path><path d="M18 6L6 18"></path></svg>
+        </button>
+      </div>
+      <div style="flex-grow: 1; min-height: 0; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 14px;">
+
+        <!-- Chọn: có khối → sửa khối; chưa có → thông tin trang -->
+        <sc-if value="{{showBlock}}" hint-placeholder-val="{{true}}">
+          <p style="margin: 0; font-size: 12px; color: var(--muted);">{{selLabel}}</p>
+          <div>
+            <p class="lbl">Gốc</p>
+            <p style="margin: 0; font-size: 13px; line-height: 1.45; color: var(--fg2); background: var(--surface); border-radius: 4px; padding: 8px 10px;">{{selOrig}}</p>
+          </div>
+          <div>
+            <label class="lbl" for="tr" style="display: block;">Bản dịch</label>
+            <textarea id="tr" class="field" rows="3" value="{{selTr}}" onChange="{{onTr}}" style="resize: vertical; line-height: 1.45;"></textarea>
+          </div>
+          <sc-if value="{{selFlagged}}" hint-placeholder-val="{{false}}">
+            <p style="margin: 0; font-size: 12.5px; color: var(--warn-fg); background: var(--warn-bg); border-radius: 4px; padding: 8px 10px;">Chữ đang tràn khung — giảm cỡ chữ hoặc rút gọn câu.</p>
+          </sc-if>
+          <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px;">
+            <div>
+              <label class="lbl" for="kind" style="display: block;">Loại</label>
+              <select id="kind" class="field" value="{{selType}}" onChange="{{onType}}">
+                <option>Thoại</option>
+                <option>Suy nghĩ</option>
+                <option>Chữ nền</option>
+                <option>SFX</option>
+              </select>
+            </div>
+            <div>
+              <label class="lbl" for="font" style="display: block;">Font</label>
+              <select id="font" class="field">
+                <option>Theo loại chữ</option>
+                <option>WildWords</option>
+                <option>Patrick Hand</option>
+              </select>
+            </div>
+          </div>
+          <div>
+            <label class="lbl" for="size" style="display: flex; justify-content: space-between;"><span>Cỡ chữ</span><span style="color: var(--fg);">{{selSize}}px</span></label>
+            <input id="size" type="range" min="10" max="28" value="{{selSize}}" onChange="{{onSize}}" style="width: 100%;">
+          </div>
+          <details style="font-size: 13px;">
+            <summary style="cursor: pointer; color: var(--fg2);">Kiểu chữ nâng cao</summary>
+            <div style="display: flex; flex-direction: column; gap: 10px; padding-top: 10px;">
+              <p class="hint">Căn lề, giãn dòng, màu chữ, viền trắng, xoay, nền khối — chỉ mở khi cần.</p>
+            </div>
+          </details>
+          <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+            <button type="button" class="btn">Dịch lại khối</button>
+            <button type="button" class="btn" style="color: var(--danger);">Xoá khối</button>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{showPage}}" hint-placeholder-val="{{false}}">
+          <p style="margin: 0; font-size: 13px;"><strong style="font-weight: 600;">Trang {{page}}</strong> <span style="color: var(--muted);">· {{pageStatus}}</span></p>
+          <p class="hint">{{pageNote}}</p>
+          <p class="hint">Bấm một khối chữ trên ảnh để sửa.</p>
+          <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+            <button type="button" class="btn">Dịch lại trang này</button>
+            <button type="button" class="btn">Ẩn trang</button>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{isText}}" hint-placeholder-val="{{false}}">
+          <p class="hint">Kéo một khung trên ảnh để tạo khối chữ mới.</p>
+          <div>
+            <label class="lbl" for="tfont" style="display: block;">Font mặc định</label>
+            <select id="tfont" class="field"><option>WildWords</option><option>Patrick Hand</option></select>
+          </div>
+          <div>
+            <label class="lbl" for="tsize" style="display: block;">Cỡ chữ</label>
+            <input id="tsize" type="range" min="10" max="28" value="{{selSize}}" onChange="{{onSize}}" style="width: 100%;">
+          </div>
+        </sc-if>
+
+        <sc-if value="{{isMask}}" hint-placeholder-val="{{false}}">
+          <p class="hint">Tô lên chữ còn sót, rồi bấm “Xoá chữ vùng đã tô”.</p>
+          <div style="display: flex; gap: 4px; background: var(--surface); padding: 3px; border-radius: 4px;">
+            <button type="button" class="seg" style="background: var(--bg); box-shadow: 0 0 0 1px var(--line);">Tô</button>
+            <button type="button" class="seg" style="background: transparent;">Bỏ tô</button>
+          </div>
+          <div>
+            <label class="lbl" for="brush" style="display: flex; justify-content: space-between;"><span>Cỡ cọ</span><span style="color: var(--fg);">{{brush}}px</span></label>
+            <input id="brush" type="range" min="4" max="80" value="{{brush}}" onChange="{{onBrush}}" style="width: 100%;">
+          </div>
+          <button type="button" class="btn-primary" style="align-self: flex-start;">Xoá chữ vùng đã tô</button>
+        </sc-if>
+
+        <sc-if value="{{isErase}}" hint-placeholder-val="{{false}}">
+          <p class="hint">Tẩy trực tiếp lên ảnh đã xoá chữ (không gọi AI).</p>
+          <div>
+            <label class="lbl" for="ebrush" style="display: flex; justify-content: space-between;"><span>Cỡ cọ</span><span style="color: var(--fg);">{{brush}}px</span></label>
+            <input id="ebrush" type="range" min="4" max="80" value="{{brush}}" onChange="{{onBrush}}" style="width: 100%;">
+          </div>
+        </sc-if>
+
+        <sc-if value="{{isOcr}}" hint-placeholder-val="{{false}}">
+          <p class="hint">Kéo khung quanh chữ AI bỏ sót. Chữ đọc được sẽ thành khối mới và được dịch luôn.</p>
+          <div>
+            <label class="lbl" for="olang" style="display: block;">Ngôn ngữ gốc</label>
+            <select id="olang" class="field"><option>Tiếng Anh</option><option>Tiếng Hàn</option><option>Tiếng Nhật</option><option>Tiếng Trung</option></select>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{isTable}}" hint-placeholder-val="{{false}}">
+          <div style="display: flex; align-items: center; gap: 12px; font-size: 12.5px; color: var(--fg2);">
+            <label style="display: inline-flex; align-items: center; gap: 6px;"><input type="checkbox"> Chỉ khối cần xem</label>
+            <label style="display: inline-flex; align-items: center; gap: 6px;"><input type="checkbox"> Chỉ trang đang mở</label>
+          </div>
+          <div style="margin: 0 -16px; border-top: 1px solid var(--surface2);">
+            <div class="row" style="font-size: 12px; color: var(--muted); cursor: default; background: var(--surface);">
+              <span>#</span><span>Tr.</span><span>Gốc</span><span>Dịch</span><span>Tình trạng</span>
+            </div>
+            <sc-for list="{{rows}}" as="r" hint-placeholder-count="6">
+              <button type="button" class="row" onClick="{{r.pick}}" style="{{r.style}}">
+                <span style="color: var(--muted);">{{r.n}}</span>
+                <span style="color: var(--muted);">{{r.page}}</span>
+                <span style="color: var(--fg2);">{{r.orig}}</span>
+                <span>{{r.tr}}</span>
+                <span style="{{r.flagStyle}}">{{r.flag}}</span>
+              </button>
+            </sc-for>
+          </div>
+          <p class="hint">Bấm một dòng để mở trang đó và chọn khối trên ảnh.</p>
+        </sc-if>
+
+        <sc-if value="{{isFind}}" hint-placeholder-val="{{false}}">
+          <div style="display: flex; gap: 4px; background: var(--surface); padding: 3px; border-radius: 4px;">
+            <button type="button" class="seg" onClick="{{tabFind}}" style="{{findTabStyle}}">Tìm / Thay</button>
+            <button type="button" class="seg" onClick="{{tabGloss}}" style="{{glossTabStyle}}">Glossary</button>
+          </div>
+          <sc-if value="{{findTabFind}}" hint-placeholder-val="{{true}}">
+            <div>
+              <label class="lbl" for="q" style="display: block;">Tìm trong bản dịch</label>
+              <input id="q" class="field" type="text" value="thầy">
+            </div>
+            <div>
+              <label class="lbl" for="rep" style="display: block;">Thay bằng</label>
+              <input id="rep" class="field" type="text" value="thầy giáo">
+            </div>
+            <p class="hint">3 kết quả ở trang 1, 4, 9.</p>
+            <button type="button" class="btn" style="align-self: flex-start;">Thay tất cả (hoàn tác được)</button>
+          </sc-if>
+          <sc-if value="{{findTabGloss}}" hint-placeholder-val="{{false}}">
+            <div style="display: flex; flex-direction: column; border: 1px solid var(--surface2); border-radius: 4px;">
+              <div style="display: flex; justify-content: space-between; padding: 8px 10px; border-bottom: 1px solid var(--surface2); font-size: 13px;"><span>Inmyeol High School</span><span style="color: var(--muted);">Trường THPT Inmyeol</span></div>
+              <div style="display: flex; justify-content: space-between; padding: 8px 10px; border-bottom: 1px solid var(--surface2); font-size: 13px;"><span>Teacher</span><span style="color: var(--muted);">Thầy</span></div>
+              <div style="display: flex; justify-content: space-between; padding: 8px 10px; font-size: 13px;"><span>Hunter</span><span style="color: var(--muted);">Thợ săn</span></div>
+            </div>
+            <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px;">
+              <input class="field" type="text" placeholder="Từ gốc" aria-label="Từ gốc">
+              <input class="field" type="text" placeholder="Dịch" aria-label="Dịch">
+            </div>
+            <div style="display: flex; gap: 8px;">
+              <button type="button" class="btn">Thêm</button>
+              <button type="button" class="btn">Áp glossary cho chương</button>
+            </div>
+          </sc-if>
+        </sc-if>
+
+      </div>
+    </aside>
+    </sc-if>
+
+    <!-- Vùng ảnh: trang vừa khung, nền xám trung tính -->
+    <main style="flex-grow: 1; min-width: 0; position: relative; background: var(--canvas); display: flex; align-items: center; justify-content: center; padding: 20px;">
+      <div style="position: relative; height: 100%; aspect-ratio: 690 / 1000; max-width: 100%; background: #fefefe; box-shadow: 0 1px 3px rgba(0,0,0,.18);">
+        <sc-if value="{{tplA}}" hint-placeholder-val="{{true}}">
+          <div style="position: absolute; left: 4%; top: 3%; width: 92%; height: 45%; border: 3px solid #1a1a1a; background: #fafaf8;"></div>
+          <div style="position: absolute; left: 4%; top: 51%; width: 92%; height: 46%; border: 3px solid #1a1a1a; background: #d6d6d0;"></div>
+          <div style="position: absolute; left: 22%; top: 30%; width: 34%; height: 18%; border-radius: 50% 50% 0 0; background: #b9b9b2;"></div>
+          <div style="position: absolute; left: 30%; top: 66%; width: 40%; height: 31%; border-radius: 45% 45% 0 0; background: #a9a9a2;"></div>
+        </sc-if>
+        <sc-if value="{{tplB}}" hint-placeholder-val="{{false}}">
+          <div style="position: absolute; left: 4%; top: 3%; width: 92%; height: 30%; border: 3px solid #1a1a1a; background: #fafaf8;"></div>
+          <div style="position: absolute; left: 4%; top: 36%; width: 45%; height: 61%; border: 3px solid #1a1a1a; background: #dcdcd6;"></div>
+          <div style="position: absolute; left: 52%; top: 36%; width: 44%; height: 61%; border: 3px solid #1a1a1a; background: #cfcfc8;"></div>
+          <div style="position: absolute; left: 12%; top: 62%; width: 30%; height: 35%; border-radius: 45% 45% 0 0; background: #b3b3ac;"></div>
+        </sc-if>
+        <sc-if value="{{isHidden}}" hint-placeholder-val="{{false}}">
+          <div style="position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,.85); font-size: 14px; color: var(--fg2);">Trang đã ẩn (credit) — không dịch, không xuất.</div>
+        </sc-if>
+        <sc-for list="{{blocks}}" as="b" hint-placeholder-count="4">
+          <button type="button" class="bubble" onClick="{{b.pick}}" style="{{b.style}}" aria-label="{{b.aria}}"><span>{{b.text}}</span></button>
+        </sc-for>
+        <sc-if value="{{hasSel}}" hint-placeholder-val="{{true}}">
+          <div role="toolbar" aria-label="Thao tác khối" style="{{floatStyle}}">
+            <button type="button" class="ib" onClick="{{focusEdit}}" aria-label="Sửa chữ" title="Sửa chữ">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"></path></svg>
+            </button>
+            <button type="button" class="ib" aria-label="Dịch lại khối" title="Dịch lại khối">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 5.7"></path><path d="M20 4v7h-7"></path></svg>
+            </button>
+            <button type="button" class="ib" aria-label="Nhân đôi khối" title="Nhân đôi khối">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="1.5"></rect><path d="M5 15V5h10"></path></svg>
+            </button>
+            <span style="width: 1px; height: 18px; background: var(--line);"></span>
+            <button type="button" class="ib" aria-label="Xoá khối" title="Xoá khối" style="color: var(--danger);">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16"></path><path d="M9 7V4h6v3"></path><path d="M6 7l1 13h10l1-13"></path></svg>
+            </button>
+          </div>
+        </sc-if>
+      </div>
+
+      <div style="position: absolute; left: 16px; bottom: 14px; display: flex; align-items: center; gap: 2px; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 2px;">
+        <button type="button" class="ib" onClick="{{prev}}" aria-label="Trang trước (←)" title="Trang trước (←)" style="width: 30px; height: 30px;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"></path></svg>
+        </button>
+        <span style="font-size: 12.5px; padding: 0 6px; font-variant-numeric: tabular-nums;">Trang {{page}} / 32</span>
+        <button type="button" class="ib" onClick="{{next}}" aria-label="Trang sau (→)" title="Trang sau (→)" style="width: 30px; height: 30px;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg>
+        </button>
+      </div>
+      <div style="position: absolute; right: 16px; bottom: 14px; display: flex; gap: 2px; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 2px; font-size: 12.5px;">
+        <button type="button" class="btn" style="height: 30px; border: 0; background: var(--accent-weak); color: var(--accent-hover);">Vừa khung</button>
+        <button type="button" class="btn" style="height: 30px; border: 0;">100%</button>
+      </div>
+    </main>
+
+    <!-- Cột thumbnail: chỉ ảnh + số; trạng thái = viền màu, chữ chỉ khi có vấn đề -->
+    <nav aria-label="Trang" style="width: 112px; flex-shrink: 0; border-left: 1px solid var(--line); display: flex; flex-direction: column;">
+      <div style="height: 36px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 12px; color: var(--muted); border-bottom: 1px solid var(--surface2);">32 trang</div>
+      <div style="flex-grow: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 12px 0 16px;">
+        <sc-for list="{{pages}}" as="p" hint-placeholder-count="8">
+          <div style="display: flex; flex-direction: column; align-items: center; gap: 3px;">
+            <button type="button" class="thumb" onClick="{{p.pick}}" aria-label="{{p.aria}}" aria-current="{{p.current}}" style="{{p.ring}}">
+              <span style="position: absolute; left: 6%; top: 4%; width: 88%; height: 42%; border: 1.5px solid #555; background: #fafaf8;"></span>
+              <span style="position: absolute; left: 6%; top: 50%; width: 88%; height: 46%; border: 1.5px solid #555; background: #d6d6d0;"></span>
+              <span style="position: absolute; left: 14%; top: 10%; width: 42%; height: 16%; border: 1.5px solid #555; border-radius: 50%; background: #fff;"></span>
+              <span style="position: absolute; left: 50%; top: 70%; width: 38%; height: 14%; border: 1.5px solid #555; border-radius: 50%; background: #fff;"></span>
+              <span style="position: absolute; right: 3px; bottom: 3px; min-width: 18px; height: 16px; padding: 0 4px; border-radius: 3px; background: rgba(27,27,26,.82); color: #fff; font-size: 10.5px; line-height: 16px; text-align: center;">{{p.n}}</span>
+            </button>
+            <sc-if value="{{p.hasBadge}}" hint-placeholder-val="{{false}}">
+              <span style="{{p.badgeStyle}}">{{p.badge}}</span>
+            </sc-if>
+          </div>
+        </sc-for>
+      </div>
+    </nav>
+
+  </div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["Giấy ấm","Xám xanh","Tối dịu","Trắng (cũ)"],"default":"Giấy ấm"},"$preview":{"width":1440,"height":860}}'>
+const TPL_A = [
+  { x: 8, y: 5, w: 44, h: 17, shape: 'o', orig: "RIGHT! WHY DISCOURAGE A GUY WHO'S JUST GETTING STARTED, TEACHER?!", tr: 'ĐÚNG! SAO LẠI NẢN CHÍ MỘT NGƯỜI VỪA MỚI BẮT ĐẦU VẬY, THẦY?!', type: 'Thoại', fs: 15 },
+  { x: 55, y: 26, w: 37, h: 13, shape: 'o', orig: "I'M NOT TRYING TO DISCOURAGE HIM.", tr: 'TÔI KHÔNG CÓ Ý LÀM NẢN LÒNG CẬU ẤY.', type: 'Thoại', fs: 15 },
+  { x: 8, y: 55, w: 36, h: 5, shape: 'r', orig: 'INMYEOL HIGH SCHOOL', tr: 'TRƯỜNG THPT INMYEOL', type: 'Chữ nền', fs: 14 },
+  { x: 52, y: 73, w: 38, h: 14, shape: 'o', orig: 'AT THIS RATE...', tr: 'CỨ ĐÀ NÀY THÌ...', type: 'Thoại', fs: 18 }
+];
+const TPL_B = [
+  { x: 28, y: 6, w: 44, h: 16, shape: 'o', orig: "HUH? YOU'RE STILL HERE?", tr: 'HẢ? CẬU VẪN CÒN Ở ĐÂY À?', type: 'Thoại', fs: 17 },
+  { x: 7, y: 40, w: 38, h: 15, shape: 'o', orig: 'I OVERSLEPT AGAIN...', tr: 'MÌNH LẠI NGỦ QUÊN RỒI...', type: 'Suy nghĩ', fs: 16 },
+  { x: 56, y: 64, w: 36, h: 14, shape: 'o', orig: "WE'RE GOING TO BE LATE!", tr: 'SẮP MUỘN HỌC RỒI!', type: 'Thoại', fs: 18 }
+];
+const STATUS = {
+  3: { tone: 'warn', label: 'Cần xem', note: 'Khối 1 đang tràn khung.' },
+  7: { tone: 'danger', label: 'Lỗi', note: 'Dịch lỗi do nhà cung cấp AI quá tải. Bấm “Dịch lại trang này”.' },
+  32: { tone: 'hidden', label: 'Đã ẩn', note: 'Trang credit — không dịch, không xuất.' }
+};
+const TITLES = { select: 'Chọn & sửa', text: 'Thêm chữ', mask: 'Mask xoá chữ', erase: 'Tẩy', ocr: 'OCR vùng', table: 'Bản dịch cả chương', find: 'Tìm / Thay · Glossary' };
+const TOOLS = ['select', 'text', 'mask', 'erase', 'ocr', 'table', 'find'];
+const LIGHT_STATUS = { warnFg: '#8a4b00', warnBg: '#fdf0dc', warnLine: '#c27400', danger: '#b42318', dangerBg: '#fbe7e4', ok: '#1d7a3e' };
+const THEMES = {
+  'Giấy ấm': { scheme: 'light', bg: '#fbf9f4', surface: '#f3efe6', surface2: '#ebe5d8', line: '#e3dccd', lineStrong: '#cbc1ad', fg: '#2a2620', fg2: '#4a443a', muted: '#6b6357', accent: '#c2501b', accentHover: '#a8430f', accentWeak: '#f6e3d6', onAccent: '#ffffff', canvas: '#e7e1d4', ...LIGHT_STATUS },
+  'Xám xanh': { scheme: 'light', bg: '#f8fafc', surface: '#f0f3f8', surface2: '#e5eaf2', line: '#dce2eb', lineStrong: '#c1cad8', fg: '#17202c', fg2: '#364152', muted: '#586375', accent: '#4f46e5', accentHover: '#4338ca', accentWeak: '#e9e8fc', onAccent: '#ffffff', canvas: '#e1e6ee', ...LIGHT_STATUS },
+  'Tối dịu': { scheme: 'dark', bg: '#222327', surface: '#2a2b30', surface2: '#33353b', line: '#383a40', lineStrong: '#4d5058', fg: '#ecebe8', fg2: '#cfcdc8', muted: '#a3a19b', accent: '#8ea2ff', accentHover: '#a5b5ff', accentWeak: '#323a5c', onAccent: '#11142a', canvas: '#17181b', warnFg: '#f2bb73', warnBg: '#3b2f1d', warnLine: '#d18f30', danger: '#ff8f85', dangerBg: '#402423', ok: '#76d39a' },
+  'Trắng (cũ)': { scheme: 'light', bg: '#ffffff', surface: '#f6f6f5', surface2: '#eeeeec', line: '#dededb', lineStrong: '#c4c4c0', fg: '#1b1b1a', fg2: '#3d3d38', muted: '#66665f', accent: '#1f4fd1', accentHover: '#1a43b3', accentWeak: '#e8eefc', onAccent: '#ffffff', canvas: '#e4e4e0', warnFg: '#8a4b00', warnBg: '#fff4e5', warnLine: '#c27400', danger: '#b42318', dangerBg: '#fdecea', ok: '#1d7a3e' }
+};
+function themeVars(t) {
+  return '--bg:' + t.bg + ';--surface:' + t.surface + ';--surface2:' + t.surface2 + ';--line:' + t.line + ';--line-strong:' + t.lineStrong +
+    ';--fg:' + t.fg + ';--fg2:' + t.fg2 + ';--muted:' + t.muted + ';--accent:' + t.accent + ';--accent-hover:' + t.accentHover +
+    ';--accent-weak:' + t.accentWeak + ';--on-accent:' + t.onAccent + ';--canvas:' + t.canvas + ';--warn-fg:' + t.warnFg +
+    ';--warn-bg:' + t.warnBg + ';--warn-line:' + t.warnLine + ';--danger:' + t.danger + ';--danger-bg:' + t.dangerBg + ';--ok:' + t.ok + ';';
+}
+const TOTAL = 32;
+
+class Component extends DCLogic {
+  state = { tool: 'select', open: true, page: 3, sel: 0, orig: false, edits: {}, sizes: {}, types: {}, brush: 24, findTab: 'find' };
+
+  tpl(n) { return n % 2 === 1 ? TPL_A : TPL_B; }
+  key(n, i) { return n + '-' + i; }
+  trOf(n, i) { const k = this.key(n, i); return this.state.edits[k] ?? this.tpl(n)[i].tr; }
+  sizeOf(n, i) { const k = this.key(n, i); return this.state.sizes[k] ?? this.tpl(n)[i].fs; }
+  flagged(n, i) { return n === 3 && i === 0 && this.sizeOf(n, i) > 13; }
+
+  pickTool(t) {
+    const s = this.state;
+    if (s.tool === t && s.open) this.setState({ open: false });
+    else this.setState({ tool: t, open: true });
+  }
+
+  renderVals() {
+    const s = this.state;
+    const n = s.page;
+    const blocksTpl = this.tpl(n);
+    const st = STATUS[n];
+    const hidden = st && st.tone === 'hidden';
+    const sel = hidden ? null : s.sel;
+    const hasSel = sel !== null && sel !== undefined && sel < blocksTpl.length;
+
+    const rail = {}, go = {};
+    TOOLS.forEach((t) => {
+      const on = s.open && s.tool === t;
+      const cur = s.tool === t;
+      rail[t] = on ? 'background:var(--accent-weak);color:var(--accent-hover);font-weight:500'
+        : cur ? 'background:transparent;color:var(--accent)' : 'background:transparent;color:var(--fg2)';
+      go[t] = () => this.pickTool(t);
+    });
+
+    const blocks = hidden ? [] : blocksTpl.map((b, i) => {
+      const isSel = hasSel && sel === i;
+      const flag = this.flagged(n, i);
+      const shape = b.shape === 'o' ? 'border-radius:50%;' : 'border-radius:2px;padding:2px 6px;';
+      const ring = isSel ? 'outline:2px dashed var(--accent);outline-offset:4px;' : flag ? 'outline:2px solid var(--warn-line);outline-offset:4px;' : '';
+      return {
+        text: s.orig ? b.orig : this.trOf(n, i),
+        aria: 'Khối ' + (i + 1) + ': ' + this.trOf(n, i),
+        style: 'left:' + b.x + '%;top:' + b.y + '%;width:' + b.w + '%;height:' + b.h + '%;font-size:' + this.sizeOf(n, i) + 'px;' + shape + ring,
+        pick: () => this.setState({ sel: i, tool: 'select', open: true })
+      };
+    });
+
+    let floatStyle = '';
+    let selOrig = '', selTr = '', selType = '', selSize = 16, selLabel = '';
+    if (hasSel) {
+      const b = blocksTpl[sel];
+      const below = b.y < 10;
+      const top = below ? 'calc(' + (b.y + b.h) + '% + 12px)' : 'calc(' + b.y + '% - 48px)';
+      floatStyle = 'position:absolute;left:' + b.x + '%;top:' + top + ';display:flex;align-items:center;gap:2px;padding:3px;background:var(--bg);border:1px solid var(--line);border-radius:6px;box-shadow:0 2px 6px rgba(0,0,0,.12);z-index:5';
+      selOrig = b.orig;
+      selTr = this.trOf(n, sel);
+      selType = s.types[this.key(n, sel)] ?? b.type;
+      selSize = this.sizeOf(n, sel);
+      selLabel = 'Trang ' + n + ' · Khối ' + (sel + 1) + ' / ' + blocksTpl.length;
+    }
+
+    const pages = [];
+    for (let i = 1; i <= TOTAL; i++) {
+      const ps = STATUS[i];
+      const active = i === n;
+      let ring = 'border:1px solid var(--line-strong);';
+      if (ps && ps.tone === 'warn') ring = 'border:2px solid var(--warn-line);';
+      if (ps && ps.tone === 'danger') ring = 'border:2px solid var(--danger);';
+      if (ps && ps.tone === 'hidden') ring = 'border:1px dashed var(--line-strong);opacity:.45;';
+      if (active) ring += 'outline:2px solid var(--accent);outline-offset:3px;';
+      const badgeStyle = !ps ? '' : ps.tone === 'warn' ? 'font-size:11px;color:var(--warn-fg);background:var(--warn-bg);border-radius:3px;padding:1px 6px'
+        : ps.tone === 'danger' ? 'font-size:11px;color:var(--danger);background:var(--danger-bg);border-radius:3px;padding:1px 6px'
+        : 'font-size:11px;color:var(--muted);padding:1px 6px';
+      pages.push({
+        n: i,
+        ring: ring,
+        current: active ? 'page' : 'false',
+        aria: 'Trang ' + i + (ps ? ' · ' + ps.label : ''),
+        hasBadge: !!ps,
+        badge: ps ? ps.label : '',
+        badgeStyle: badgeStyle,
+        pick: () => this.setState({ page: i, sel: null })
+      });
+    }
+
+    const rows = [];
+    let k = 0;
+    for (let p = 1; p <= 6; p++) {
+      this.tpl(p).forEach((b, i) => {
+        k++;
+        const flag = this.flagged(p, i);
+        const on = p === n && hasSel && sel === i;
+        rows.push({
+          n: k, page: p, orig: b.orig, tr: this.trOf(p, i),
+          flag: flag ? 'Tràn khung' : 'Xong',
+          flagStyle: flag ? 'color:var(--warn-fg)' : 'color:var(--ok)',
+          style: on ? 'background:var(--accent-weak)' : '',
+          pick: () => this.setState({ page: p, sel: i })
+        });
+      });
+    }
+
+    const open = s.open;
+    const tool = s.tool;
+    const updateKeyed = (field) => (e) => {
+      if (!hasSel) return;
+      const v = field === 'sizes' ? Number(e.target.value) : e.target.value;
+      this.setState({ [field]: { ...s[field], [this.key(n, sel)]: v } });
+    };
+    const segOn = 'background:var(--bg);box-shadow:0 0 0 1px var(--line);font-weight:500';
+    const segOff = 'background:transparent';
+
+    const theme = THEMES[this.props.theme] ?? THEMES['Giấy ấm'];
+    return {
+      themeVars: themeVars(theme), scheme: theme.scheme,
+      rail, go,
+      panelOpen: open,
+      panelTitle: TITLES[tool],
+      panelStyle: 'width:' + (tool === 'table' ? 560 : 288) + 'px;flex-shrink:0;border-right:1px solid var(--line);display:flex;flex-direction:column;background:var(--bg)',
+      closePanel: () => this.setState({ open: false }),
+      showBlock: open && tool === 'select' && hasSel,
+      showPage: open && tool === 'select' && !hasSel,
+      isText: open && tool === 'text',
+      isMask: open && tool === 'mask',
+      isErase: open && tool === 'erase',
+      isOcr: open && tool === 'ocr',
+      isTable: open && tool === 'table',
+      isFind: open && tool === 'find',
+      page: n,
+      pageStatus: st ? st.label : 'Xong',
+      pageNote: st ? st.note : 'Đã dịch và chèn chữ, chưa có gì cần xem.',
+      tplA: n % 2 === 1, tplB: n % 2 === 0, isHidden: !!hidden,
+      blocks, hasSel, floatStyle,
+      selOrig, selTr, selType, selSize, selLabel,
+      selFlagged: hasSel && this.flagged(n, sel),
+      onTr: updateKeyed('edits'), onSize: updateKeyed('sizes'), onType: updateKeyed('types'),
+      focusEdit: () => this.setState({ tool: 'select', open: true }),
+      brush: s.brush,
+      onBrush: (e) => this.setState({ brush: Number(e.target.value) }),
+      toggleOrig: () => this.setState({ orig: !s.orig }),
+      origPressed: s.orig ? 'true' : 'false',
+      origBtnStyle: 'height:32px;padding:0 12px;border-radius:4px;font-size:13px;display:inline-flex;align-items:center;gap:6px;' + (s.orig ? 'border:1px solid var(--accent);background:var(--accent-weak);color:var(--accent-hover)' : 'border:1px solid var(--line-strong);background:var(--bg);color:var(--fg)'),
+      prev: () => this.setState({ page: Math.max(1, n - 1), sel: null }),
+      next: () => this.setState({ page: Math.min(TOTAL, n + 1), sel: null }),
+      pages, rows,
+      findTabFind: s.findTab === 'find', findTabGloss: s.findTab === 'gloss',
+      findTabStyle: s.findTab === 'find' ? segOn : segOff,
+      glossTabStyle: s.findTab === 'gloss' ? segOn : segOff,
+      tabFind: () => this.setState({ findTab: 'find' }),
+      tabGloss: () => this.setState({ findTab: 'gloss' })
+    };
+  }
+}
+</script>
+</body>
+</html>

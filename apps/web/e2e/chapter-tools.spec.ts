@@ -1,14 +1,23 @@
 /**
  * Công cụ màn chương: Tìm & thay (xem trước → áp dụng → hoàn tác), áp glossary (chọn entry → xem trước → áp dụng →
- * hoàn tác) — cả hai là tab ở bảng dưới, không hộp thoại; sau áp dụng bảng văn bản hiện chữ mới không cần tải lại,
- * không PUT nào bị 423. Xuất chương qua drawer "Xuất chương" (job chapter.export qua worker giả → nút tải → 302 tới
- * presigned GET; Esc đóng, focus về nút Xuất). Mỗi test dựng một
- * chương 1 trang đã dịch riêng (worker giả) để không phụ thuộc thứ tự test.
+ * hoàn tác) — cả hai ở panel "Tìm" của rail công cụ (segmented), không hộp thoại; sau áp dụng panel Bản dịch hiện
+ * chữ mới không cần tải lại, không PUT nào bị 423. Xuất chương qua drawer "Xuất chương" (job chapter.export qua
+ * worker giả → nút tải → 302 tới presigned GET; Esc đóng, focus về nút Xuất). Ẩn / khôi phục trang qua menu chuột
+ * phải ở cột thumbnail. Mỗi test dựng một chương đã dịch riêng (worker giả) để không phụ thuộc thứ tự test.
  */
 import { type APIRequestContext, expect, type Page, test } from "@playwright/test";
 import { WEB_URL } from "./env.ts";
 import { PNG_1PX, runFakeWorker } from "./fake-worker.ts";
-import { login, state, translateIfPrepared } from "./helpers.ts";
+import {
+  login,
+  openFind,
+  openPanel,
+  pageThumb,
+  pageThumbs,
+  railButton,
+  state,
+  translateIfPrepared,
+} from "./helpers.ts";
 
 const ws = state.workspaceId;
 const headers = { origin: WEB_URL };
@@ -73,20 +82,14 @@ async function readyChapter(page: Page, n = 1) {
 async function openChapter(page: Page, chapterId: string) {
   await page.goto(`/w/${ws}/s/${state.seriesId}/c/${chapterId}`);
   await expect(page.getByRole("heading", { name: /^Chương / })).toBeVisible();
-  // Tab công cụ chỉ bật khi chương ở trạng thái review/done và có trang.
-  await expect(page.getByRole("tab", { name: "Tìm / Thay", exact: true })).toBeEnabled({ timeout: 15_000 });
+  // Panel Tìm chỉ bật khi chương ở trạng thái review/done và có trang.
+  await expect(railButton(page, "find")).toBeEnabled({ timeout: 15_000 });
   await expect(page.getByRole("status", { name: "Khoá chương" })).toContainText("Bạn đang giữ khoá chương");
 }
 
-/** Mở tab của bảng dưới → panel của tab. */
-async function openTab(page: Page, name: string) {
-  await page.getByRole("tab", { name, exact: true }).click();
-  return page.getByRole("tabpanel", { name, exact: true });
-}
-
-/** Ô Dịch trang 1 vùng 1 của bảng văn bản (tab Bản dịch). */
+/** Ô Dịch trang 1 vùng 1 của bảng văn bản (panel Bản dịch). */
 async function tableCell(page: Page) {
-  await page.getByRole("tab", { name: /^Bản dịch/ }).click();
+  await openPanel(page, "table");
   return page.getByLabel("Bản dịch trang 1 vùng 1", { exact: true });
 }
 
@@ -117,7 +120,7 @@ test.describe("công cụ chương", () => {
     await openChapter(page, chapterId);
     await expect(await tableCell(page)).toHaveValue(FAKE_TRANSLATION);
 
-    const dlg = await openTab(page, "Tìm / Thay");
+    const dlg = await openFind(page, "Tìm / Thay");
     await expect(page.getByRole("dialog")).toHaveCount(0);
     await dlg.getByLabel("Tìm", { exact: true }).fill("chào");
     await dlg.getByLabel("Thay bằng", { exact: true }).fill("Hello");
@@ -135,15 +138,16 @@ test.describe("công cụ chương", () => {
     // Bảng văn bản cập nhật không cần tải lại (page đang sửa nạp lại bản server mới).
     await expect(await tableCell(page)).toHaveValue("Xin Hello");
 
-    // Bấm kết quả → nhảy tới khối (inspector + dòng hiện tại của bảng), vẫn ở tab Tìm / Thay.
-    await openTab(page, "Tìm / Thay");
+    // Bấm kết quả → nhảy tới khối (dòng hiện tại của bảng + panel Chọn), panel Tìm vẫn mở.
+    await openFind(page, "Tìm / Thay");
     await dlg.getByRole("button", { name: "Tới khối", exact: true }).click();
-    await expect(page.getByRole("complementary", { name: "Bảng thuộc tính" })).toContainText("Khối 1 · Thoại");
-    await expect(page.getByRole("tab", { name: "Tìm / Thay", exact: true })).toHaveAttribute("aria-selected", "true");
+    await expect(railButton(page, "find")).toHaveAttribute("aria-pressed", "true");
+    await expect(dlg).toBeVisible();
     await tableCell(page);
     await expect(page.locator(`[data-row="${pageId}:t0"]`)).toHaveClass(/\bon\b/);
+    await expect(await openPanel(page, "select")).toContainText("Khối 1 / 1 · Thoại");
 
-    await openTab(page, "Tìm / Thay");
+    await openFind(page, "Tìm / Thay");
     await dlg.getByRole("button", { name: "Hoàn tác", exact: true }).click();
     await expect(dlg.getByText("Đã hoàn tác trên 1 trang.")).toBeVisible();
     await expect.poll(() => regionTranslation(page.request, pageId)).toBe(FAKE_TRANSLATION);
@@ -165,7 +169,7 @@ test.describe("công cụ chương", () => {
     const locked = watchLocked(page);
     await openChapter(page, chapterId);
 
-    const dlg = await openTab(page, "Áp glossary");
+    const dlg = await openFind(page, "Glossary");
     await expect(page.getByRole("dialog")).toHaveCount(0);
     await expect(dlg.getByLabel("Chọn 안녕하세요", { exact: true })).toBeVisible();
 
@@ -190,7 +194,7 @@ test.describe("công cụ chương", () => {
     await expect.poll(() => regionTranslation(page.request, pageId)).toBe("Chào bạn");
     await expect(await tableCell(page)).toHaveValue("Chào bạn");
 
-    await openTab(page, "Áp glossary");
+    await openFind(page, "Glossary");
     await dlg.getByRole("button", { name: "Hoàn tác", exact: true }).click();
     await expect(dlg.getByText("Đã hoàn tác trên 1 trang.")).toBeVisible();
     await expect.poll(() => regionTranslation(page.request, pageId)).toBe(FAKE_TRANSLATION);
@@ -260,28 +264,45 @@ test.describe("công cụ chương", () => {
   });
 });
 
-test("delete a page from the rail (undo, then restore from the Đã xoá filter)", async ({ page }) => {
+test("hide a page from the thumbnail column (undo, then restore from its menu)", async ({ page }) => {
   await login(page);
   const { chapterId } = await readyChapter(page, 3);
   await openChapter(page, chapterId);
-  const rail = page.getByRole("complementary", { name: "Danh sách trang" });
+  const thumbs = pageThumbs(page);
+  await expect(thumbs.getByText("3 trang", { exact: true })).toBeVisible();
 
-  await rail.getByRole("button", { name: "Xoá trang 2" }).click();
-  await expect(rail.getByRole("button", { name: "Tất cả 2" })).toBeVisible();
-  // Số trang giữ số gốc: còn Trang 1 và Trang 3.
-  await expect(rail.getByRole("button", { name: /^Trang \d/ })).toHaveText([/^Trang 1/, /^Trang 3/]);
-  // "Hoàn tác" của thông báo (thanh công cụ editor cũng có nút Hoàn tác).
-  await page
-    .getByRole("status")
-    .filter({ hasText: "Đã xoá trang 2" })
-    .getByRole("button", { name: "Hoàn tác" })
-    .click();
-  await expect(rail.getByRole("button", { name: "Tất cả 3" })).toBeVisible();
-  await expect(rail.getByRole("button", { name: /^Đã xoá/ })).toHaveCount(0);
+  // Chuột phải thumbnail → menu; Esc đóng, focus về thumbnail.
+  await pageThumb(page, 2).click({ button: "right" });
+  await expect(page.getByRole("menuitem", { name: "Ẩn trang 2" })).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("menu")).toHaveCount(0);
+  await expect(pageThumb(page, 2)).toBeFocused();
+  // Tab trong menu: đóng menu, focus đi tiếp (không rơi về <body>).
+  await pageThumb(page, 2).click({ button: "right" });
+  await expect(page.getByRole("menuitem", { name: "Ẩn trang 2" })).toBeFocused();
+  await page.keyboard.press("Tab");
+  await expect(page.getByRole("menu")).toHaveCount(0);
+  await expect(page.locator("body")).not.toBeFocused();
+  // Chuột phải thumbnail → "Ẩn trang 2".
+  await pageThumb(page, 2).click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Ẩn trang 2" }).click();
+  await expect(thumbs.getByText("2 trang", { exact: true })).toBeVisible();
+  // Số trang giữ số gốc; trang ẩn nằm đúng chỗ, mờ + "Đã ẩn".
+  await expect(thumbs.getByRole("button", { name: /^Trang \d · / })).toHaveCount(3);
+  await expect(thumbs.getByRole("button", { name: "Trang 2 · Đã ẩn", exact: true })).toBeVisible();
+  await expect(pageThumb(page, 1)).not.toHaveAccessibleName(/Đã ẩn/);
+  await expect(pageThumb(page, 3)).not.toHaveAccessibleName(/Đã ẩn/);
+  // "Hoàn tác" của thông báo (thanh trên cũng có nút Hoàn tác).
+  await page.getByRole("status").filter({ hasText: "Đã ẩn trang 2" }).getByRole("button", { name: "Hoàn tác" }).click();
+  await expect(thumbs.getByText("3 trang", { exact: true })).toBeVisible();
+  await expect(thumbs.getByRole("button", { name: /Đã ẩn/ })).toHaveCount(0);
 
-  await rail.getByRole("button", { name: "Xoá trang 2" }).click();
-  await rail.getByRole("button", { name: "Đã xoá 1" }).click();
-  await rail.getByRole("button", { name: "Khôi phục trang 2" }).click();
-  await expect(rail.getByRole("button", { name: "Tất cả 3" })).toBeVisible();
-  await expect(rail.getByRole("button", { name: /^Đã xoá/ })).toHaveCount(0);
+  // Ẩn lại bằng bàn phím (Shift+F10 trên thumbnail đang focus), rồi bấm trang ẩn → menu "Khôi phục trang 2".
+  await pageThumb(page, 2).focus();
+  await page.keyboard.press("Shift+F10");
+  await page.getByRole("menuitem", { name: "Ẩn trang 2" }).click();
+  await thumbs.getByRole("button", { name: "Trang 2 · Đã ẩn", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Khôi phục trang 2" }).click();
+  await expect(thumbs.getByText("3 trang", { exact: true })).toBeVisible();
+  await expect(thumbs.getByRole("button", { name: /Đã ẩn/ })).toHaveCount(0);
 });

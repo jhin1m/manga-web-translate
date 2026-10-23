@@ -1,6 +1,6 @@
 /**
  * OCR vùng chọn: kéo khung (công cụ O) → POST /ocr-region → poll job → chèn region + text box vào state như
- * một thao tác editor (có undo, đi qua save). "OCR lại" 1 vùng có sẵn (inspector): cùng job trên bbox của vùng,
+ * một thao tác editor (có undo, đi qua save). "Dịch lại khối" 1 vùng có sẵn (panel Chọn, thanh nổi): cùng job trên bbox của vùng,
  * kết quả thay chữ gốc + bản dịch của vùng đó. Khung đang chờ hiện viền đứt; lỗi báo trên panel.
  */
 import type { Region } from "@mtl/shared";
@@ -10,6 +10,7 @@ import { errorMessage } from "../../../lib/api.ts";
 import { insertOcrRegion, refreshRegionFromOcr } from "../actions.ts";
 import { type OcrRegionResult, startOcrRegion, waitJob } from "../api.ts";
 import { editorStore } from "../store.ts";
+import { SELECT_FILL, SELECT_STROKE } from "./colors.ts";
 
 export type PageRect = { x: number; y: number; w: number; h: number };
 type Pending = PageRect & { id: string };
@@ -85,14 +86,14 @@ export function OcrOverlay({
           <Rect
             key={`${r.x}:${r.y}:${r.w}`}
             {...r}
-            stroke="#1f4fd1"
+            stroke={SELECT_STROKE}
             strokeWidth={1.5}
             strokeScaleEnabled={false}
             dash={[6, 4]}
           />
         ))}
         {draft && (
-          <Rect {...draft} stroke="#1f4fd1" strokeWidth={1.5} strokeScaleEnabled={false} fill="rgba(31,79,209,0.08)" />
+          <Rect {...draft} stroke={SELECT_STROKE} strokeWidth={1.5} strokeScaleEnabled={false} fill={SELECT_FILL} />
         )}
       </Group>
     </Layer>

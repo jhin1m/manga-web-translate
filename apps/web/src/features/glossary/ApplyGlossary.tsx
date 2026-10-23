@@ -1,6 +1,7 @@
 /**
- * Tab "Áp glossary" ở bảng dưới màn chương — áp lại glossary vào bản dịch có sẵn (không gọi LLM): mỗi entry của glossary series (series đè workspace) có
- * ô "cụm cũ trong bản dịch" (mặc định = từ gốc để bắt chữ chưa dịch). Chọn entry → xem trước → áp dụng → hoàn tác.
+ * Áp glossary (đoạn "Glossary" của panel Tìm màn chương) — áp lại glossary vào bản dịch có sẵn (không gọi LLM): mỗi
+ * entry của glossary series (series đè workspace) có ô "cụm cũ trong bản dịch" (mặc định = từ gốc để bắt chữ chưa
+ * dịch). Chọn entry → xem trước → áp dụng → hoàn tác.
  */
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";

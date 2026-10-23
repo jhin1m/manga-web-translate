@@ -24,6 +24,24 @@ const row = (page_id: string, version: number, n = 1) => ({
 });
 
 describe("chapter store", () => {
+  it("fitView: no active page is a no-op; 100% sets the zoomed flag, fit clears it", () => {
+    const s = createChapterStore();
+    s.getState().setPages([meta("a", 1000)]);
+    s.getState().setBox({ w: 1200, h: 800 });
+    editorStore.getState().setView({ scale: 0.3, x: 1, y: 2 });
+    s.getState().fitView(1);
+    expect(editorStore.getState().view).toEqual({ scale: 0.3, x: 1, y: 2 });
+    expect(s.getState().zoomed).toBe(false);
+
+    s.getState().setActive("a");
+    s.getState().fitView(1);
+    expect(editorStore.getState().view).toEqual({ scale: 1, x: 200, y: FIT_EDGE });
+    expect(s.getState().zoomed).toBe(true);
+    s.getState().fitView();
+    expect(editorStore.getState().view.scale).toBeLessThan(1);
+    expect(s.getState().zoomed).toBe(false);
+  });
+
   it("switching page opens the new page at its top, centered; zoom is kept once the user zoomed", () => {
     const s = createChapterStore();
     s.getState().setPages([meta("a", 1000), { ...meta("b", 2000), width: 400 }]);

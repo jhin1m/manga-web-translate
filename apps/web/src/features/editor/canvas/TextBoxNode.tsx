@@ -9,6 +9,7 @@ import { memo } from "react";
 import { Group, Rect, Shape } from "react-konva";
 import { canvasFont, type FontKit } from "../fonts.ts";
 import { linePlacements } from "../measure.ts";
+import { SELECT_STROKE } from "./colors.ts";
 
 type Props = {
   box: TextBox;
@@ -82,7 +83,7 @@ export const TextBoxNode = memo(function TextBoxNode({
         <Rect
           width={w}
           height={h}
-          stroke="#1f4fd1"
+          stroke={SELECT_STROKE}
           strokeWidth={1}
           strokeScaleEnabled={false}
           dash={[4, 4]}

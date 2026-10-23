@@ -176,7 +176,7 @@ export class ChapterSession {
 
   /**
    * Khôi phục bản ghi IndexedDB của page KHÔNG active: rebase op lên state server rồi PUT thẳng. Có xung đột →
-   * hoãn tới khi mở page đó (danh sách xung đột hiện trong inspector).
+   * hoãn tới khi mở page đó (danh sách xung đột hiện trong panel Chọn).
    */
   async restoreOther(rec: PendingRecord): Promise<"saved" | "deferred" | "noop"> {
     const { chapter, queue } = this.deps;

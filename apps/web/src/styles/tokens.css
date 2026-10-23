@@ -1,7 +1,7 @@
 /*
  * Design tokens + base styles (xem docs/design-guidelines.md).
- * Hướng "công cụ làm việc": dày thông tin, trung tính, MỘT màu nhấn. Cấm: chữ gradient, glassmorphism,
- * blob nền, pastel/cute, emoji trang trí, bóng đổ lớn.
+ * Hướng "công cụ làm việc": dày thông tin, thang ấm trung tính ("Giấy ấm"), MỘT màu nhấn cam đất.
+ * Cấm: chữ gradient, glassmorphism, blob nền, pastel/cute, emoji trang trí, bóng đổ lớn.
  */
 @import "@fontsource/be-vietnam-pro/400.css";
 @import "@fontsource/be-vietnam-pro/500.css";
@@ -10,23 +10,27 @@
 :root {
   color-scheme: light;
 
-  /* Màu: thang xám trung tính + 1 nhấn + màu trạng thái (chỉ dùng cho trạng thái, không trang trí). */
-  --c-bg: #ffffff;
-  --c-surface: #f6f6f5;
-  --c-surface-2: #eeeeec;
-  --c-line: #dededb;
-  --c-line-strong: #c4c4c0;
-  --c-fg: #1b1b1a;
-  --c-fg-muted: #66665f;
-  --c-fg-subtle: #8e8e86;
-  --c-accent: #1f4fd1;
-  --c-accent-hover: #1a43b3;
-  --c-accent-weak: #e8eefc;
+  /* Màu "Giấy ấm": thang ấm trung tính + 1 nhấn cam đất + màu trạng thái (chỉ dùng cho trạng thái, không trang trí).
+     Chữ màu nhấn trên nền bg/surface dùng --c-accent-hover (#c2501b chỉ đạt 4.48:1 trên --c-bg). */
+  --c-bg: #fbf9f4;
+  --c-surface: #f3efe6;
+  --c-surface-2: #ebe5d8;
+  --c-line: #e3dccd;
+  --c-line-strong: #cbc1ad;
+  --c-fg: #2a2620;
+  --c-fg-muted: #6b6357;
+  --c-fg-subtle: #7a7264;
+  --c-accent: #c2501b;
+  --c-accent-hover: #a8430f;
+  --c-accent-weak: #f6e3d6;
+  --c-canvas: #e7e1d4;
   --c-ok: #1d7a3e;
   --c-warn: #a15c00;
+  --c-warn-weak: #fdf0dc;
   --c-danger: #b42318;
-  --c-info: #1f4fd1;
-  --c-focus: #1f4fd1;
+  --c-danger-weak: #fbe7e4;
+  --c-info: #2f6690; /* xanh lam dịu: "đang xử lý" tách hẳn khỏi cam nhấn và vàng cảnh báo */
+  --c-focus: #c2501b;
 
   /* Chữ */
   --font-ui: "Be Vietnam Pro", Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
@@ -60,11 +64,12 @@ body {
   font: var(--fs-md) / var(--lh) var(--font-ui);
   color: var(--c-fg);
   background: var(--c-bg);
+  accent-color: var(--c-accent);
   -webkit-font-smoothing: antialiased;
 }
 
 a {
-  color: var(--c-accent);
+  color: var(--c-accent-hover);
   text-decoration: none;
 }
 a:hover {
@@ -161,7 +166,7 @@ button:disabled {
 button.link {
   border-color: transparent;
   background: none;
-  color: var(--c-accent);
+  color: var(--c-accent-hover);
   padding-inline: var(--sp-1);
 }
 
@@ -204,6 +209,7 @@ button.link {
   font-size: var(--fs-sm);
   color: var(--c-fg-muted);
   margin-bottom: var(--sp-1);
+  overflow-wrap: anywhere;
 }
 .row {
   display: flex;

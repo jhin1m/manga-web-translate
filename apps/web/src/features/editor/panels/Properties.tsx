@@ -1,9 +1,12 @@
 /**
- * Thuộc tính box đang chọn (chữ sửa ở ô "Bản dịch" của inspector): font, cỡ (tắt khi auto-fit), giãn dòng, lề, căn lề, màu, viền ngoài, ẩn.
+ * Kiểu chữ của box đang chọn (chữ sửa ở ô "Bản dịch" của panel Chọn), chia 2 phần:
+ * - `BasicStyle`: font, cỡ (tắt khi tự khớp), tự khớp cỡ chữ vào khung — luôn hiện.
+ * - `AdvancedStyle`: giãn dòng, lề, căn lề, màu chữ, màu viền, viền ngoài, ẩn khi xuất — trong "Kiểu chữ nâng cao".
  * Thay đổi liên tục cùng trường (gõ số, kéo màu) gộp 1 bước undo qua key `style:<field>:<id>`.
  */
 import type { TextBox } from "@mtl/shared";
-import { type BoxStyle, deleteBox, setStyle } from "../actions.ts";
+import type { ReactNode } from "react";
+import { type BoxStyle, setStyle } from "../actions.ts";
 import { editorStore, useEditor } from "../store.ts";
 
 const ALIGN: { id: TextBox["align"]; label: string }[] = [
@@ -17,34 +20,40 @@ const num = (v: string, min: number, max: number) => {
   return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : null;
 };
 
-export function Properties({ fonts }: { fonts: string[] }) {
+/** Box đang chọn + hàm đổi 1 trường kiểu (1 bước undo mỗi chuỗi thay đổi cùng trường). */
+function useBoxStyle() {
   const box = useEditor((s) => s.doc?.text_boxes.find((b) => b.id === s.selection));
   const readOnly = useEditor((s) => !!s.readOnly);
-  if (!box) return <p className="muted small ed-pad">Chọn một khung chữ để sửa thuộc tính. Double-click để sửa chữ.</p>;
-
-  const st = editorStore.getState();
   const style = (field: keyof BoxStyle, patch: BoxStyle) => {
-    if (st.layout) st.apply(setStyle(box.id, patch, st.layout), `style:${field}:${box.id}`);
+    const st = editorStore.getState();
+    if (box && st.layout) st.apply(setStyle(box.id, patch, st.layout), `style:${field}:${box.id}`);
   };
+  return { box, readOnly, style };
+}
 
+export function BasicStyle({ fonts }: { fonts: string[] }) {
+  const { box, readOnly, style } = useBoxStyle();
+  if (!box) return null;
   return (
     <fieldset className="ed-props" disabled={readOnly}>
-      <label htmlFor="ed-font">Font</label>
-      <select
-        id="ed-font"
-        value={box.font_family}
-        onChange={(e) => style("font_family", { font_family: e.target.value })}
-      >
-        {!fonts.includes(box.font_family) && <option value={box.font_family}>{box.font_family} (thiếu)</option>}
-        {fonts.map((f) => (
-          <option key={f} value={f}>
-            {f}
-          </option>
-        ))}
-      </select>
       <div className="ed-row">
         <div>
-          <label htmlFor="ed-size">Cỡ (px)</label>
+          <label htmlFor="ed-font">Font</label>
+          <select
+            id="ed-font"
+            value={box.font_family}
+            onChange={(e) => style("font_family", { font_family: e.target.value })}
+          >
+            {!fonts.includes(box.font_family) && <option value={box.font_family}>{box.font_family} (thiếu)</option>}
+            {fonts.map((f) => (
+              <option key={f} value={f}>
+                {f}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label htmlFor="ed-size">Cỡ chữ (px)</label>
           <input
             id="ed-size"
             type="number"
@@ -53,12 +62,33 @@ export function Properties({ fonts }: { fonts: string[] }) {
             step={1}
             value={box.font_size}
             disabled={box.auto_fit}
+            title={box.auto_fit ? "Đang tự khớp cỡ chữ vào khung" : undefined}
             onChange={(e) => {
               const v = num(e.target.value, 6, 200);
               if (v !== null) style("font_size", { font_size: v });
             }}
           />
         </div>
+      </div>
+      <label className="ed-check">
+        <input
+          type="checkbox"
+          checked={box.auto_fit}
+          onChange={(e) => style("auto_fit", { auto_fit: e.target.checked })}
+        />
+        Tự khớp cỡ chữ vào khung
+      </label>
+    </fieldset>
+  );
+}
+
+/** `children`: thao tác thêm ở cuối (VD "Áp kiểu này cho khối cùng loại"). */
+export function AdvancedStyle({ children }: { children?: ReactNode }) {
+  const { box, readOnly, style } = useBoxStyle();
+  if (!box) return null;
+  return (
+    <fieldset className="ed-props" disabled={readOnly}>
+      <div className="ed-row">
         <div>
           <label htmlFor="ed-lh">Giãn dòng</label>
           <input
@@ -89,14 +119,6 @@ export function Properties({ fonts }: { fonts: string[] }) {
           />
         </div>
       </div>
-      <label className="ed-check">
-        <input
-          type="checkbox"
-          checked={box.auto_fit}
-          onChange={(e) => style("auto_fit", { auto_fit: e.target.checked })}
-        />
-        Tự khớp cỡ chữ vào khung
-      </label>
       <span className="label">Căn lề</span>
       <div className="ed-seg">
         {ALIGN.map((a) => (
@@ -151,11 +173,7 @@ export function Properties({ fonts }: { fonts: string[] }) {
         <input type="checkbox" checked={box.hidden} onChange={(e) => style("hidden", { hidden: e.target.checked })} />
         Ẩn khi xuất
       </label>
-      <div className="ed-actions">
-        <button type="button" className="btn-danger" onClick={() => st.apply(deleteBox(box.id))}>
-          Xoá khung
-        </button>
-      </div>
+      {children}
     </fieldset>
   );
 }

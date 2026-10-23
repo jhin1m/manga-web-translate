@@ -1,9 +1,10 @@
 # Xuất chương + sửa hàng loạt (find/replace, áp glossary)
 
 Trên UI (màn chương, xem [editor.md](./editor.md)): **Xuất** là drawer phải (`features/chapter/export-drawer.tsx`; mở
-bằng nút chính "Xuất", menu phụ hoặc `?drawer=export`; cảnh báo "Trước khi xuất", chọn định dạng, tải qua 302 bên
-dưới). **Tìm / Thay** và **Áp glossary** là tab của bảng dưới (cùng tab Bản dịch), không còn hộp thoại modal; hai tab
-chỉ dùng được khi chương đã dịch xong. Trước khi gọi `apply` UI lưu hết sửa chưa lưu (`beforeWrite`). API bên dưới
+bằng nút chính "Xuất", nút "Xuất" phụ hoặc `?drawer=export`; cảnh báo "Trước khi xuất" — "Xem các khối này" mở panel
+Bản dịch lọc khối cần xem —, chọn định dạng, tải qua 302 bên dưới). **Tìm / Thay** và **Áp glossary** là 2 đoạn của
+panel **Tìm** trên rail công cụ (segmented "Tìm / Thay" | "Glossary", panel rộng 560px; Ctrl/Cmd+F mở thẳng "Tìm /
+Thay"), không có hộp thoại modal; chỉ dùng được khi chương đã dịch xong. Trước khi gọi `apply` UI lưu hết sửa chưa lưu (`beforeWrite`). API bên dưới
 không đổi.
 
 ## Xuất chương (`chapter.export`)
@@ -38,7 +39,7 @@ Render phía server bằng chính `worker/mtl_pipeline/render.py` (một rendere
 - **Xoá sau 7 ngày**: lifecycle MinIO lọc theo tag (`minio-init` trong `infra/docker-compose.dev.yml`,
   `mc ilm import`); production phải cấu hình rule tương đương trên bucket.
 
-## Find/replace và áp glossary (tab Tìm / Thay, Áp glossary)
+## Find/replace và áp glossary (panel Tìm: "Tìm / Thay", "Glossary")
 
 Chữ thường (không regex), phạm vi trong 1 chương, thay trong `region.translation` và `text_box.text`; box bị đổi có
 `lines: []` (renderer ngắt lại).

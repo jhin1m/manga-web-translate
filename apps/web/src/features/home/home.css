@@ -240,13 +240,15 @@ label.file-pick input {
 }
 .row-item .grow {
   flex: 1;
-  min-width: 200px;
+  min-width: 140px;
 }
+/* Tên series dài cắt "…" (title của .row-name hiện tên đầy đủ), không đè cột trạng thái. */
 .row-title {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  width: 240px;
+  flex: 0 1 240px;
+  min-width: 0;
 }
 .row-title a {
   font-weight: 600;
@@ -255,6 +257,12 @@ label.file-pick input {
 .row-sub {
   font-size: var(--fs-xs);
   color: var(--c-fg-muted);
+}
+.row-name,
+.row-sub {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .row-error {
   flex-basis: 100%;
@@ -301,7 +309,7 @@ label.file-pick input {
   font-weight: 600;
 }
 .row-open:hover .row-name {
-  color: var(--c-accent);
+  color: var(--c-accent-hover);
 }
 
 /* Chấm trạng thái 10px. */
@@ -355,8 +363,19 @@ label.file-pick input {
   gap: var(--sp-4);
   flex-wrap: wrap;
 }
+.series-head-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+/* Tên series dài cắt "…" trên 1 dòng; tên đầy đủ ở `title`. */
 .series-head h1 {
   font-size: 22px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .chips {
   border: 0;
@@ -375,7 +394,7 @@ label.file-pick input {
 .chips button[aria-pressed="true"] {
   border-color: var(--c-accent);
   background: var(--c-accent-weak);
-  color: var(--c-accent);
+  color: var(--c-accent-hover);
 }
 /* Hàng chương: phần số + trạng thái là link mở chương (bấm cả vùng). */
 .ch-open {
@@ -401,7 +420,7 @@ label.file-pick input {
   font-size: 15px;
 }
 .ch-open:hover .ch-num {
-  color: var(--c-accent);
+  color: var(--c-accent-hover);
 }
 .ch-body {
   flex: 1;
@@ -467,7 +486,7 @@ label.file-pick input {
   text-decoration: none;
 }
 .tabs a[aria-current="page"] {
-  color: var(--c-accent);
+  color: var(--c-accent-hover);
   border-bottom-color: var(--c-accent);
 }
 .tab-panel {
@@ -645,6 +664,6 @@ label.file-pick input {
     padding-inline: var(--sp-4);
   }
   .row-title {
-    width: auto;
+    flex-basis: auto;
   }
 }

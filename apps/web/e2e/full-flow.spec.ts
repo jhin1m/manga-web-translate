@@ -7,7 +7,7 @@
 import { expect, type Route, test } from "@playwright/test";
 import { WEB_URL } from "./env.ts";
 import { PNG_1PX, runFakeWorker } from "./fake-worker.ts";
-import { login, state } from "./helpers.ts";
+import { login, openPanel, pageThumbs, state } from "./helpers.ts";
 
 const ws = state.workspaceId;
 
@@ -58,12 +58,12 @@ test("drop a strip on home → translate → edit → export", async ({ page }) 
 
   let ready = false;
   const worker = runFakeWorker(state.token, () => ready, 60_000, { pagesPerSource: 3 });
-  const rail = page.getByRole("complementary", { name: "Danh sách trang" });
-  // Xong bước 1 dừng lại: 3 trang "Chờ dịch", chưa có job dịch → bấm Bước 2.
+  const rail = pageThumbs(page);
+  // Xong bước 1 dừng lại: 3 trang "Chờ dịch" (tên truy cập thumbnail), chưa có job dịch → bấm Bước 2.
   await expect(chip).toHaveText("Xong bước 1 · chờ dịch", { timeout: 30_000 });
-  await expect(rail.locator(".status", { hasText: "Chờ dịch" })).toHaveCount(3);
+  await expect(rail.getByRole("button", { name: /· Chờ dịch$/ })).toHaveCount(3);
   await page.getByRole("button", { name: "Bước 2 · Dịch" }).click();
-  await expect(rail.locator(".status", { hasText: "Xong" })).toHaveCount(3, { timeout: 30_000 });
+  await expect(rail.getByRole("button", { name: /· Xong$/ })).toHaveCount(3, { timeout: 30_000 });
   const primary = page.getByRole("button", { name: "Xuất", exact: true });
   await expect(primary).toBeEnabled({ timeout: 15_000 });
   await expect(chip).toHaveText(/^Chờ duyệt/);
@@ -76,7 +76,7 @@ test("drop a strip on home → translate → edit → export", async ({ page }) 
     await page.request.get(`/api/w/${ws}/chapters/${chapterId}/progress`)
   ).json()) as ProgressBody;
   const p2 = progress.pages.find((p) => p.ord === 1)?.id ?? "";
-  await page.getByRole("tab", { name: /^Bản dịch/ }).click();
+  await openPanel(page, "table");
   const cell = page.getByLabel("Bản dịch trang 2 vùng 1", { exact: true });
   await cell.click();
   await expect(cell).not.toHaveAttribute("readonly");

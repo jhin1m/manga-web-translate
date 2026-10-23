@@ -1,6 +1,6 @@
 /**
  * Canvas màn chương: hiện từng trang một — chỉ page đang sửa (active), vẽ qua transform `view` (toạ độ page) trên 1
- * Stage bằng khung nhìn (không bao giờ bằng page — giới hạn canvas Safari). Đổi trang ở rail / phím ←/→.
+ * Stage bằng khung nhìn (không bao giờ bằng page — giới hạn canvas Safari). Đổi trang ở cột trang / pager / phím ←/→.
  *
  * Chế độ xem (chapterStore): Gốc = ảnh gốc, ẩn chữ; Dịch = ảnh sạch + chữ; Chia đôi = thêm cột Gốc bên trái cùng
  * Stage (cuộn/zoom đồng bộ tự nhiên), chỉ cột Dịch nhận thao tác — bấm/kéo ở cột Gốc = kéo canvas.
@@ -19,7 +19,7 @@ import { addBox, editText, newTextBox } from "../actions.ts";
 import { chapterStore, effectiveMode, useChapterStore } from "../chapter-store.ts";
 import type { FontKit } from "../fonts.ts";
 import { lineStep } from "../measure.ts";
-import { clampView, contentBox, fitScale, pageStartView, screenToPage } from "../page-layout.ts";
+import { clampView, contentBox, FIT_EDGE, fitScale, pageStartView, screenToPage } from "../page-layout.ts";
 import { editorStore, useEditor, type View } from "../store.ts";
 import { MaskLayer } from "./MaskLayer.tsx";
 import { OcrOverlay, type PageRect } from "./OcrSelect.tsx";
@@ -95,7 +95,7 @@ export const ChapterCanvas = memo(function ChapterCanvas(props: {
   }, []);
 
   // Lần đầu có page active + khung đã đo: vừa khung theo page đó. Khung đổi cỡ khi chưa ai động vào khung nhìn
-  // (bảng dưới mở/thu sau lần đo đầu) → vừa lại. Đổi trang sau đó do chapterStore.setActive đặt khung nhìn.
+  // (panel ngữ cảnh mở/thu sau lần đo đầu) → vừa lại. Đổi trang sau đó do chapterStore.setActive đặt khung nhìn.
   useEffect(() => {
     if (size.w === 0 || page.w === 0) return;
     if (fitted && editorStore.getState().view !== lastFit.current) return;
@@ -103,6 +103,26 @@ export const ChapterCanvas = memo(function ChapterCanvas(props: {
     lastFit.current = v;
     editorStore.getState().setView(v);
     setFitted(true);
+  }, [fitted, size, page]);
+
+  // Khung đổi cỡ sau khi người dùng đã động vào khung nhìn (thu/mở panel, panel 288 ↔ 560, đổi trang rồi mới đổi cỡ):
+  // chưa tự zoom → vừa lại theo bề rộng mới, giữ điểm page đang ở mép trên; đã zoom → giữ mức, chỉ kẹp/căn giữa lại.
+  const lastSize = useRef(size);
+  useEffect(() => {
+    const prev = lastSize.current;
+    lastSize.current = size;
+    if (prev.w === size.w && prev.h === size.h) return;
+    const v = editorStore.getState().view;
+    // Chưa vừa lần đầu / chưa ai động vào khung nhìn → effect vừa khung ở trên lo.
+    if (!fitted || size.w === 0 || page.w === 0 || v === lastFit.current) return;
+    const c = contentBox(page, chapterStore.getState().viewMode === "split");
+    if (chapterStore.getState().zoomed) {
+      editorStore.getState().setView(clampView(v, c, size, c.x));
+      return;
+    }
+    const topY = (FIT_EDGE - v.y) / v.scale;
+    const scale = fitScale(c, page, size, MIN_SCALE);
+    editorStore.getState().setView(clampView({ scale, x: 0, y: FIT_EDGE - topY * scale }, c, size, c.x));
   }, [fitted, size, page]);
 
   // Bật/tắt chia đôi: vừa lại theo nội dung mới (trừ khi đã tự zoom), giữ điểm page đang ở giữa khung.

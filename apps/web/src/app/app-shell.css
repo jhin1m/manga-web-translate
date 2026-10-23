@@ -40,7 +40,7 @@
   height: 32px;
   border-radius: 50%;
   background: var(--c-accent-weak);
-  color: var(--c-accent);
+  color: var(--c-accent-hover);
   display: flex;
   align-items: center;
   justify-content: center;

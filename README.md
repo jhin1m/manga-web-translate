@@ -9,11 +9,12 @@ OCR (Bước 1), dịch theo ngữ cảnh cả chương + tự chèn chữ (Bư�
 ## Tính năng hiện có
 
 - **Upload**: thả ảnh lẻ / ZIP ở home hoặc màn series → tự đoán series + số chương, upload nền (song song, thử lại, tải
-  tiếp sau khi đóng tab). Rail ảnh gốc hiện ngay khi đang tải; xoá / khôi phục ảnh trước Bước 1.
+  tiếp sau khi đóng tab). Cột ảnh gốc hiện ngay khi đang tải; xoá / khôi phục ảnh trước Bước 1.
 - **Pipeline 2 bước**: Bước 1 = ghép slice → cắt trang theo detector → xoá chữ (inpaint) + OCR bằng LLM, song song theo
   trang. Bước 2 = dịch tuần tự theo chương (ngữ cảnh cuộn), auto-typeset theo hợp đồng layout dùng chung web ↔ server.
 - **Editor** (react-konva): xem từng trang, sửa box chữ, undo/redo, autosave có version + khôi phục bản nháp, vẽ mask
-  để xoá chữ lại, OCR lại vùng tự vẽ, chế độ Gốc / Dịch / Chia đôi, bảng văn bản cả chương, khoá chương theo người sửa.
+  để xoá chữ lại, OCR lại vùng tự vẽ, Xem gốc / Chia đôi, bảng văn bản cả chương, khoá chương theo người sửa; rail
+  công cụ + 1 panel theo công cụ, thanh nổi cạnh khối, cột thumbnail trang.
 - **Bỏ rác**: ẩn trang sau Bước 1 (không dịch, không xuất, khôi phục được); học ảnh credit theo series ("Luôn bỏ ở
   series này" → chương sau tự bỏ ảnh giống, dHash); gợi ý "Có thể là credit" theo khổ ảnh; danh sách chữ watermark bỏ
   qua theo series (không gửi LLM, không chèn chữ).

@@ -1,17 +1,11 @@
 /*
  * Panel + canvas editor (dùng trong màn chương gộp, chapter-workspace.css lo bố cục) — cùng token/hướng A với phần
- * còn lại (docs/design-guidelines.md). Vùng canvas nền xám trung tính để nhìn ảnh; không gradient, không bóng lớn.
+ * còn lại (docs/design-guidelines.md). Vùng canvas nền ấm trung tính (`--c-canvas`) để nhìn ảnh; không gradient, không bóng lớn.
  */
-.ed-tool kbd {
-  font: inherit;
-  font-size: var(--fs-xs);
-  color: var(--c-fg-subtle);
-}
-.ed-tool.on,
 .ed-seg .on {
   background: var(--c-accent-weak);
   border-color: var(--c-accent);
-  color: var(--c-accent);
+  color: var(--c-accent-hover);
 }
 .ed-notices:empty {
   display: none;
@@ -30,7 +24,7 @@
   flex: 1;
   min-height: 0;
   overflow: hidden;
-  background: #8a8a85;
+  background: var(--c-canvas);
   touch-action: none;
 }
 .ed-loading {
@@ -38,7 +32,7 @@
   place-items: center;
 }
 .ed-loading .muted {
-  color: #f6f6f5;
+  color: var(--c-fg-muted);
 }
 .ed-textedit {
   position: absolute;
@@ -52,19 +46,6 @@
   white-space: pre-wrap;
 }
 
-.ed-side {
-  grid-area: side;
-  border-left: 1px solid var(--c-line);
-  overflow-y: auto;
-  font-size: var(--fs-sm);
-}
-.ed-side > section {
-  padding: var(--sp-3);
-  border-bottom: 1px solid var(--c-line);
-}
-.ed-side > .notice {
-  margin: var(--sp-2);
-}
 .ed-h {
   margin-bottom: var(--sp-1);
 }
@@ -77,13 +58,26 @@
   padding: 0;
   min-width: 0;
 }
-.ed-props label {
-  margin-top: var(--sp-2);
+.ed-props {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
 }
+.ed-props label,
+.ed-props .label {
+  margin: 0 0 var(--sp-1);
+  font-size: var(--fs-xs);
+  color: var(--c-fg-muted);
+}
+/* Panel 288px: 2 ô / hàng, ô nhập rộng hết cột. */
 .ed-row {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--sp-2);
+}
+.ed-row input,
+.ed-row select {
+  width: 100%;
 }
 .ed-row input[type="color"] {
   height: 30px;
@@ -93,10 +87,16 @@ label.ed-check {
   display: flex;
   align-items: center;
   gap: var(--sp-2);
+  margin: 0;
+  font-size: var(--fs-sm);
   color: var(--c-fg);
 }
 .ed-seg {
   display: flex;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
 }
 .ed-seg button {
   flex: 1;

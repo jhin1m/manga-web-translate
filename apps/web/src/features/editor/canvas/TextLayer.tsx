@@ -10,6 +10,7 @@ import { Group, Layer, Transformer } from "react-konva";
 import { moveBox, resizeBox } from "../actions.ts";
 import type { FontKit } from "../fonts.ts";
 import { editorStore, useEditor } from "../store.ts";
+import { SELECT_STROKE } from "./colors.ts";
 import { TextBoxNode } from "./TextBoxNode.tsx";
 
 const MARGIN = 600;
@@ -101,10 +102,12 @@ export function TextLayer({
       <Transformer
         ref={trRef}
         rotateEnabled
+        // Núm xoay gần khung → thanh thao tác nổi phía trên khối (block-toolbar.tsx) không che núm.
+        rotateAnchorOffset={20}
         keepRatio={false}
         ignoreStroke
-        borderStroke="#1f4fd1"
-        anchorStroke="#1f4fd1"
+        borderStroke={SELECT_STROKE}
+        anchorStroke={SELECT_STROKE}
         anchorSize={8}
         rotationSnaps={[0, 90, 180, 270]}
         boundBoxFunc={(oldBox, newBox) => (newBox.width < 8 || newBox.height < 8 ? oldBox : newBox)}
