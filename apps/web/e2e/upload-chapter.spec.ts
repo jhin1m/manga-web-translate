@@ -81,6 +81,33 @@ test("drop a 10-page ZIP on home, open the chapter while uploading, then Bước
   // Upload xong → bấm Bước 1 → xong bước 1 chờ bấm Bước 2.
   const step1 = page.getByRole("button", { name: "Bước 1 · Xoá chữ + OCR" });
   await expect(step1).toBeEnabled({ timeout: 30_000 });
+  // Đổi thứ tự (nhận diện ảnh qua URL ký sau khi tải lại, vì ảnh local là blob): "Xuống 1" trên ảnh 2 → thành ảnh 3 và
+  // vẫn giữ sau khi tải lại; Alt+↑ trên thumbnail đang focus đưa về chỗ cũ.
+  await page.reload();
+  await expect(sources.locator("img")).toHaveCount(10);
+  await expect(step1).toBeEnabled({ timeout: 30_000 });
+  const fileOf = async (n: number) =>
+    new URL((await sources.locator("img").nth(n).getAttribute("src")) ?? "", WEB_URL).pathname;
+  const second = await fileOf(1);
+  await sources.getByRole("button", { name: /^Ảnh 2/ }).click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Xuống 1" }).click();
+  await expect.poll(() => fileOf(2)).toBe(second);
+  await expect(page.getByRole("status").filter({ hasText: "Đã đổi thứ tự" })).toBeVisible();
+  await page.reload();
+  await expect(sources.locator("img")).toHaveCount(10);
+  await expect.poll(() => fileOf(2)).toBe(second);
+  await sources.getByRole("button", { name: /^Ảnh 3/ }).focus();
+  await page.keyboard.press("Alt+ArrowUp");
+  await expect.poll(() => fileOf(1)).toBe(second);
+  await expect(sources.getByRole("button", { name: /^Ảnh 2/ })).toBeFocused();
+  await expect(step1).toBeEnabled();
+  // Kéo-thả: ảnh 1 thả vào nửa dưới ảnh 3 → nằm sau ảnh 3 (vị trí 3); Hoàn tác trả về đầu.
+  const first = await fileOf(0);
+  const items = sources.locator(".cw-thumb-item");
+  await items.nth(0).dragTo(items.nth(2), { targetPosition: { x: 20, y: 90 } });
+  await expect.poll(() => fileOf(2)).toBe(first);
+  await page.getByRole("status").filter({ hasText: "Đã đổi thứ tự" }).getByRole("button", { name: "Hoàn tác" }).click();
+  await expect.poll(() => fileOf(0)).toBe(first);
   // Xoá ảnh 2 (chuột phải thumbnail) → mờ + "Đã xoá", đếm đã bỏ; Hoàn tác khôi phục; xoá lại bằng nút panel Chọn
   // để Bước 1 bỏ qua nó.
   const thumb2 = sources.getByRole("button", { name: /^Ảnh 2/ });

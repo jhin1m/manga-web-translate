@@ -84,6 +84,7 @@ const ChapterPatch = z
 
 /** Chỉ "user" từ API: "credit" do server gán khi khớp ảnh credit đã học của series. */
 const SourceSkipBody = z.object({ skip: z.enum(["user"]).nullable() });
+const SourceOrderBody = z.object({ ids: z.array(z.string().uuid()).min(1).max(MAX_FILES_PER_CHAPTER) });
 const PresignBody = z.object({ file_ids: z.array(z.string().uuid()).min(1).max(MAX_FILES_PER_CHAPTER) });
 /** mode bỏ trống → page_format của series (web không gửi). */
 const CommitBody = z.object({ mode: z.enum(PAGE_FORMATS).optional() });
@@ -334,6 +335,35 @@ chapterRoutes.patch("/w/:ws/chapters/:chapterId/source-files/:fileId", requireWo
   });
   if (!row) throw new NotFoundError("source file");
   return c.json(sourceFileView(row));
+});
+
+/**
+ * Đổi thứ tự ảnh gốc trước Bước 1: `ids` là toàn bộ source file của chương theo thứ tự mới (đúng bộ — không thiếu,
+ * không thừa, không trùng), ghi `ord = vị trí`. Ảnh bỏ qua vẫn nằm trong thứ tự. Ingest đọc theo `ord` nên worker không đổi.
+ */
+chapterRoutes.put("/w/:ws/chapters/:chapterId/source-files/order", requireWorkspace(), async (c) => {
+  const body = await parseJson(c, SourceOrderBody);
+  const ws = c.get("workspaceId");
+  const ch = await c.get("sdb").byId(chapters, c.req.param("chapterId"), "chapter");
+  const files = await inJobTx(async (tx) => {
+    const t = scoped(tx, ws);
+    await assertSourcesEditable(t, await lockChapter(tx, ws, ch.id), c.get("user").id);
+    const current = await t.select(sourceFiles, eq(sourceFiles.chapterId, ch.id));
+    const wanted = new Set(body.ids);
+    if (wanted.size !== body.ids.length || wanted.size !== current.length || current.some((f) => !wanted.has(f.id))) {
+      throw new HTTPException(400, {
+        res: Response.json(
+          { error: "source_set_mismatch", message: "danh sách ảnh không khớp bộ ảnh của chương" },
+          { status: 400 },
+        ),
+      });
+    }
+    const ord = new Map(body.ids.map((id, i) => [id, i]));
+    const changed = current.filter((f) => ord.get(f.id) !== f.ord);
+    for (const f of changed) await t.update(sourceFiles, eq(sourceFiles.id, f.id), { ord: ord.get(f.id) as number });
+    return current.map((f) => ({ ...f, ord: ord.get(f.id) as number })).sort((a, b) => a.ord - b.ord);
+  });
+  return c.json({ source_files: files.map(sourceFileView) });
 });
 
 /** Chi tiết chương + khoá + danh sách source file (để tiếp tục upload/commit chương draft). */

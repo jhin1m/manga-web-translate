@@ -5,7 +5,7 @@
  * dấu nhận dạng từng ảnh (dHash + kích thước) để server bỏ qua sẵn ảnh credit series đã học.
  *
  * Tab đóng giữa chừng: localStorage giữ dấu `mtl.upload.<chapterId>` (tổng + id file đã xong); thả lại đúng bộ
- * file → khớp theo thứ tự (natural sort) + bytes với `source_files` → ký lại + upload phần thiếu.
+ * file → khớp theo thứ tự (natural sort) + bytes với `source_files` theo thứ tự tạo (id uuid v7) → ký lại + upload phần thiếu.
  */
 import { useStore } from "zustand";
 import { createStore } from "zustand/vanilla";
@@ -197,12 +197,14 @@ export function createUploadManager(deps: UploadDeps) {
 
     /**
      * Tiếp tục chương nháp đã khai báo file: bộ file thả lại phải khớp số lượng + bytes theo thứ tự với
-     * `source_files` (không thì ném lỗi, không upload gì). Chỉ upload file chưa có trong dấu "đã xong".
+     * `source_files` theo thứ tự khai báo lúc tạo chương (không thì ném lỗi, không upload gì). Chỉ upload file chưa có
+     * trong dấu "đã xong". Thứ tự khai báo lấy từ id (uuid v7 sinh tuần tự khi tạo chương), không phải `ord`: `ord` đổi
+     * được khi người dùng sắp xếp lại ảnh, còn file thả lại luôn theo thứ tự tên.
      */
     resumeChapter(o: { ws: string; chapter: DraftChapter; pages: PageFile[] }): { uploading: number } {
       if (active.has(o.chapter.id)) throw new Error("Chương này đang tải ảnh — chờ lượt hiện tại xong.");
       const pages = orderPages(o.pages);
-      const files = [...o.chapter.source_files].sort((a, b) => a.ord - b.ord);
+      const files = [...o.chapter.source_files].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
       if (pages.length !== files.length) {
         throw new Error(`Chương nháp có ${files.length} ảnh, bạn thả ${pages.length} ảnh — chọn đúng bộ file đã tải.`);
       }
