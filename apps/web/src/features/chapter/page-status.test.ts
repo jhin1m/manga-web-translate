@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { needsReview, pageLevel, thumbAria, thumbMark } from "./page-status.ts";
+import { needsReview, pageLevel, pageLevelOf, thumbAria, thumbMark } from "./page-status.ts";
 import type { PageStatus } from "./status.ts";
 
 describe("page level", () => {
@@ -51,6 +51,23 @@ describe("page level", () => {
     expect(busy("translating", job({}))?.label).toBe("Chờ AI");
     expect(busy("prepared", null)?.label).toBe("Cần xem");
     expect(thumbMark({ ...base, status: "prepared", job: null }, false)).toBeNull();
+  });
+
+  it("pages in a queued/running chapter translate job show as translating before the worker claims it", () => {
+    const tj = (over: object) =>
+      job({ type: "chapter.translate", status: "queued", error_class: null, progress: 0, ...over } as never);
+    expect(thumbMark({ ...base, status: "prepared", job: tj({}) }, false)).toEqual({
+      tone: "busy",
+      label: "Đang dịch · chờ",
+      progress: null,
+    });
+    // Dịch lại trang đã xong: còn `ready` tới khi claim.
+    expect(thumbMark({ ...base, job: tj({ status: "running", progress: 0.5 }) }, false)?.label).toBe("Đang dịch · 50%");
+    expect(thumbAria({ ...base, status: "prepared", job: tj({}) }, false)).toBe("Trang 3 · Đang dịch · chờ");
+    expect(pageLevelOf({ status: "prepared", job: tj({}) })).toBe("busy");
+    // Job dịch đã xong / huỷ không còn tính là đang dịch.
+    expect(thumbMark({ ...base, status: "prepared", job: tj({ status: "succeeded" }) }, false)).toBeNull();
+    expect(pageLevelOf({ status: "failed", job: tj({}) })).toBe("error");
   });
 
   it("thumbnail accessible name always carries the state", () => {

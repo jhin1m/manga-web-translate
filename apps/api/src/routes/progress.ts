@@ -37,14 +37,17 @@ progressRoutes.get("/w/:ws/chapters/:chapterId/progress", requireWorkspace(), as
       )
     : [];
   const stateBy = new Map(states.map((s) => [s.pageId, s]));
-  // Job mới nhất theo page (đang chạy ưu tiên).
+  // Job mới nhất theo page (đang chạy ưu tiên). Job dịch là job cấp chương (page_id null) → gắn cho từng page trong
+  // page_ids: page còn `prepared`/`ready` tới lúc worker nhận job, rail vẫn thấy "Đang dịch" + % của job.
   const sorted = [...jobRows].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
   const active = (s: string) => (ACTIVE_JOB_STATUSES as readonly string[]).includes(s);
   const latestByPage = new Map<string, (typeof jobRows)[number]>();
   for (const j of sorted) {
-    if (!j.pageId) continue;
-    const cur = latestByPage.get(j.pageId);
-    if (!cur || (!active(cur.status) && active(j.status))) latestByPage.set(j.pageId, j);
+    const ids = j.pageId ? [j.pageId] : j.payload.type === "chapter.translate" ? j.payload.page_ids : [];
+    for (const id of ids) {
+      const cur = latestByPage.get(id);
+      if (!cur || (!active(cur.status) && active(j.status))) latestByPage.set(id, j);
+    }
   }
   const chapterJobs = sorted.filter((j) => j.type === "chapter.ingest" || j.type === "chapter.translate").slice(0, 5);
   const counts: Record<string, number> = {};

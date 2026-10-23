@@ -19,7 +19,7 @@ import { TextField } from "../editor/panels/TextField.tsx";
 import { editorStore, useEditor } from "../editor/store.ts";
 import type { ProgressPage } from "./api.ts";
 import { describeJobError } from "./job-error.ts";
-import { PAGE_LEVEL, pageLevel, thumbFlags } from "./page-status.ts";
+import { PAGE_LEVEL, pageLevelOf, thumbFlags } from "./page-status.ts";
 import { type SourceItem, sourceLabel } from "./source-rail-model.ts";
 import { KIND_LABEL, type Row } from "./text-table/rows.ts";
 import { setRowTranslation } from "./text-table/text-table.tsx";
@@ -220,7 +220,7 @@ function PageView(props: SelectPanelProps & { page: ProgressPage }) {
       !!doc && !!ai && JSON.stringify([doc.regions, doc.text_boxes]) !== JSON.stringify([ai.regions, ai.text_boxes]),
     [doc, ai],
   );
-  const lv = PAGE_LEVEL[pageLevel(page.status)];
+  const lv = PAGE_LEVEL[pageLevelOf(page)];
   const jobError = describeJobError(page.job);
   // Cờ chờ AI đã nói ở dòng lỗi job; tràn khung nói kèm số khối.
   const flags = thumbFlags(page, false).filter((f) => f !== "chờ AI thử lại");

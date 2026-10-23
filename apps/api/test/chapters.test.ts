@@ -27,7 +27,7 @@ type Upload = { id: string; url: string; fields: Record<string, string> };
 type Progress = {
   chapter: { status: string };
   counts: Record<string, number>;
-  pages: { id: string; ord: number; status: string; skipped: boolean }[];
+  pages: { id: string; ord: number; status: string; skipped: boolean; job: { type: string; status: string } | null }[];
 };
 
 let A: Seed;
@@ -124,6 +124,11 @@ describe("chapter flow", () => {
     const ch = await uploadChapter(3, "1");
     expect((await progress(ch)).chapter.status).toBe("ingesting");
     await ingestAndPrepare(ch);
+    // Job dịch còn xếp hàng: page vẫn `prepared` nhưng tiến độ gắn job dịch cấp chương cho từng page (rail hiện "Đang dịch").
+    const queued = await progress(ch);
+    expect(queued.pages.map((p) => [p.status, p.job?.type, p.job?.status])).toEqual(
+      Array(3).fill(["prepared", "chapter.translate", "queued"]),
+    );
     const [tj] = await claimFor(ch, "chapter.translate", 1);
     expect(tj?.payload.context).toBe("rolling");
     expect((await doTranslate(token, tj as Claimed)).status).toBe(200);

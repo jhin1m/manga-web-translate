@@ -2,6 +2,7 @@
  * Trạng thái page gom về 4 mức người dùng hiểu được (cột trang, panel Chọn) + cờ "cần xem" + nhãn/viền thumbnail.
  * Thuần: chỉ đọc `ProgressPage`.
  */
+import { ACTIVE_JOB_STATUSES } from "@mtl/shared";
 import type { ProgressPage } from "./api.ts";
 import { describeJobError, waitingOnProvider } from "./job-error.ts";
 import type { PageStatus, Tone } from "./status.ts";
@@ -25,6 +26,16 @@ const LEVEL: Record<PageStatus, PageLevel> = {
 };
 
 export const pageLevel = (s: PageStatus): PageLevel => LEVEL[s];
+
+const ACTIVE = new Set<string>(ACTIVE_JOB_STATUSES);
+
+/** Page nằm trong job dịch còn hoạt động — kể cả lúc job còn xếp hàng (page vẫn `prepared`/`ready` tới khi worker nhận). */
+export const inTranslateJob = (p: Pick<ProgressPage, "job">) =>
+  p.job?.type === "chapter.translate" && ACTIVE.has(p.job.status);
+
+/** Mức hiển thị của page: như `pageLevel`, nhưng page đang chờ job dịch tính là "Đang xử lý". */
+export const pageLevelOf = (p: Pick<ProgressPage, "status" | "job">): PageLevel =>
+  inTranslateJob(p) && p.status !== "failed" ? "busy" : LEVEL[p.status];
 
 /**
  * Page cần người xem lại: lỗi, AI có bản mới cho page đã sửa tay, hoặc có box chữ tràn khung (`overflow`, đo ở
@@ -55,7 +66,7 @@ export function thumbMark(p: ThumbPage, overflow: boolean): ThumbMark {
   if (p.skipped) return { tone: "hidden", label: "Đã ẩn" };
   if (p.status === "failed") return { tone: "danger", label: "Lỗi" };
   if (waitingOnProvider(p.job)) return { tone: "warn", label: "Chờ AI" };
-  const step = BUSY_STEP[p.status];
+  const step = BUSY_STEP[p.status] ?? (inTranslateJob(p) ? "Đang dịch" : undefined);
   if (step) {
     const running = p.job?.status === "running";
     const progress = running ? Math.min(1, Math.max(0, p.job?.progress ?? 0)) : null;
@@ -79,7 +90,7 @@ export function thumbFlags(p: ThumbPage, overflow: boolean): string[] {
 /** Tên truy cập luôn đủ trạng thái: "Trang 3 · Xong", "Trang 2 · Cần xem: tràn khung", "Trang 7 · Lỗi". */
 export function thumbAria(p: ThumbPage, overflow: boolean): string {
   const mark = thumbMark(p, overflow);
-  const head = `Trang ${p.ord + 1} · ${mark?.label ?? PAGE_LEVEL[pageLevel(p.status)].label}`;
+  const head = `Trang ${p.ord + 1} · ${mark?.label ?? PAGE_LEVEL[pageLevelOf(p)].label}`;
   if (mark?.label !== "Cần xem") return head;
   const flags = thumbFlags(p, overflow).filter((f) => f !== "chờ AI thử lại");
   return flags.length ? `${head}: ${flags.join(", ")}` : head;
