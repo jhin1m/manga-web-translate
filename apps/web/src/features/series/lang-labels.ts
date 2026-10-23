@@ -1,11 +1,5 @@
 /** Nhãn tiếng Việt cho ngôn ngữ + định dạng truyện của series (danh sách mã từ @mtl/shared). */
-import {
-  LANG_NAMES,
-  type PageFormat,
-  type SourceLang,
-  type TargetLang,
-  TESTED_SOURCE_LANGS,
-} from "@mtl/shared/series-lang";
+import { LANG_NAMES, type PageFormat, type SourceLang, type TargetLang } from "@mtl/shared/series-lang";
 
 export {
   HONORIFIC_EXAMPLES,
@@ -43,5 +37,3 @@ export const PAGE_FORMAT_LABELS: Record<PageFormat, string> = {
 /** Placeholder ô "Xưng / gọi" theo ngôn ngữ đích. */
 export const addressPlaceholder = (tgt: TargetLang) =>
   tgt === "vi" ? "anh/em" : tgt === "en" ? "Boss / kid" : "cách gọi";
-
-export const isTestedSource = (src: SourceLang) => TESTED_SOURCE_LANGS.includes(src);

@@ -100,9 +100,8 @@ test("new series picks source language; settings edit target language, page form
   await expect(page.getByText(/Nhật → Việt/)).toBeVisible();
 
   await page.getByRole("navigation", { name: "Mục của series" }).getByRole("link", { name: "Cài đặt dịch" }).click();
-  // ja → server tự chọn "Từng trang"; nguồn chưa kiểm định chỉ ghi chú, không chặn lưu.
+  // ja → server tự chọn "Từng trang".
   await expect(page.getByLabel("Định dạng truyện")).toHaveValue("pages");
-  await expect(page.getByText("Chưa kiểm định kỹ")).toBeVisible();
   await page.getByLabel("Ngôn ngữ đích").selectOption("en");
   await page.getByLabel("Định dạng truyện").selectOption("strip");
   await page.getByRole("button", { name: "Lưu cài đặt" }).click();

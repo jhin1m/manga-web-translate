@@ -120,7 +120,7 @@ Không overlap; `source_map` ghi slice gốc ↔ đoạn y của page. `mode: "p
 ## Ngôn ngữ + thứ tự đọc
 
 Series chọn nguồn `ko | ja | zh | en`, đích `vi | en | id | es | pt | fr` (`packages/shared/src/series-lang.ts`;
-nguồn ≠ `ko` chỉ ghi chú "chưa kiểm định kỹ", không chặn). Ngôn ngữ đi trong payload, prompt
+mọi nguồn đã thử chương thật). Ngôn ngữ đi trong payload, prompt
 (`worker/mtl_pipeline/prompts/`) tĩnh để giữ cache:
 
 | Job | Field | Dùng ở worker |

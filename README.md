@@ -105,7 +105,6 @@ Mọi test tự động hiện dùng worker giả lập; chưa có số đo vớ
 - [ ] **Đợt tính năng nhỏ (kiểm tay)**: soi ≥ 3 trang thật có chữ màu (màu chữ dịch khớp tông gốc, đọc rõ); parity
       chữ Konva ↔ render.py với font tuỳ chỉnh; gửi email lời mời qua SMTP thật (Gmail app password / Brevo) và bấm
       link đăng ký; kéo-thả sắp ảnh trên Safari; màn series hiện "Xuất lại" sau khi ẩn trang ở chương đã xuất.
-- [ ] **Ngôn ngữ nguồn ngoài tiếng Hàn** (ja/zh/en) mới chỉ ghi chú "chưa kiểm định kỹ" — cần thử chương thật.
 
 ### Phải làm
 

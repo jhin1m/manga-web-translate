@@ -32,7 +32,6 @@ import { parseIgnoreText } from "./ignore-text-input.ts";
 import {
   addressPlaceholder,
   HONORIFIC_EXAMPLES,
-  isTestedSource,
   LANG_NAMES,
   langChangeWarning,
   PAGE_FORMAT_LABELS,
@@ -168,9 +167,6 @@ export function SeriesSettingsForm({
                 </option>
               ))}
             </select>
-            {!isTestedSource(f.source_lang) && (
-              <span className="hint">Chưa kiểm định kỹ — kết quả có thể kém hơn tiếng Hàn.</span>
-            )}
           </div>
           <div>
             <label htmlFor="s-tgt">Ngôn ngữ đích</label>

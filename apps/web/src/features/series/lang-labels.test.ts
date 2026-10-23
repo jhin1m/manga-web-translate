@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
   addressPlaceholder,
-  isTestedSource,
   LANG_NAMES,
   langChangeWarning,
   langShort,
@@ -20,10 +19,9 @@ describe("lang-labels", () => {
     expect(langShort("xx")).toBe("xx");
   });
 
-  it("placeholder xưng hô theo đích; chỉ tiếng Hàn đã kiểm định", () => {
+  it("placeholder xưng hô theo đích", () => {
     expect(addressPlaceholder("vi")).toBe("anh/em");
     expect(addressPlaceholder("fr")).toBe("cách gọi");
-    expect(SOURCE_LANGS.filter(isTestedSource)).toEqual(["ko"]);
   });
 
   it("cảnh báo đổi ngôn ngữ chỉ khi cặp đổi và glossary riêng có từ", () => {

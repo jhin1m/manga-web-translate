@@ -31,9 +31,6 @@ export const HONORIFIC_EXAMPLES: Record<SourceLang, string> = {
   en: "Mr./Ms., Sir",
 };
 
-/** Nguồn đã kiểm định chất lượng; nguồn khác vẫn chọn được, UI chỉ ghi chú. */
-export const TESTED_SOURCE_LANGS: readonly SourceLang[] = ["ko"];
-
 export const defaultPageFormat = (src: SourceLang): PageFormat => (src === "ja" ? "pages" : "strip");
 
 export type ReadingOrder = "ltr" | "rtl";
