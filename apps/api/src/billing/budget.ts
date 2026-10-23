@@ -6,9 +6,9 @@
  * - mtl-jobs: hết vượt (sang ngày/tháng mới hoặc nâng ngưỡng) → `paused_budget → queued`; cảnh báo 50/80/100%.
  */
 import { type DbLike, jobs, runtimeFlags, usageLedger } from "@mtl/db";
-import { PAID_JOB_TYPES } from "@mtl/shared";
 import { and, eq, gte, inArray, sql } from "drizzle-orm";
 import { env } from "../env.ts";
+import { llmJobSql } from "../jobs/llm-job-filter.ts";
 import { sendAlert } from "../lib/alert.ts";
 
 export type BudgetWindow = { spentUsd: number; limitUsd: number | null; ratio: number; period: string };
@@ -46,7 +46,7 @@ export async function pauseQueuedPaidJobs(t: DbLike): Promise<number> {
   const locked = t
     .select({ id: jobs.id })
     .from(jobs)
-    .where(and(eq(jobs.status, "queued"), inArray(jobs.type, [...PAID_JOB_TYPES])))
+    .where(and(eq(jobs.status, "queued"), llmJobSql))
     .for("update", { skipLocked: true });
   const rows = await t
     .update(jobs)

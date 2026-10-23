@@ -57,6 +57,64 @@
             "ltr",
             "rtl"
           ]
+        },
+        "pipeline": {
+          "type": "object",
+          "properties": {
+            "detector": {
+              "type": "string",
+              "enum": [
+                "rtdetr_v2_comic",
+                "comic_text_detector"
+              ]
+            },
+            "detection_threshold": {
+              "type": "number",
+              "minimum": 0.05,
+              "maximum": 0.95
+            },
+            "ocr_engine": {
+              "type": "string",
+              "enum": [
+                "llm",
+                "manga_ocr",
+                "paddle_ocr"
+              ]
+            },
+            "inpainter": {
+              "type": "string",
+              "enum": [
+                "big_lama",
+                "lama_manga"
+              ]
+            },
+            "mask_dilation": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 24
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "inpaint_size": {
+              "type": "integer",
+              "minimum": 256,
+              "maximum": 1024
+            }
+          },
+          "required": [
+            "detector",
+            "detection_threshold",
+            "ocr_engine",
+            "inpainter",
+            "mask_dilation",
+            "inpaint_size"
+          ],
+          "additionalProperties": false
         }
       },
       "required": [
@@ -203,6 +261,28 @@
             "y"
           ],
           "additionalProperties": false
+        },
+        "inpaint": {
+          "type": "object",
+          "properties": {
+            "inpainter": {
+              "type": "string",
+              "enum": [
+                "big_lama",
+                "lama_manga"
+              ]
+            },
+            "inpaint_size": {
+              "type": "integer",
+              "minimum": 256,
+              "maximum": 1024
+            }
+          },
+          "required": [
+            "inpainter",
+            "inpaint_size"
+          ],
+          "additionalProperties": false
         }
       },
       "required": [
@@ -255,6 +335,14 @@
         "target_lang": {
           "type": "string",
           "minLength": 2
+        },
+        "ocr_engine": {
+          "type": "string",
+          "enum": [
+            "llm",
+            "manga_ocr",
+            "paddle_ocr"
+          ]
         }
       },
       "required": [

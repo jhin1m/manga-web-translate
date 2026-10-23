@@ -14,16 +14,22 @@ import {
   pages,
   series,
   sourceFiles,
+  workspaceSettings,
 } from "@mtl/db";
 import {
   ACTIVE_JOB_STATUSES,
   emptyPageState,
   HONORIFIC_EXAMPLES,
+  inpaintOptions,
   type JobPayload,
   type JobType,
   LANG_NAMES,
+  ocrEngineFor,
   type PageFormat,
+  type PipelineSettings,
+  prepareOptions,
   readingOrder,
+  resolvePipelineSettings,
   type SourceLang,
   type TargetLang,
   type TranslateSettings,
@@ -175,11 +181,22 @@ export async function enqueueIngest(
   });
 }
 
+/** Cài đặt pipeline của workspace (thiếu hàng / key → mặc định = hành vi cũ). */
+export async function pipelineSettingsOf(tx: DbLike, ws: string): Promise<PipelineSettings> {
+  const [row] = await tx
+    .select({ pipeline: workspaceSettings.pipeline })
+    .from(workspaceSettings)
+    .where(eq(workspaceSettings.workspaceId, ws));
+  return resolvePipelineSettings(row?.pipeline);
+}
+
 /**
  * Giai đoạn 1 cho 1 page; page → `pending`. Thứ tự đọc theo mode chương đã thực sự ingest (không theo
- * page_format hiện tại của series — đổi định dạng chỉ áp cho lần commit sau).
+ * page_format hiện tại của series — đổi định dạng chỉ áp cho lần commit sau). Cài đặt pipeline của workspace được
+ * snapshot vào payload (`pipeline`); vòng lặp nhiều page truyền sẵn để khỏi đọc lại.
  */
-export async function enqueuePrepare(tx: DbLike, page: Page, s: Series, ch: Chapter) {
+export async function enqueuePrepare(tx: DbLike, page: Page, s: Series, ch: Chapter, pipeline?: PipelineSettings) {
+  const options = prepareOptions(pipeline ?? (await pipelineSettingsOf(tx, page.workspaceId)), s.sourceLang);
   await tx.update(pages).set({ status: "pending" }).where(eq(pages.id, page.id));
   return insertJob(tx, {
     workspaceId: page.workspaceId,
@@ -188,8 +205,9 @@ export async function enqueuePrepare(tx: DbLike, page: Page, s: Series, ch: Chap
       page_id: page.id,
       source_lang: s.sourceLang,
       reading_order: readingOrder(s.sourceLang, ch.ingestMode),
+      pipeline: options,
     },
-    key: prepareKey(page.id, page.originalSha256, s.settingsRev),
+    key: prepareKey(page.id, page.originalSha256, s.settingsRev, options),
     chapterId: page.chapterId,
     pageId: page.id,
   });
@@ -288,12 +306,14 @@ export async function retryFailedPages(tx: DbLike, ws: string, chapterId: string
     .from(pages)
     .where(and(eq(pages.chapterId, ch.id), eq(pages.status, "failed"), eq(pages.skipped, false)))
     .orderBy(asc(pages.ord));
+  const pipeline = await pipelineSettingsOf(tx, ws);
+  const options = prepareOptions(pipeline, s.sourceLang);
   const stage1 = failed.filter(
-    (p) => !p.ocrResult || p.prepareInputRev !== prepareKey(p.id, p.originalSha256, s.settingsRev).inputRev,
+    (p) => !p.ocrResult || p.prepareInputRev !== prepareKey(p.id, p.originalSha256, s.settingsRev, options).inputRev,
   );
   const stage2 = failed.filter((p) => !stage1.includes(p));
   const created: Job[] = [];
-  for (const p of stage1) created.push((await enqueuePrepare(tx, p, s, ch)).job);
+  for (const p of stage1) created.push((await enqueuePrepare(tx, p, s, ch, pipeline)).job);
   if (stage2.length) {
     created.push(
       (
@@ -315,9 +335,10 @@ export async function retryFailedPages(tx: DbLike, ws: string, chapterId: string
 export async function enqueueReinpaint(
   tx: DbLike,
   ws: string,
-  payload: Extract<JobPayload, { type: "page.reinpaint" }>,
+  input: Omit<Extract<JobPayload, { type: "page.reinpaint" }>, "inpaint">,
 ) {
-  const page = await pageIn(tx, ws, payload.page_id);
+  const page = await pageIn(tx, ws, input.page_id);
+  const payload = { ...input, inpaint: inpaintOptions(await pipelineSettingsOf(tx, ws)) };
   if (!payload.user_mask_key.startsWith(`ws/${ws}/pg/${page.id}/user-mask/`) || payload.user_mask_key.includes("..")) {
     throw new HTTPException(400, { message: "user_mask_key không thuộc page này" });
   }
@@ -334,7 +355,7 @@ export async function enqueueReinpaint(
 export async function enqueueOcrRegion(
   tx: DbLike,
   ws: string,
-  input: Omit<Extract<JobPayload, { type: "page.ocr_region" }>, "source_lang" | "target_lang">,
+  input: Omit<Extract<JobPayload, { type: "page.ocr_region" }>, "source_lang" | "target_lang" | "ocr_engine">,
 ) {
   const page = await pageIn(tx, ws, input.page_id);
   const [ch] = await tx
@@ -343,7 +364,12 @@ export async function enqueueOcrRegion(
     .where(and(eq(chapters.workspaceId, ws), eq(chapters.id, page.chapterId)));
   if (!ch) throw new NotFoundError("chapter");
   const s = await seriesOf(tx, ch);
-  const payload = { ...input, source_lang: s.sourceLang, target_lang: s.targetLang };
+  const payload = {
+    ...input,
+    source_lang: s.sourceLang,
+    target_lang: s.targetLang,
+    ocr_engine: ocrEngineFor(await pipelineSettingsOf(tx, ws), s.sourceLang),
+  };
   return insertJob(tx, {
     workspaceId: ws,
     payload,
@@ -414,7 +440,8 @@ export async function createIngestedPages(
     .values(
       inserted.map((p) => ({ pageId: p.id, workspaceId: ch.workspaceId, state: emptyPageState(p.width, p.height) })),
     );
-  for (const p of inserted) await enqueuePrepare(tx, p, s, ch);
+  const pipeline = await pipelineSettingsOf(tx, ch.workspaceId);
+  for (const p of inserted) await enqueuePrepare(tx, p, s, ch, pipeline);
   await tx.update(chapters).set({ status: "processing" }).where(eq(chapters.id, ch.id));
   return inserted;
 }

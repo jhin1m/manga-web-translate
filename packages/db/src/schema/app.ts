@@ -16,6 +16,7 @@ import {
   PAGE_STATUSES,
   type PageFormat,
   type PageState,
+  type PipelineSettings,
   type PreparePartial,
   SOURCE_SKIP_REASONS,
   type SourceSkipReason,
@@ -59,6 +60,8 @@ export const workspaceSettings = pgTable(
       .primaryKey()
       .references(() => organization.id, { onDelete: "cascade" }),
     workerMode: text("worker_mode").$type<"mac" | "modal">().notNull().default("mac"),
+    /** Cài đặt pipeline (PipelineSettings, có thể thiếu key) — đọc qua `resolvePipelineSettings`; `{}` = mặc định. */
+    pipeline: jsonb("pipeline").$type<Partial<PipelineSettings>>().notNull().default({}),
     ...timestamps,
   },
   (t) => [check("workspace_settings_worker_mode_chk", inList(sql`${t.workerMode}`, ["mac", "modal"]))],

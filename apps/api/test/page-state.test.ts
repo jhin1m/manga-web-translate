@@ -190,6 +190,8 @@ describe("mask upload → reinpaint", () => {
       base_clean_rev: 4,
       user_mask_key: post.key,
       offset: { x: 10, y: 20 },
+      // Cài đặt pipeline mặc định của workspace (snapshot lúc enqueue).
+      inpaint: { inpainter: "big_lama", inpaint_size: 512 },
     });
   });
 

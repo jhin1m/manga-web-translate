@@ -13,13 +13,13 @@ import type { ClaimRequest, CompleteRequest, FailRequest, HeartbeatRequest, Work
 import {
   pageId as derivePageId,
   type ErrorClass,
+  isLlmPayload,
   JOB_TYPES,
   type JobResult,
   LLM_JOB_TYPES,
-  PAID_JOB_TYPES,
   storageKeys,
 } from "@mtl/shared";
-import { and, asc, eq, inArray, lte, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, lte, not, sql } from "drizzle-orm";
 import type { z } from "zod";
 import { budgetStatus, pauseQueuedPaidJobs } from "../billing/budget.ts";
 import { recordServerUsage, recordUsage, type WorkerKind } from "../billing/ledger.ts";
@@ -33,6 +33,7 @@ import { buildInputs, claimOutputNames, outputKey, type PresignedOutput, presign
 import { markDispatchClaimed } from "./dispatcher.ts";
 import { chapterHasUserEdits, createIngestedPages, refreshChapter } from "./enqueue.ts";
 import { decideFailure, JobHttpError, leaseLost } from "./errors.ts";
+import { llmJobSql } from "./llm-job-filter.ts";
 import { writeAiState } from "./page-state-writer.ts";
 
 type Job = typeof jobs.$inferSelect;
@@ -77,16 +78,15 @@ export async function claim(w: WorkerIdentity, req: z.infer<typeof ClaimRequest>
     throw new JobHttpError(400, "capability_not_allowed");
   }
   return tx(async (t) => {
-    const paused = await isLlmPaused(t);
-    let types = paused ? caps.filter((c) => !LLM_JOB_TYPES.includes(c)) : caps;
+    // Breaker LLM / kill-switch ngân sách chặn job gọi LLM (`llmJobSql`); job OCR local cùng loại vẫn claim được.
+    let blockLlm = await isLlmPaused(t);
     // Kill-switch ngân sách: kiểm tại claim cho mọi worker (Mac lẫn Modal) — job tốn tiền chuyển paused_budget.
-    if (types.some((c) => PAID_JOB_TYPES.includes(c)) && (await budgetStatus(t)).exceeded) {
+    if (!blockLlm && caps.some((c) => LLM_JOB_TYPES.includes(c)) && (await budgetStatus(t)).exceeded) {
       await pauseQueuedPaidJobs(t);
-      types = types.filter((c) => !PAID_JOB_TYPES.includes(c));
+      blockLlm = true;
     }
     // Claim kèm dispatch_id (container Modal) → dispatch active; id lạ/không phải token nền tảng → bỏ qua.
     const dispatchId = w.workspaceId || !req.dispatch_id ? null : await markDispatchClaimed(t, req.dispatch_id);
-    if (types.length === 0) return [];
     // Token workspace → worker Mac của đúng workspace đó; token nền tảng → mọi workspace chế độ modal (red team #9).
     const picked = await t
       .select({ id: jobs.id })
@@ -96,7 +96,8 @@ export async function claim(w: WorkerIdentity, req: z.infer<typeof ClaimRequest>
         and(
           eq(jobs.status, "queued"),
           lte(jobs.runAfter, sql`now()`),
-          inArray(jobs.type, types),
+          inArray(jobs.type, caps),
+          blockLlm ? not(llmJobSql) : undefined,
           w.workspaceId ? eq(jobs.workspaceId, w.workspaceId) : undefined,
           sql`coalesce(${workspaceSettings.workerMode}, 'mac') = ${workerKind(w)}`,
         ),
@@ -203,7 +204,7 @@ export async function heartbeat(w: WorkerIdentity, jobId: string, req: z.infer<t
     await usage(t, w, job, req.attempt, req.usage);
     if (job.status === "cancelled")
       return { lease_expires_at: (job.leaseExpiresAt as Date).toISOString(), stop: "cancel" as const };
-    if (PAID_JOB_TYPES.includes(job.type) && (await budgetStatus(t)).exceeded) {
+    if (isLlmPayload(job.payload) && (await budgetStatus(t)).exceeded) {
       await pauseForBudget(t, job);
       return { lease_expires_at: new Date().toISOString(), stop: "paused_budget" as const };
     }

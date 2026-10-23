@@ -4,7 +4,7 @@
  */
 
 import { createHash } from "node:crypto";
-import { idempotencyKey, type JobPayload, prepareInputRev, translateInputRev } from "@mtl/shared";
+import { idempotencyKey, type JobPayload, type PrepareOptions, prepareInputRev, translateInputRev } from "@mtl/shared";
 import { env } from "../env.ts";
 
 export type JobKey = { inputRev: string; idempotencyKey: string };
@@ -16,8 +16,14 @@ export function ingestKey(chapterId: string, ingestRev: number, mode: string, so
   return { inputRev, idempotencyKey: idempotencyKey("chapter.ingest", chapterId, inputRev, { mode }) };
 }
 
-export function prepareKey(pageId: string, originalSha256: string, settingsRev: number): JobKey {
-  const inputRev = prepareInputRev(originalSha256, settingsRev, env.PIPELINE_VERSION);
+/** `options` = cài đặt pipeline đã snapshot; khác mặc định mới đổi input_rev (page cũ không bị coi là lỗi thời). */
+export function prepareKey(
+  pageId: string,
+  originalSha256: string,
+  settingsRev: number,
+  options?: PrepareOptions,
+): JobKey {
+  const inputRev = prepareInputRev(originalSha256, settingsRev, env.PIPELINE_VERSION, options);
   return { inputRev, idempotencyKey: idempotencyKey("page.prepare", pageId, inputRev) };
 }
 

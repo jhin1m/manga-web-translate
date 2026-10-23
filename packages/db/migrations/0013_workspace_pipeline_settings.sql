@@ -1,0 +1,1 @@
+ALTER TABLE "workspace_settings" ADD COLUMN "pipeline" jsonb DEFAULT '{}'::jsonb NOT NULL;

@@ -1,3 +1,4 @@
+import type { PipelineSettings } from "@mtl/shared";
 import { organizationClient } from "better-auth/client/plugins";
 import { createAuthClient } from "better-auth/react";
 
@@ -42,7 +43,7 @@ export const wsPath = (ws: string, path = "") => `/api/w/${ws}${path}`;
 export type WorkspaceSummary = { id: string; name: string; slug: string };
 export type WorkspaceDetail = WorkspaceSummary & {
   role: "owner" | "admin" | "member";
-  settings: { worker_mode: string };
+  settings: { worker_mode: string; pipeline: PipelineSettings };
 };
 
 export const errorMessage = (e: unknown) =>

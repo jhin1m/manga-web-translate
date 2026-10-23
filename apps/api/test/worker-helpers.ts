@@ -13,7 +13,7 @@ export const PNG_1PX = Buffer.from(
   "base64",
 );
 export const SHA = "ab".repeat(32);
-export const VERSION = "0.5.1";
+export const VERSION = "0.6.0";
 
 export type Claimed = {
   id: string;

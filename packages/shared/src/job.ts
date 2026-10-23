@@ -3,6 +3,14 @@ import { bytesToHex, utf8ToBytes } from "@noble/hashes/utils.js";
 import { v5 as uuidv5 } from "uuid";
 import { z } from "zod";
 import { BBox, OcrRegion, OcrResult, PageState, Region } from "./page-state.ts";
+import {
+  InpaintOptions,
+  isDefaultPrepareOptions,
+  LOCAL_OCR_ENGINES,
+  type OcrEngine,
+  OcrEngineSchema,
+  PrepareOptions,
+} from "./pipeline-settings.ts";
 import { PAGE_FORMATS } from "./series-lang.ts";
 
 export const JOB_TYPES = [
@@ -102,6 +110,8 @@ export const JobPayload = z.discriminatedUnion("type", [
     source_lang: z.string().min(2),
     /** Optional: job xếp hàng trước pipeline 0.4.0 không có → worker mặc định ltr. */
     reading_order: z.enum(["ltr", "rtl"]).optional(),
+    /** Cài đặt pipeline của workspace lúc enqueue (0.6.0). Thiếu → worker dùng mặc định cũ. */
+    pipeline: PrepareOptions.optional(),
   }),
   z.object({
     type: z.literal("chapter.translate"),
@@ -118,6 +128,8 @@ export const JobPayload = z.discriminatedUnion("type", [
     base_clean_rev: Rev,
     user_mask_key: z.string().min(1),
     offset: z.object({ x: z.number().int(), y: z.number().int() }),
+    /** Inpainter của workspace lúc enqueue (0.6.0). Thiếu → big_lama 512. */
+    inpaint: InpaintOptions.optional(),
   }),
   z.object({
     type: z.literal("page.ocr_region"),
@@ -126,6 +138,8 @@ export const JobPayload = z.discriminatedUnion("type", [
     /** Optional: job xếp hàng trước pipeline 0.4.0 không có → worker mặc định ko → vi. */
     source_lang: z.string().min(2).optional(),
     target_lang: z.string().min(2).optional(),
+    /** OCR engine theo cài đặt workspace (0.6.0). Thiếu → llm. Dịch vẫn qua LLM. */
+    ocr_engine: OcrEngineSchema.optional(),
   }),
   z.object({
     type: z.literal("chapter.export"),
@@ -137,6 +151,15 @@ export const JobPayload = z.discriminatedUnion("type", [
   }),
 ]);
 export type JobPayload = z.infer<typeof JobPayload>;
+
+/**
+ * Job có gọi LLM (breaker + kill-switch ngân sách áp vào). `page.prepare` OCR local không gọi LLM (usage 0) — SQL
+ * tương ứng ở apps/api `llmJobSql`.
+ */
+export function isLlmPayload(p: Pick<JobPayload, "type"> & { pipeline?: { ocr_engine?: string } }): boolean {
+  if (!LLM_JOB_TYPES.includes(p.type)) return false;
+  return !(p.type === "page.prepare" && LOCAL_OCR_ENGINES.includes(p.pipeline?.ocr_engine as OcrEngine));
+}
 
 /** source_map: slice gốc nào phủ đoạn y nào của page (để xuất lại theo slice). */
 export const SourceMapEntry = z.object({
@@ -177,9 +200,19 @@ export type PreparePartial = z.infer<typeof PreparePartial>;
 
 const hex = (s: string) => bytesToHex(sha256(utf8ToBytes(s)));
 
-/** input_rev của page.prepare = sha256(original_sha256 | settings_rev | pipeline_version). */
-export function prepareInputRev(originalSha256: string, settingsRev: number, pipelineVersion: string): string {
-  return hex([originalSha256, settingsRev, pipelineVersion].join("|"));
+/**
+ * input_rev của page.prepare = sha256(original_sha256 | settings_rev | pipeline_version [| tuỳ chọn pipeline]).
+ * Tuỳ chọn pipeline chỉ trộn vào khi khác mặc định → page/job tạo trước khi có cài đặt giữ nguyên input_rev.
+ */
+export function prepareInputRev(
+  originalSha256: string,
+  settingsRev: number,
+  pipelineVersion: string,
+  options?: PrepareOptions,
+): string {
+  const parts: unknown[] = [originalSha256, settingsRev, pipelineVersion];
+  if (options && !isDefaultPrepareOptions(options)) parts.push(stableStringify(options));
+  return hex(parts.join("|"));
 }
 
 /**

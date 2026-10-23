@@ -92,6 +92,13 @@
       "when": 1792762954834,
       "tag": "0012_workspace_fonts",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1792777146846,
+      "tag": "0013_workspace_pipeline_settings",
+      "breakpoints": true
     }
   ]
 }

@@ -187,10 +187,16 @@ const glossaryRoute = createRoute({
 
 const membersRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "members", component: MembersPage });
 
-const workspaceSettingsRoute = createRoute({
+export const workspaceSettingsRoute = createRoute({
   getParentRoute: () => workspaceRoute,
   path: "settings",
-  component: WorkspaceSettingsPage,
+  // `tab=pipeline`: tab Pipeline; không có = tab Font.
+  validateSearch: (search: Record<string, unknown>): { tab?: "pipeline" } =>
+    search.tab === "pipeline" ? { tab: "pipeline" } : {},
+  component: function WorkspaceSettingsRoute() {
+    const { tab } = workspaceSettingsRoute.useSearch();
+    return <WorkspaceSettingsPage tab={tab ?? "fonts"} />;
+  },
 });
 
 // ---- Path cũ → path mới (giữ bookmark/link cũ). ----

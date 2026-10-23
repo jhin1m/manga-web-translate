@@ -17,7 +17,7 @@ import {
   sourceFiles,
   workspaceFonts,
 } from "@mtl/db";
-import { emptyPageState, pageId } from "@mtl/shared";
+import { DEFAULT_PIPELINE_SETTINGS, emptyPageState, pageId } from "@mtl/shared";
 import { eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { app, call, db, seedWorkspace } from "./helpers.ts";
@@ -132,6 +132,7 @@ beforeAll(async () => {
 /** Body hợp lệ tối thiểu cho từng route (để 404 đến từ tra cứu id chứ không phải validate body). */
 const BODIES: Record<string, unknown> = {
   "PATCH /api/w/:ws/settings": { worker_mode: "modal" },
+  "PUT /api/w/:ws/settings/pipeline": { pipeline: DEFAULT_PIPELINE_SETTINGS },
   "POST /api/w/:ws/chapters/:chapterId/uploads": { filename: "001.png", content_type: "image/png", bytes: 1024 },
   "POST /api/w/:ws/series": { title: "Series mới" },
   "PATCH /api/w/:ws/series/:seriesId": { style_prompt: "ngắn gọn" },
