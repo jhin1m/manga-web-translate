@@ -24,6 +24,10 @@ Brief: [`plans/261024-0028-local-ocr-manga-lama-proofread/goal-brief.md`](../261
 | `cd worker && uv run pytest` | 217 pass (gồm test model thật: LaMa manga, MangaOCR, PaddleOCR ko/en/zh); ruff + mypy sạch |
 | `pnpm --filter @mtl/web e2e` | 34/34 pass (mới: `pipeline-settings`, `proofread`) |
 
+Chạy lại toàn bộ trên HEAD `94c2183` (commit báo cáo): typecheck/lint exit 0, `pnpm test` 30+32+5+1 file pass, pytest
+217 pass, `proofread.test.ts` riêng 3/3 lần pass, e2e 34/34 (gồm `pipeline-settings.spec.ts`, `proofread.spec.ts`).
+Branch không có upstream (chưa push), `main` không đổi, diff không chứa `.env` / `.onnx` / `.txt` model.
+
 Ghi nhận: 1 lần `proofread.test.ts` (ca "lượt cũ xong sau lượt mới") fail trong lượt chạy full đầu tiên sau sửa review;
 đã đổi so `created_at` sang SQL (Date JS mất micro giây) — sau đó 5 lần chạy riêng + 4 lần full đều pass. Nguyên nhân
 gốc lần fail đó chưa tái hiện được.
