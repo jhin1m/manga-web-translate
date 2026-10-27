@@ -1,5 +1,5 @@
 /**
- * Chỉ dev: thử đăng nhập tự động (API chỉ mount route khi bật env, còn lại 404). Gọi sau `import.meta.env.DEV`
+ * Chỉ dev: thử đăng nhập tự động (API chỉ mount route khi bật env, còn lại 401). Gọi sau `import.meta.env.DEV`
  * để build production loại bỏ cả module. Dùng chung 1 promise → mỗi lần tải trang thử đúng 1 lần (kể cả StrictMode).
  * Đã chủ động đăng xuất trong tab → tab đó không tự đăng nhập lại nữa (cờ sessionStorage).
  */

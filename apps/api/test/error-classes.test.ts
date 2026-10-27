@@ -10,7 +10,7 @@ import { MAX_OUTPUT_TOKENS_PER_CALL } from "../src/billing/prices.ts";
 import { BREAKER_THRESHOLD } from "../src/jobs/breaker.ts";
 import { enqueueIngest, inJobTx } from "../src/jobs/enqueue.ts";
 import { MAX_PROVIDER_RETRIES } from "../src/jobs/errors.ts";
-import { call, db, seedWorkspace } from "./helpers.ts";
+import { call, db, seedUser } from "./helpers.ts";
 import {
   addSources,
   type Claimed,
@@ -30,15 +30,15 @@ import {
   workerToken,
 } from "./worker-helpers.ts";
 
-type Seed = Awaited<ReturnType<typeof seedWorkspace>>;
+type Seed = Awaited<ReturnType<typeof seedUser>>;
 
 const clearBreaker = () => db.delete(runtimeFlags).where(sql`${runtimeFlags.key} in ('llm_paused', 'llm_errors')`);
 
 async function chapterWithPages(label: string, n: number) {
-  const S = await seedWorkspace(label);
-  const token = (await workerToken(S.workspaceId)).token;
-  await addSources(S.workspaceId, S.chapterId, n);
-  await inJobTx((tx) => enqueueIngest(tx, S.workspaceId, S.chapterId));
+  const S = await seedUser(label);
+  const token = (await workerToken("mac")).token;
+  await addSources(S.userId, S.chapterId, n);
+  await inJobTx((tx) => enqueueIngest(tx, S.userId, S.chapterId));
   const [ij] = await claimJobs(token, { caps: ["chapter.ingest"] });
   expect((await doIngest(token, ij as Claimed)).status).toBe(200);
   return { S, token };
@@ -67,7 +67,7 @@ describe("provider / rate_limited", () => {
     expect(row.providerRetries).toBe(1);
     expect(row.runAfter.getTime() - Date.now()).toBeGreaterThan(80_000);
     // Màn chương đọc lớp lỗi + giờ thử lại từ progress để báo "tự thử lại lúc …" thay vì lỗi thô.
-    const res = await call(`/api/w/${S.workspaceId}/chapters/${S.chapterId}/progress`, { cookie: S.cookie });
+    const res = await call(`/api/chapters/${S.chapterId}/progress`, { cookie: S.cookie });
     expect(res.status).toBe(200);
     const body = (await res.json()) as {
       pages: { job: { id: string; error_class: string; run_after: string } | null }[];
@@ -78,16 +78,16 @@ describe("provider / rate_limited", () => {
 
     // Thêm lỗi tới ngưỡng breaker (mỗi lần lấy job đã đến hạn).
     for (let i = 1; i < BREAKER_THRESHOLD; i++) {
-      await makeRunnable(eq(jobs.workspaceId, S.workspaceId));
+      await makeRunnable(eq(jobs.userId, S.userId));
       const k = await claimOne(token);
       expect((await failJob(token, k, "rate_limited")).status).toBe(200);
     }
-    await makeRunnable(eq(jobs.workspaceId, S.workspaceId));
+    await makeRunnable(eq(jobs.userId, S.userId));
     const [paused] = await db.select().from(runtimeFlags).where(eq(runtimeFlags.key, "llm_paused"));
     expect(paused?.until?.getTime()).toBeGreaterThan(Date.now());
     // Đang pause: loại job cần LLM không được claim.
     expect(await claimJobs(token, { caps: ["page.prepare"], max: 4 })).toEqual([]);
-    const rows = await db.select().from(jobs).where(eq(jobs.workspaceId, S.workspaceId));
+    const rows = await db.select().from(jobs).where(eq(jobs.userId, S.userId));
     expect(rows.filter((r) => r.type === "page.prepare").every((r) => r.attempts === 0)).toBe(true);
     await clearBreaker();
   });
@@ -96,12 +96,12 @@ describe("provider / rate_limited", () => {
     const [victim] = await db
       .select()
       .from(jobs)
-      .where(and(eq(jobs.workspaceId, S.workspaceId), eq(jobs.type, "page.prepare"), sql`${jobs.providerRetries} > 0`));
+      .where(and(eq(jobs.userId, S.userId), eq(jobs.type, "page.prepare"), sql`${jobs.providerRetries} > 0`));
     await db
       .update(jobs)
       .set({ providerRetries: MAX_PROVIDER_RETRIES })
       .where(eq(jobs.id, victim?.id as string));
-    await makeRunnable(eq(jobs.workspaceId, S.workspaceId));
+    await makeRunnable(eq(jobs.userId, S.userId));
     // Claim cả 2 page.prepare; job đã hết lượt provider → failed, job còn lại thành công.
     const claimed = await claimJobs(token, { caps: ["page.prepare"], max: 2 });
     expect(claimed).toHaveLength(2);

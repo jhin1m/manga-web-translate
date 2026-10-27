@@ -6,9 +6,8 @@ import { chapters, glossaryEntries, jobs, pageStates, pages, scoped, series, sou
 import { emptyPageState, pageId } from "@mtl/shared";
 import { eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { INVITATION_HEADER, INVITATION_TOKEN_HEADER } from "../src/auth.ts";
 import { deletePrefix, head } from "../src/storage.ts";
-import { call, cookieFrom, db, invite, PASSWORD, seedWorkspace, uniq } from "./helpers.ts";
+import { call, db, seedUser, uniq } from "./helpers.ts";
 import {
   aiState,
   type Claimed,
@@ -22,7 +21,7 @@ import {
   workerToken,
 } from "./worker-helpers.ts";
 
-type Seed = Awaited<ReturnType<typeof seedWorkspace>>;
+type Seed = Awaited<ReturnType<typeof seedUser>>;
 type Upload = { id: string; url: string; fields: Record<string, string> };
 type Progress = {
   chapter: { status: string };
@@ -32,38 +31,18 @@ type Progress = {
 
 let A: Seed;
 let token: string;
-let memberCookie: string;
-
-/** Thành viên thứ 2 của A (nhận lời mời qua link có token). */
-async function joinAsMember(): Promise<string> {
-  const email = `${uniq("member")}@example.com`;
-  const id = await invite(A.cookie, A.workspaceId, email);
-  const link = await call(`/api/w/${A.workspaceId}/invitations/${id}/link`, { cookie: A.cookie });
-  const t = new URL(((await link.json()) as { link: string }).link).searchParams.get("token") ?? "";
-  const res = await call("/api/auth/sign-up/email", {
-    method: "POST",
-    body: { email, password: PASSWORD, name: "Lan" },
-    headers: { [INVITATION_HEADER]: id, [INVITATION_TOKEN_HEADER]: t },
-  });
-  expect(res.status).toBe(200);
-  const cookie = cookieFrom(res);
-  const acc = await call("/api/auth/organization/accept-invitation", {
-    method: "POST",
-    cookie,
-    body: { invitationId: id },
-  });
-  expect(acc.status).toBe(200);
-  return cookie;
-}
+/** Tab thứ 2 của cùng người dùng (khoá chương giữ theo tab). */
+const TAB_B = { "x-tab-id": "tab-b" };
 
 beforeAll(async () => {
-  A = await seedWorkspace("chap");
-  token = (await workerToken(A.workspaceId, "chapters-test")).token;
-  memberCookie = await joinAsMember();
+  A = await seedUser("chap");
+  token = (await workerToken("mac", "chapters-test")).token;
 });
 
-const api = (path: string, init: { method?: string; body?: unknown; cookie?: string } = {}) =>
-  call(`/api/w/${A.workspaceId}${path}`, { cookie: A.cookie, ...init });
+const api = (
+  path: string,
+  init: { method?: string; body?: unknown; cookie?: string; headers?: Record<string, string> } = {},
+) => call(`/api${path}`, { cookie: A.cookie, ...init });
 
 async function json<T>(res: Response, status: number): Promise<T> {
   expect(res.status, await res.clone().text()).toBe(status);
@@ -96,7 +75,7 @@ async function uploadChapter(n: number, number: string) {
 
 const progress = async (chapterId: string) => json<Progress>(await api(`/chapters/${chapterId}/progress`), 200);
 
-/** Worker giả (token riêng workspace A, test chạy tuần tự): claim 1 loại job. */
+/** Worker giả (token Mac, test chạy tuần tự): claim 1 loại job. */
 async function claimFor(_chapterId: string, type: string, max = 8): Promise<Claimed[]> {
   await makeRunnable();
   return claimJobs(token, { caps: [type], max });
@@ -241,7 +220,7 @@ describe("chapter flow", () => {
 });
 
 describe("chapter lock", () => {
-  it("second user sees the holder; writing while not holding → 423; release frees it", async () => {
+  it("another tab is refused (423) and only reads; writing while not holding → 423; release frees it", async () => {
     const files = [{ name: "1.png", content_type: "image/png", bytes: PNG_1PX.length }];
     const { chapter, files: ups } = await json<{ chapter: { id: string }; files: Upload[] }>(
       await api("/chapters", { method: "POST", body: { series_id: A.seriesId, number: "5", files } }),
@@ -251,24 +230,26 @@ describe("chapter lock", () => {
     const ch = chapter.id;
 
     await json(await api(`/chapters/${ch}/lock`, { method: "POST" }), 200);
-    const denied = await json<{ holder_name: string }>(
-      await api(`/chapters/${ch}/lock`, { method: "POST", cookie: memberCookie }),
+    const denied = await json<Record<string, unknown>>(
+      await api(`/chapters/${ch}/lock`, { method: "POST", headers: TAB_B }),
       423,
     );
-    expect(denied.holder_name).toBe("chap");
-    const seen = await json<{ lock: { holder_name: string; is_me: boolean } }>(
-      await api(`/chapters/${ch}`, { cookie: memberCookie }),
+    expect(denied).toEqual({ error: "chapter_locked" });
+    const seen = await json<{ lock: Record<string, unknown> | null }>(
+      await api(`/chapters/${ch}`, { headers: TAB_B }),
       200,
     );
-    expect(seen.lock).toMatchObject({ holder_name: "chap", is_me: false });
-    // Ghi nội dung chương khi người khác giữ khoá → 423.
-    expect((await api(`/chapters/${ch}/commit`, { method: "POST", body: {}, cookie: memberCookie })).status).toBe(423);
-    // Heartbeat của chính người giữ vẫn được.
+    expect(Object.keys(seen.lock ?? {})).toEqual(["expires_at"]);
+    // Ghi nội dung chương khi tab khác giữ khoá → 423.
+    expect((await api(`/chapters/${ch}/commit`, { method: "POST", body: {}, headers: TAB_B })).status).toBe(423);
+    // Tab B đóng (nhả khoá) không nhả khoá của tab đang giữ; heartbeat của tab giữ vẫn được.
+    expect((await api(`/chapters/${ch}/lock`, { method: "DELETE", headers: TAB_B })).status).toBe(204);
+    expect((await api(`/chapters/${ch}/lock`, { method: "POST", headers: TAB_B })).status).toBe(423);
     await json(await api(`/chapters/${ch}/lock`, { method: "POST" }), 200);
 
     expect((await api(`/chapters/${ch}/lock`, { method: "DELETE" })).status).toBe(204);
-    await json(await api(`/chapters/${ch}/lock`, { method: "POST", cookie: memberCookie }), 200);
-    expect((await api(`/chapters/${ch}/commit`, { method: "POST", body: {}, cookie: memberCookie })).status).toBe(202);
+    await json(await api(`/chapters/${ch}/lock`, { method: "POST", headers: TAB_B }), 200);
+    expect((await api(`/chapters/${ch}/commit`, { method: "POST", body: {}, headers: TAB_B })).status).toBe(202);
   });
 });
 
@@ -287,12 +268,8 @@ describe("skip source files before step 1", () => {
     await Promise.all(created.files.map((f) => postFile(f, PNG_1PX)));
     return { ch: created.chapter.id, ids: created.files.map((f) => f.id) };
   }
-  const skip = (ch: string, id: string, value: "user" | null, cookie?: string) =>
-    api(`/chapters/${ch}/source-files/${id}`, {
-      method: "PATCH",
-      body: { skip: value },
-      ...(cookie ? { cookie } : {}),
-    });
+  const skip = (ch: string, id: string, value: "user" | null, headers?: Record<string, string>) =>
+    api(`/chapters/${ch}/source-files/${id}`, { method: "PATCH", body: { skip: value }, headers });
 
   it("skipped images stay listed but never reach ingest; undo brings them back", async () => {
     const { ch, ids } = await draftChapter(3, "7");
@@ -352,10 +329,10 @@ describe("skip source files before step 1", () => {
     await json(await api(`/chapters/${ch}/cancel`, { method: "POST", body: {} }), 200);
   });
 
-  it("someone else holding the lock blocks skipping (423)", async () => {
+  it("another tab holding the lock blocks skipping (423)", async () => {
     const { ch, ids } = await draftChapter(1, "7.7");
     await json(await api(`/chapters/${ch}/lock`, { method: "POST" }), 200);
-    expect((await skip(ch, ids[0] as string, "user", memberCookie)).status).toBe(423);
+    expect((await skip(ch, ids[0] as string, "user", TAB_B)).status).toBe(423);
     await json(await skip(ch, ids[0] as string, "user"), 200);
     expect((await api(`/chapters/${ch}/lock`, { method: "DELETE" })).status).toBe(204);
   });
@@ -396,8 +373,8 @@ describe("reorder source files before step 1", () => {
     await Promise.all(created.files.map((f) => postFile(f, PNG_1PX)));
     return { ch: created.chapter.id, ids: created.files.map((f) => f.id) };
   }
-  const reorder = (ch: string, ids: string[], cookie?: string) =>
-    api(`/chapters/${ch}/source-files/order`, { method: "PUT", body: { ids }, ...(cookie ? { cookie } : {}) });
+  const reorder = (ch: string, ids: string[], headers?: Record<string, string>) =>
+    api(`/chapters/${ch}/source-files/order`, { method: "PUT", body: { ids }, headers });
   const listed = async (ch: string) =>
     (await json<{ source_files: { id: string }[] }>(await api(`/chapters/${ch}`), 200)).source_files.map((f) => f.id);
 
@@ -439,11 +416,11 @@ describe("reorder source files before step 1", () => {
     expect(await listed(ch)).toEqual([a, b, c]);
   });
 
-  it("refuses once the chapter is past step 1 (409, like skip) and while someone else holds the lock (423)", async () => {
+  it("refuses once the chapter is past step 1 (409, like skip) and while another tab holds the lock (423)", async () => {
     const { ch, ids } = await draftChapter(2, "8.3");
     const [a, b] = ids as [string, string];
     await json(await api(`/chapters/${ch}/lock`, { method: "POST" }), 200);
-    expect((await reorder(ch, [b, a], memberCookie)).status).toBe(423);
+    expect((await reorder(ch, [b, a], TAB_B)).status).toBe(423);
     expect((await api(`/chapters/${ch}/lock`, { method: "DELETE" })).status).toBe(204);
 
     await json(await api(`/chapters/${ch}/commit`, { method: "POST", body: {} }), 202);
@@ -685,14 +662,13 @@ describe("recent chapters", () => {
       number: string;
       series_title: string;
       exported: boolean;
-      lock_holder_is_me: boolean;
       page_counts: { total: number };
     }[];
   };
 
-  it("orders by updated_at (own lock first), honours limit and open, carries series_title", async () => {
-    const R = await seedWorkspace("recent");
-    const sdb = scoped(db, R.workspaceId);
+  it("orders by updated_at (chapters open for editing first), honours limit and open, carries series_title", async () => {
+    const R = await seedUser("recent");
+    const sdb = scoped(db, R.userId);
     const at = (min: number) => new Date(Date.now() - min * 60_000);
     const mk = (number: string, min: number) =>
       sdb.insert(chapters, { seriesId: R.seriesId, number, createdAt: at(min), updatedAt: at(min) });
@@ -704,27 +680,24 @@ describe("recent chapters", () => {
       .update(chapters)
       .set({ updatedAt: at(60) })
       .where(eq(chapters.id, R.chapterId));
-    const get = async (qs: string) =>
-      json<Recent>(await call(`/api/w/${R.workspaceId}/recent-chapters${qs}`, { cookie: R.cookie }), 200);
+    const get = async (qs: string) => json<Recent>(await call(`/api/recent-chapters${qs}`, { cookie: R.cookie }), 200);
 
     const all = await get("");
     expect(all.chapters.map((c) => c.id)).toEqual([fresh.id, mid.id, old.id, R.chapterId]);
-    expect(all.chapters[0]).toMatchObject({ series_title: "Series recent", lock_holder_is_me: false });
+    expect(all.chapters[0]).toMatchObject({ series_title: "Series recent" });
+    expect(all.chapters[0]).not.toHaveProperty("lock_holder_is_me");
     expect(all.chapters[0]?.page_counts).toEqual({ total: 0, ready: 0, failed: 0, busy: 0 });
     expect((await get("?limit=2")).chapters.map((c) => c.id)).toEqual([fresh.id, mid.id]);
-    expect((await call(`/api/w/${R.workspaceId}/recent-chapters?limit=0`, { cookie: R.cookie })).status).toBe(400);
+    expect((await call(`/api/recent-chapters?limit=0`, { cookie: R.cookie })).status).toBe(400);
 
-    // Khoá của mình → đứng đầu dù updated_at cũ (lock bump updated_at nên ép lại cho chắc thứ tự).
-    await json(
-      await call(`/api/w/${R.workspaceId}/chapters/${old.id}/lock`, { method: "POST", cookie: R.cookie }),
-      200,
-    );
+    // Chương đang mở sửa (khoá còn hạn) → đứng đầu dù updated_at cũ (lock bump updated_at nên ép lại cho chắc thứ tự).
+    await json(await call(`/api/chapters/${old.id}/lock`, { method: "POST", cookie: R.cookie }), 200);
     await db
       .update(chapters)
       .set({ updatedAt: at(30) })
       .where(eq(chapters.id, old.id));
     const locked = await get("");
-    expect(locked.chapters[0]).toMatchObject({ id: old.id, lock_holder_is_me: true });
+    expect(locked.chapters[0]?.id).toBe(old.id);
 
     // open=1: bỏ chương done và chương đã có export thành công.
     await db.update(chapters).set({ status: "done" }).where(eq(chapters.id, mid.id));
@@ -749,8 +722,8 @@ describe("recent chapters", () => {
   });
 
   it("an exported chapter edited or retranslated afterwards needs re-export", async () => {
-    const R = await seedWorkspace("reexport");
-    const sdb = scoped(db, R.workspaceId);
+    const R = await seedUser("reexport");
+    const sdb = scoped(db, R.userId);
     const at = (min: number) => new Date(Date.now() - min * 60_000);
     const job = (chapterId: string, type: "chapter.export" | "chapter.translate", min: number) =>
       sdb.insert(jobs, {
@@ -771,7 +744,7 @@ describe("recent chapters", () => {
         ord: 0,
         width: 10,
         height: 10,
-        originalKey: `ws/${R.workspaceId}/ch/${ch.id}/ingest/1/0.png`,
+        originalKey: `u/${R.userId}/ch/${ch.id}/ingest/1/0.png`,
         originalSha256: "ab".repeat(32),
       });
       await sdb.insert(pageStates, { pageId: id, state: emptyPageState(10, 10), updatedAt: at(editedMin) });
@@ -786,10 +759,7 @@ describe("recent chapters", () => {
     await job(retranslated, "chapter.translate", 10);
 
     type Recent = { chapters: { id: string; exported: boolean; reexport: boolean }[] };
-    const open = await json<Recent>(
-      await call(`/api/w/${R.workspaceId}/recent-chapters?open=1`, { cookie: R.cookie }),
-      200,
-    );
+    const open = await json<Recent>(await call(`/api/recent-chapters?open=1`, { cookie: R.cookie }), 200);
     const ids = open.chapters.map((c) => c.id);
     expect(ids).not.toContain(clean);
     expect(open.chapters.find((c) => c.id === edited)).toMatchObject({ exported: false, reexport: true });
@@ -797,13 +767,10 @@ describe("recent chapters", () => {
 
     // Xuất lại → hết cần làm.
     await job(edited, "chapter.export", 0);
-    const again = await json<Recent>(
-      await call(`/api/w/${R.workspaceId}/recent-chapters?open=1`, { cookie: R.cookie }),
-      200,
-    );
+    const again = await json<Recent>(await call(`/api/recent-chapters?open=1`, { cookie: R.cookie }), 200);
     expect(again.chapters.map((c) => c.id)).not.toContain(edited);
     const d = await json<{ chapters: { id: string; exported: boolean; reexport: boolean }[] }>(
-      await call(`/api/w/${R.workspaceId}/series/${R.seriesId}`, { cookie: R.cookie }),
+      await call(`/api/series/${R.seriesId}`, { cookie: R.cookie }),
       200,
     );
     expect(d.chapters.find((c) => c.id === clean)).toMatchObject({ exported: true, reexport: false });
@@ -811,8 +778,8 @@ describe("recent chapters", () => {
   });
 
   it("hiding or restoring a page after the last export needs re-export; a no-op PATCH does not", async () => {
-    const R = await seedWorkspace("reexport-skip");
-    const sdb = scoped(db, R.workspaceId);
+    const R = await seedUser("reexport-skip");
+    const sdb = scoped(db, R.userId);
     const ch = await sdb.insert(chapters, { seriesId: R.seriesId, number: "1", status: "review" });
     const ids: [string, string] = [pageId(ch.id, 1, 0), pageId(ch.id, 1, 1)];
     for (const [ord, id] of ids.entries()) {
@@ -822,7 +789,7 @@ describe("recent chapters", () => {
         ord,
         width: 10,
         height: 10,
-        originalKey: `ws/${R.workspaceId}/ch/${ch.id}/ingest/1/${ord}.png`,
+        originalKey: `u/${R.userId}/ch/${ch.id}/ingest/1/${ord}.png`,
         originalSha256: "ab".repeat(32),
         status: "ready",
       });
@@ -843,15 +810,15 @@ describe("recent chapters", () => {
         createdAt: new Date(Date.now() - min * 60_000),
       });
     const hide = (pageId: string, skipped: boolean) =>
-      call(`/api/w/${R.workspaceId}/pages/${pageId}`, { method: "PATCH", cookie: R.cookie, body: { skipped } });
+      call(`/api/pages/${pageId}`, { method: "PATCH", cookie: R.cookie, body: { skipped } });
     const reexport = async () =>
       (
         await json<{ chapters: { id: string; reexport: boolean }[] }>(
-          await call(`/api/w/${R.workspaceId}/series/${R.seriesId}`, { cookie: R.cookie }),
+          await call(`/api/series/${R.seriesId}`, { cookie: R.cookie }),
           200,
         )
       ).chapters.find((c) => c.id === ch.id)?.reexport;
-    await json(await call(`/api/w/${R.workspaceId}/chapters/${ch.id}/lock`, { method: "POST", cookie: R.cookie }), 200);
+    await json(await call(`/api/chapters/${ch.id}/lock`, { method: "POST", cookie: R.cookie }), 200);
 
     await exportAt(20);
     expect(await reexport()).toBe(false);
@@ -893,15 +860,15 @@ describe("recent chapters", () => {
 });
 
 describe("edit chapter number / series", () => {
-  it("renumbers, moves to another series of the workspace, rejects a taken number and foreign series", async () => {
-    const R = await seedWorkspace("patch");
-    const O = await seedWorkspace("patch-other");
-    const sdb = scoped(db, R.workspaceId);
+  it("renumbers, moves to another series of the same user, rejects a taken number and foreign series", async () => {
+    const R = await seedUser("patch");
+    const O = await seedUser("patch-other");
+    const sdb = scoped(db, R.userId);
     const other = await sdb.insert(series, { title: "Series khác" });
     await sdb.insert(chapters, { seriesId: R.seriesId, number: "2" });
     await sdb.insert(chapters, { seriesId: other.id, number: "7" });
     const patch = (body: unknown, id = R.chapterId) =>
-      call(`/api/w/${R.workspaceId}/chapters/${id}`, { method: "PATCH", cookie: R.cookie, body });
+      call(`/api/chapters/${id}`, { method: "PATCH", cookie: R.cookie, body });
     type Summary = { id: string; series_id: string; number: string };
 
     expect(await json<Summary>(await patch({ number: "3" }), 200)).toMatchObject({
@@ -919,12 +886,12 @@ describe("edit chapter number / series", () => {
     const moved = await json<Summary>(await patch({ series_id: other.id, number: "8" }), 200);
     expect(moved).toMatchObject({ series_id: other.id, number: "8" });
     const detail = await json<{ series: { id: string } }>(
-      await call(`/api/w/${R.workspaceId}/chapters/${R.chapterId}`, { cookie: R.cookie }),
+      await call(`/api/chapters/${R.chapterId}`, { cookie: R.cookie }),
       200,
     );
     expect(detail.series.id).toBe(other.id);
 
-    // Series của workspace khác → 404, chương không đổi.
+    // Series của người dùng khác → 404, chương không đổi.
     expect((await patch({ series_id: O.seriesId })).status).toBe(404);
     expect((await patch({})).status).toBe(400);
     expect((await patch({ number: "abc" })).status).toBe(400);
@@ -934,7 +901,7 @@ describe("edit chapter number / series", () => {
 });
 
 describe("delete chapter / series", () => {
-  it("removes a processed chapter with its jobs, pages and stored files; refuses while someone else edits", async () => {
+  it("removes a processed chapter with its jobs, pages and stored files; refuses while another tab edits", async () => {
     const ch = await uploadChapter(2, "601");
     await ingestAndPrepare(ch);
     const [src] = await db.select().from(sourceFiles).where(eq(sourceFiles.chapterId, ch));
@@ -942,10 +909,10 @@ describe("delete chapter / series", () => {
     expect(pageIds).toHaveLength(2);
     expect(await head(src?.storageKey ?? "")).not.toBeNull();
 
-    await json(await api(`/chapters/${ch}/lock`, { method: "POST", cookie: memberCookie }), 200);
-    const locked = await json<{ holder_name: string }>(await api(`/chapters/${ch}`, { method: "DELETE" }), 423);
-    expect(locked.holder_name).toBe("Lan");
-    expect((await api(`/chapters/${ch}/lock`, { method: "DELETE", cookie: memberCookie })).status).toBe(204);
+    await json(await api(`/chapters/${ch}/lock`, { method: "POST", headers: TAB_B }), 200);
+    const locked = await json<{ error: string }>(await api(`/chapters/${ch}`, { method: "DELETE" }), 423);
+    expect(locked.error).toBe("chapter_locked");
+    expect((await api(`/chapters/${ch}/lock`, { method: "DELETE", headers: TAB_B })).status).toBe(204);
 
     expect((await api(`/chapters/${ch}`, { method: "DELETE" })).status).toBe(204);
     expect((await api(`/chapters/${ch}`)).status).toBe(404);
@@ -953,26 +920,21 @@ describe("delete chapter / series", () => {
     expect(await db.select().from(pages).where(eq(pages.chapterId, ch))).toEqual([]);
     expect(await head(src?.storageKey ?? "")).toBeNull();
     // Không còn object nào dưới prefix của chương / page (deletePrefix đếm lại = 0).
-    for (const p of [`ws/${A.workspaceId}/ch/${ch}/`, ...pageIds.map((id) => `ws/${A.workspaceId}/pg/${id}/`)]) {
+    for (const p of [`u/${A.userId}/ch/${ch}/`, ...pageIds.map((id) => `u/${A.userId}/pg/${id}/`)]) {
       expect(await deletePrefix(p)).toBe(0);
     }
     expect((await api(`/chapters/${ch}`, { method: "DELETE" })).status).toBe(404);
   });
 
-  it("deletes a series with its chapters and glossary (admin only, own workspace only)", async () => {
-    const O = await seedWorkspace("del-other");
-    const sdb = scoped(db, A.workspaceId);
+  it("deletes a series with its chapters and glossary (own data only)", async () => {
+    const O = await seedUser("del-other");
+    const sdb = scoped(db, A.userId);
     const s = await sdb.insert(series, { title: "Series xoá" });
     const ch = await sdb.insert(chapters, { seriesId: s.id, number: "1" });
     await sdb.insert(glossaryEntries, { seriesId: s.id, sourceTerm: "검", targetTerm: "kiếm" });
 
-    expect((await api(`/series/${s.id}`, { method: "DELETE", cookie: memberCookie })).status).toBe(403);
-    expect((await call(`/api/w/${O.workspaceId}/series/${s.id}`, { method: "DELETE", cookie: O.cookie })).status).toBe(
-      404,
-    );
-    expect(
-      (await call(`/api/w/${O.workspaceId}/chapters/${ch.id}`, { method: "DELETE", cookie: O.cookie })).status,
-    ).toBe(404);
+    expect((await call(`/api/series/${s.id}`, { method: "DELETE", cookie: O.cookie })).status).toBe(404);
+    expect((await call(`/api/chapters/${ch.id}`, { method: "DELETE", cookie: O.cookie })).status).toBe(404);
 
     expect((await api(`/series/${s.id}`, { method: "DELETE" })).status).toBe(204);
     expect((await api(`/series/${s.id}`)).status).toBe(404);

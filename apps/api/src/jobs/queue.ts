@@ -8,16 +8,7 @@
  * Muốn chuyển sang pg-boss: chỉ thay file này, giữ API worker.
  */
 import { randomBytes } from "node:crypto";
-import {
-  chapters,
-  type DbLike,
-  jobs,
-  pageStates,
-  pages,
-  proofreadSuggestions,
-  sourceFiles,
-  workspaceSettings,
-} from "@mtl/db";
+import { chapters, type DbLike, jobs, pageStates, pages, proofreadSuggestions, sourceFiles } from "@mtl/db";
 import type { ClaimRequest, CompleteRequest, FailRequest, HeartbeatRequest, WorkerUsage } from "@mtl/shared";
 import {
   pageId as derivePageId,
@@ -31,7 +22,8 @@ import {
 import { and, asc, eq, gt, inArray, lte, ne, not, sql } from "drizzle-orm";
 import type { z } from "zod";
 import { budgetStatus, pauseQueuedPaidJobs } from "../billing/budget.ts";
-import { recordServerUsage, recordUsage, type WorkerKind } from "../billing/ledger.ts";
+import { recordServerUsage, recordUsage } from "../billing/ledger.ts";
+import { claimableSql, lockQueuedOverQuotaLlmJobs, quotaFailMessage, userQuotaStatus } from "../billing/user-quota.ts";
 import { db } from "../db.ts";
 import { env } from "../env.ts";
 import { isChapterLocked } from "../lib/chapter-lock.ts";
@@ -52,7 +44,6 @@ export const HEARTBEAT_S = 20;
 const MAX_INGEST_PAGES = 1000;
 
 export const attemptNo = (j: Pick<Job, "attempts" | "providerRetries">) => j.attempts + j.providerRetries;
-export const workerKind = (w: WorkerIdentity): WorkerKind => (w.workspaceId ? "mac" : "modal");
 const tx = <R>(fn: (t: DbLike) => Promise<R>) => db.transaction((t) => fn(t as unknown as DbLike));
 
 /** So sánh major.minor.patch. */
@@ -64,6 +55,13 @@ export function compareVersion(a: string, b: string): number {
     if (d !== 0) return Math.sign(d);
   }
   return 0;
+}
+
+/** Job LLM đang chờ của người vượt hạn mức → failed `quota_exceeded` (claim + runner gọi). Trả số job. */
+export async function failOverQuotaQueued(t: DbLike): Promise<number> {
+  const rows = await lockQueuedOverQuotaLlmJobs(t);
+  for (const job of rows) await terminal(t, job, "failed", "internal", quotaFailMessage());
+  return rows.length;
 }
 
 export type ClaimedJobOut = {
@@ -94,21 +92,22 @@ export async function claim(w: WorkerIdentity, req: z.infer<typeof ClaimRequest>
       await pauseQueuedPaidJobs(t);
       blockLlm = true;
     }
-    // Claim kèm dispatch_id (container Modal) → dispatch active; id lạ/không phải token nền tảng → bỏ qua.
-    const dispatchId = w.workspaceId || !req.dispatch_id ? null : await markDispatchClaimed(t, req.dispatch_id);
-    // Token workspace → worker Mac của đúng workspace đó; token nền tảng → mọi workspace chế độ modal (red team #9).
+    // Hạn mức từng người dùng: job LLM đang chờ của người vượt → failed trước khi chọn (không kẹt chương).
+    await failOverQuotaQueued(t);
+    // Claim kèm dispatch_id (container Modal) → dispatch active; id lạ / token không phải Modal → bỏ qua.
+    const dispatchId = w.kind !== "modal" || !req.dispatch_id ? null : await markDispatchClaimed(t, req.dispatch_id);
+    // Worker chung toàn hệ thống: mọi token claim job mọi người dùng. Modal (tốn GPU) không nhận job nào của người
+    // vượt hạn mức — job không-LLM của họ chỉ chạy trên Mac ($0) hoặc chờ sang ngày.
     const picked = await t
       .select({ id: jobs.id })
       .from(jobs)
-      .leftJoin(workspaceSettings, eq(workspaceSettings.workspaceId, jobs.workspaceId))
       .where(
         and(
           eq(jobs.status, "queued"),
           lte(jobs.runAfter, sql`now()`),
           inArray(jobs.type, caps),
           blockLlm ? not(llmJobSql) : undefined,
-          w.workspaceId ? eq(jobs.workspaceId, w.workspaceId) : undefined,
-          sql`coalesce(${workspaceSettings.workerMode}, 'mac') = ${workerKind(w)}`,
+          claimableSql(w.kind),
         ),
       )
       .orderBy(asc(jobs.priority), asc(jobs.createdAt))
@@ -154,7 +153,7 @@ export async function claim(w: WorkerIdentity, req: z.infer<typeof ClaimRequest>
         inputs = await buildInputs(t, job);
         outputs = await presignOutputs(job, claimOutputNames(job.payload));
       } catch (err) {
-        // Input không dựng được (page mất, key ngoài workspace…) → fail job này thay vì 500 cả claim:
+        // Input không dựng được (page mất, key ngoài dữ liệu người dùng…) → fail job này thay vì 500 cả claim:
         // để nguyên thì job kẹt đầu hàng đợi và chặn mọi lần claim sau.
         console.warn(`[claim] job ${job.id} input không hợp lệ: ${(err as Error).message}`);
         await terminal(t, job, "failed", "invalid_input", `inputs: ${(err as Error).message}`);
@@ -204,7 +203,7 @@ async function fenced(t: DbLike, w: WorkerIdentity, jobId: string, f: Fence, all
 }
 
 async function usage(t: DbLike, w: WorkerIdentity, job: Job, attempt: number, u: WorkerUsage | null) {
-  if (u) await recordUsage(t, job, attempt, u, workerKind(w));
+  if (u) await recordUsage(t, job, attempt, u, w.kind);
 }
 
 export async function heartbeat(w: WorkerIdentity, jobId: string, req: z.infer<typeof HeartbeatRequest>) {
@@ -216,6 +215,16 @@ export async function heartbeat(w: WorkerIdentity, jobId: string, req: z.infer<t
     if (isLlmPayload(job.payload) && (await budgetStatus(t)).exceeded) {
       await pauseForBudget(t, job);
       return { lease_expires_at: new Date().toISOString(), stop: "paused_budget" as const };
+    }
+    // Hạn mức người dùng (sau khi ghi usage của nhịp này): vượt → dừng job LLM + failed. Vượt tối đa ≈ chi phí tới
+    // nhịp heartbeat kế của các job đang chạy của người đó.
+    if (
+      env.USER_DAILY_USD !== undefined &&
+      isLlmPayload(job.payload) &&
+      (await userQuotaStatus(t, job.userId)).exceeded
+    ) {
+      await terminal(t, job, "failed", "internal", quotaFailMessage());
+      return { lease_expires_at: new Date().toISOString(), stop: "cancel" as const };
     }
     const [u] = await t
       .update(jobs)
@@ -267,7 +276,7 @@ export async function complete(w: WorkerIdentity, jobId: string, req: z.infer<ty
 
 /** → mã lỗi khi server tự kết thúc job thay vì nhận kết quả (worker nhận 409). */
 async function applyResult(t: DbLike, job: Job, attempt: number, result: JobResult): Promise<string | undefined> {
-  const ws = job.workspaceId;
+  const owner = job.userId;
   switch (result.type) {
     case "chapter.ingest":
       return applyIngest(t, job, result);
@@ -276,8 +285,8 @@ async function applyResult(t: DbLike, job: Job, attempt: number, result: JobResu
       requireRev(job, result.clean_rev, "clean");
       requireRev(job, result.mask_rev, "mask");
       await requireObjects([
-        storageKeys.clean(ws, job.pageId, result.clean_rev),
-        storageKeys.mask(ws, job.pageId, result.mask_rev),
+        storageKeys.clean(owner, job.pageId, result.clean_rev),
+        storageKeys.mask(owner, job.pageId, result.mask_rev),
       ]);
       await t
         .update(pages)
@@ -291,7 +300,7 @@ async function applyResult(t: DbLike, job: Job, attempt: number, result: JobResu
         })
         .where(eq(pages.id, job.pageId));
       await recordServerUsage(t, job, attempt, "pages", 1);
-      if (job.chapterId) await refreshChapter(t, ws, job.chapterId);
+      if (job.chapterId) await refreshChapter(t, owner, job.chapterId);
       return undefined;
     }
     case "chapter.translate": {
@@ -315,7 +324,7 @@ async function applyResult(t: DbLike, job: Job, attempt: number, result: JobResu
       const locked = isChapterLocked(ch);
       for (const r of result.pages) {
         await writeAiState(t, {
-          workspaceId: ws,
+          userId: owner,
           pageId: r.page_id,
           aiState: r.ai_state,
           actor: `job:${job.id}`,
@@ -329,13 +338,13 @@ async function applyResult(t: DbLike, job: Job, attempt: number, result: JobResu
           .where(inArray(pages.id, [...got]));
       const missing = p.page_ids.filter((id) => !got.has(id));
       if (missing.length) await t.update(pages).set({ status: "failed" }).where(inArray(pages.id, missing));
-      await refreshChapter(t, ws, p.chapter_id);
+      await refreshChapter(t, owner, p.chapter_id);
       return undefined;
     }
     case "page.reinpaint": {
       if (!job.pageId) throw new Error("page.reinpaint without page_id");
       requireRev(job, result.clean_rev, "clean");
-      await requireObjects([storageKeys.clean(ws, job.pageId, result.clean_rev)]);
+      await requireObjects([storageKeys.clean(owner, job.pageId, result.clean_rev)]);
       await t.update(pages).set({ cleanRev: result.clean_rev }).where(eq(pages.id, job.pageId));
       return undefined;
     }
@@ -382,7 +391,7 @@ async function applyProofread(t: DbLike, job: Job, result: Extract<JobResult, { 
   const p = job.payload;
   if (p.type !== "chapter.proofread") throw new Error("payload mismatch");
   // Khoá dòng chương: 2 lượt hiệu đính complete cùng lúc chạy tuần tự (không đụng unique (page, region)).
-  await lockChapter(t, job.workspaceId, p.chapter_id);
+  await lockChapter(t, job.userId, p.chapter_id);
   // Lượt cũ xong sau lượt mới hơn đã nhận kết quả → bỏ (không đè gợi ý mới + lượt Bỏ của người dùng).
   const [newer] = await t
     .select({ id: jobs.id })
@@ -415,7 +424,7 @@ async function applyProofread(t: DbLike, job: Job, result: Extract<JobResult, { 
   if (rows.length) {
     await t.insert(proofreadSuggestions).values(
       rows.map((sg) => ({
-        workspaceId: job.workspaceId,
+        userId: job.userId,
         chapterId: p.chapter_id,
         pageId: sg.page_id,
         jobId: job.id,
@@ -487,7 +496,7 @@ export async function terminal(
     .set({ status, errorClass, error: message.slice(0, 4000), stage: null })
     .where(eq(jobs.id, job.id));
   const p = job.payload;
-  const ws = job.workspaceId;
+  const owner = job.userId;
   switch (p.type) {
     case "chapter.ingest":
       // Huỷ ingest = chưa commit → về draft (commit lại được); lỗi → partial_failed.
@@ -501,7 +510,7 @@ export async function terminal(
     case "page.prepare":
       await t.update(pages).set({ status: "failed" }).where(eq(pages.id, p.page_id));
       // Huỷ page cuối của giai đoạn 1: page còn lại đã prepare → chương `prepared` (chờ "Dịch"), không kẹt processing.
-      if (job.chapterId) await refreshChapter(t, ws, job.chapterId);
+      if (job.chapterId) await refreshChapter(t, owner, job.chapterId);
       return;
     case "chapter.translate": {
       // Page đang chờ/đang dịch: đã có bản AI trước (dịch lại) → giữ `ready`; chưa có → `failed`.
@@ -514,7 +523,7 @@ export async function terminal(
       const failed = affected.filter((r) => r.aiRev === 0).map((r) => r.id);
       if (ready.length) await t.update(pages).set({ status: "ready" }).where(inArray(pages.id, ready));
       if (failed.length) await t.update(pages).set({ status: "failed" }).where(inArray(pages.id, failed));
-      await refreshChapter(t, ws, p.chapter_id);
+      await refreshChapter(t, owner, p.chapter_id);
       return;
     }
     default:
@@ -619,8 +628,8 @@ async function savePartial(t: DbLike, job: Job, partial: NonNullable<z.infer<typ
   requireRev(job, partial.clean_rev, "partial clean");
   requireRev(job, partial.mask_rev, "partial mask");
   await requireObjects([
-    storageKeys.clean(job.workspaceId, job.pageId, partial.clean_rev),
-    storageKeys.mask(job.workspaceId, job.pageId, partial.mask_rev),
+    storageKeys.clean(job.userId, job.pageId, partial.clean_rev),
+    storageKeys.mask(job.userId, job.pageId, partial.mask_rev),
   ]);
   await t
     .update(pages)
@@ -628,13 +637,13 @@ async function savePartial(t: DbLike, job: Job, partial: NonNullable<z.infer<typ
     .where(eq(pages.id, job.pageId));
 }
 
-/** Huỷ job từ phía người dùng (workspace-scoped). Job đang chạy: worker nhận `stop: "cancel"` ở heartbeat kế. */
-export async function cancelJob(ws: string, jobId: string): Promise<Job | null> {
+/** Huỷ job từ phía người dùng (chỉ job của chính họ). Job đang chạy: worker nhận `stop: "cancel"` ở heartbeat kế. */
+export async function cancelJob(userId: string, jobId: string): Promise<Job | null> {
   return tx(async (t) => {
     const [job] = await t
       .select()
       .from(jobs)
-      .where(and(eq(jobs.id, jobId), eq(jobs.workspaceId, ws)))
+      .where(and(eq(jobs.id, jobId), eq(jobs.userId, userId)))
       .for("update");
     if (!job) return null;
     if (!["queued", "running", "paused_budget"].includes(job.status)) return job;

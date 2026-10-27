@@ -19,7 +19,6 @@ import {
   translateIfPrepared,
 } from "./helpers.ts";
 
-const ws = state.workspaceId;
 const headers = { origin: WEB_URL };
 
 /** Bản dịch fake worker gán cho vùng t0 (xem fake-worker.ts aiState). */
@@ -32,7 +31,7 @@ let chapterSeq = 3000;
 /** Chương `n` trang (mặc định 1) đã dịch (worker giả) → id chương, id page đầu, số chương. */
 async function readyChapter(page: Page, n = 1) {
   const number = String(++chapterSeq);
-  const created = await page.request.post(`/api/w/${ws}/chapters`, {
+  const created = await page.request.post(`/api/chapters`, {
     headers,
     data: {
       series_id: state.seriesId,
@@ -56,16 +55,14 @@ async function readyChapter(page: Page, n = 1) {
     form.append("file", new Blob([new Uint8Array(PNG_1PX)], { type: "image/png" }));
     expect((await fetch(f.url, { method: "POST", body: form })).status).toBe(204);
   }
-  expect((await page.request.post(`/api/w/${ws}/chapters/${chapter.id}/commit`, { headers, data: {} })).status()).toBe(
-    202,
-  );
+  expect((await page.request.post(`/api/chapters/${chapter.id}/commit`, { headers, data: {} })).status()).toBe(202);
 
   let pageId: string | null = null;
   const deadline = Date.now() + 30_000;
   let done = false;
   const worker = runFakeWorker(state.token, () => done, 30_000);
   while (!pageId && Date.now() < deadline) {
-    const p = (await (await page.request.get(`/api/w/${ws}/chapters/${chapter.id}/progress`)).json()) as {
+    const p = (await (await page.request.get(`/api/chapters/${chapter.id}/progress`)).json()) as {
       chapter: { status: string };
       pages: { id: string; status: string }[];
     };
@@ -80,7 +77,7 @@ async function readyChapter(page: Page, n = 1) {
 }
 
 async function openChapter(page: Page, chapterId: string) {
-  await page.goto(`/w/${ws}/s/${state.seriesId}/c/${chapterId}`);
+  await page.goto(`/s/${state.seriesId}/c/${chapterId}`);
   await expect(page.getByRole("heading", { name: /^Chương / })).toBeVisible();
   // Panel Tìm chỉ bật khi chương ở trạng thái review/done và có trang.
   await expect(railButton(page, "find")).toBeEnabled({ timeout: 15_000 });
@@ -104,7 +101,7 @@ function watchLocked(page: Page) {
 
 /** Bản dịch vùng đầu tiên của page, đọc thẳng từ API (không qua UI). */
 async function regionTranslation(request: APIRequestContext, pageId: string) {
-  const r = (await (await request.get(`/api/w/${ws}/pages/${pageId}`)).json()) as {
+  const r = (await (await request.get(`/api/pages/${pageId}`)).json()) as {
     state: { regions: { translation: string }[] };
   };
   return r.state.regions[0]?.translation;
@@ -162,7 +159,7 @@ test.describe("công cụ chương", () => {
       { source_term: SOURCE_TERM, target_term: "Chào bạn" },
       { source_term: "없는말", target_term: "Điều khác" },
     ]) {
-      const r = await page.request.post(`/api/w/${ws}/series/${state.seriesId}/glossary`, { headers, data: body });
+      const r = await page.request.post(`/api/series/${state.seriesId}/glossary`, { headers, data: body });
       expect(r.status()).toBe(201);
     }
     const { chapterId, pageId } = await readyChapter(page);
@@ -210,7 +207,7 @@ test.describe("công cụ chương", () => {
     const worker = runFakeWorker(state.token, () => exportDone, 90_000);
 
     // "Xuất lại" ở home mở chương với `?drawer=export` → drawer mở sẵn.
-    await page.goto(`/w/${ws}/s/${state.seriesId}/c/${chapterId}?drawer=export`);
+    await page.goto(`/s/${state.seriesId}/c/${chapterId}?drawer=export`);
     await expect(page.getByRole("dialog", { name: "Xuất chương" })).toBeVisible();
     await expect(page).not.toHaveURL(/drawer=export/);
     await page.keyboard.press("Escape");
@@ -231,8 +228,8 @@ test.describe("công cụ chương", () => {
     const link = dlg.getByRole("link", { name: "Tải xuống" });
     await expect(link).toHaveAttribute("download", "");
     const href = await link.getAttribute("href");
-    expect(href).toMatch(new RegExp(`^/api/w/${ws}/exports/[0-9a-f-]{36}/download$`));
-    const exportId = href?.split("/")[5] ?? "";
+    expect(href).toMatch(/^\/api\/exports\/[0-9a-f-]{36}\/download$/);
+    const exportId = href?.split("/")[3] ?? "";
 
     // Không follow redirect: phải 302 tới presigned GET 5' kèm Content-Disposition attachment.
     const r = await page.request.get(href as string, { maxRedirects: 0 });
@@ -248,7 +245,7 @@ test.describe("công cụ chương", () => {
     expect(file.status()).toBe(200);
     const body = await file.body();
     expect(body.subarray(0, 2).toString("latin1")).toBe("PK");
-    const api = (await (await page.request.get(`/api/w/${ws}/exports/${exportId}`)).json()) as {
+    const api = (await (await page.request.get(`/api/exports/${exportId}`)).json()) as {
       status: string;
       bytes: number;
       download_url: string | null;

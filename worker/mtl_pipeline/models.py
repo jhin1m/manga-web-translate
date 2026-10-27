@@ -1,6 +1,6 @@
 """Đọc models.lock.json, kiểm sha256 trước khi nạp, từ chối định dạng có thể chứa pickle.
 
-Model `optional` (chỉ dùng khi cài đặt pipeline của workspace chọn: LaMa manga, OCR local) không bắt buộc lúc khởi
+Model `optional` (chỉ dùng khi cài đặt pipeline của người dùng chọn: LaMa manga, OCR local) không bắt buộc lúc khởi
 động; `ensure_model` tải lazy đúng URL/revision trong lock (kiểm sha256) lần đầu job cần."""
 
 from __future__ import annotations

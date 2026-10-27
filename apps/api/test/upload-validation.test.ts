@@ -7,15 +7,15 @@ import { eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { MAX_FILE_BYTES, sniffImageMime, validateUploaded } from "../src/routes/chapters.ts";
 import { head } from "../src/storage.ts";
-import { call, db, seedWorkspace } from "./helpers.ts";
+import { call, db, seedUser } from "./helpers.ts";
 import { PNG_1PX } from "./worker-helpers.ts";
 
-type Seed = Awaited<ReturnType<typeof seedWorkspace>>;
+type Seed = Awaited<ReturnType<typeof seedUser>>;
 type Upload = { id: string; ord: number; name: string; url: string; fields: Record<string, string> };
 
 let A: Seed;
 beforeAll(async () => {
-  A = await seedWorkspace("upl");
+  A = await seedUser("upl");
 });
 
 const JPEG = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0, 0x10, 0x4a, 0x46, 0x49, 0x46, 0, 1, 1, 0, 0, 1, 0, 1]);
@@ -30,7 +30,7 @@ async function postFile(u: Pick<Upload, "url" | "fields">, body: Uint8Array, con
 }
 
 async function createChapter(files: { name: string; content_type: string; bytes: number }[], number = "1") {
-  const res = await call(`/api/w/${A.workspaceId}/chapters`, {
+  const res = await call(`/api/chapters`, {
     method: "POST",
     cookie: A.cookie,
     body: { series_id: A.seriesId, number, files },
@@ -60,7 +60,7 @@ describe("chapter create + presigned POST", () => {
   it("validates the file list (type, size, count)", async () => {
     const bad = async (files: unknown[]) =>
       (
-        await call(`/api/w/${A.workspaceId}/chapters`, {
+        await call(`/api/chapters`, {
           method: "POST",
           cookie: A.cookie,
           body: { series_id: A.seriesId, number: "9", files },
@@ -86,7 +86,7 @@ describe("chapter create + presigned POST", () => {
 
   it("re-presigns files of a draft chapter only", async () => {
     const { chapter, files } = await createChapter([{ name: "001.png", content_type: "image/png", bytes: 100 }]);
-    const res = await call(`/api/w/${A.workspaceId}/chapters/${chapter.id}/presign`, {
+    const res = await call(`/api/chapters/${chapter.id}/presign`, {
       method: "POST",
       cookie: A.cookie,
       body: { file_ids: files.map((f) => f.id) },
@@ -112,7 +112,7 @@ describe("commit", () => {
     expect((await postFile(f3, JPEG)).status).toBe(204);
     // f4 không upload.
 
-    const res = await call(`/api/w/${A.workspaceId}/chapters/${chapter.id}/commit`, {
+    const res = await call(`/api/chapters/${chapter.id}/commit`, {
       method: "POST",
       cookie: A.cookie,
       body: {},
@@ -134,18 +134,18 @@ describe("commit", () => {
     const js = await db.select().from(jobs).where(eq(jobs.chapterId, chapter.id));
     expect(js.map((j) => j.type)).toEqual(["chapter.ingest"]);
 
-    const detail = await call(`/api/w/${A.workspaceId}/chapters/${chapter.id}`, { cookie: A.cookie });
+    const detail = await call(`/api/chapters/${chapter.id}`, { cookie: A.cookie });
     expect(((await detail.json()) as { status: string }).status).toBe("ingesting");
 
     // Đã commit → không ký upload thêm.
-    const pre = await call(`/api/w/${A.workspaceId}/chapters/${chapter.id}/presign`, {
+    const pre = await call(`/api/chapters/${chapter.id}/presign`, {
       method: "POST",
       cookie: A.cookie,
       body: { file_ids: [f1.id] },
     });
     expect(pre.status).toBe(409);
     // Commit lại chương đã xử lý → 409, không loại/xoá source_files nào.
-    const again = await call(`/api/w/${A.workspaceId}/chapters/${chapter.id}/commit`, {
+    const again = await call(`/api/chapters/${chapter.id}/commit`, {
       method: "POST",
       cookie: A.cookie,
       body: {},
@@ -159,14 +159,14 @@ describe("commit", () => {
       { name: "001.png", content_type: "image/png", bytes: HTML.length },
     ]);
     expect((await postFile(files[0] as Upload, HTML)).status).toBe(204);
-    const res = await call(`/api/w/${A.workspaceId}/chapters/${chapter.id}/commit`, {
+    const res = await call(`/api/chapters/${chapter.id}/commit`, {
       method: "POST",
       cookie: A.cookie,
       body: {},
     });
     expect(res.status).toBe(400);
     expect(((await res.json()) as { error: string }).error).toBe("no_valid_files");
-    const detail = await call(`/api/w/${A.workspaceId}/chapters/${chapter.id}`, { cookie: A.cookie });
+    const detail = await call(`/api/chapters/${chapter.id}`, { cookie: A.cookie });
     expect(((await detail.json()) as { status: string }).status).toBe("draft");
     // File lỗi được giữ lại để upload lại rồi commit tiếp.
     expect(await db.select().from(sourceFiles).where(eq(sourceFiles.chapterId, chapter.id))).toHaveLength(1);

@@ -1,19 +1,19 @@
-/** Hàng đợi: idempotency, claim song song không trùng, lọc workspace / worker_mode / capability / pipeline_version. */
+/** Hàng đợi: idempotency, claim song song không trùng, worker chung mọi người dùng, lọc capability / pipeline_version. */
 import { jobs, pages, scoped } from "@mtl/db";
 import { type JobPayload, pageId } from "@mtl/shared";
 import { and, eq } from "drizzle-orm";
 import { v7 as uuidv7 } from "uuid";
-import { beforeAll, describe, expect, it } from "vitest";
+import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { inJobTx, insertJob } from "../src/jobs/enqueue.ts";
 import { compareVersion } from "../src/jobs/queue.ts";
 import { reapExpiredLeases } from "../src/jobs/reaper.ts";
-import { db, seedWorkspace } from "./helpers.ts";
-import { claimJobs, expireLease, jobRow, SHA, setWorkerMode, VERSION, wcall, workerToken } from "./worker-helpers.ts";
+import { db, seedUser } from "./helpers.ts";
+import { cancelActiveJobs } from "./isolate-queue.ts";
+import { claimJobs, expireLease, jobRow, SHA, VERSION, wcall, workerToken } from "./worker-helpers.ts";
 
-type Seed = Awaited<ReturnType<typeof seedWorkspace>>;
+type Seed = Awaited<ReturnType<typeof seedUser>>;
 let A: Seed;
 let B: Seed;
-let M: Seed;
 
 const exportPayload = (chapterId: string): JobPayload => ({
   type: "chapter.export",
@@ -30,7 +30,7 @@ async function addExportJobs(seed: Seed, n: number, key = () => uuidv7()) {
   for (let i = 0; i < n; i++) {
     const { job } = await inJobTx((tx) =>
       insertJob(tx, {
-        workspaceId: seed.workspaceId,
+        userId: seed.userId,
         payload: exportPayload(seed.chapterId),
         key: { inputRev: "r", idempotencyKey: key() },
         chapterId: seed.chapterId,
@@ -42,22 +42,24 @@ async function addExportJobs(seed: Seed, n: number, key = () => uuidv7()) {
 }
 
 async function seedPage(seed: Seed) {
-  await scoped(db, seed.workspaceId).insert(pages, {
+  await scoped(db, seed.userId).insert(pages, {
     id: pageId(seed.chapterId, 1, 0),
     chapterId: seed.chapterId,
     ord: 0,
     width: 100,
     height: 100,
-    originalKey: `ws/${seed.workspaceId}/ch/${seed.chapterId}/ingest/1/0.png`,
+    originalKey: `u/${seed.userId}/ch/${seed.chapterId}/ingest/1/0.png`,
     originalSha256: SHA,
   });
 }
 
 beforeAll(async () => {
-  [A, B, M] = await Promise.all([seedWorkspace("qa"), seedWorkspace("qb"), seedWorkspace("qm")]);
-  await Promise.all([A, B, M].map(seedPage));
-  await setWorkerMode(M.workspaceId, "modal");
+  [A, B] = await Promise.all([seedUser("qa"), seedUser("qb")]);
+  await Promise.all([A, B].map(seedPage));
 });
+
+// Worker chung: mỗi ca chỉ thấy job của chính nó.
+beforeEach(cancelActiveJobs);
 
 describe("enqueue idempotency", () => {
   it("returns the same job while active, creates a new one after the old failed", async () => {
@@ -76,11 +78,11 @@ describe("enqueue idempotency", () => {
 
 describe("claim", () => {
   it("2 workers claiming 1000 jobs concurrently never get the same job", async () => {
-    const W = await seedWorkspace("q1000");
+    const W = await seedUser("q1000");
     await seedPage(W);
     const ids = new Set(await addExportJobs(W, 1000));
-    const t1 = (await workerToken(W.workspaceId, "w1")).token;
-    const t2 = (await workerToken(W.workspaceId, "w2")).token;
+    const t1 = (await workerToken("mac", "w1")).token;
+    const t2 = (await workerToken("mac", "w2")).token;
     const seen: string[] = [];
     const drain = async (tk: string) => {
       for (;;) {
@@ -95,23 +97,19 @@ describe("claim", () => {
     expect(seen.every((id) => ids.has(id))).toBe(true);
   }, 120_000);
 
-  it("workspace token only claims its own workspace; mac token skips modal workspaces", async () => {
-    const [bJob] = await addExportJobs(B, 1);
-    const [mJob] = await addExportJobs(M, 1);
-    const tA = (await workerToken(A.workspaceId, "a-only")).token;
-    const tM = (await workerToken(M.workspaceId, "m-mac")).token;
-    const gotA = await claimJobs(tA, { caps: ["chapter.export"], max: 8 });
-    expect(gotA.map((j) => j.id)).not.toContain(bJob);
-    expect(await claimJobs(tM, { caps: ["chapter.export"], max: 8 })).toEqual([]);
-    // Token nền tảng (Modal) phục vụ workspace chế độ modal.
-    const platform = (await workerToken(null, "modal")).token;
-    const got = await claimJobs(platform, { caps: ["chapter.export"], max: 8 });
-    expect(got.map((j) => j.id)).toContain(mJob);
-    expect(got.map((j) => j.id)).not.toContain(bJob);
+  it("mac and modal tokens both claim jobs of every user (shared workers)", async () => {
+    const mac = (await workerToken("mac", "mac-any")).token;
+    const modal = (await workerToken("modal", "modal-any")).token;
+    for (const tk of [mac, modal]) {
+      const [aJob] = await addExportJobs(A, 1);
+      const [bJob] = await addExportJobs(B, 1);
+      const got = (await claimJobs(tk, { caps: ["chapter.export"], max: 8 })).map((j) => j.id);
+      expect(got).toEqual(expect.arrayContaining([aJob, bJob]));
+    }
   });
 
   it("rejects old pipeline_version (426) and unknown/disallowed capabilities (400)", async () => {
-    const tA = (await workerToken(A.workspaceId, "caps", ["page.prepare"])).token;
+    const tA = (await workerToken("mac", "caps", ["page.prepare"])).token;
     const body = { worker_id: "x", max: 1, dispatch_id: null };
     expect(
       (await wcall(tA, "/claim", { ...body, capabilities: ["page.prepare"], pipeline_version: "0.2.9" })).status,
@@ -133,14 +131,14 @@ describe("claim", () => {
 
 describe("reaper", () => {
   it("fails a job whose lease expired on its last attempt", async () => {
-    const W = await seedWorkspace("reap");
+    const W = await seedUser("reap");
     await seedPage(W);
     const [id] = await addExportJobs(W, 1);
     await db
       .update(jobs)
       .set({ maxAttempts: 1 })
       .where(eq(jobs.id, id as string));
-    const tk = (await workerToken(W.workspaceId)).token;
+    const tk = (await workerToken("mac")).token;
     const [j] = await claimJobs(tk, { caps: ["chapter.export"] });
     expect(j?.id).toBe(id);
     await expireLease(id as string);
@@ -151,7 +149,7 @@ describe("reaper", () => {
     const running = await db
       .select()
       .from(jobs)
-      .where(and(eq(jobs.workspaceId, W.workspaceId), eq(jobs.status, "running")));
+      .where(and(eq(jobs.userId, W.userId), eq(jobs.status, "running")));
     expect(running).toEqual([]);
   });
 });

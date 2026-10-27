@@ -36,7 +36,6 @@ type Marker = { total: number; done: string[] };
 type Item = { page: PageFile; fileId: string };
 /** Phần không đưa vào store (Blob, target ký): giữ để thử lại file lỗi. */
 type Job = {
-  ws: string;
   items: Item[];
   targets: Map<string, PresignedTarget>;
   states: Map<string, ItemState>;
@@ -148,7 +147,7 @@ export function createUploadManager(deps: UploadDeps) {
         let target = job.targets.get(it.fileId);
         // Thử lại / chưa có target / policy sắp hết hạn → ký lại (mất mạng lâu làm policy cũ hết hạn).
         if (!target || attempt > 1 || Date.parse(target.expires_at) - Date.now() < 60_000) {
-          const [fresh] = (await deps.presignAgain(job.ws, chapterId, [it.fileId])).files;
+          const [fresh] = (await deps.presignAgain(chapterId, [it.fileId])).files;
           if (!fresh) throw new Error("không ký lại được file");
           target = fresh;
           job.targets.set(it.fileId, fresh);
@@ -165,10 +164,10 @@ export function createUploadManager(deps: UploadDeps) {
     store,
 
     /** Tạo chương nháp + bắt đầu upload; resolve ngay sau khi có chapterId (upload chạy tiếp ở nền). */
-    async startNewChapter(o: { ws: string; seriesId: string; number: string; title?: string; pages: PageFile[] }) {
+    async startNewChapter(o: { seriesId: string; number: string; title?: string; pages: PageFile[] }) {
       const pages = orderPages(o.pages);
       const fps = await deps.fingerprints(pages.map((p) => p.blob)).catch(() => []);
-      const res = await deps.createChapter(o.ws, {
+      const res = await deps.createChapter({
         series_id: o.seriesId,
         number: o.number,
         title: o.title ?? "",
@@ -189,7 +188,7 @@ export function createUploadManager(deps: UploadDeps) {
         targets.set(f.id, f);
       }
       items.sort((a, b) => pages.indexOf(a.page) - pages.indexOf(b.page));
-      jobs.set(chapterId, { ws: o.ws, items, targets, states: new Map() });
+      jobs.set(chapterId, { items, targets, states: new Map() });
       writeMarker(chapterId, { total: items.length, done: [] });
       void run(chapterId, items);
       return { chapterId, chapter: res.chapter };
@@ -201,7 +200,7 @@ export function createUploadManager(deps: UploadDeps) {
      * trong dấu "đã xong". Thứ tự khai báo lấy từ id (uuid v7 sinh tuần tự khi tạo chương), không phải `ord`: `ord` đổi
      * được khi người dùng sắp xếp lại ảnh, còn file thả lại luôn theo thứ tự tên.
      */
-    resumeChapter(o: { ws: string; chapter: DraftChapter; pages: PageFile[] }): { uploading: number } {
+    resumeChapter(o: { chapter: DraftChapter; pages: PageFile[] }): { uploading: number } {
       if (active.has(o.chapter.id)) throw new Error("Chương này đang tải ảnh — chờ lượt hiện tại xong.");
       const pages = orderPages(o.pages);
       const files = [...o.chapter.source_files].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
@@ -220,7 +219,7 @@ export function createUploadManager(deps: UploadDeps) {
       const states = new Map<string, ItemState>();
       for (const id of doneIds)
         states.set(id, { status: "done", loaded: Number.POSITIVE_INFINITY, attempts: 0, error: null });
-      jobs.set(o.chapter.id, { ws: o.ws, items, targets: new Map(), states });
+      jobs.set(o.chapter.id, { items, targets: new Map(), states });
       writeMarker(o.chapter.id, { total: items.length, done: [...doneIds] });
       const missing = items.filter((it) => !doneIds.has(it.fileId));
       void run(o.chapter.id, missing);

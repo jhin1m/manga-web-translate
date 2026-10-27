@@ -1,6 +1,6 @@
 /** Kiểu + query của series (khớp apps/api/src/routes/series.ts). */
 import type { PageFormat, SourceLang, TargetLang } from "@mtl/shared/series-lang";
-import { api, wsPath } from "../../lib/api.ts";
+import { api } from "../../lib/api.ts";
 
 export type PronounRule = { speaker: string; listener: string; address: string; note: string };
 export type FontSlot = "dialogue" | "narration" | "sfx";
@@ -36,7 +36,8 @@ export type ChapterSummary = {
   number: string;
   title: string;
   status: ChapterStatus;
-  locked_by: string | null;
+  /** Đang mở sửa ở một tab (khoá còn hạn). */
+  locked: boolean;
   created_at: string;
   updated_at: string;
 };
@@ -59,48 +60,48 @@ export type SeriesListItem = Series & {
 };
 export type SeriesDetail = Series & { chapters: ChapterRow[] };
 
-/** Chương mở của workspace (drawer Hoạt động): chương mình giữ khoá trước rồi updated_at mới nhất. */
-export type RecentChapter = ChapterRow & { series_title: string; lock_holder_is_me: boolean };
+/** Chương mở (drawer Hoạt động): chương đang mở sửa trước rồi updated_at mới nhất. */
+export type RecentChapter = ChapterRow & { series_title: string };
 
 export const seriesKeys = {
-  list: (ws: string) => ["series", ws] as const,
-  detail: (ws: string, id: string) => ["series", ws, id] as const,
-  recent: (ws: string) => ["series", ws, "recent-chapters"] as const,
-  skipImages: (ws: string, id: string) => ["series", ws, id, "skip-images"] as const,
+  list: () => ["series"] as const,
+  detail: (id: string) => ["series", id] as const,
+  recent: () => ["series", "recent-chapters"] as const,
+  skipImages: (id: string) => ["series", id, "skip-images"] as const,
 };
 
-export const fetchSeriesList = (ws: string) => api<{ series: SeriesListItem[] }>(wsPath(ws, "/series"));
-export const fetchSeries = (ws: string, id: string) => api<SeriesDetail>(wsPath(ws, `/series/${id}`));
-export const fetchRecentChapters = (ws: string, limit = 20) =>
-  api<{ chapters: RecentChapter[] }>(wsPath(ws, `/recent-chapters?limit=${limit}&open=1`));
-export const createSeries = (ws: string, body: { title: string } & Partial<SeriesSettings>) =>
-  api<Series>(wsPath(ws, "/series"), { method: "POST", body });
-export const patchSeries = (ws: string, id: string, body: Partial<SeriesSettings> & { title?: string }) =>
-  api<Series>(wsPath(ws, `/series/${id}`), { method: "PATCH", body });
-/** Xoá series cùng mọi chương + glossary riêng (admin trở lên). */
-export const deleteSeries = (ws: string, id: string) => api<void>(wsPath(ws, `/series/${id}`), { method: "DELETE" });
-/** Xoá hẳn chương (ảnh, bản dịch, lịch sử). Người khác đang mở sửa → 423 kèm `holder_name`. */
-export const deleteChapter = (ws: string, id: string) => api<void>(wsPath(ws, `/chapters/${id}`), { method: "DELETE" });
+export const fetchSeriesList = () => api<{ series: SeriesListItem[] }>("/api/series");
+export const fetchSeries = (id: string) => api<SeriesDetail>(`/api/series/${id}`);
+export const fetchRecentChapters = (limit = 20) =>
+  api<{ chapters: RecentChapter[] }>(`/api/recent-chapters?limit=${limit}&open=1`);
+export const createSeries = (body: { title: string } & Partial<SeriesSettings>) =>
+  api<Series>("/api/series", { method: "POST", body });
+export const patchSeries = (id: string, body: Partial<SeriesSettings> & { title?: string }) =>
+  api<Series>(`/api/series/${id}`, { method: "PATCH", body });
+/** Xoá series cùng mọi chương + glossary riêng. */
+export const deleteSeries = (id: string) => api<void>(`/api/series/${id}`, { method: "DELETE" });
+/** Xoá hẳn chương (ảnh, bản dịch, lịch sử). Đang mở sửa ở tab khác → 423. */
+export const deleteChapter = (id: string) => api<void>(`/api/chapters/${id}`, { method: "DELETE" });
 
 /** Ảnh credit series đã học — chương tạo sau có ảnh khớp được bỏ qua sẵn. */
 export type SkipImage = { id: string; width: number; height: number; url: string; created_at: string };
-export const fetchSkipImages = (ws: string, seriesId: string) =>
-  api<{ images: SkipImage[] }>(wsPath(ws, `/series/${seriesId}/skip-images`));
+export const fetchSkipImages = (seriesId: string) =>
+  api<{ images: SkipImage[] }>(`/api/series/${seriesId}/skip-images`);
 /** "Luôn bỏ ở series này": học 1 ảnh gốc, hoặc mọi ảnh gốc nằm trọn trong 1 trang. */
-export const learnSkipImage = (ws: string, seriesId: string, from: { source_file_id: string } | { page_id: string }) =>
-  api<{ learned: number; known: number }>(wsPath(ws, `/series/${seriesId}/skip-images`), {
+export const learnSkipImage = (seriesId: string, from: { source_file_id: string } | { page_id: string }) =>
+  api<{ learned: number; known: number }>(`/api/series/${seriesId}/skip-images`, {
     method: "POST",
     body: from,
   });
-export const deleteSkipImage = (ws: string, seriesId: string, id: string) =>
-  api<void>(wsPath(ws, `/series/${seriesId}/skip-images/${id}`), { method: "DELETE" });
+export const deleteSkipImage = (seriesId: string, id: string) =>
+  api<void>(`/api/series/${seriesId}/skip-images/${id}`, { method: "DELETE" });
 
 /** Ẩn box khớp chữ bỏ qua trong chương đã dịch (xem trước → áp dụng → hoàn tác theo batch_id). */
 type ChapterRef = { chapter_id: string; number: string; title: string };
 export type IgnoreSkipReason = "locked" | "busy" | "changed";
 export type IgnorePreview = {
   chapters: (ChapterRef & { boxes: number; pages: number; samples: string[]; versions: Record<string, number> })[];
-  skipped: (ChapterRef & { reason: IgnoreSkipReason; holder_name: string | null })[];
+  skipped: (ChapterRef & { reason: IgnoreSkipReason })[];
   total_boxes: number;
 };
 export type IgnoreApplied = {
@@ -114,14 +115,13 @@ export type IgnoreUndone = {
   chapters: (ChapterRef & { pages: number })[];
   skipped: (ChapterRef & { reason: IgnoreSkipReason; pages: number })[];
 };
-const ignoreApply = (ws: string, seriesId: string, step: string) =>
-  wsPath(ws, `/series/${seriesId}/ignore-apply/${step}`);
-export const previewIgnoreApply = (ws: string, seriesId: string) =>
-  api<IgnorePreview>(ignoreApply(ws, seriesId, "preview"), { method: "POST", body: {} });
-export const applyIgnoreApply = (ws: string, seriesId: string, versions: Record<string, number>) =>
-  api<IgnoreApplied>(ignoreApply(ws, seriesId, "apply"), { method: "POST", body: { versions } });
-export const undoIgnoreApply = (ws: string, seriesId: string, batchId: string) =>
-  api<IgnoreUndone>(ignoreApply(ws, seriesId, "undo"), { method: "POST", body: { batch_id: batchId } });
+const ignoreApply = (seriesId: string, step: string) => `/api/series/${seriesId}/ignore-apply/${step}`;
+export const previewIgnoreApply = (seriesId: string) =>
+  api<IgnorePreview>(ignoreApply(seriesId, "preview"), { method: "POST", body: {} });
+export const applyIgnoreApply = (seriesId: string, versions: Record<string, number>) =>
+  api<IgnoreApplied>(ignoreApply(seriesId, "apply"), { method: "POST", body: { versions } });
+export const undoIgnoreApply = (seriesId: string, batchId: string) =>
+  api<IgnoreUndone>(ignoreApply(seriesId, "undo"), { method: "POST", body: { batch_id: batchId } });
 
 /** Số chương gợi ý cho lần upload tiếp theo: lớn nhất + 1. */
 export function nextChapterNumber(chapters: Pick<ChapterSummary, "number">[]): string {

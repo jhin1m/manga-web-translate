@@ -4,7 +4,7 @@ import { Hono } from "hono";
 import { v7 as uuidv7 } from "uuid";
 import { z } from "zod";
 import { parseJson } from "../lib/validate.ts";
-import { type AppEnv, requireWorkspace } from "../middleware/workspace.ts";
+import type { AppEnv } from "../middleware/user.ts";
 import { presignPost } from "../storage.ts";
 
 /** Loại ảnh nhận upload → đuôi key. Kiểm magic bytes khi commit (Phase 4). */
@@ -21,13 +21,13 @@ const UploadRequest = z.object({
 
 export const uploadRoutes = new Hono<AppEnv>();
 
-/** Cấp presigned POST cho 1 slice của chương. Chương phải thuộc workspace trên URL (khác → 404). */
-uploadRoutes.post("/w/:ws/chapters/:chapterId/uploads", requireWorkspace(), async (c) => {
+/** Cấp presigned POST cho 1 slice của chương. Chương phải thuộc người dùng (khác → 404). */
+uploadRoutes.post("/chapters/:chapterId/uploads", async (c) => {
   const body = await parseJson(c, UploadRequest);
-  const ws = c.get("workspaceId");
+  const userId = c.get("userId");
   const chapter = await c.get("sdb").byId(chapters, c.req.param("chapterId"), "chapter");
   const uploadId = uuidv7();
-  const key = storageKeys.source(ws, chapter.id, uploadId, UPLOAD_TYPES[body.content_type]);
+  const key = storageKeys.source(userId, chapter.id, uploadId, UPLOAD_TYPES[body.content_type]);
   const post = await presignPost(key, body.content_type, body.bytes, UPLOAD_TTL_S);
   return c.json({ upload_id: uploadId, key, url: post.url, fields: post.fields, expires_at: post.expiresAt }, 201);
 });

@@ -14,7 +14,6 @@ import { PNG_1PX, runFakeWorker } from "./fake-worker.ts";
 import { grayPng } from "./gray-png.ts";
 import { login, loginWithForm, openPanel, pageThumbs, state } from "./helpers.ts";
 
-const ws = state.workspaceId;
 const s = state.seriesId;
 
 test("drop a 10-page ZIP on home, open the chapter while uploading, then Bước 1 → Bước 2 translate it", async ({
@@ -45,8 +44,8 @@ test("drop a 10-page ZIP on home, open the chapter while uploading, then Bước
     .locator('input[type="file"]')
     .setInputFiles({ name: "chuong-501.zip", mimeType: "application/zip", buffer: Buffer.from(zip) });
 
-  // Không có dòng xác nhận: workspace chỉ có 1 series, số chương lấy từ tên ZIP.
-  await expect(page).toHaveURL(/\/w\/.+\/s\/.+\/c\/[0-9a-f-]{36}$/, { timeout: 30_000 });
+  // Không có dòng xác nhận: tài khoản chỉ có 1 series, số chương lấy từ tên ZIP.
+  await expect(page).toHaveURL(/\/s\/.+\/c\/[0-9a-f-]{36}$/, { timeout: 30_000 });
   await expect(page.getByRole("heading", { name: /^Chương 501/ })).toBeVisible();
   await expect(page.getByRole("status", { name: "Tiến độ tải ảnh" })).toContainText("Đang tải ảnh");
   await expect(page.getByRole("button", { name: "Bước 1 · Xoá chữ + OCR" })).toBeDisabled();
@@ -150,15 +149,15 @@ test("series page: 3 loose images = 1 draft chapter waiting for Bước 1; fix i
   page,
 }) => {
   await login(page);
-  // Series thứ 2 để chuyển chương sang (series đích phải cùng workspace).
-  const other = await page.request.post(`/api/w/${ws}/series`, {
+  // Series thứ 2 để chuyển chương sang (series đích phải của cùng người dùng).
+  const other = await page.request.post(`/api/series`, {
     headers: { origin: WEB_URL },
     data: { title: "Series phụ e2e" },
   });
   expect(other.status()).toBe(201);
   const otherId = ((await other.json()) as { id: string }).id;
 
-  await page.goto(`/w/${ws}/s/${s}`);
+  await page.goto(`/s/${s}`);
   const zone = page.getByRole("region", { name: "Thêm chương tiếp theo" });
   const next = Number((await zone.getByText(/^Thả strip của Chương \d+/).textContent())?.match(/\d+/)?.[0]);
   expect(next).toBeGreaterThan(0);
@@ -186,7 +185,7 @@ test("series page: 3 loose images = 1 draft chapter waiting for Bước 1; fix i
   await expect(page.getByRole("heading", { name: new RegExp(`^Chương ${next + 1000}$`) })).toBeVisible();
   await expect(page.locator(".cw-back")).toHaveText("Series phụ e2e");
 
-  await page.goto(`/w/${ws}/s/${s}`);
+  await page.goto(`/s/${s}`);
   const glossary = page.getByRole("region", { name: "Glossary của series" });
   await glossary.getByLabel("Từ gốc").fill("김준");
   await glossary.getByLabel("Bản dịch").fill("Kim Jun");
@@ -198,7 +197,7 @@ test("a credit deleted with “Luôn bỏ ở series này” is skipped in the n
   page,
 }) => {
   await login(page);
-  const created = await page.request.post(`/api/w/${ws}/series`, {
+  const created = await page.request.post(`/api/series`, {
     headers: { origin: WEB_URL },
     data: { title: "Series credit e2e" },
   });
@@ -215,7 +214,7 @@ test("a credit deleted with “Luôn bỏ ở series này” is skipped in the n
     },
   ];
   const dropChapter = async () => {
-    await page.goto(`/w/${ws}/s/${sid}`);
+    await page.goto(`/s/${sid}`);
     await page
       .getByRole("region", { name: "Thêm chương tiếp theo" })
       .locator('input[type="file"]')
@@ -244,7 +243,7 @@ test("a credit deleted with “Luôn bỏ ở series này” is skipped in the n
   await expect(sources).not.toContainText("đã bỏ");
 
   // Cài đặt series: ảnh đã học, xoá khỏi danh sách.
-  await page.goto(`/w/${ws}/s/${sid}?tab=settings`);
+  await page.goto(`/s/${sid}?tab=settings`);
   const learned = page.getByRole("group", { name: "Ảnh tự bỏ" });
   await expect(learned.getByRole("img", { name: "Ảnh tự bỏ 1" })).toBeVisible();
   await learned.getByRole("button", { name: "Xoá ảnh tự bỏ 1" }).click();

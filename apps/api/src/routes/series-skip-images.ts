@@ -1,7 +1,7 @@
 /**
  * Ảnh credit series đã học ("Luôn bỏ ở series này"): học từ 1 ảnh gốc (trước Bước 1) hoặc từ 1 trang (sau Bước 1 —
  * học mọi ảnh gốc nằm trọn trong trang), xem, xoá. Chương tạo sau có ảnh khớp bị bỏ qua sẵn (`creditSkips`).
- * Hash do trình duyệt gửi: tin trong workspace (sai chỉ làm khớp/không khớp sai, người dùng khôi phục được).
+ * Hash do trình duyệt gửi: tin trong dữ liệu của chính người dùng (sai chỉ làm khớp/không khớp sai, người dùng khôi phục được).
  */
 import { chapters, NotFoundError, pages, type Scoped, scoped, series, seriesSkipImages, sourceFiles } from "@mtl/db";
 import { type ImageFingerprint, isPlainHash, sameImage, storageKeys } from "@mtl/shared";
@@ -12,7 +12,7 @@ import { v7 as uuidv7 } from "uuid";
 import { z } from "zod";
 import { inJobTx } from "../jobs/enqueue.ts";
 import { parseJson } from "../lib/validate.ts";
-import { type AppEnv, requireWorkspace } from "../middleware/workspace.ts";
+import type { AppEnv } from "../middleware/user.ts";
 import { copyObject, deleteObject, head, MAX_GET_TTL_S, presignGet } from "../storage.ts";
 
 /** Trần ảnh đã học / series — mỗi lần tạo chương so với cả danh sách. */
@@ -47,7 +47,7 @@ export async function creditMatcher(sdb: Scoped, seriesId: string) {
   };
 }
 
-/** Chương của series này (chương series khác / workspace khác → 404 như không tồn tại). */
+/** Chương của series này (chương series khác / người dùng khác → 404 như không tồn tại). */
 async function chapterInSeries(sdb: Scoped, chapterId: string, seriesId: string, what: string) {
   const ch = await sdb.byId(chapters, chapterId, "chapter");
   if (ch.seriesId !== seriesId) throw new NotFoundError(what);
@@ -83,29 +83,26 @@ export const seriesSkipImageRoutes = new Hono<AppEnv>();
  * (`not_uploaded`), đầy danh sách. Khoá hàng series suốt lượt học → bấm 2 lần / 2 tab cùng lúc không học trùng, không
  * vượt trần. Trả số ảnh học mới + số ảnh đã có sẵn.
  */
-seriesSkipImageRoutes.post("/w/:ws/series/:seriesId/skip-images", requireWorkspace(), async (c) => {
+seriesSkipImageRoutes.post("/series/:seriesId/skip-images", async (c) => {
   const body = await parseJson(c, LearnBody);
-  const ws = c.get("workspaceId");
+  const userId = c.get("userId");
   const seriesId = c.req.param("seriesId");
-  const userId = c.get("user").id;
   const result = await inJobTx(async (tx) => {
     const [locked] = await tx
       .select({ id: series.id })
       .from(series)
-      .where(and(eq(series.workspaceId, ws), eq(series.id, seriesId)))
+      .where(and(eq(series.userId, userId), eq(series.id, seriesId)))
       .for("update");
     if (!locked) throw new NotFoundError("series");
-    return learnInto(scoped(tx, ws), ws, locked.id, body, userId);
+    return learnInto(scoped(tx, userId), locked.id, body);
   });
   return c.json(result);
 });
 
 async function learnInto(
   sdb: Scoped,
-  ws: string,
   seriesId: string,
   body: z.infer<typeof LearnBody>,
-  userId: string,
 ): Promise<{ learned: number; known: number }> {
   let source: { chapterId: string; files: SourceFile[] };
   if (body.source_file_id) {
@@ -141,7 +138,7 @@ async function learnInto(
   // Chép ảnh trước, ghi hàng sau: lỗi giữa chừng chỉ để lại object mồ côi, không có hàng trỏ tới object thiếu.
   for (const { file, fp } of fresh) {
     const id = uuidv7();
-    const thumbKey = storageKeys.seriesSkip(ws, seriesId, id, file.storageKey.split(".").pop() ?? "img");
+    const thumbKey = storageKeys.seriesSkip(sdb.userId, seriesId, id, file.storageKey.split(".").pop() ?? "img");
     await copyObject(file.storageKey, thumbKey);
     await sdb.insert(seriesSkipImages, {
       id,
@@ -149,13 +146,13 @@ async function learnInto(
       ...fp,
       thumbKey,
       learnedFromChapterId: source.chapterId,
-      createdBy: userId,
+      createdBy: sdb.userId,
     });
   }
   return { learned: fresh.length, known: hashed.length - fresh.length };
 }
 
-seriesSkipImageRoutes.get("/w/:ws/series/:seriesId/skip-images", requireWorkspace(), async (c) => {
+seriesSkipImageRoutes.get("/series/:seriesId/skip-images", async (c) => {
   const sdb = c.get("sdb");
   const s = await sdb.byId(series, c.req.param("seriesId"), "series");
   const rows = await sdb.select(seriesSkipImages, eq(seriesSkipImages.seriesId, s.id));
@@ -164,7 +161,7 @@ seriesSkipImageRoutes.get("/w/:ws/series/:seriesId/skip-images", requireWorkspac
 });
 
 /** Bỏ ảnh khỏi danh sách: chương tạo sau không tự bỏ ảnh đó nữa (chương đã tạo giữ nguyên). */
-seriesSkipImageRoutes.delete("/w/:ws/series/:seriesId/skip-images/:imageId", requireWorkspace(), async (c) => {
+seriesSkipImageRoutes.delete("/series/:seriesId/skip-images/:imageId", async (c) => {
   const sdb = c.get("sdb");
   const s = await sdb.byId(series, c.req.param("seriesId"), "series");
   const img = await sdb.byId(seriesSkipImages, c.req.param("imageId"), "skip image");

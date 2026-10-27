@@ -25,9 +25,8 @@ import {
 } from "../lib/batch-edit.ts";
 import { activeLockHolder } from "../lib/chapter-lock.ts";
 import { compileIgnoreListRe2 } from "../lib/ignore-text.ts";
-import { memberNames } from "../lib/member-names.ts";
 import { parseJson } from "../lib/validate.ts";
-import { type AppEnv, requireWorkspace } from "../middleware/workspace.ts";
+import type { AppEnv } from "../middleware/user.ts";
 
 const SAMPLES_PER_CHAPTER = 3;
 const SAMPLE_MAX_CHARS = 80;
@@ -84,31 +83,31 @@ async function chaptersWithBusy(sdb: Scoped, seriesId: string) {
   return { chs, busy: new Set(active.map((j) => j.chapterId)) };
 }
 
-/** Lý do chương không được đụng tới (người khác giữ khoá / đang chạy job), null = được. */
-const blockedReason = (ch: Chapter, busy: Set<string | null>, userId: string): SkipReason | null => {
-  const holder = activeLockHolder(ch);
-  if (holder && holder !== userId) return "locked";
+/** Lý do chương không được đụng tới (tab khác đang giữ khoá / đang chạy job), null = được. */
+const blockedReason = (ch: Chapter, busy: Set<string | null>, holder: string): SkipReason | null => {
+  const current = activeLockHolder(ch);
+  if (current && current !== holder) return "locked";
   return busy.has(ch.id) ? "busy" : null;
 };
 
 type Guarded<T> = { ok: true; value: T } | { ok: false; reason: Extract<SkipReason, "locked" | "busy"> };
 
 /**
- * Chạy `fn` trong 1 transaction đang khoá dòng chương. Người khác giữ khoá còn hạn / chương đang có job hoạt động →
- * không chạy. Không cần lấy khoá chương: dòng bị khoá tới hết transaction nên không ai lấy được khoá xen vào, và khoá
- * của chính người dùng (editor đang mở) không bị đụng tới.
+ * Chạy `fn` trong 1 transaction đang khoá dòng chương. Tab khác giữ khoá còn hạn (editor đang mở) / chương đang có
+ * job hoạt động → không chạy. Không cần lấy khoá chương: dòng bị khoá tới hết transaction nên không ai lấy được khoá
+ * xen vào, và khoá của chính tab này không bị đụng tới.
  */
 function withChapter<T>(
-  ws: string,
   userId: string,
+  holder: string,
   chapterId: string,
   fn: (tx: Scoped) => Promise<T>,
 ): Promise<Guarded<T>> {
   return inJobTx(async (tx): Promise<Guarded<T>> => {
-    const ch = await lockChapter(tx, ws, chapterId);
-    const holder = activeLockHolder(ch);
-    if (holder && holder !== userId) return { ok: false, reason: "locked" };
-    const t = scoped(tx, ws);
+    const ch = await lockChapter(tx, userId, chapterId);
+    const current = activeLockHolder(ch);
+    if (current && current !== holder) return { ok: false, reason: "locked" };
+    const t = scoped(tx, userId);
     const running = await t.select(
       jobs,
       and(eq(jobs.chapterId, chapterId), inArray(jobs.status, [...ACTIVE_JOB_STATUSES]), notReadOnlyJob) as SQL,
@@ -124,13 +123,12 @@ async function ignoreMatcher(sdb: Scoped, seriesId: string) {
 }
 
 export const seriesIgnoreApplyRoutes = new Hono<AppEnv>();
-const base = "/w/:ws/series/:seriesId/ignore-apply";
+const base = "/series/:seriesId/ignore-apply";
 
 /** Mỗi chương: số box sẽ ẩn + vài mẫu chữ nguồn + `versions`; chương không thể áp được liệt kê ở `skipped`. */
-seriesIgnoreApplyRoutes.post(`${base}/preview`, requireWorkspace(), async (c) => {
+seriesIgnoreApplyRoutes.post(`${base}/preview`, async (c) => {
   await parseJson(c, PreviewBody);
   const sdb = c.get("sdb");
-  const user = c.get("user");
   const seriesId = c.req.param("seriesId");
   const isIgnored = await ignoreMatcher(sdb, seriesId);
   const { chs, busy } = await chaptersWithBusy(sdb, seriesId);
@@ -141,15 +139,13 @@ seriesIgnoreApplyRoutes.post(`${base}/preview`, requireWorkspace(), async (c) =>
     samples: string[];
     versions: Record<string, number>;
   })[] = [];
-  const skipped: (ReturnType<typeof chapterRef> & { reason: SkipReason; holder_name: string | null })[] = [];
-  const holders: Record<string, string | null> = {};
+  const skipped: (ReturnType<typeof chapterRef> & { reason: SkipReason })[] = [];
   for (const ch of chs) {
     const pv = previewPages(await chapterPages(sdb, ch.id), transform);
     if (pv.total === 0) continue;
-    const reason = blockedReason(ch, busy, user.id);
+    const reason = blockedReason(ch, busy, c.get("lockHolder"));
     if (reason) {
-      holders[ch.id] = reason === "locked" ? activeLockHolder(ch) : null;
-      skipped.push({ ...chapterRef(ch), reason, holder_name: null });
+      skipped.push({ ...chapterRef(ch), reason });
       continue;
     }
     const samples = [...new Set(pv.matches.map((m) => sample(m.source)))].slice(0, SAMPLES_PER_CHAPTER);
@@ -161,11 +157,6 @@ seriesIgnoreApplyRoutes.post(`${base}/preview`, requireWorkspace(), async (c) =>
       versions: pv.versions,
     });
   }
-  const names = await memberNames(
-    c.get("workspaceId"),
-    Object.values(holders).filter((h): h is string => !!h),
-  );
-  for (const sk of skipped) sk.holder_name = names.get(holders[sk.chapter_id] ?? "") ?? null;
   return c.json({ chapters: out, skipped, total_boxes: out.reduce((n, ch) => n + ch.boxes, 0) });
 });
 
@@ -173,11 +164,10 @@ seriesIgnoreApplyRoutes.post(`${base}/preview`, requireWorkspace(), async (c) =>
  * Ẩn box ở mọi chương áp được; `versions` (gộp từ preview) chốt trang đã xem — chỉ chương có trang trong `versions`
  * được ghi, trang đổi sau đó → chương bị bỏ qua.
  */
-seriesIgnoreApplyRoutes.post(`${base}/apply`, requireWorkspace(), async (c) => {
+seriesIgnoreApplyRoutes.post(`${base}/apply`, async (c) => {
   const body = await parseJson(c, ApplyBody);
   const sdb = c.get("sdb");
   const user = c.get("user");
-  const ws = c.get("workspaceId");
   const seriesId = c.req.param("seriesId");
   const isIgnored = await ignoreMatcher(sdb, seriesId);
   const { chs, busy } = await chaptersWithBusy(sdb, seriesId);
@@ -193,14 +183,14 @@ seriesIgnoreApplyRoutes.post(`${base}/apply`, requireWorkspace(), async (c) => {
     if (!previewed.has(ch.id)) {
       // Chương preview đã liệt kê là bị chặn (nên không có trong `versions`): chỉ đọc state của chương đang bị chặn
       // để báo lại nếu còn chữ cần ẩn; chương còn lại không liên quan tới lần áp này.
-      const reason = blockedReason(ch, busy, user.id);
+      const reason = blockedReason(ch, busy, c.get("lockHolder"));
       if (reason && (await chapterPages(sdb, ch.id)).some((p) => transform(p.state).matches.length)) {
         skipped.push({ ...chapterRef(ch), reason });
       }
       continue;
     }
     try {
-      const r = await withChapter(ws, user.id, ch.id, (tx) =>
+      const r = await withChapter(user.id, c.get("lockHolder"), ch.id, (tx) =>
         applyBatch(tx, ch.id, user.id, transform, body.versions, batchId, BATCH_TAG),
       );
       if (!r.ok) skipped.push({ ...chapterRef(ch), reason: r.reason });
@@ -220,13 +210,12 @@ seriesIgnoreApplyRoutes.post(`${base}/apply`, requireWorkspace(), async (c) => {
 
 /**
  * Hoàn tác theo batch do áp chữ bỏ qua tạo ra (không còn bản ghi — đã hoàn tác hết / bị dọn / batch của chức năng khác
- * → 410): trang đã đổi sau khi áp, chương bị người khác giữ khoá hoặc đang có job chạy được bỏ qua và báo lại.
+ * → 410): trang đã đổi sau khi áp, chương bị tab khác giữ khoá hoặc đang có job chạy được bỏ qua và báo lại.
  */
-seriesIgnoreApplyRoutes.post(`${base}/undo`, requireWorkspace(), async (c) => {
+seriesIgnoreApplyRoutes.post(`${base}/undo`, async (c) => {
   const body = await parseJson(c, UndoBody);
   const sdb = c.get("sdb");
   const user = c.get("user");
-  const ws = c.get("workspaceId");
   const seriesId = c.req.param("seriesId");
   await sdb.byId(series, seriesId, "series");
   const chs = (await sdb.select(chapters, eq(chapters.seriesId, seriesId))).sort(byNumber);
@@ -239,7 +228,9 @@ seriesIgnoreApplyRoutes.post(`${base}/undo`, requireWorkspace(), async (c) => {
     // Một batch chỉ có một loại actor: kiểm ở chương đầu tiên có bản ghi, trước khi ghi gì.
     if (!hist.every((h) => h.actor.endsWith(`#${BATCH_TAG}`))) throw httpError(410, { error: "batch_not_found" });
     found = true;
-    const r = await withChapter(ws, user.id, ch.id, (tx) => undoBatch(tx, ch.id, user.id, body.batch_id, "skip"));
+    const r = await withChapter(user.id, c.get("lockHolder"), ch.id, (tx) =>
+      undoBatch(tx, ch.id, user.id, body.batch_id, "skip"),
+    );
     if (!r.ok) {
       skipped.push({ ...chapterRef(ch), reason: r.reason, pages: hist.length });
       continue;

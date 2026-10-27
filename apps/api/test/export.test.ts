@@ -5,10 +5,10 @@ import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { attachmentDisposition } from "../src/routes/export.ts";
 import { objectTags } from "../src/storage.ts";
-import { call, db, seedWorkspace } from "./helpers.ts";
+import { call, db, seedUser } from "./helpers.ts";
 import { aiState, type Claimed, claimJobs, complete, SHA, wcall, workerToken } from "./worker-helpers.ts";
 
-type Seed = Awaited<ReturnType<typeof seedWorkspace>>;
+type Seed = Awaited<ReturnType<typeof seedUser>>;
 type View = { id: string; status: string; bytes: number | null; download_url: string | null; expires_at: string };
 let A: Seed;
 let B: Seed;
@@ -20,7 +20,7 @@ const SRC = ["0190a000-0000-7000-8000-000000000001", "0190a000-0000-7000-8000-00
 
 /** 2 page: page 0 đã dịch (clean rev 2), page 1 chưa qua giai đoạn 2. */
 async function seedPages(s: Seed) {
-  const sdb = scoped(db, s.workspaceId);
+  const sdb = scoped(db, s.userId);
   for (const ord of [0, 1]) {
     const id = pageId(s.chapterId, 1, ord);
     await sdb.insert(pages, {
@@ -29,7 +29,7 @@ async function seedPages(s: Seed) {
       ord,
       width: W,
       height: H,
-      originalKey: storageKeys.ingestPage(s.workspaceId, s.chapterId, 1, ord),
+      originalKey: storageKeys.ingestPage(s.userId, s.chapterId, 1, ord),
       originalSha256: SHA,
       cleanRev: ord === 0 ? 2 : null,
       status: ord === 0 ? "ready" : "failed",
@@ -40,7 +40,7 @@ async function seedPages(s: Seed) {
 }
 
 const api = (s: Seed, path: string, init: { method?: string; body?: unknown } = {}) =>
-  call(`/api/w/${s.workspaceId}${path}`, { cookie: s.cookie, ...init });
+  call(`/api${path}`, { cookie: s.cookie, ...init });
 
 async function startExport(s: Seed, body: Record<string, unknown> = { format: "cbz", layout: "pages" }) {
   const res = await api(s, `/chapters/${s.chapterId}/export`, { method: "POST", body });
@@ -60,9 +60,9 @@ async function putExport(j: Claimed, body: Uint8Array, headers?: Record<string, 
 }
 
 beforeAll(async () => {
-  [A, B] = await Promise.all([seedWorkspace("exp-a"), seedWorkspace("exp-b")]);
+  [A, B] = await Promise.all([seedUser("exp-a"), seedUser("exp-b")]);
   await seedPages(A);
-  ({ token } = await workerToken(A.workspaceId, "export-worker"));
+  ({ token } = await workerToken("mac", "export-worker"));
 });
 
 describe("POST /chapters/:id/export", () => {
@@ -112,13 +112,13 @@ describe("export job lifecycle", () => {
       [0, true],
       [1, false],
     ]);
-    expect(inputs.pages[0]?.background).toContain(storageKeys.clean(A.workspaceId, pageId(A.chapterId, 1, 0), 2));
+    expect(inputs.pages[0]?.background).toContain(storageKeys.clean(A.userId, pageId(A.chapterId, 1, 0), 2));
     expect(inputs.pages[0]?.state?.regions[0]?.translation).toBe("Trang 0");
     expect(inputs.pages[1]?.background).toContain("/ingest/1/1.png");
     expect(inputs.pages[1]?.state).toBeNull();
     expect(inputs.pages[0]?.source_map[0]?.source_file_id).toBe(SRC[0]);
     const out = j.outputs.export as Claimed["outputs"][string] & { headers: Record<string, string> };
-    expect(out.key).toBe(storageKeys.export(A.workspaceId, A.chapterId, j.id, "cbz"));
+    expect(out.key).toBe(storageKeys.export(A.userId, A.chapterId, j.id, "cbz"));
     expect(out.headers).toEqual({
       "content-type": "application/vnd.comicbook+zip",
       "x-amz-tagging": "mtl-kind=export",
@@ -138,14 +138,14 @@ describe("export job lifecycle", () => {
   });
 
   it("complete checks the key and records the real object size", async () => {
-    const wrong = await complete(token, j, { type: "chapter.export", key: `ws/${A.workspaceId}/x.cbz`, bytes: 1 });
+    const wrong = await complete(token, j, { type: "chapter.export", key: `u/${A.userId}/x.cbz`, bytes: 1 });
     expect(wrong.status).toBe(400);
     const res = await complete(token, j, { type: "chapter.export", key: j.outputs.export?.key ?? "", bytes: 1 });
     expect(res.status, await res.clone().text()).toBe(200);
     const got = (await (await api(A, `/exports/${j.id}`)).json()) as View;
     expect(got.status).toBe("succeeded");
     expect(got.bytes).toBe(1234);
-    expect(got.download_url).toBe(`/api/w/${A.workspaceId}/exports/${j.id}/download`);
+    expect(got.download_url).toBe(`/api/exports/${j.id}/download`);
     const list = (await (await api(A, `/chapters/${A.chapterId}/exports`)).json()) as { exports: View[] };
     expect(list.exports[0]?.id).toBe(j.id);
   });
@@ -164,10 +164,10 @@ describe("export job lifecycle", () => {
     expect((await file.arrayBuffer()).byteLength).toBe(1234);
   });
 
-  it("another workspace's job id → 404; non-export job → 404", async () => {
+  it("another user's job id → 404; non-export job → 404", async () => {
     expect((await api(B, `/exports/${j.id}/download`)).status).toBe(404);
     expect((await api(B, `/exports/${j.id}`)).status).toBe(404);
-    const [other] = await scoped(db, A.workspaceId).select(jobs, eq(jobs.type, "page.prepare"));
+    const [other] = await scoped(db, A.userId).select(jobs, eq(jobs.type, "page.prepare"));
     if (other) expect((await api(A, `/exports/${other.id}/download`)).status).toBe(404);
   });
 

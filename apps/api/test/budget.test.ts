@@ -5,12 +5,13 @@
  */
 import { jobs, pages, runtimeFlags, usageLedger } from "@mtl/db";
 import { and, eq, sql } from "drizzle-orm";
-import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { type BudgetStatus, budgetStatus, checkBudgetAlerts } from "../src/billing/budget.ts";
 import { env } from "../src/env.ts";
 import { enqueueIngest, inJobTx } from "../src/jobs/enqueue.ts";
 import { maintainBudget } from "../src/jobs/runner.ts";
-import { db, seedWorkspace } from "./helpers.ts";
+import { db, seedUser } from "./helpers.ts";
+import { cancelActiveJobs } from "./isolate-queue.ts";
 import {
   addSources,
   type Claimed,
@@ -19,7 +20,6 @@ import {
   doPrepare,
   fence,
   jobRow,
-  setWorkerMode,
   usage,
   wcall,
   workerToken,
@@ -30,15 +30,14 @@ const setLimits = (daily?: number, monthly?: number) => {
   env.GLOBAL_MONTHLY_USD = monthly;
 };
 
-async function preparedChapter(label: string, n: number, mode: "mac" | "modal" = "mac") {
-  const S = await seedWorkspace(label);
-  const wsToken = (await workerToken(S.workspaceId)).token;
-  await addSources(S.workspaceId, S.chapterId, n);
-  await inJobTx((tx) => enqueueIngest(tx, S.workspaceId, S.chapterId));
-  const [ij] = await claimJobs(wsToken, { caps: ["chapter.ingest"] });
-  expect((await doIngest(wsToken, ij as Claimed)).status).toBe(200);
-  if (mode === "modal") await setWorkerMode(S.workspaceId, "modal");
-  return { S, wsToken };
+async function preparedChapter(label: string, n: number) {
+  const S = await seedUser(label);
+  const macToken = (await workerToken("mac")).token;
+  await addSources(S.userId, S.chapterId, n);
+  await inJobTx((tx) => enqueueIngest(tx, S.userId, S.chapterId));
+  const [ij] = await claimJobs(macToken, { caps: ["chapter.ingest"] });
+  expect((await doIngest(macToken, ij as Claimed)).status).toBe(200);
+  return { S, macToken };
 }
 
 const prepareJobs = (chapterId: string) =>
@@ -48,6 +47,8 @@ const prepareJobs = (chapterId: string) =>
     .where(and(eq(jobs.chapterId, chapterId), eq(jobs.type, "page.prepare")));
 
 beforeAll(() => setLimits());
+// Worker chung: mỗi ca chỉ thấy job của chính nó.
+beforeEach(cancelActiveJobs);
 afterEach(() => vi.restoreAllMocks());
 afterAll(async () => {
   setLimits();
@@ -74,34 +75,34 @@ describe("budget status", () => {
 describe("kill-switch at claim + heartbeat", () => {
   it("exceeded: Mac and Modal claims return no paid jobs; queued paid jobs become paused_budget", async () => {
     const mac = await preparedChapter("bmac", 2);
-    const modal = await preparedChapter("bmodal", 1, "modal");
-    const platform = (await workerToken(null, "modal-budget")).token;
+    const modal = await preparedChapter("bmodal", 1);
+    const platform = (await workerToken("modal", "modal-budget")).token;
     setLimits(0, undefined);
 
-    expect(await claimJobs(mac.wsToken, { caps: ["page.prepare", "chapter.translate"] })).toEqual([]);
+    expect(await claimJobs(mac.macToken, { caps: ["page.prepare", "chapter.translate"] })).toEqual([]);
     expect(await claimJobs(platform, { caps: ["page.prepare"] })).toEqual([]);
     for (const j of [...(await prepareJobs(mac.S.chapterId)), ...(await prepareJobs(modal.S.chapterId))]) {
       expect(j.status).toBe("paused_budget");
     }
     // Loại không tốn tiền LLM vẫn claim được (ở đây không còn job nào, nhưng không lỗi).
-    expect(await claimJobs(mac.wsToken, { caps: ["chapter.ingest", "page.reinpaint"] })).toEqual([]);
+    expect(await claimJobs(mac.macToken, { caps: ["chapter.ingest", "page.reinpaint"] })).toEqual([]);
 
     // Hết vượt → mtl-jobs mở lại, claim chạy tiếp.
     setLimits();
     expect((await maintainBudget()).resumed).toBeGreaterThanOrEqual(3);
-    const [j] = await claimJobs(mac.wsToken, { caps: ["page.prepare"] });
+    const [j] = await claimJobs(mac.macToken, { caps: ["page.prepare"] });
     expect(j?.type).toBe("page.prepare");
-    expect((await doPrepare(mac.wsToken, j as Claimed)).status).toBe(200);
+    expect((await doPrepare(mac.macToken, j as Claimed)).status).toBe(200);
   });
 
   it("running paid job stops via heartbeat: paused_budget, attempt refunded, page back to pending, worker fenced", async () => {
-    const { S, wsToken } = await preparedChapter("bhb", 1);
-    const [j] = (await claimJobs(wsToken, { caps: ["page.prepare"] })) as Claimed[];
+    const { S, macToken } = await preparedChapter("bhb", 1);
+    const [j] = (await claimJobs(macToken, { caps: ["page.prepare"] })) as Claimed[];
     if (!j) throw new Error("no job");
     expect((await jobRow(j.id)).attempts).toBe(1);
 
     setLimits(0, 0);
-    const hb = await wcall(wsToken, `/jobs/${j.id}/heartbeat`, {
+    const hb = await wcall(macToken, `/jobs/${j.id}/heartbeat`, {
       ...fence(j),
       progress: 0.5,
       stage: "inpaint",
@@ -117,7 +118,7 @@ describe("kill-switch at claim + heartbeat", () => {
     const led = await db.select().from(usageLedger).where(eq(usageLedger.jobId, j.id));
     expect(led.length).toBeGreaterThan(0);
     // Worker cũ cố hoàn tất → 409, không ghi đè clean_rev.
-    expect((await doPrepare(wsToken, j)).status).toBe(409);
+    expect((await doPrepare(macToken, j)).status).toBe(409);
     expect(pg?.cleanRev ?? null).toBe(
       (
         await db
@@ -132,12 +133,12 @@ describe("kill-switch at claim + heartbeat", () => {
     setLimits();
     await maintainBudget();
     expect((await jobRow(j.id)).status).toBe("queued");
-    const [again] = await claimJobs(wsToken, { caps: ["page.prepare"] });
+    const [again] = await claimJobs(macToken, { caps: ["page.prepare"] });
     expect(again?.id).toBe(j.id);
     // Attempt trên dây tăng → usage lần chạy lại không đụng khoá ledger của lần bị dừng.
     expect(again?.attempt).toBeGreaterThan(j.attempt);
     expect((await jobRow(j.id)).attempts).toBe(1);
-    const hb2 = await wcall(wsToken, `/jobs/${j.id}/heartbeat`, {
+    const hb2 = await wcall(macToken, `/jobs/${j.id}/heartbeat`, {
       ...fence(again as Claimed),
       progress: 0.5,
       stage: null,
@@ -146,14 +147,14 @@ describe("kill-switch at claim + heartbeat", () => {
     expect(hb2.status).toBe(200);
     const rows = await db.select().from(usageLedger).where(eq(usageLedger.jobId, j.id));
     expect(new Set(rows.map((r) => r.attempt))).toEqual(new Set([j.attempt, again?.attempt]));
-    expect((await doPrepare(wsToken, again as Claimed)).status).toBe(200);
+    expect((await doPrepare(macToken, again as Claimed)).status).toBe(200);
   });
 
   it("non-paid job heartbeat is not stopped by the budget", async () => {
-    const S = await seedWorkspace("bingest");
-    const tok = (await workerToken(S.workspaceId)).token;
-    await addSources(S.workspaceId, S.chapterId, 1);
-    await inJobTx((tx) => enqueueIngest(tx, S.workspaceId, S.chapterId));
+    const S = await seedUser("bingest");
+    const tok = (await workerToken("mac")).token;
+    await addSources(S.userId, S.chapterId, 1);
+    await inJobTx((tx) => enqueueIngest(tx, S.userId, S.chapterId));
     setLimits(0, 0);
     const [ij] = (await claimJobs(tok, { caps: ["chapter.ingest"] })) as Claimed[];
     if (!ij) throw new Error("ingest not claimed under exceeded budget");

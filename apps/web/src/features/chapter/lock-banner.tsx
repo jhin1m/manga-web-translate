@@ -7,8 +7,7 @@ export function LockBanner({ state, onRetry }: { state: LockState; onRetry(): vo
   if (state.status === "denied")
     return (
       <p className="notice">
-        <strong>{state.holderName ?? "Thành viên khác"}</strong> đang giữ khoá chương — chỉ xem trước được, chưa áp
-        dụng.{" "}
+        Chương đang mở ở tab khác — chỉ xem trước được, chưa áp dụng.{" "}
         <button type="button" className="btn-ghost" onClick={onRetry}>
           Thử lại
         </button>

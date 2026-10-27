@@ -11,13 +11,13 @@ import { apiReadyChapter, login, state } from "./helpers.ts";
 
 test("delete a whole series from its home row, after an explicit confirm", async ({ page }) => {
   await login(page);
-  const created = await page.request.post(`/api/w/${state.workspaceId}/series`, {
+  const created = await page.request.post(`/api/series`, {
     headers: { origin: WEB_URL },
     data: { title: "Series xoá e2e" },
   });
   expect(created.status()).toBe(201);
   const s = (await created.json()) as { id: string };
-  const chapter = await page.request.post(`/api/w/${state.workspaceId}/chapters`, {
+  const chapter = await page.request.post(`/api/chapters`, {
     headers: { origin: WEB_URL },
     data: {
       series_id: s.id,
@@ -39,13 +39,13 @@ test("delete a whole series from its home row, after an explicit confirm", async
   await row.getByRole("button", { name: "Xoá series Series xoá e2e" }).click();
   await row.getByRole("button", { name: "Xoá series", exact: true }).click();
   await expect(row).toHaveCount(0);
-  const gone = await page.request.get(`/api/w/${state.workspaceId}/series/${s.id}`);
+  const gone = await page.request.get(`/api/series/${s.id}`);
   expect(gone.status()).toBe(404);
 });
 
 test("delete a chapter from the series page, after an explicit confirm", async ({ page }) => {
   await login(page);
-  const created = await page.request.post(`/api/w/${state.workspaceId}/chapters`, {
+  const created = await page.request.post(`/api/chapters`, {
     headers: { origin: WEB_URL },
     data: {
       series_id: state.seriesId,
@@ -56,7 +56,7 @@ test("delete a chapter from the series page, after an explicit confirm", async (
   expect(created.status()).toBe(201);
   const { chapter } = (await created.json()) as { chapter: { id: string } };
 
-  await page.goto(`/w/${state.workspaceId}/s/${state.seriesId}`);
+  await page.goto(`/s/${state.seriesId}`);
   const row = page.locator(`.row-item[data-chapter="${chapter.id}"]`);
   await expect(row).toBeVisible();
 
@@ -67,13 +67,13 @@ test("delete a chapter from the series page, after an explicit confirm", async (
   await row.getByRole("button", { name: "Xoá chương 9301" }).click();
   await row.getByRole("button", { name: "Xoá chương", exact: true }).click();
   await expect(row).toHaveCount(0);
-  const gone = await page.request.get(`/api/w/${state.workspaceId}/chapters/${chapter.id}`);
+  const gone = await page.request.get(`/api/chapters/${chapter.id}`);
   expect(gone.status()).toBe(404);
 });
 
 test("series tabs keep the series header and mark the current tab", async ({ page }) => {
   await login(page);
-  await page.goto(`/w/${state.workspaceId}/s/${state.seriesId}`);
+  await page.goto(`/s/${state.seriesId}`);
   const tabs = page.getByRole("navigation", { name: "Mục của series" });
   await tabs.getByRole("link", { name: "Cài đặt dịch" }).click();
   await expect(page).toHaveURL(/\?tab=settings/);
@@ -121,7 +121,7 @@ test("new series picks source language; settings edit target language, page form
 
   const url = new URL(page.url());
   const seriesId = url.pathname.split("/").at(-1) as string;
-  const s = (await (await page.request.get(`/api/w/${state.workspaceId}/series/${seriesId}`)).json()) as {
+  const s = (await (await page.request.get(`/api/series/${seriesId}`)).json()) as {
     source_lang: string;
     target_lang: string;
     page_format: string;
@@ -135,28 +135,27 @@ test("ignored text hides matching boxes of translated chapters after a preview, 
   page,
 }) => {
   await login(page);
-  const ws = state.workspaceId;
   const headers = { origin: WEB_URL };
   const first = await apiReadyChapter(page, "4101");
   const second = await apiReadyChapter(page, "4102");
   const pageIdOf = async (chapterId: string) => {
-    const p = (await (await page.request.get(`/api/w/${ws}/chapters/${chapterId}/progress`)).json()) as {
+    const p = (await (await page.request.get(`/api/chapters/${chapterId}/progress`)).json()) as {
       pages: { id: string }[];
     };
     return p.pages[0]?.id as string;
   };
   const hiddenBoxes = async (chapterId: string) => {
-    const r = (await (await page.request.get(`/api/w/${ws}/pages/${await pageIdOf(chapterId)}`)).json()) as {
+    const r = (await (await page.request.get(`/api/pages/${await pageIdOf(chapterId)}`)).json()) as {
       state: { text_boxes: { hidden: boolean }[] };
     };
     return r.state.text_boxes.filter((b) => b.hidden).length;
   };
   const setIgnore = (ignore_text: string[]) =>
-    page.request.patch(`/api/w/${ws}/series/${state.seriesId}`, { headers, data: { ignore_text } });
+    page.request.patch(`/api/series/${state.seriesId}`, { headers, data: { ignore_text } });
   // Worker giả chỉ trả vùng (không box): người dùng đặt chữ lên vùng t0 như khi sửa tay.
   const placeBox = async (chapterId: string) => {
     const pageId = await pageIdOf(chapterId);
-    const cur = (await (await page.request.get(`/api/w/${ws}/pages/${pageId}`)).json()) as {
+    const cur = (await (await page.request.get(`/api/pages/${pageId}`)).json()) as {
       version: number;
       state: Record<string, unknown>;
     };
@@ -181,13 +180,13 @@ test("ignored text hides matching boxes of translated chapters after a preview, 
       auto_fit: false,
       hidden: false,
     };
-    expect((await page.request.post(`/api/w/${ws}/chapters/${chapterId}/lock`, { headers })).ok()).toBe(true);
-    const put = await page.request.put(`/api/w/${ws}/pages/${pageId}/state`, {
+    expect((await page.request.post(`/api/chapters/${chapterId}/lock`, { headers })).ok()).toBe(true);
+    const put = await page.request.put(`/api/pages/${pageId}/state`, {
       headers: { ...headers, "if-match": `"${cur.version}"` },
       data: { state: { ...cur.state, text_boxes: [box] } },
     });
     expect(put.ok()).toBe(true);
-    expect((await page.request.delete(`/api/w/${ws}/chapters/${chapterId}/lock`, { headers })).ok()).toBe(true);
+    expect((await page.request.delete(`/api/chapters/${chapterId}/lock`, { headers })).ok()).toBe(true);
   };
   await placeBox(first);
   await placeBox(second);
@@ -196,7 +195,7 @@ test("ignored text hides matching boxes of translated chapters after a preview, 
   try {
     // Fake worker OCR "안녕하세요": mục có dấu cách chen giữa vẫn khớp (so khớp bỏ dấu cách).
     expect((await setIgnore(["안녕 하세요"])).status()).toBe(200);
-    await page.goto(`/w/${ws}/s/${state.seriesId}?tab=settings`);
+    await page.goto(`/s/${state.seriesId}?tab=settings`);
     const section = page.getByRole("region", { name: "Ẩn chữ khớp trong chương đã dịch" });
     await section.getByRole("button", { name: "Ẩn chữ khớp trong chương đã dịch…" }).click();
     await expect(section.getByText(/^Sẽ ẩn \d+ box ở \d+ chương/)).toBeVisible();
@@ -224,13 +223,13 @@ test("a very long series name is truncated with a full-name title and never over
 }) => {
   await login(page);
   const title = `Series_${"DaiKhongDauCach".repeat(4)} ${"tên rất dài có dấu cách ".repeat(3)}`.slice(0, 120).trim();
-  const created = await page.request.post(`/api/w/${state.workspaceId}/series`, {
+  const created = await page.request.post(`/api/series`, {
     headers: { origin: WEB_URL },
     data: { title },
   });
   expect(created.status()).toBe(201);
   const s = (await created.json()) as { id: string };
-  const chapter = await page.request.post(`/api/w/${state.workspaceId}/chapters`, {
+  const chapter = await page.request.post(`/api/chapters`, {
     headers: { origin: WEB_URL },
     data: {
       series_id: s.id,
@@ -260,7 +259,7 @@ test("a very long series name is truncated with a full-name title and never over
 
   // Trang series + thanh trên màn chương: không tràn ngang.
   await page.setViewportSize({ width: 1568, height: 800 });
-  await page.goto(`/w/${state.workspaceId}/s/${s.id}`);
+  await page.goto(`/s/${s.id}`);
   const heading = page.getByRole("heading", { name: title });
   await expect(heading).toBeVisible();
   await expect(heading).toHaveAttribute("title", title);
@@ -269,13 +268,13 @@ test("a very long series name is truncated with a full-name title and never over
     "ellipsis",
   );
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-  await page.goto(`/w/${state.workspaceId}/s/${s.id}/c/${chapterId}`);
+  await page.goto(`/s/${s.id}/c/${chapterId}`);
   const back = page.locator(".cw-back");
   await expect(back).toHaveAttribute("title", title);
   expect((await page.locator(".cw-back-name").boundingBox())?.width ?? 999).toBeLessThanOrEqual(240);
 
   // Dọn: series này có chương mới nhất → spec sau thả file sẽ đoán nhầm vào nó.
   await page.goto("/");
-  const del = await page.request.delete(`/api/w/${state.workspaceId}/series/${s.id}`, { headers: { origin: WEB_URL } });
+  const del = await page.request.delete(`/api/series/${s.id}`, { headers: { origin: WEB_URL } });
   expect(del.ok()).toBe(true);
 });

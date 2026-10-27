@@ -6,21 +6,21 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { type FormEvent, useState } from "react";
 import { errorMessage } from "../../lib/api.ts";
-import { fontLabel, useWorkspaceFonts } from "../fonts/api.ts";
+import { fontLabel, useUserFonts } from "../fonts/api.ts";
 import { createEntry, fetchGlossary, glossaryKey } from "../glossary/api.ts";
 import type { Series } from "./api.ts";
 
 const RECENT_TERMS = 5;
 
-export function SeriesSidebar({ ws, series }: { ws: string; series: Series }) {
+export function SeriesSidebar({ series }: { series: Series }) {
   const rule = series.pronoun_rules[0];
-  const custom = useWorkspaceFonts(ws).data;
+  const custom = useUserFonts().data;
   return (
     <aside aria-label="Cài đặt dịch của series" className="series-side">
       <section className="card">
         <div className="card-head">
           <h2>Cài đặt dịch</h2>
-          <Link to="/w/$ws/s/$seriesId" params={{ ws, seriesId: series.id }} search={{ tab: "settings" }}>
+          <Link to="/s/$seriesId" params={{ seriesId: series.id }} search={{ tab: "settings" }}>
             Sửa
           </Link>
         </div>
@@ -38,22 +38,22 @@ export function SeriesSidebar({ ws, series }: { ws: string; series: Series }) {
         </dl>
         <div className="small muted">Áp cho mọi chương dịch sau khi lưu; chương đã sửa tay không bị đổi.</div>
       </section>
-      <GlossaryCard ws={ws} series={series} />
+      <GlossaryCard series={series} />
     </aside>
   );
 }
 
-function GlossaryCard({ ws, series }: { ws: string; series: Series }) {
+function GlossaryCard({ series }: { series: Series }) {
   const qc = useQueryClient();
   const seriesId = series.id;
   const scope = { seriesId };
-  const key = glossaryKey(ws, scope);
-  const q = useQuery({ queryKey: key, queryFn: () => fetchGlossary(ws, scope) });
+  const key = glossaryKey(scope);
+  const q = useQuery({ queryKey: key, queryFn: () => fetchGlossary(scope) });
   const [src, setSrc] = useState("");
   const [tgt, setTgt] = useState("");
   const add = useMutation({
     mutationFn: () =>
-      createEntry(ws, scope, { source_term: src.trim(), target_term: tgt.trim(), note: "", case_sensitive: false }),
+      createEntry(scope, { source_term: src.trim(), target_term: tgt.trim(), note: "", case_sensitive: false }),
     onSuccess: () => {
       setSrc("");
       setTgt("");
@@ -71,7 +71,7 @@ function GlossaryCard({ ws, series }: { ws: string; series: Series }) {
     <section className="card" aria-label="Glossary của series">
       <div className="card-head">
         <h2>Glossary · {entries.length} từ</h2>
-        <Link to="/w/$ws/s/$seriesId" params={{ ws, seriesId }} search={{ tab: "glossary" }}>
+        <Link to="/s/$seriesId" params={{ seriesId }} search={{ tab: "glossary" }}>
           Xem tất cả
         </Link>
       </div>

@@ -1,11 +1,11 @@
 /**
- * Giữ khoá chương khi mở editor (Phase 5 gọi hook này). Server ép khoá cho mọi ghi nội dung chương; khoá hết
- * hạn sau 15 phút không heartbeat. Chỉ heartbeat khi người dùng còn thao tác — rời máy 15 phút thì khoá tự nhả
- * cho người khác.
+ * Giữ khoá chương khi mở editor. Khoá giữ theo tab (header `x-tab-id`, xem lib/api.ts): chương đang mở sửa ở tab
+ * khác → tab này chỉ xem. Server ép khoá cho mọi ghi nội dung chương; khoá hết hạn sau 15 phút không heartbeat. Chỉ
+ * heartbeat khi người dùng còn thao tác — rời máy 15 phút thì khoá tự nhả cho tab khác.
  */
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ApiError, wsPath } from "../../lib/api.ts";
+import { ApiError, tabId } from "../../lib/api.ts";
 import { chapterKeys, lockChapter, unlockChapter } from "./api.ts";
 
 export const HEARTBEAT_MS = 60_000;
@@ -15,7 +15,7 @@ export const IDLE_MS = 14 * 60_000;
 export type LockState =
   | { status: "acquiring" }
   | { status: "held"; expiresAt: string }
-  | { status: "denied"; holderName: string | null }
+  | { status: "denied" }
   | { status: "error"; message: string };
 
 /**
@@ -30,7 +30,7 @@ export function serial<T>(op: () => Promise<T>): Promise<T> {
   return run;
 }
 
-export function useChapterLock(ws: string, chapterId: string, enabled = true) {
+export function useChapterLock(chapterId: string, enabled = true) {
   const qc = useQueryClient();
   const [state, setState] = useState<LockState>({ status: "acquiring" });
   const lastActivity = useRef(Date.now());
@@ -40,17 +40,17 @@ export function useChapterLock(ws: string, chapterId: string, enabled = true) {
 
   const acquire = useCallback(async () => {
     try {
-      const r = await serial(() => lockChapter(ws, chapterId));
+      const r = await serial(() => lockChapter(chapterId));
       if (live.current) setState({ status: "held", expiresAt: r.expires_at });
     } catch (e) {
       if (!live.current) return;
       if (e instanceof ApiError && e.status === 423) {
-        setState({ status: "denied", holderName: (e.body.holder_name as string | null) ?? null });
+        setState({ status: "denied" });
       } else setState({ status: "error", message: e instanceof Error ? e.message : String(e) });
     } finally {
-      void qc.invalidateQueries({ queryKey: chapterKeys.detail(ws, chapterId) });
+      void qc.invalidateQueries({ queryKey: chapterKeys.detail(chapterId) });
     }
-  }, [ws, chapterId, qc]);
+  }, [chapterId, qc]);
 
   useEffect(() => {
     if (!enabled) return;
@@ -65,11 +65,12 @@ export function useChapterLock(ws: string, chapterId: string, enabled = true) {
     const timer = setInterval(() => {
       if (Date.now() - lastActivity.current < IDLE_MS) void acquire();
     }, HEARTBEAT_MS);
-    // Đóng tab: nhả khoá bằng request keepalive (unmount thường không kịp chạy).
+    // Đóng tab: nhả khoá bằng request keepalive (unmount thường không kịp chạy). Đúng tab id → chỉ nhả khoá của tab này.
     const onHide = () => {
-      void fetch(wsPath(ws, `/chapters/${chapterId}/lock`), {
+      void fetch(`/api/chapters/${chapterId}/lock`, {
         method: "DELETE",
         credentials: "same-origin",
+        headers: { "x-tab-id": tabId() },
         keepalive: true,
       });
     };
@@ -79,9 +80,9 @@ export function useChapterLock(ws: string, chapterId: string, enabled = true) {
       removeEventListener("pagehide", onHide);
       clearInterval(timer);
       live.current = false;
-      void serial(() => unlockChapter(ws, chapterId)).catch(() => undefined);
+      void serial(() => unlockChapter(chapterId)).catch(() => undefined);
     };
-  }, [ws, chapterId, enabled, acquire]);
+  }, [chapterId, enabled, acquire]);
 
   return { state, retry: acquire };
 }

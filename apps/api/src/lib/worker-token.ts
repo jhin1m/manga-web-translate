@@ -1,6 +1,7 @@
 /**
  * Token worker: chuỗi ngẫu nhiên 32 byte, DB chỉ lưu sha256. Worker gửi `Authorization: Bearer <token>`.
- * Token workspace (workspace_id ≠ null) = worker Mac của workspace đó; token nền tảng (null) = Modal.
+ * Worker chung toàn hệ thống (claim job mọi người dùng): `kind='mac'` = máy người vận hành, `kind='modal'` = GPU thuê
+ * qua dispatcher (tính tiền GPU, phiên dispatch).
  */
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { workerTokens } from "@mtl/db";
@@ -12,7 +13,7 @@ const PREFIX = "mtlw_";
 
 export type WorkerIdentity = {
   tokenId: string;
-  workspaceId: string | null;
+  kind: "mac" | "modal";
   /** Rỗng = không giới hạn thêm (vẫn phải là tập con JobType). */
   capabilities: string[];
 };
@@ -35,13 +36,13 @@ export async function authenticateWorker(token: string): Promise<WorkerIdentity 
   if (!row.lastSeenAt || Date.now() - row.lastSeenAt.getTime() > 60_000) {
     await db.update(workerTokens).set({ lastSeenAt: sql`now()` }).where(eq(workerTokens.id, row.id));
   }
-  return { tokenId: row.id, workspaceId: row.workspaceId, capabilities: row.capabilities };
+  return { tokenId: row.id, kind: row.kind, capabilities: row.capabilities };
 }
 
 /** Tạo token mới → trả token gốc (chỉ hiện một lần). */
 export async function createWorkerToken(opts: {
   name: string;
-  workspaceId: string | null;
+  kind: "mac" | "modal";
   capabilities?: string[];
 }): Promise<{ id: string; token: string }> {
   const bad = (opts.capabilities ?? []).filter((c) => !(JOB_TYPES as readonly string[]).includes(c));
@@ -51,7 +52,7 @@ export async function createWorkerToken(opts: {
     .insert(workerTokens)
     .values({
       name: opts.name,
-      workspaceId: opts.workspaceId,
+      kind: opts.kind,
       capabilities: opts.capabilities ?? [],
       tokenHash: hashWorkerToken(token),
     })

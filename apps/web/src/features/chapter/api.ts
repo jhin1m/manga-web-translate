@@ -1,6 +1,6 @@
 /** Kiểu + gọi API của chương (khớp apps/api/src/routes/{chapters,pages,progress}.ts). */
 import type { PageState, SourceSkipReason } from "@mtl/shared";
-import { api, wsPath } from "../../lib/api.ts";
+import { api } from "../../lib/api.ts";
 import type { ChapterStatus, ChapterSummary } from "../series/api.ts";
 import type { Suggestion } from "./proofread-model.ts";
 import type { PageStatus } from "./status.ts";
@@ -21,7 +21,8 @@ export type JobView = {
   updated_at: string;
 };
 
-export type ChapterLock = { holder: string; holder_name: string | null; is_me: boolean; expires_at: string };
+/** Khoá chương còn hạn (tab nào giữ không lộ ra — tab này biết mình giữ qua POST /lock). */
+export type ChapterLock = { expires_at: string };
 
 export type ChapterDetail = ChapterSummary & {
   ingest_rev: number;
@@ -75,19 +76,18 @@ export type PageStateRow = {
 };
 
 export const chapterKeys = {
-  detail: (ws: string, ch: string) => ["chapter", ws, ch] as const,
-  progress: (ws: string, ch: string) => ["chapter", ws, ch, "progress"] as const,
-  pages: (ws: string, ch: string, sig: string) => ["chapter", ws, ch, "pages", sig] as const,
-  states: (ws: string, ch: string) => ["chapter", ws, ch, "states"] as const,
-  sourceFiles: (ws: string, ch: string) => ["chapter", ws, ch, "source-files"] as const,
+  detail: (ch: string) => ["chapter", ch] as const,
+  progress: (ch: string) => ["chapter", ch, "progress"] as const,
+  pages: (ch: string, sig: string) => ["chapter", ch, "pages", sig] as const,
+  states: (ch: string) => ["chapter", ch, "states"] as const,
+  sourceFiles: (ch: string) => ["chapter", ch, "source-files"] as const,
 };
 
-const base = (ws: string, ch: string, path = "") => wsPath(ws, `/chapters/${ch}${path}`);
+const base = (ch: string, path = "") => `/api/chapters/${ch}${path}`;
 
-export const fetchChapter = (ws: string, ch: string) => api<ChapterDetail>(base(ws, ch));
-export const fetchProgress = (ws: string, ch: string) => api<Progress>(base(ws, ch, "/progress"));
-export const fetchPages = (ws: string, ch: string) =>
-  api<{ expires_at: string; pages: PageImage[] }>(base(ws, ch, "/pages"));
+export const fetchChapter = (ch: string) => api<ChapterDetail>(base(ch));
+export const fetchProgress = (ch: string) => api<Progress>(base(ch, "/progress"));
+export const fetchPages = (ch: string) => api<{ expires_at: string; pages: PageImage[] }>(base(ch, "/pages"));
 export type SourceFileImage = {
   id: string;
   ord: number;
@@ -95,54 +95,51 @@ export type SourceFileImage = {
   width: number | null;
   url: string;
 };
-export const fetchSourceFiles = (ws: string, ch: string) =>
-  api<{ expires_at: string; files: SourceFileImage[] }>(base(ws, ch, "/source-files"));
+export const fetchSourceFiles = (ch: string) =>
+  api<{ expires_at: string; files: SourceFileImage[] }>(base(ch, "/source-files"));
 /** Xoá (ẩn) / khôi phục 1 trang sau Bước 1 (cần giữ khoá; 409 khi chương đang chạy hoặc là trang cuối còn hiện). */
-export const setPageSkip = (ws: string, pageId: string, skipped: boolean) =>
-  api<{ id: string; skipped: boolean }>(wsPath(ws, `/pages/${pageId}`), { method: "PATCH", body: { skipped } });
+export const setPageSkip = (pageId: string, skipped: boolean) =>
+  api<{ id: string; skipped: boolean }>(`/api/pages/${pageId}`, { method: "PATCH", body: { skipped } });
 /** Bỏ qua / dùng lại 1 ảnh gốc trước Bước 1 (chương chưa có page; 409 khi đã có page). */
-export const setSourceSkip = (ws: string, ch: string, fileId: string, skip: "user" | null) =>
-  api<ChapterDetail["source_files"][number]>(base(ws, ch, `/source-files/${fileId}`), {
+export const setSourceSkip = (ch: string, fileId: string, skip: "user" | null) =>
+  api<ChapterDetail["source_files"][number]>(base(ch, `/source-files/${fileId}`), {
     method: "PATCH",
     body: { skip },
   });
 /** Đổi thứ tự ảnh gốc trước Bước 1: `ids` = cả bộ ảnh theo thứ tự mới (400 `source_set_mismatch` khi lệch bộ). */
-export const setSourceOrder = (ws: string, ch: string, ids: string[]) =>
-  api<{ source_files: ChapterDetail["source_files"] }>(base(ws, ch, "/source-files/order"), {
+export const setSourceOrder = (ch: string, ids: string[]) =>
+  api<{ source_files: ChapterDetail["source_files"] }>(base(ch, "/source-files/order"), {
     method: "PUT",
     body: { ids },
   });
-export const fetchChapterStates = (ws: string, ch: string) => api<{ pages: PageStateRow[] }>(base(ws, ch, "/states"));
+export const fetchChapterStates = (ch: string) => api<{ pages: PageStateRow[] }>(base(ch, "/states"));
 
 export type Rejected = { id: string; ord: number; reason: "missing" | "too_large" | "type_mismatch" };
 /** Đổi số chương / chuyển series (409 `chapter_number_taken` khi series đích đã có số đó). */
-export const patchChapter = (ws: string, ch: string, body: { number?: string; series_id?: string }) =>
-  api<ChapterSummary>(base(ws, ch), { method: "PATCH", body });
-export const commitChapter = (ws: string, ch: string) =>
-  api<{ job: JobView; accepted: number; rejected: Rejected[] }>(base(ws, ch, "/commit"), { method: "POST", body: {} });
+export const patchChapter = (ch: string, body: { number?: string; series_id?: string }) =>
+  api<ChapterSummary>(base(ch), { method: "PATCH", body });
+export const commitChapter = (ch: string) =>
+  api<{ job: JobView; accepted: number; rejected: Rejected[] }>(base(ch, "/commit"), { method: "POST", body: {} });
 /** Bước 2 "Dịch": chương xong bước 1 → dịch + chèn chữ các page đã OCR. */
-export const translatePrepared = (ws: string, ch: string) =>
-  api<{ job: JobView }>(base(ws, ch, "/translate-prepared"), { method: "POST" });
-export const retryFailed = (ws: string, ch: string) =>
-  api<{ jobs: JobView[] }>(base(ws, ch, "/retry-failed"), { method: "POST" });
-export const retranslate = (ws: string, ch: string, pageIds?: string[]) =>
-  api<{ job: JobView }>(base(ws, ch, "/translate"), { method: "POST", body: pageIds ? { page_ids: pageIds } : {} });
+export const translatePrepared = (ch: string) =>
+  api<{ job: JobView }>(base(ch, "/translate-prepared"), { method: "POST" });
+export const retryFailed = (ch: string) => api<{ jobs: JobView[] }>(base(ch, "/retry-failed"), { method: "POST" });
+export const retranslate = (ch: string, pageIds?: string[]) =>
+  api<{ job: JobView }>(base(ch, "/translate"), { method: "POST", body: pageIds ? { page_ids: pageIds } : {} });
 export type ProofreadView = { job: JobView | null; suggestions: Suggestion[] };
-export const proofreadKey = (ws: string, ch: string) => ["chapter", ws, ch, "proofread"] as const;
-export const fetchProofread = (ws: string, ch: string) => api<ProofreadView>(base(ws, ch, "/proofread"));
-export const runProofread = (ws: string, ch: string) =>
-  api<{ job: JobView; created: boolean }>(base(ws, ch, "/proofread"), { method: "POST" });
-export const dismissSuggestion = (ws: string, id: string, dismissed = true) =>
-  api<{ id: string; dismissed: boolean }>(wsPath(ws, `/proofread-suggestions/${id}`), {
+export const proofreadKey = (ch: string) => ["chapter", ch, "proofread"] as const;
+export const fetchProofread = (ch: string) => api<ProofreadView>(base(ch, "/proofread"));
+export const runProofread = (ch: string) =>
+  api<{ job: JobView; created: boolean }>(base(ch, "/proofread"), { method: "POST" });
+export const dismissSuggestion = (id: string, dismissed = true) =>
+  api<{ id: string; dismissed: boolean }>(`/api/proofread-suggestions/${id}`, {
     method: "PATCH",
     body: { dismissed },
   });
 
-export const cancelChapter = (ws: string, ch: string) =>
-  api<{ cancelled: number }>(base(ws, ch, "/cancel"), { method: "POST" });
-export const lockChapter = (ws: string, ch: string) =>
-  api<{ holder: string; expires_at: string }>(base(ws, ch, "/lock"), { method: "POST" });
-export const unlockChapter = (ws: string, ch: string) => api<void>(base(ws, ch, "/lock"), { method: "DELETE" });
+export const cancelChapter = (ch: string) => api<{ cancelled: number }>(base(ch, "/cancel"), { method: "POST" });
+export const lockChapter = (ch: string) => api<{ expires_at: string }>(base(ch, "/lock"), { method: "POST" });
+export const unlockChapter = (ch: string) => api<void>(base(ch, "/lock"), { method: "DELETE" });
 
 export const REJECT_REASON: Record<Rejected["reason"], string> = {
   missing: "chưa upload xong",
@@ -177,13 +174,12 @@ export type ExportRequest = {
 };
 
 export const exportKeys = {
-  list: (ws: string, ch: string) => ["chapter", ws, ch, "exports"] as const,
+  list: (ch: string) => ["chapter", ch, "exports"] as const,
 };
-export const createExport = (ws: string, ch: string, body: ExportRequest) =>
-  api<{ job: ExportView; created: boolean }>(base(ws, ch, "/export"), { method: "POST", body });
-export const fetchExports = (ws: string, ch: string) => api<{ exports: ExportView[] }>(base(ws, ch, "/exports"));
-export const cancelJob = (ws: string, jobId: string) =>
-  api<unknown>(wsPath(ws, `/jobs/${jobId}/cancel`), { method: "POST" });
+export const createExport = (ch: string, body: ExportRequest) =>
+  api<{ job: ExportView; created: boolean }>(base(ch, "/export"), { method: "POST", body });
+export const fetchExports = (ch: string) => api<{ exports: ExportView[] }>(base(ch, "/exports"));
+export const cancelJob = (jobId: string) => api<unknown>(`/api/jobs/${jobId}/cancel`, { method: "POST" });
 
 // ---- Find/replace + áp lại glossary (cùng dạng preview/apply/undo) ----
 export type MatchTarget = "box" | "region";
@@ -209,13 +205,13 @@ export type ApplyResult = { batch_id: string; pages: number; replaced: number };
 export type FindReplaceInput = { find: string; replace: string; case_sensitive: boolean };
 export type GlossaryRule = { source_term: string; from: string };
 
-export const previewFindReplace = (ws: string, ch: string, body: FindReplaceInput) =>
-  api<PreviewResult>(base(ws, ch, "/find-replace/preview"), { method: "POST", body });
-export const applyFindReplace = (ws: string, ch: string, body: FindReplaceInput, versions: Record<string, number>) =>
-  api<ApplyResult>(base(ws, ch, "/find-replace/apply"), { method: "POST", body: { ...body, versions } });
-export const undoBatch = (ws: string, ch: string, batchId: string) =>
-  api<{ pages: number }>(base(ws, ch, "/find-replace/undo"), { method: "POST", body: { batch_id: batchId } });
-export const previewGlossaryApply = (ws: string, ch: string, rules: GlossaryRule[]) =>
-  api<PreviewResult>(base(ws, ch, "/glossary-apply/preview"), { method: "POST", body: { rules } });
-export const applyGlossaryRules = (ws: string, ch: string, rules: GlossaryRule[], versions: Record<string, number>) =>
-  api<ApplyResult>(base(ws, ch, "/glossary-apply/apply"), { method: "POST", body: { rules, versions } });
+export const previewFindReplace = (ch: string, body: FindReplaceInput) =>
+  api<PreviewResult>(base(ch, "/find-replace/preview"), { method: "POST", body });
+export const applyFindReplace = (ch: string, body: FindReplaceInput, versions: Record<string, number>) =>
+  api<ApplyResult>(base(ch, "/find-replace/apply"), { method: "POST", body: { ...body, versions } });
+export const undoBatch = (ch: string, batchId: string) =>
+  api<{ pages: number }>(base(ch, "/find-replace/undo"), { method: "POST", body: { batch_id: batchId } });
+export const previewGlossaryApply = (ch: string, rules: GlossaryRule[]) =>
+  api<PreviewResult>(base(ch, "/glossary-apply/preview"), { method: "POST", body: { rules } });
+export const applyGlossaryRules = (ch: string, rules: GlossaryRule[], versions: Record<string, number>) =>
+  api<ApplyResult>(base(ch, "/glossary-apply/apply"), { method: "POST", body: { rules, versions } });

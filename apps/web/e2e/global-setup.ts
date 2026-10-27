@@ -3,7 +3,7 @@ import { writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { E2E_ENV, STATE_FILE } from "./env.ts";
 
-/** Reset DB e2e + tạo workspace/owner/series/token worker; lưu vào STATE_FILE cho test. */
+/** Reset DB e2e + tạo người dùng/series/token worker; lưu vào STATE_FILE cho test. */
 export default function globalSetup() {
   const seed = fileURLToPath(new URL("./seed.ts", import.meta.url));
   const out = execFileSync("pnpm", ["--filter", "@mtl/api", "exec", "tsx", seed], {

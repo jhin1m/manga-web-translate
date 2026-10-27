@@ -4,19 +4,19 @@
  */
 import { expect, type Page, test } from "@playwright/test";
 import { WEB_URL } from "./env.ts";
-import { login, state } from "./helpers.ts";
+import { login } from "./helpers.ts";
 
 const headers = { origin: WEB_URL };
 
 async function post(page: Page, path: string, data: unknown) {
-  const r = await page.request.post(`/api/w/${state.workspaceId}${path}`, { headers, data });
+  const r = await page.request.post(`/api${path}`, { headers, data });
   expect(r.status(), await r.text()).toBe(201);
   return (await r.json()) as { id: string };
 }
 
-test("workspace glossary: each language pair has its own table, the pair stays in the URL", async ({ page }) => {
+test("shared glossary: each language pair has its own table, the pair stays in the URL", async ({ page }) => {
   await login(page);
-  await page.goto(`/w/${state.workspaceId}/glossary`);
+  await page.goto(`/glossary`);
   await expect(page.getByLabel("Ngôn ngữ gốc")).toHaveValue("ko");
   await expect(page.getByLabel("Ngôn ngữ đích")).toHaveValue("vi");
 
@@ -33,7 +33,7 @@ test("workspace glossary: each language pair has its own table, the pair stays i
   await expect(page.getByText("Áp cho series dịch Hàn → Việt")).toBeVisible();
   await expect(page.getByRole("cell", { name: "CEO e2e" })).toHaveCount(0);
 
-  await page.goto(`/w/${state.workspaceId}/glossary?src=ko&tgt=en`);
+  await page.goto(`/glossary?src=ko&tgt=en`);
   await expect(page.getByLabel("Ngôn ngữ đích")).toHaveValue("en");
   await expect(page.getByRole("cell", { name: "CEO e2e" })).toBeVisible();
 });
@@ -45,7 +45,7 @@ test("changing a series language warns about its own glossary and switches the i
   await post(page, "/glossary?source_lang=ko&target_lang=vi", { source_term: "회장e2e", target_term: "chủ tịch e2e" });
   await post(page, "/glossary?source_lang=ko&target_lang=en", { source_term: "회장e2e", target_term: "chairman e2e" });
 
-  await page.goto(`/w/${state.workspaceId}/s/${s.id}?tab=glossary`);
+  await page.goto(`/s/${s.id}?tab=glossary`);
   await expect(page.getByRole("row").filter({ hasText: "chủ tịch e2e" })).toContainText(
     "từ glossary chung (Hàn → Việt)",
   );

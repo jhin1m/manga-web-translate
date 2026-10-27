@@ -21,7 +21,7 @@ describe("resolveDropSeries", () => {
     expect(resolveDropSeries({ fileNames: ["001.webp"], series: many, recentSeriesId: "gone" })).toBeNull();
   });
 
-  it("(d) the only series of the workspace; none or ambiguous → null", () => {
+  it("(d) the only series of the user; none or ambiguous → null", () => {
     expect(resolveDropSeries({ fileNames: ["001.webp"], series: solo })).toBe("s1");
     expect(resolveDropSeries({ fileNames: ["001.webp"], series: many })).toBeNull();
     expect(resolveDropSeries({ fileNames: ["001.webp"], series: [] })).toBeNull();

@@ -1,6 +1,6 @@
 """Font tuỳ chỉnh của job: tải về cache theo sha256 (kiểm hash), đăng ký id → file cho `mtl_pipeline.fonts`.
 
-Chỉ tải URL nằm trong inputs của job (API đã kiểm font thuộc workspace). Font hỏng / sai hash bị bỏ qua →
+Chỉ tải URL nằm trong inputs của job (API đã kiểm font thuộc người dùng của job). Font hỏng / sai hash bị bỏ qua →
 render fallback font thoại mặc định như id không biết. Tải lỗi 4xx (font đã xoá, URL hết hạn) cũng bỏ qua; lỗi kết nối /
 5xx thì ném ra để job được thử lại."""
 

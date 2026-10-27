@@ -7,7 +7,7 @@ import {
   JOB_TYPES,
   JobFonts,
   JobPayload,
-  keyBelongsToWorkspace,
+  keyBelongsToUser,
   PageState,
   pageId,
   prepareInputRev,
@@ -130,11 +130,11 @@ describe("JobFonts", () => {
 });
 
 describe("storage keys", () => {
-  it("are namespaced by workspace and revisioned", () => {
-    expect(storageKeys.clean("w1", "p1", 7)).toBe("ws/w1/pg/p1/clean/7.png");
-    expect(keyBelongsToWorkspace(storageKeys.source("w1", "c1", "u1", "png"), "w1")).toBe(true);
-    expect(keyBelongsToWorkspace(storageKeys.source("w1", "c1", "u1", "png"), "w2")).toBe(false);
-    expect(keyBelongsToWorkspace("ws/w1/../w2/x", "w1")).toBe(false);
+  it("are namespaced by user and revisioned", () => {
+    expect(storageKeys.clean("w1", "p1", 7)).toBe("u/w1/pg/p1/clean/7.png");
+    expect(keyBelongsToUser(storageKeys.source("w1", "c1", "u1", "png"), "w1")).toBe(true);
+    expect(keyBelongsToUser(storageKeys.source("w1", "c1", "u1", "png"), "w2")).toBe(false);
+    expect(keyBelongsToUser("u/w1/../w2/x", "w1")).toBe(false);
   });
 });
 

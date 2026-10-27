@@ -33,22 +33,21 @@ const FORMAT: Record<ExportFormat, string> = { png_zip: "ZIP PNG", cbz: "CBZ" };
 export const isExportActive = (s: ExportStatus) => s === "queued" || s === "running";
 
 /** Export gần đây của chương; poll khi còn lượt đang chạy. Dùng chung cho drawer Xuất, Hoạt động và số việc. */
-export function useExports(ws: string, chapterId: string) {
+export function useExports(chapterId: string) {
   const qc = useQueryClient();
   const q = useQuery({
-    queryKey: exportKeys.list(ws, chapterId),
-    queryFn: () => fetchExports(ws, chapterId),
+    queryKey: exportKeys.list(chapterId),
+    queryFn: () => fetchExports(chapterId),
     refetchInterval: (q) =>
       q.state.status !== "error" && q.state.data?.exports.some((e) => isExportActive(e.status))
         ? EXPORT_POLL_MS
         : false,
   });
-  const refresh = () => void qc.invalidateQueries({ queryKey: exportKeys.list(ws, chapterId) });
+  const refresh = () => void qc.invalidateQueries({ queryKey: exportKeys.list(chapterId) });
   return { q, refresh };
 }
 
 export function ExportPanel(props: {
-  ws: string;
   chapterId: string;
   /** Tên file không đuôi, khớp tên server đặt khi tải (`{series}-ch{số}`). */
   fileBase: string;
@@ -60,18 +59,18 @@ export function ExportPanel(props: {
   beforeStart(): Promise<unknown>;
   onCancel(): void;
 }) {
-  const { ws, chapterId } = props;
+  const { chapterId } = props;
   const [format, setFormat] = useState<ExportFormat>("png_zip");
   const [slices, setSlices] = useState(true);
   const [quality, setQuality] = useState(90);
   const [untranslated, setUntranslated] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const { q: listQ, refresh } = useExports(ws, chapterId);
+  const { q: listQ, refresh } = useExports(chapterId);
 
   const start = useMutation({
     mutationFn: async () => {
       await props.beforeStart();
-      return createExport(ws, chapterId, {
+      return createExport(chapterId, {
         format,
         layout: slices ? "original_slices" : "pages",
         quality: format === "cbz" ? quality : undefined,
@@ -89,7 +88,7 @@ export function ExportPanel(props: {
     },
   });
   const cancel = useMutation({
-    mutationFn: (id: string) => cancelJob(ws, id),
+    mutationFn: (id: string) => cancelJob(id),
     onSettled: refresh,
     onError: (e) => setError(errorMessage(e)),
   });

@@ -5,6 +5,7 @@ import { secureHeaders } from "hono/secure-headers";
 import { auth } from "./auth.ts";
 import { devAutoLoginEnabled, env } from "./env.ts";
 import { requestLog } from "./lib/request-log.ts";
+import { type AppEnv, requireUser } from "./middleware/user.ts";
 import { chapterRoutes } from "./routes/chapters.ts";
 import { type DevLogin, devAuthRoutes } from "./routes/dev-auth.ts";
 import { exportRoutes } from "./routes/export.ts";
@@ -13,6 +14,7 @@ import { fontRoutes } from "./routes/fonts.ts";
 import { glossaryRoutes } from "./routes/glossary.ts";
 import { healthRoutes } from "./routes/health.ts";
 import { jobRoutes } from "./routes/jobs.ts";
+import { meRoutes } from "./routes/me.ts";
 import { pageStateRoutes } from "./routes/page-state.ts";
 import { pageRoutes } from "./routes/pages.ts";
 import { progressRoutes } from "./routes/progress.ts";
@@ -22,7 +24,6 @@ import { seriesIgnoreApplyRoutes } from "./routes/series-ignore-apply.ts";
 import { seriesSkipImageRoutes } from "./routes/series-skip-images.ts";
 import { uploadRoutes } from "./routes/uploads.ts";
 import { workerRoutes } from "./routes/worker.ts";
-import { workspaceRoutes } from "./routes/workspaces.ts";
 
 const envDevLogin = (): DevLogin | false =>
   devAutoLoginEnabled(env)
@@ -40,22 +41,9 @@ export function createApp({ devAutoLogin = envDevLogin() }: { devAutoLogin?: Dev
   app.on(["GET", "POST"], "/api/auth/*", (c) => auth.handler(c.req.raw));
   if (devAutoLogin) app.route("/api", devAuthRoutes(devAutoLogin));
 
-  // Route người dùng: /api/me/* và /api/w/:ws/* (workspace trên URL).
-  app.route("/api", workspaceRoutes);
-  app.route("/api", uploadRoutes);
-  app.route("/api", jobRoutes);
-  app.route("/api", progressRoutes);
-  app.route("/api", seriesRoutes);
-  app.route("/api", seriesSkipImageRoutes);
-  app.route("/api", seriesIgnoreApplyRoutes);
-  app.route("/api", chapterRoutes);
-  app.route("/api", proofreadRoutes);
-  app.route("/api", pageRoutes);
-  app.route("/api", pageStateRoutes);
-  app.route("/api", glossaryRoutes);
-  app.route("/api", exportRoutes);
-  app.route("/api", findReplaceRoutes);
-  app.route("/api", fontRoutes);
+  // Route người dùng: mọi đường dưới /api còn lại bắt buộc đăng nhập (requireUser gắn một lần ở đây, sau
+  // auth/dev/health) — dữ liệu luôn của người đang đăng nhập.
+  app.route("/api", userApi());
 
   // Worker (Bearer token worker, không cookie) — giao thức có fencing, xem jobs/queue.ts.
   app.route("/worker/v1", workerRoutes);
@@ -70,5 +58,27 @@ export function createApp({ devAutoLogin = envDevLogin() }: { devAutoLogin?: Dev
     console.error(err);
     return c.json({ error: "internal" }, 500);
   });
+  return app;
+}
+
+/** Router người dùng (mount ở /api). Export cho test cách ly tự liệt kê route. */
+export function userApi() {
+  const app = new Hono<AppEnv>();
+  app.use("*", requireUser);
+  app.route("/", meRoutes);
+  app.route("/", uploadRoutes);
+  app.route("/", jobRoutes);
+  app.route("/", progressRoutes);
+  app.route("/", seriesRoutes);
+  app.route("/", seriesSkipImageRoutes);
+  app.route("/", seriesIgnoreApplyRoutes);
+  app.route("/", chapterRoutes);
+  app.route("/", proofreadRoutes);
+  app.route("/", pageRoutes);
+  app.route("/", pageStateRoutes);
+  app.route("/", glossaryRoutes);
+  app.route("/", exportRoutes);
+  app.route("/", findReplaceRoutes);
+  app.route("/", fontRoutes);
   return app;
 }

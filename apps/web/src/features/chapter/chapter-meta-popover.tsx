@@ -11,12 +11,11 @@ import { type ChapterDetail, chapterKeys, patchChapter } from "./api.ts";
 const NUMBER_RE = /^\d+(\.\d+)?$/;
 
 export function ChapterMetaPopover(props: {
-  ws: string;
   detail: ChapterDetail | undefined;
   /** Series đổi → điều hướng sang URL mới. */
   onMoved(seriesId: string): void;
 }) {
-  const { ws, detail } = props;
+  const { detail } = props;
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const label = `Chương ${detail?.number ?? "…"}${detail?.title ? ` · ${detail.title}` : ""}`;
@@ -46,30 +45,30 @@ export function ChapterMetaPopover(props: {
           {label}
         </button>
       </h1>
-      {open && detail && <MetaForm ws={ws} detail={detail} onClose={() => setOpen(false)} onMoved={props.onMoved} />}
+      {open && detail && <MetaForm detail={detail} onClose={() => setOpen(false)} onMoved={props.onMoved} />}
     </div>
   );
 }
 
-function MetaForm(props: { ws: string; detail: ChapterDetail; onClose(): void; onMoved(seriesId: string): void }) {
-  const { ws, detail } = props;
+function MetaForm(props: { detail: ChapterDetail; onClose(): void; onMoved(seriesId: string): void }) {
+  const { detail } = props;
   const qc = useQueryClient();
-  const listQ = useQuery({ queryKey: seriesKeys.list(ws), queryFn: () => fetchSeriesList(ws) });
+  const listQ = useQuery({ queryKey: seriesKeys.list(), queryFn: () => fetchSeriesList() });
   const [seriesId, setSeriesId] = useState(detail.series.id);
   const [number, setNumber] = useState(detail.number);
   const save = useMutation({
     mutationFn: () =>
-      patchChapter(ws, detail.id, {
+      patchChapter(detail.id, {
         number,
         ...(seriesId !== detail.series.id ? { series_id: seriesId } : {}),
       }),
     onSuccess: (ch) => {
       const title = listQ.data?.series.find((s) => s.id === ch.series_id)?.title ?? detail.series.title;
-      qc.setQueryData<ChapterDetail>(chapterKeys.detail(ws, detail.id), (d) =>
+      qc.setQueryData<ChapterDetail>(chapterKeys.detail(detail.id), (d) =>
         d ? { ...d, number: ch.number, series_id: ch.series_id, series: { id: ch.series_id, title } } : d,
       );
-      // Danh sách series, chi tiết series (cũ + mới) và "Việc cần làm" đều dưới khoá ["series", ws].
-      void qc.invalidateQueries({ queryKey: seriesKeys.list(ws) });
+      // Danh sách series, chi tiết series (cũ + mới) và "Việc cần làm" đều dưới khoá ["series"].
+      void qc.invalidateQueries({ queryKey: seriesKeys.list() });
       props.onClose();
       if (ch.series_id !== detail.series.id) props.onMoved(ch.series_id);
     },

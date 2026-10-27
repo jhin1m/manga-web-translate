@@ -1,6 +1,6 @@
 /**
- * Cài đặt nhóm → tab Font: upload TTF/OTF (owner/admin), danh sách font của nhóm kèm cảnh báo thiếu dấu tiếng Việt
- * (vẫn dùng được), xoá (bị chặn khi series còn dùng làm font mặc định). Thành viên chỉ xem.
+ * Cài đặt chung → tab Font: upload TTF/OTF, danh sách font của bạn kèm cảnh báo thiếu dấu tiếng Việt (vẫn dùng
+ * được), xoá (bị chặn khi series còn dùng làm font mặc định).
  */
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { ApiError, errorMessage } from "../../lib/api.ts";
@@ -9,10 +9,10 @@ import {
   deleteFont,
   FONT_ACCEPT,
   fontKeys,
-  MAX_WORKSPACE_FONTS,
+  MAX_USER_FONTS,
+  type UserFont,
   uploadCheckedFont,
-  useWorkspaceFonts,
-  type WorkspaceFont,
+  useUserFonts,
 } from "./api.ts";
 
 const MISSING_SHOWN = 12;
@@ -28,44 +28,40 @@ function deleteError(e: unknown): string {
   return errorMessage(e);
 }
 
-export function FontSettings({ ws, canManage }: { ws: string; canManage: boolean }) {
+export function FontSettings() {
   const qc = useQueryClient();
-  const q = useWorkspaceFonts(ws);
-  const refresh = () => qc.invalidateQueries({ queryKey: fontKeys.list(ws) });
+  const q = useUserFonts();
+  const refresh = () => qc.invalidateQueries({ queryKey: fontKeys.list() });
   const fonts = q.data ?? [];
 
   const upload = useMutation({
-    mutationFn: (file: File) => uploadCheckedFont(ws, file, fonts.length),
+    mutationFn: (file: File) => uploadCheckedFont(file, fonts.length),
     onSuccess: refresh,
   });
-  const del = useMutation({ mutationFn: (id: string) => deleteFont(ws, id), onSuccess: refresh });
+  const del = useMutation({ mutationFn: (id: string) => deleteFont(id), onSuccess: refresh });
 
   return (
-    <section className="section" aria-label="Font của nhóm">
-      <h2>Font của nhóm</h2>
+    <section className="section" aria-label="Font của bạn">
+      <h2>Font của bạn</h2>
       <p className="muted small">
-        Font TTF/OTF (tối đa 10MB, {MAX_WORKSPACE_FONTS} font) dùng được trong editor và làm font mặc định của series.
-        Nhóm tự chịu trách nhiệm về bản quyền font.
+        Font TTF/OTF (tối đa 10MB, {MAX_USER_FONTS} font) dùng được trong editor và làm font mặc định của series. Bạn tự
+        chịu trách nhiệm về bản quyền font.
       </p>
-      {canManage ? (
-        <p>
-          <input
-            id="font-file"
-            type="file"
-            accept={FONT_ACCEPT}
-            aria-label="Chọn file font"
-            disabled={upload.isPending}
-            onChange={(e) => {
-              const file = e.target.files?.[0];
-              e.target.value = "";
-              if (file) upload.mutate(file);
-            }}
-          />
-          {upload.isPending && <span className="muted small"> Đang tải lên…</span>}
-        </p>
-      ) : (
-        <p className="muted small">Chỉ owner/admin tải lên hoặc xoá font.</p>
-      )}
+      <p>
+        <input
+          id="font-file"
+          type="file"
+          accept={FONT_ACCEPT}
+          aria-label="Chọn file font"
+          disabled={upload.isPending}
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            e.target.value = "";
+            if (file) upload.mutate(file);
+          }}
+        />
+        {upload.isPending && <span className="muted small"> Đang tải lên…</span>}
+      </p>
       {upload.error && (
         <p className="error" role="alert">
           {errorMessage(upload.error)}
@@ -77,7 +73,7 @@ export function FontSettings({ ws, canManage }: { ws: string; canManage: boolean
         </p>
       )}
       {q.error && <p className="error">{errorMessage(q.error)}</p>}
-      {q.data && fonts.length === 0 && <p className="muted">Nhóm chưa có font riêng.</p>}
+      {q.data && fonts.length === 0 && <p className="muted">Bạn chưa có font riêng.</p>}
       {fonts.length > 0 && (
         <table className="data" aria-label="Danh sách font">
           <thead>
@@ -85,18 +81,12 @@ export function FontSettings({ ws, canManage }: { ws: string; canManage: boolean
               <th>Tên font</th>
               <th>Dung lượng</th>
               <th>Tiếng Việt</th>
-              {canManage && <th />}
+              <th />
             </tr>
           </thead>
           <tbody>
             {fonts.map((f) => (
-              <FontRow
-                key={f.id}
-                font={f}
-                canManage={canManage}
-                busy={del.isPending}
-                onDelete={() => del.mutate(f.id)}
-              />
+              <FontRow key={f.id} font={f} busy={del.isPending} onDelete={() => del.mutate(f.id)} />
             ))}
           </tbody>
         </table>
@@ -110,17 +100,7 @@ export function FontSettings({ ws, canManage }: { ws: string; canManage: boolean
   );
 }
 
-function FontRow({
-  font,
-  canManage,
-  busy,
-  onDelete,
-}: {
-  font: WorkspaceFont;
-  canManage: boolean;
-  busy: boolean;
-  onDelete(): void;
-}) {
+function FontRow({ font, busy, onDelete }: { font: UserFont; busy: boolean; onDelete(): void }) {
   const shown = font.missing.slice(0, MISSING_SHOWN).join(" ");
   const more = font.missing.length - MISSING_SHOWN;
   return (
@@ -137,21 +117,19 @@ function FontRow({
           </span>
         )}
       </td>
-      {canManage && (
-        <td>
-          <button
-            type="button"
-            className="icon-btn"
-            data-danger
-            aria-label={`Xoá font ${font.name}`}
-            title="Xoá font"
-            disabled={busy}
-            onClick={onDelete}
-          >
-            <TrashIcon />
-          </button>
-        </td>
-      )}
+      <td>
+        <button
+          type="button"
+          className="icon-btn"
+          data-danger
+          aria-label={`Xoá font ${font.name}`}
+          title="Xoá font"
+          disabled={busy}
+          onClick={onDelete}
+        >
+          <TrashIcon />
+        </button>
+      </td>
     </tr>
   );
 }

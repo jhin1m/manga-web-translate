@@ -23,7 +23,7 @@ export function llmPrice(model: string | null): { price: { in: number; out: numb
   };
 }
 
-/** USD / giây GPU. Worker Mac (token workspace) chạy máy của nhóm → 0; Modal (token nền tảng) tính theo L4. */
+/** USD / giây GPU. Worker Mac (máy người vận hành) → 0; Modal tính theo L4. */
 export const GPU_USD_PER_S = { mac: 0, modal: 0.000222 } as const;
 
 /** Trần mỗi call LLM dùng để clamp số đếm worker gửi (≥ max_output_tokens của provider trong worker). */

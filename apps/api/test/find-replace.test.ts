@@ -4,10 +4,10 @@ import { emptyPageState, type PageState, pageId, type TextBox } from "@mtl/share
 import { eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { applyRules, replaceLiteral } from "../src/routes/find-replace.ts";
-import { call, db, seedWorkspace } from "./helpers.ts";
+import { call, db, seedUser } from "./helpers.ts";
 import { SHA } from "./worker-helpers.ts";
 
-type Seed = Awaited<ReturnType<typeof seedWorkspace>>;
+type Seed = Awaited<ReturnType<typeof seedUser>>;
 type Preview = {
   matches: { page_id: string; ord: number; target: string; id: string; before: string; after: string }[];
   total: number;
@@ -60,7 +60,7 @@ let chapterId = "";
 const pageIds: string[] = [];
 
 async function newChapter(n: number, make: (i: number) => PageState) {
-  const sdb = scoped(db, A.workspaceId);
+  const sdb = scoped(db, A.userId);
   const ch = await sdb.insert(chapters, { seriesId: A.seriesId, number: String(10 + pageIds.length) });
   const ids: string[] = [];
   for (let i = 0; i < n; i++) {
@@ -71,7 +71,7 @@ async function newChapter(n: number, make: (i: number) => PageState) {
       ord: i,
       width: 400,
       height: 600,
-      originalKey: `ws/${A.workspaceId}/ch/${ch.id}/ingest/1/${i}.png`,
+      originalKey: `u/${A.userId}/ch/${ch.id}/ingest/1/${i}.png`,
       originalSha256: SHA,
       status: "ready",
     });
@@ -82,19 +82,17 @@ async function newChapter(n: number, make: (i: number) => PageState) {
 }
 
 const api = (path: string, body: unknown, ch = chapterId) =>
-  call(`/api/w/${A.workspaceId}/chapters/${ch}${path}`, { method: "POST", cookie: A.cookie, body });
-const lock = (ch = chapterId) =>
-  call(`/api/w/${A.workspaceId}/chapters/${ch}/lock`, { method: "POST", cookie: A.cookie });
-const unlock = (ch = chapterId) =>
-  call(`/api/w/${A.workspaceId}/chapters/${ch}/lock`, { method: "DELETE", cookie: A.cookie });
+  call(`/api/chapters/${ch}${path}`, { method: "POST", cookie: A.cookie, body });
+const lock = (ch = chapterId) => call(`/api/chapters/${ch}/lock`, { method: "POST", cookie: A.cookie });
+const unlock = (ch = chapterId) => call(`/api/chapters/${ch}/lock`, { method: "DELETE", cookie: A.cookie });
 const stateOf = async (id: string) => {
-  const [row] = await scoped(db, A.workspaceId).select(pageStates, eq(pageStates.pageId, id));
+  const [row] = await scoped(db, A.userId).select(pageStates, eq(pageStates.pageId, id));
   if (!row?.state) throw new Error("no state");
   return { ...row, state: row.state };
 };
 
 beforeAll(async () => {
-  A = await seedWorkspace("fr");
+  A = await seedUser("fr");
   const c = await newChapter(3, (i) => state(`Rút Kiếm ra! ${i}`, i === 2 ? "kiếm khác" : "Chào"));
   chapterId = c.chapterId;
   pageIds.push(...c.ids);
@@ -174,7 +172,7 @@ describe("find/replace", () => {
     expect(p2.stateOrigin).toBe("user");
     expect(p2.state.regions.map((r) => r.translation)).toEqual(["Rút đao ra! 2", "đao khác"]);
     expect(p2.state.text_boxes.every((b) => b.lines.length === 0)).toBe(true);
-    const hist = await scoped(db, A.workspaceId).select(pageStateHistory, eq(pageStateHistory.batchId, batchId));
+    const hist = await scoped(db, A.userId).select(pageStateHistory, eq(pageStateHistory.batchId, batchId));
     expect(hist.map((h) => h.version)).toEqual([3, 3, 3]);
   });
 
@@ -204,7 +202,7 @@ describe("find/replace", () => {
       })
     ).json()) as { batch_id: string };
     const edited = await stateOf(pageIds[0] as string);
-    const put = await call(`/api/w/${A.workspaceId}/pages/${pageIds[0]}/state`, {
+    const put = await call(`/api/pages/${pageIds[0]}/state`, {
       method: "PUT",
       cookie: A.cookie,
       body: { state: edited.state },
@@ -223,8 +221,8 @@ describe("find/replace", () => {
 });
 
 describe("apply glossary", () => {
-  it("uses the merged glossary (series overrides workspace), scoped to regions whose source has the term", async () => {
-    const sdb = scoped(db, A.workspaceId);
+  it("uses the merged glossary (series overrides shared), scoped to regions whose source has the term", async () => {
+    const sdb = scoped(db, A.userId);
     await sdb.insert(glossaryEntries, {
       seriesId: null,
       sourceLang: "ko",
@@ -260,7 +258,7 @@ describe("apply glossary", () => {
   it("skips hidden pages in preview and apply", async () => {
     const c = await newChapter(2, () => state("Rút Kiếm ra!", "Chào"));
     const hidden = c.ids[1] as string;
-    await scoped(db, A.workspaceId).update(pages, eq(pages.id, hidden), { skipped: true });
+    await scoped(db, A.userId).update(pages, eq(pages.id, hidden), { skipped: true });
     const rules = [{ source_term: "검", from: "Kiếm" }];
     const pv = await api("/glossary-apply/preview", { rules }, c.chapterId);
     expect(pv.status, await pv.clone().text()).toBe(200);
@@ -274,8 +272,8 @@ describe("apply glossary", () => {
     await unlock(c.chapterId);
   });
 
-  it("workspace entries of another language pair are not part of the series glossary → 400 unknown_terms", async () => {
-    await scoped(db, A.workspaceId).insert(glossaryEntries, {
+  it("shared entries of another language pair are not part of the series glossary → 400 unknown_terms", async () => {
+    await scoped(db, A.userId).insert(glossaryEntries, {
       sourceLang: "ko",
       targetLang: "en",
       sourceTerm: "회장",

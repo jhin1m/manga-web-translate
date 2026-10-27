@@ -1,4 +1,4 @@
-import { api, wsPath } from "../../lib/api.ts";
+import { api } from "../../lib/api.ts";
 import type { ChapterSummary } from "../series/api.ts";
 
 export type PresignedTarget = {
@@ -9,23 +9,20 @@ export type PresignedTarget = {
   expires_at: string;
 };
 
-export const createChapter = (
-  ws: string,
-  body: {
-    series_id: string;
-    number: string;
-    title: string;
-    /** dhash/width/height: dấu nhận dạng ảnh (bỏ trống khi không tính được) — server bỏ qua sẵn ảnh credit đã học. */
-    files: { name: string; content_type: string; bytes: number; dhash?: string; width?: number; height?: number }[];
-  },
-) =>
-  api<{ chapter: ChapterSummary; files: (PresignedTarget & { name: string })[] }>(wsPath(ws, "/chapters"), {
+export const createChapter = (body: {
+  series_id: string;
+  number: string;
+  title: string;
+  /** dhash/width/height: dấu nhận dạng ảnh (bỏ trống khi không tính được) — server bỏ qua sẵn ảnh credit đã học. */
+  files: { name: string; content_type: string; bytes: number; dhash?: string; width?: number; height?: number }[];
+}) =>
+  api<{ chapter: ChapterSummary; files: (PresignedTarget & { name: string })[] }>("/api/chapters", {
     method: "POST",
     body,
   });
 
-export const presignAgain = (ws: string, chapterId: string, fileIds: string[]) =>
-  api<{ files: PresignedTarget[] }>(wsPath(ws, `/chapters/${chapterId}/presign`), {
+export const presignAgain = (chapterId: string, fileIds: string[]) =>
+  api<{ files: PresignedTarget[] }>(`/api/chapters/${chapterId}/presign`, {
     method: "POST",
     body: { file_ids: fileIds },
   });

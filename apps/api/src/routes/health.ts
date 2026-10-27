@@ -1,4 +1,4 @@
-/** `GET /healthz` (không auth, không lộ dữ liệu workspace): 200 khi DB + MinIO + runner ổn, ngược lại 503. */
+/** `GET /healthz` (không auth, không lộ dữ liệu người dùng): 200 khi DB + MinIO + runner ổn, ngược lại 503. */
 import { Hono } from "hono";
 import { checkHealth } from "../lib/health.ts";
 

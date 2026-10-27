@@ -1,10 +1,10 @@
-/** Glossary workspace/series: CRUD, glossary_rev cùng transaction, ghi đè theo series, import/export CSV. */
+/** Glossary chung/series: CRUD, glossary_rev cùng transaction, ghi đè theo series, import/export CSV. */
 import { chapters, glossaryEntries, scoped, series } from "@mtl/db";
 import { and, eq, isNull } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { inJobTx, translateSettings } from "../src/jobs/enqueue.ts";
 import { parseCsvRows, parseGlossaryCsv, toCsv } from "../src/routes/glossary.ts";
-import { call, db, seedWorkspace } from "./helpers.ts";
+import { call, db, seedUser } from "./helpers.ts";
 
 type Entry = {
   id: string;
@@ -27,11 +27,11 @@ async function json<T>(res: Response, status: number): Promise<T> {
 }
 
 async function setup() {
-  const A = await seedWorkspace("glo");
-  const sdb = scoped(db, A.workspaceId);
+  const A = await seedUser("glo");
+  const sdb = scoped(db, A.userId);
   const other = await sdb.insert(series, { title: "Other" });
   const api = (path: string, init: { method?: string; body?: unknown } = {}) =>
-    call(`/api/w/${A.workspaceId}${path}`, { cookie: A.cookie, ...init });
+    call(`/api${path}`, { cookie: A.cookie, ...init });
   const revs = async () => {
     const rows = await sdb.select(series);
     return Object.fromEntries(rows.map((r) => [r.id, r.glossaryRev]));
@@ -40,7 +40,7 @@ async function setup() {
 }
 
 describe("glossary CRUD + revs", () => {
-  it("series entry bumps only that series; workspace entry bumps every series", async () => {
+  it("series entry bumps only that series; shared entry bumps every series", async () => {
     const { A, other, api, revs } = await setup();
     const r0 = await revs();
     const se = await json<Entry>(
@@ -66,8 +66,8 @@ describe("glossary CRUD + revs", () => {
       (await api(`/glossary${KO_VI}`, { method: "POST", body: { source_term: "검", target_term: "x" } })).status,
     ).toBe(409);
 
-    // Series ghi đè workspace khi dựng snapshot cho job.
-    const sA = await scoped(db, A.workspaceId).byId(series, A.seriesId);
+    // Series ghi đè glossary chung khi dựng snapshot cho job.
+    const sA = await scoped(db, A.userId).byId(series, A.seriesId);
     const settings = await inJobTx((tx) => translateSettings(tx, sA));
     expect(settings.glossary).toMatchObject({ 검: "kiếm" });
 
@@ -129,7 +129,7 @@ describe("unique term per scope (DB constraint)", () => {
     expect(rows).toHaveLength(1);
   });
 
-  it("same term is allowed once per scope (workspace and each series)", async () => {
+  it("same term is allowed once per scope (shared and each series)", async () => {
     const { A, other, api } = await setup();
     const body = { source_term: "범위", target_term: "phạm vi" };
     expect((await api(`/glossary${KO_VI}`, { method: "POST", body })).status).toBe(201);
@@ -138,8 +138,8 @@ describe("unique term per scope (DB constraint)", () => {
   });
 });
 
-describe("workspace glossary per language pair", () => {
-  it("requires a valid pair in the query (400 invalid_query); outsiders still get 403 first", async () => {
+describe("shared glossary per language pair", () => {
+  it("requires a valid pair in the query (400 invalid_query); other users see only their own entries", async () => {
     const { api } = await setup();
     const error = async (res: Response) => (await json<{ error: string }>(res, 400)).error;
     const body = { source_term: "검", target_term: "kiếm" };
@@ -151,10 +151,12 @@ describe("workspace glossary per language pair", () => {
     expect(
       await error(await api("/glossary/csv", { method: "POST", body: { csv: "source_term,target_term\na,b\n" } })),
     ).toBe("invalid_query");
-    const B = await seedWorkspace("glo-out");
-    const { A } = await setup();
-    const res = await call(`/api/w/${A.workspaceId}/glossary${KO_VI}`, { cookie: B.cookie });
-    expect(res.status).toBe(403);
+    // Người dùng khác chỉ thấy glossary chung của chính họ.
+    const B = await seedUser("glo-out");
+    await setup();
+    const res = await call(`/api/glossary${KO_VI}`, { cookie: B.cookie });
+    expect(res.status).toBe(200);
+    expect(((await res.json()) as { entries: unknown[] }).entries).toEqual([]);
   });
 
   it("same term in two pairs; duplicate within one pair → 409; series entries carry no pair", async () => {
@@ -185,7 +187,7 @@ describe("workspace glossary per language pair", () => {
     expect(listVi.inherited).toEqual([]);
   });
 
-  it("a series only inherits/translates with workspace entries of its own pair (series entry still wins)", async () => {
+  it("a series only inherits/translates with shared entries of its own pair (series entry still wins)", async () => {
     const { A, sdb, api } = await setup();
     const koEn = await sdb.insert(series, { title: "KO→EN", sourceLang: "ko", targetLang: "en" });
     await json(
@@ -204,9 +206,9 @@ describe("workspace glossary per language pair", () => {
       await api(`/series/${koEn.id}/glossary`, { method: "POST", body: { source_term: "검", target_term: "blade" } }),
       201,
     );
-    // Workspace khác có entry chung ko→en cùng term → không lọt sang (lọc kèm workspace_id).
-    const B = await seedWorkspace("glo-b");
-    await scoped(db, B.workspaceId).insert(glossaryEntries, {
+    // Người dùng khác có entry chung ko→en cùng term → không lọt sang (lọc kèm user_id).
+    const B = await seedUser("glo-b");
+    await scoped(db, B.userId).insert(glossaryEntries, {
       sourceLang: "ko",
       targetLang: "en",
       sourceTerm: "마왕",
@@ -226,7 +228,7 @@ describe("workspace glossary per language pair", () => {
     expect(listed.entries.map((e) => e.target_term)).toEqual(["blade"]);
   });
 
-  it("editing a workspace entry still bumps glossary_rev of every series in the workspace", async () => {
+  it("editing a shared entry still bumps glossary_rev of every series of the user", async () => {
     const { A, sdb, api, revs } = await setup();
     const koEn = await sdb.insert(series, { title: "KO→EN", sourceLang: "ko", targetLang: "en" });
     const r0 = await revs();
@@ -266,7 +268,7 @@ describe("workspace glossary per language pair", () => {
 
     const exp = await api(`/glossary/csv${KO_EN}`);
     expect(exp.status).toBe(200);
-    expect(exp.headers.get("content-disposition")).toContain("glossary-workspace-ko-en.csv");
+    expect(exp.headers.get("content-disposition")).toContain("glossary-chung-ko-en.csv");
     expect(parseGlossaryCsv(await exp.text()).entries.map((e) => e.target_term)).toEqual(["chairman"]);
   });
 });

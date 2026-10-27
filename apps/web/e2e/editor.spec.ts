@@ -20,18 +20,20 @@ import {
   translateIfPrepared,
 } from "./helpers.ts";
 
-const ws = state.workspaceId;
 const headers = { origin: WEB_URL };
 
 type ProgressBody = { chapter: { status: string }; pages: { id: string; status: string }[] };
 
+/** Số chương riêng của spec này (không trùng số cố định của spec khác, VD 501 ở upload-chapter). */
+let chapterSeq = 1000;
+
 /** Chương 1 ảnh nguồn đã upload + commit (chưa chạy worker) → id chương. */
 async function committedChapter(page: Page) {
-  const created = await page.request.post(`/api/w/${ws}/chapters`, {
+  const created = await page.request.post(`/api/chapters`, {
     headers,
     data: {
       series_id: state.seriesId,
-      number: String(100 + Math.floor(Math.random() * 1000)),
+      number: String(++chapterSeq),
       files: [{ name: "1.png", content_type: "image/png", bytes: PNG_1PX.length }],
     },
   });
@@ -46,14 +48,12 @@ async function committedChapter(page: Page) {
   for (const [k, v] of Object.entries(f.fields)) form.append(k, v);
   form.append("file", new Blob([new Uint8Array(PNG_1PX)], { type: "image/png" }));
   expect((await fetch(f.url, { method: "POST", body: form })).status).toBe(204);
-  expect((await page.request.post(`/api/w/${ws}/chapters/${chapter.id}/commit`, { headers, data: {} })).status()).toBe(
-    202,
-  );
+  expect((await page.request.post(`/api/chapters/${chapter.id}/commit`, { headers, data: {} })).status()).toBe(202);
   return chapter.id;
 }
 
 const progressOf = async (page: Page, chapterId: string) =>
-  (await (await page.request.get(`/api/w/${ws}/chapters/${chapterId}/progress`)).json()) as ProgressBody;
+  (await (await page.request.get(`/api/chapters/${chapterId}/progress`)).json()) as ProgressBody;
 
 /** Chạy worker giả (xong bước 1 thì bấm bước 2 "Dịch") tới khi `done(progress)` đúng → danh sách page. */
 async function runUntil(
@@ -86,7 +86,7 @@ async function readyChapter(page: Page, opts: FakeWorkerOptions = {}) {
   return { chapterId, pageId: pages[0]?.id ?? "", pageIds: pages.map((p) => p.id) };
 }
 
-const chapterUrl = (chapterId: string) => `/w/${ws}/s/${state.seriesId}/c/${chapterId}`;
+const chapterUrl = (chapterId: string) => `/s/${state.seriesId}/c/${chapterId}`;
 
 /** Ô Dịch của bảng văn bản: trang `ord` (1-based), vùng `i` trong trang. */
 const cell = (page: Page, ord = 1, i = 1) => page.getByLabel(`Bản dịch trang ${ord} vùng ${i}`, { exact: true });
@@ -101,7 +101,7 @@ const pager = (page: Page) => page.locator(".cw-pager");
 
 type PageBody = { version: number; state: { regions: { translation: string }[] } };
 const translationOf = async (page: Page, pageId: string) =>
-  ((await (await page.request.get(`/api/w/${ws}/pages/${pageId}`)).json()) as PageBody).state.regions[0]?.translation;
+  ((await (await page.request.get(`/api/pages/${pageId}`)).json()) as PageBody).state.regions[0]?.translation;
 
 test("edit translation → autosave → reload keeps it; crash mid-edit → restore unsaved changes", async ({
   page,
@@ -122,7 +122,7 @@ test("edit translation → autosave → reload keeps it; crash mid-edit → rest
   await expect(page.locator(".status", { hasText: "Đã lưu" })).toBeVisible({ timeout: 10_000 });
   await page.reload();
   await expect(cell(page)).toHaveValue("Chào cậu, ệ ẫ ữ");
-  const saved = (await (await page.request.get(`/api/w/${ws}/pages/${pageId}`)).json()) as {
+  const saved = (await (await page.request.get(`/api/pages/${pageId}`)).json()) as {
     version: number;
     state_origin: string;
     state: { regions: { translation: string }[] };
@@ -196,10 +196,10 @@ test("edit translation → autosave → reload keeps it; crash mid-edit → rest
   });
   await cell(page).fill("Rời ngay");
   await page.getByRole("link", { name: "Series e2e" }).click();
-  await expect(page).toHaveURL(new RegExp(`/w/${ws}/s/${state.seriesId}$`));
+  await expect(page).toHaveURL(new RegExp(`/s/${state.seriesId}$`));
   await expect
     .poll(async () => {
-      const r = (await (await page.request.get(`/api/w/${ws}/pages/${pageId}`)).json()) as typeof saved;
+      const r = (await (await page.request.get(`/api/pages/${pageId}`)).json()) as typeof saved;
       return r.state.regions[0]?.translation;
     })
     .toBe("Rời ngay");
@@ -208,7 +208,7 @@ test("edit translation → autosave → reload keeps it; crash mid-edit → rest
   await page.goto(chapterUrl(chapterId));
   await cell(page).fill("Chào cậu, ệ ẫ ữ");
   await expect(page.locator(".status", { hasText: "Đã lưu" })).toBeVisible({ timeout: 10_000 });
-  const beforeCrash = (await (await page.request.get(`/api/w/${ws}/pages/${pageId}`)).json()) as typeof saved;
+  const beforeCrash = (await (await page.request.get(`/api/pages/${pageId}`)).json()) as typeof saved;
 
   // "Crash": PUT không tới server, đóng tab khi đang có thay đổi chưa lưu.
   await page.route("**/state", (route) => route.abort());
@@ -224,7 +224,7 @@ test("edit translation → autosave → reload keeps it; crash mid-edit → rest
   await again.getByRole("button", { name: "Khôi phục" }).click();
   await expect(cell(again)).toHaveValue("Chưa kịp lưu");
   await expect(again.locator(".status", { hasText: "Đã lưu" })).toBeVisible({ timeout: 10_000 });
-  const after = (await (await again.request.get(`/api/w/${ws}/pages/${pageId}`)).json()) as typeof saved;
+  const after = (await (await again.request.get(`/api/pages/${pageId}`)).json()) as typeof saved;
   expect(after.state.regions[0]?.translation).toBe("Chưa kịp lưu");
   expect(after.version).toBeGreaterThan(beforeCrash.version);
 });
@@ -272,7 +272,7 @@ test("3 pages shown one at a time: pager and thumbnails stay in sync with ?page=
   await expect(foot).toContainText("Trang 1 / 3");
   await expect
     .poll(async () => {
-      const r = (await (await page.request.get(`/api/w/${ws}/pages/${pageIds[1]}`)).json()) as {
+      const r = (await (await page.request.get(`/api/pages/${pageIds[1]}`)).json()) as {
         state: { regions: { translation: string }[] };
       };
       return r.state.regions[0]?.translation;
@@ -296,7 +296,7 @@ test("opening a chapter while it translates does not hold the lock; the AI trans
   await expect(page.locator(".ed-canvas canvas").first()).toBeVisible();
   await page.waitForTimeout(1500);
   const detail = async () =>
-    (await (await page.request.get(`/api/w/${ws}/chapters/${chapterId}`)).json()) as { lock: unknown; status: string };
+    (await (await page.request.get(`/api/chapters/${chapterId}`)).json()) as { lock: unknown; status: string };
   expect(await detail()).toMatchObject({ status: "processing", lock: null });
 
   // Drawer Hoạt động liệt kê job dịch chương đang chờ.
@@ -311,39 +311,49 @@ test("opening a chapter while it translates does not hold the lock; the AI trans
   const pages = await runUntil(page, chapterId, allReady);
   await expect(cell(page)).toHaveValue("Xin chào", { timeout: 15_000 });
   await expect(page.getByRole("status", { name: "Khoá chương" })).toContainText("Bạn đang giữ khoá chương");
-  const st = (await (await page.request.get(`/api/w/${ws}/pages/${pages[0]?.id}`)).json()) as {
+  const st = (await (await page.request.get(`/api/pages/${pages[0]?.id}`)).json()) as {
     state_origin: string;
     ai_update_available: boolean;
   };
   expect(st).toMatchObject({ state_origin: "ai", ai_update_available: false });
 });
 
-test("lock held by someone else → warning band with retry; once the lock is free the band goes away", async ({
+test("two tabs on one chapter: the second only reads; closing another tab keeps the lock; the lock moves once freed", async ({
   page,
+  context,
 }) => {
   await login(page);
   const { chapterId } = await readyChapter(page);
-  // Thành viên khác giữ khoá: server trả 423 cho lần lấy khoá đầu.
-  let denied = true;
-  await page.route(`**/api/w/${ws}/chapters/${chapterId}/lock`, (route) =>
-    denied && route.request().method() === "POST"
-      ? route.fulfill({
-          status: 423,
-          contentType: "application/json",
-          body: JSON.stringify({ error: "chapter_locked", holder: "someone", holder_name: "Thành viên B" }),
-        })
-      : route.fallback(),
-  );
   await page.goto(chapterUrl(chapterId));
-  const band = page.getByRole("alert", { name: "Cảnh báo chương" });
-  await expect(band).toContainText("Thành viên B đang sửa chương này — bạn chỉ xem được.");
-  const edit = page.getByRole("status", { name: "Khoá chương" });
-  await expect(edit).toContainText("Chỉ xem");
+  const editA = page.getByRole("status", { name: "Khoá chương" });
+  await expect(editA).toContainText("Bạn đang giữ khoá chương");
 
-  denied = false;
+  // Tab thứ 2 (sessionStorage riêng → tab id khác) của cùng tài khoản: chỉ xem.
+  const tabB = await context.newPage();
+  await tabB.goto(chapterUrl(chapterId));
+  const band = tabB.getByRole("alert", { name: "Cảnh báo chương" });
+  await expect(band).toContainText("Chương đang mở ở tab khác — chỉ xem ở tab này.");
+  const editB = tabB.getByRole("status", { name: "Khoá chương" });
+  await expect(editB).toContainText("Chỉ xem");
+
+  // Tab thứ 3 mở rồi đóng: lệnh nhả khoá của nó (tab id khác) không nhả khoá của tab đang sửa.
+  const tabC = await context.newPage();
+  await tabC.goto(chapterUrl(chapterId));
+  await expect(tabC.getByRole("status", { name: "Khoá chương" })).toContainText("Chỉ xem");
+  await tabC.close({ runBeforeUnload: true });
   await band.getByRole("button", { name: "Thử lại" }).click();
-  await expect(edit).toContainText("Bạn đang giữ khoá chương");
+  await expect(editB).toContainText("Chỉ xem");
+  await expect(editA).toContainText("Bạn đang giữ khoá chương");
+
+  // Tab A rời chương → nhả khoá của chính nó → tab B lấy được khoá.
+  await page.goto("/");
+  await expect
+    .poll(async () => ((await (await tabB.request.get(`/api/chapters/${chapterId}`)).json()) as { lock: unknown }).lock)
+    .toBeNull();
+  await band.getByRole("button", { name: "Thử lại" }).click();
+  await expect(editB).toContainText("Bạn đang giữ khoá chương");
   await expect(band).toHaveCount(0);
+  await tabB.close();
 });
 
 test("text table: row click activates its page; edit in place autosaves; Enter moves to the next page's row", async ({
@@ -404,7 +414,7 @@ test("overflowing box is flagged in the table and thumbnails; 'Chỉ khối cầ
   const { chapterId, pageIds } = await readyChapter(page, { pagesPerSource: 2 });
   const [p1, p2] = pageIds as [string, string];
   // Box chữ dài trong khung nhỏ gắn vùng t0 của trang 1 (ghi qua API, cần khoá chương).
-  const detail = (await (await page.request.get(`/api/w/${ws}/pages/${p1}`)).json()) as {
+  const detail = (await (await page.request.get(`/api/pages/${p1}`)).json()) as {
     version: number;
     state: { regions: unknown[]; text_boxes: unknown[] } & Record<string, unknown>;
   };
@@ -430,13 +440,13 @@ test("overflowing box is flagged in the table and thumbnails; 'Chỉ khối cầ
     auto_fit: false,
     hidden: false,
   };
-  expect((await page.request.post(`/api/w/${ws}/chapters/${chapterId}/lock`, { headers })).ok()).toBe(true);
-  const put = await page.request.put(`/api/w/${ws}/pages/${p1}/state`, {
+  expect((await page.request.post(`/api/chapters/${chapterId}/lock`, { headers })).ok()).toBe(true);
+  const put = await page.request.put(`/api/pages/${p1}/state`, {
     headers: { ...headers, "if-match": `"${detail.version}"` },
     data: { state: { ...detail.state, text_boxes: [tiny] } },
   });
   expect(put.ok()).toBe(true);
-  expect((await page.request.delete(`/api/w/${ws}/chapters/${chapterId}/lock`, { headers })).ok()).toBe(true);
+  expect((await page.request.delete(`/api/chapters/${chapterId}/lock`, { headers })).ok()).toBe(true);
 
   await page.goto(chapterUrl(chapterId));
   await openTable(page);
@@ -555,7 +565,7 @@ test("floating block toolbar: edit focuses the translation, duplicate adds a fre
   await login(page);
   const { chapterId, pageId } = await readyChapter(page);
   // Box chữ gắn vùng t0 (ghi qua API, cần khoá chương).
-  const detail = (await (await page.request.get(`/api/w/${ws}/pages/${pageId}`)).json()) as {
+  const detail = (await (await page.request.get(`/api/pages/${pageId}`)).json()) as {
     version: number;
     state: { text_boxes: unknown[] } & Record<string, unknown>;
   };
@@ -580,13 +590,13 @@ test("floating block toolbar: edit focuses the translation, duplicate adds a fre
     auto_fit: false,
     hidden: false,
   };
-  expect((await page.request.post(`/api/w/${ws}/chapters/${chapterId}/lock`, { headers })).ok()).toBe(true);
-  const put = await page.request.put(`/api/w/${ws}/pages/${pageId}/state`, {
+  expect((await page.request.post(`/api/chapters/${chapterId}/lock`, { headers })).ok()).toBe(true);
+  const put = await page.request.put(`/api/pages/${pageId}/state`, {
     headers: { ...headers, "if-match": `"${detail.version}"` },
     data: { state: { ...detail.state, text_boxes: [tb] } },
   });
   expect(put.ok()).toBe(true);
-  expect((await page.request.delete(`/api/w/${ws}/chapters/${chapterId}/lock`, { headers })).ok()).toBe(true);
+  expect((await page.request.delete(`/api/chapters/${chapterId}/lock`, { headers })).ok()).toBe(true);
 
   await page.goto(chapterUrl(chapterId));
   await openTable(page);
@@ -622,7 +632,7 @@ test("floating block toolbar: edit focuses the translation, duplicate adds a fre
     .poll(
       async () =>
         (
-          (await (await page.request.get(`/api/w/${ws}/pages/${pageId}`)).json()) as {
+          (await (await page.request.get(`/api/pages/${pageId}`)).json()) as {
             state: { text_boxes: unknown[] };
           }
         ).state.text_boxes.length,
@@ -634,7 +644,7 @@ test("dragging a block while the panel is collapsed moves it only by the drag di
   await login(page);
   const { chapterId, pageId } = await readyChapter(page);
   // Khối lớn giữa trang để bấm trúng giữa khung canvas.
-  const detail = (await (await page.request.get(`/api/w/${ws}/pages/${pageId}`)).json()) as {
+  const detail = (await (await page.request.get(`/api/pages/${pageId}`)).json()) as {
     version: number;
     state: { text_boxes: unknown[] } & Record<string, unknown>;
   };
@@ -659,13 +669,13 @@ test("dragging a block while the panel is collapsed moves it only by the drag di
     auto_fit: false,
     hidden: false,
   };
-  expect((await page.request.post(`/api/w/${ws}/chapters/${chapterId}/lock`, { headers })).ok()).toBe(true);
-  const put = await page.request.put(`/api/w/${ws}/pages/${pageId}/state`, {
+  expect((await page.request.post(`/api/chapters/${chapterId}/lock`, { headers })).ok()).toBe(true);
+  const put = await page.request.put(`/api/pages/${pageId}/state`, {
     headers: { ...headers, "if-match": `"${detail.version}"` },
     data: { state: { ...detail.state, text_boxes: [big] } },
   });
   expect(put.ok()).toBe(true);
-  expect((await page.request.delete(`/api/w/${ws}/chapters/${chapterId}/lock`, { headers })).ok()).toBe(true);
+  expect((await page.request.delete(`/api/chapters/${chapterId}/lock`, { headers })).ok()).toBe(true);
 
   await page.goto(chapterUrl(chapterId));
   await expect(page.locator(".ed-canvas canvas").first()).toBeVisible();
@@ -687,7 +697,7 @@ test("dragging a block while the panel is collapsed moves it only by the drag di
   await expect(page.locator(".status", { hasText: "Đã lưu" })).toBeVisible({ timeout: 10_000 });
   const boxX = async () =>
     (
-      (await (await page.request.get(`/api/w/${ws}/pages/${pageId}`)).json()) as {
+      (await (await page.request.get(`/api/pages/${pageId}`)).json()) as {
         state: { text_boxes: { id: string; x: number; y: number }[] };
       }
     ).state.text_boxes.find((b) => b.id === "tb-big");

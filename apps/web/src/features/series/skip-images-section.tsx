@@ -7,12 +7,12 @@ import { errorMessage } from "../../lib/api.ts";
 import { TrashIcon } from "../home/row-icons.tsx";
 import { deleteSkipImage, fetchSkipImages, seriesKeys } from "./api.ts";
 
-export function SkipImagesSection({ ws, seriesId }: { ws: string; seriesId: string }) {
+export function SkipImagesSection({ seriesId }: { seriesId: string }) {
   const qc = useQueryClient();
-  const key = seriesKeys.skipImages(ws, seriesId);
-  const q = useQuery({ queryKey: key, queryFn: () => fetchSkipImages(ws, seriesId), staleTime: 10 * 60_000 });
+  const key = seriesKeys.skipImages(seriesId);
+  const q = useQuery({ queryKey: key, queryFn: () => fetchSkipImages(seriesId), staleTime: 10 * 60_000 });
   const del = useMutation({
-    mutationFn: (id: string) => deleteSkipImage(ws, seriesId, id),
+    mutationFn: (id: string) => deleteSkipImage(seriesId, id),
     onSuccess: () => qc.invalidateQueries({ queryKey: key }),
   });
   const images = q.data?.images ?? [];

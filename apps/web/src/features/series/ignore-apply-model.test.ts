@@ -9,13 +9,10 @@ describe("ignore apply messages", () => {
     expect(
       describeSkipped([
         { number: "3", reason: "busy" },
-        { number: "5", reason: "locked", holder_name: "An" },
-        { number: "6", reason: "locked", holder_name: null },
+        { number: "5", reason: "locked" },
         { number: "7", reason: "changed", pages: 2 },
       ]),
-    ).toBe(
-      "Chương 3 (đang chạy job), Chương 5 (An đang sửa), Chương 6 (đang có người sửa), Chương 7 (2 trang đã đổi sau đó)",
-    );
+    ).toBe("Chương 3 (đang chạy job), Chương 5 (đang mở sửa ở tab khác), Chương 7 (2 trang đã đổi sau đó)");
     expect(describeSkipped([])).toBe("");
   });
 

@@ -6,21 +6,25 @@ import { chapters, jobs, proofreadSuggestions } from "@mtl/db";
 import { and, eq, isNull, type SQL, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { z } from "zod";
+import { assertQuota } from "../billing/user-quota.ts";
 import { enqueueProofread, inJobTx } from "../jobs/enqueue.ts";
 import { parseJson } from "../lib/validate.ts";
-import { type AppEnv, requireWorkspace } from "../middleware/workspace.ts";
+import type { AppEnv } from "../middleware/user.ts";
 import { jobView } from "./jobs.ts";
 
 export const proofreadRoutes = new Hono<AppEnv>();
 
-proofreadRoutes.post("/w/:ws/chapters/:chapterId/proofread", requireWorkspace(), async (c) => {
+proofreadRoutes.post("/chapters/:chapterId/proofread", async (c) => {
   const ch = await c.get("sdb").byId(chapters, c.req.param("chapterId"), "chapter");
-  const { job, created } = await inJobTx((tx) => enqueueProofread(tx, c.get("workspaceId"), ch.id));
+  const { job, created } = await inJobTx(async (tx) => {
+    await assertQuota(tx, c.get("userId"));
+    return enqueueProofread(tx, c.get("userId"), ch.id);
+  });
   return c.json({ job: jobView(job), created }, 202);
 });
 
 /** Lần hiệu đính gần nhất của chương (null = chưa chạy) + gợi ý chưa bỏ. */
-proofreadRoutes.get("/w/:ws/chapters/:chapterId/proofread", requireWorkspace(), async (c) => {
+proofreadRoutes.get("/chapters/:chapterId/proofread", async (c) => {
   const sdb = c.get("sdb");
   const ch = await sdb.byId(chapters, c.req.param("chapterId"), "chapter");
   // Chỉ lượt gần nhất (max created_at), không kéo payload mọi lượt cũ mỗi lần poll.
@@ -51,7 +55,7 @@ proofreadRoutes.get("/w/:ws/chapters/:chapterId/proofread", requireWorkspace(), 
 });
 
 /** "Bỏ" gợi ý (dismissed: false = hoàn tác). */
-proofreadRoutes.patch("/w/:ws/proofread-suggestions/:suggestionId", requireWorkspace(), async (c) => {
+proofreadRoutes.patch("/proofread-suggestions/:suggestionId", async (c) => {
   const body = await parseJson(c, z.object({ dismissed: z.boolean() }));
   const sdb = c.get("sdb");
   const row = await sdb.byId(proofreadSuggestions, c.req.param("suggestionId"), "suggestion");

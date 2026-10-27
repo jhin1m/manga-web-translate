@@ -6,7 +6,7 @@ import { chapters, jobs, pageStates, usageLedger } from "@mtl/db";
 import { eq, inArray } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { enqueueIngest, inJobTx, retranslate } from "../src/jobs/enqueue.ts";
-import { call, db, seedWorkspace } from "./helpers.ts";
+import { call, db, seedUser } from "./helpers.ts";
 import {
   addSources,
   claimJobs,
@@ -19,19 +19,19 @@ import {
   workerToken,
 } from "./worker-helpers.ts";
 
-type Seed = Awaited<ReturnType<typeof seedWorkspace>>;
+type Seed = Awaited<ReturnType<typeof seedUser>>;
 let A: Seed;
 let token: string;
 const N = 40;
 
 beforeAll(async () => {
-  A = await seedWorkspace("proto");
-  token = (await workerToken(A.workspaceId)).token;
-  await addSources(A.workspaceId, A.chapterId, N);
+  A = await seedUser("proto");
+  token = (await workerToken("mac")).token;
+  await addSources(A.userId, A.chapterId, N);
 });
 
 async function progress() {
-  const res = await call(`/api/w/${A.workspaceId}/chapters/${A.chapterId}/progress`, { cookie: A.cookie });
+  const res = await call(`/api/chapters/${A.chapterId}/progress`, { cookie: A.cookie });
   expect(res.status).toBe(200);
   return (await res.json()) as {
     chapter: { status: string };
@@ -47,7 +47,7 @@ describe("worker protocol end-to-end", () => {
   });
 
   it(`processes a ${N}-slice chapter to review with 0 stuck jobs`, async () => {
-    const { job: ingest, created } = await inJobTx((tx) => enqueueIngest(tx, A.workspaceId, A.chapterId));
+    const { job: ingest, created } = await inJobTx((tx) => enqueueIngest(tx, A.userId, A.chapterId));
     expect(created).toBe(true);
     expect((await progress()).chapter.status).toBe("ingesting");
 
@@ -97,13 +97,13 @@ describe("worker protocol end-to-end", () => {
       .select()
       .from(jobs)
       .where(inArray(jobs.status, ["queued", "running"]));
-    expect(stuck.filter((j) => j.workspaceId === A.workspaceId)).toEqual([]);
+    expect(stuck.filter((j) => j.userId === A.userId)).toEqual([]);
 
-    const states = await db.select().from(pageStates).where(eq(pageStates.workspaceId, A.workspaceId));
+    const states = await db.select().from(pageStates).where(eq(pageStates.userId, A.userId));
     expect(
       states.every((s) => s.aiRev === 1 && s.version === 1 && s.state?.regions[0]?.translation === "Xin chào"),
     ).toBe(true);
-    const ledger = await db.select().from(usageLedger).where(eq(usageLedger.workspaceId, A.workspaceId));
+    const ledger = await db.select().from(usageLedger).where(eq(usageLedger.userId, A.userId));
     expect(ledger.filter((l) => l.kind === "pages")).toHaveLength(N);
     expect(ledger.filter((l) => l.kind === "llm_tokens_in")).toHaveLength(N);
   });
@@ -119,7 +119,7 @@ describe("worker protocol end-to-end", () => {
       .set({ state: edited, stateOrigin: "user", version: (before?.version ?? 0) + 1 })
       .where(eq(pageStates.pageId, first.id));
 
-    await inJobTx((tx) => retranslate(tx, A.workspaceId, A.chapterId, [first.id]));
+    await inJobTx((tx) => retranslate(tx, A.userId, A.chapterId, [first.id]));
     const [tj] = await claimJobs(token, { caps: ["chapter.translate"] });
     expect(tj?.payload.context).toBe("neighbors");
     expect((await doTranslate(token, tj as NonNullable<typeof tj>, "Bản AI mới")).status).toBe(200);
@@ -134,7 +134,7 @@ describe("worker protocol end-to-end", () => {
   });
 
   it("blocks re-ingest once a page has user edits → 409", async () => {
-    const res = await inJobTx((tx) => enqueueIngest(tx, A.workspaceId, A.chapterId)).catch((e: unknown) => e);
+    const res = await inJobTx((tx) => enqueueIngest(tx, A.userId, A.chapterId)).catch((e: unknown) => e);
     expect((res as { status?: number }).status).toBe(409);
   });
 });

@@ -10,6 +10,7 @@ import {
   PAGE_FORMATS,
   SOURCE_LANGS,
   TARGET_LANGS,
+  userPrefix,
 } from "@mtl/shared";
 import { and, eq, inArray, type SQL, sql } from "drizzle-orm";
 import { Hono } from "hono";
@@ -20,7 +21,7 @@ import { chaptersOf, removeChapters } from "../lib/chapter-removal.ts";
 import { unknownFonts } from "../lib/fonts.ts";
 import { ignoreEntryErrorRe2 } from "../lib/ignore-text.ts";
 import { parseJson } from "../lib/validate.ts";
-import { type AppEnv, requireWorkspace } from "../middleware/workspace.ts";
+import type { AppEnv } from "../middleware/user.ts";
 import { deletePrefix } from "../storage.ts";
 
 export const HONORIFIC_POLICIES = ["translate", "keep"] as const;
@@ -42,7 +43,7 @@ const Settings = z.object({
   honorific_policy: z.enum(HONORIFIC_POLICIES),
   pronoun_rules: z.array(PronounRule).max(200),
   style_prompt: z.string().max(1000),
-  /** Id font gói sẵn hoặc font của workspace — kiểm tồn tại ở `assertKnownFonts` (cần DB). */
+  /** Id font gói sẵn hoặc font của người dùng — kiểm tồn tại ở `assertKnownFonts` (cần DB). */
   default_fonts: z.object({ dialogue: FontId, narration: FontId, sfx: FontId }).partial(),
   llm_tier: z.enum(LLM_TIERS),
   /** Chữ bỏ qua (watermark): mục quá ngắn dễ nuốt cả thoại, regex lỗi / dễ treo → 400 kèm lý do. */
@@ -94,7 +95,8 @@ export const chapterSummary = (ch: ChapterRow) => ({
   number: ch.number,
   title: ch.title,
   status: ch.status,
-  locked_by: activeLockHolder(ch),
+  /** Đang mở sửa ở một tab (khoá còn hạn) — không lộ holder: tab id là chứng từ giữ khoá. */
+  locked: activeLockHolder(ch) !== null,
   created_at: ch.createdAt,
   updated_at: ch.updatedAt,
 });
@@ -201,7 +203,7 @@ export async function chapterStats(sdb: Scoped, chs: ChapterRow[]) {
 const nextNumber = (chs: ChapterRow[]) =>
   String(chs.reduce((m, c) => Math.max(m, Math.floor(Number(c.number) || 0)), 0) + 1);
 
-/** Font mặc định phải là font gói sẵn hoặc font của workspace này → không thì 400 `unknown_font`. */
+/** Font mặc định phải là font gói sẵn hoặc font của người dùng → không thì 400 `unknown_font`. */
 async function assertKnownFonts(sdb: Scoped, fonts: Record<string, string | undefined> | undefined) {
   const unknown = await unknownFonts(
     sdb,
@@ -247,7 +249,7 @@ function translationChanged(cur: SeriesRow, set: Partial<typeof series.$inferIns
 
 export const seriesRoutes = new Hono<AppEnv>();
 
-seriesRoutes.get("/w/:ws/series", requireWorkspace(), async (c) => {
+seriesRoutes.get("/series", async (c) => {
   const sdb = c.get("sdb");
   const [rows, chs] = await Promise.all([sdb.select(series), sdb.select(chapters)]);
   const count = new Map<string, number>();
@@ -294,7 +296,7 @@ seriesRoutes.get("/w/:ws/series", requireWorkspace(), async (c) => {
   });
 });
 
-seriesRoutes.post("/w/:ws/series", requireWorkspace(), async (c) => {
+seriesRoutes.post("/series", async (c) => {
   const body = await parseJson(c, SeriesCreate);
   await assertKnownFonts(c.get("sdb"), body.default_fonts);
   // Không gửi page_format → theo ngôn ngữ nguồn (ja → từng trang, còn lại → strip).
@@ -305,7 +307,7 @@ seriesRoutes.post("/w/:ws/series", requireWorkspace(), async (c) => {
   return c.json(seriesView(s), 201);
 });
 
-seriesRoutes.get("/w/:ws/series/:seriesId", requireWorkspace(), async (c) => {
+seriesRoutes.get("/series/:seriesId", async (c) => {
   const sdb = c.get("sdb");
   const s = await sdb.byId(series, c.req.param("seriesId"), "series");
   const chs = await sdb.select(chapters, eq(chapters.seriesId, s.id));
@@ -323,7 +325,7 @@ seriesRoutes.get("/w/:ws/series/:seriesId", requireWorkspace(), async (c) => {
   });
 });
 
-seriesRoutes.patch("/w/:ws/series/:seriesId", requireWorkspace(), async (c) => {
+seriesRoutes.patch("/series/:seriesId", async (c) => {
   const body = await parseJson(c, SeriesPatch);
   const sdb = c.get("sdb");
   await assertKnownFonts(sdb, body.default_fonts);
@@ -348,15 +350,15 @@ seriesRoutes.patch("/w/:ws/series/:seriesId", requireWorkspace(), async (c) => {
  * Xoá series cùng mọi chương + glossary riêng + ảnh credit đã học (admin trở lên). Chương đang bị người khác giữ khoá
  * → 423.
  */
-seriesRoutes.delete("/w/:ws/series/:seriesId", requireWorkspace("admin"), async (c) => {
+seriesRoutes.delete("/series/:seriesId", async (c) => {
   const sdb = c.get("sdb");
   const s = await sdb.byId(series, c.req.param("seriesId"), "series");
-  await removeChapters(sdb, c.get("workspaceId"), c.get("user").id, await chaptersOf(sdb, s.id), async () => {
+  await removeChapters(sdb, c.get("lockHolder"), await chaptersOf(sdb, s.id), async () => {
     await sdb.delete(series, eq(series.id, s.id));
   });
   // Hàng series_skip_images đã cascade theo series; dọn bản sao ảnh (lỗi chỉ để lại file mồ côi).
   try {
-    await deletePrefix(`ws/${c.get("workspaceId")}/series/${s.id}/`);
+    await deletePrefix(`${userPrefix(c.get("userId"))}series/${s.id}/`);
   } catch (err) {
     console.error("[series] dọn ảnh tự bỏ thất bại", err);
   }

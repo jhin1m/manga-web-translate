@@ -3,7 +3,7 @@
   modal volume create mtl-models
   uv run python scripts/fetch_models.py            # cả model optional (LaMa manga, OCR local) — không tải lazy
   modal volume put mtl-models models/ /            # weights đã kiểm sha256 theo models.lock.json
-  modal secret create mtl-worker MTL_TOKEN=<token nền tảng> MTL_API_URL=https://<app-domain> \
+  modal secret create mtl-worker MTL_TOKEN=<token kind=modal> MTL_API_URL=https://<app-domain> \
       MODAL_DRAIN_SECRET=<≥32 ký tự, trùng .env của API> GEMINI_API_KEY=<…>
   modal deploy modal_app.py                        # in URL endpoint `drain` → MODAL_DRAIN_URL ở API
 

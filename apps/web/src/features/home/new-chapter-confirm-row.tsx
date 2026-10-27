@@ -43,7 +43,6 @@ function useImageSize(page: PageFile | undefined) {
 }
 
 export function NewChapterConfirmRow(props: {
-  ws: string;
   files: File[];
   series: SeriesListItem[];
   /** Series cố định (màn series / nút "+ Ch.N") — không hiện ô chọn series. */
@@ -54,7 +53,7 @@ export function NewChapterConfirmRow(props: {
   /** Tạo nhiều chương (không điều hướng). */
   onCreated?: () => void;
 }) {
-  const { ws, files } = props;
+  const { files } = props;
   const qc = useQueryClient();
   const navigate = useNavigate();
   const ref = useRef<HTMLFormElement>(null);
@@ -115,7 +114,7 @@ export function NewChapterConfirmRow(props: {
     mutationFn: async () => {
       let sid = seriesId === NEW_SERIES ? made.current.seriesId : seriesId;
       if (!sid) {
-        sid = (await createSeries(ws, { title: newTitle.trim(), source_lang: newSourceLang })).id;
+        sid = (await createSeries({ title: newTitle.trim(), source_lang: newSourceLang })).id;
         made.current.seriesId = sid;
       }
       const base = Number(chapterNumber);
@@ -123,7 +122,6 @@ export function NewChapterConfirmRow(props: {
         if (made.current.chapters.has(i)) continue;
         const num = groups.length > 1 ? String(base + i) : chapterNumber;
         const { chapterId } = await uploadManager.startNewChapter({
-          ws,
           seriesId: sid,
           number: num,
           pages: g,
@@ -133,10 +131,10 @@ export function NewChapterConfirmRow(props: {
       return { seriesId: sid, created: [...made.current.chapters.values()] };
     },
     onSuccess: ({ seriesId: sid, created }) => {
-      void qc.invalidateQueries({ queryKey: ["series", ws] });
+      void qc.invalidateQueries({ queryKey: ["series"] });
       const [only] = created;
       if (created.length === 1 && only) {
-        void navigate({ to: "/w/$ws/s/$seriesId/c/$chapterId", params: { ws, seriesId: sid, chapterId: only } });
+        void navigate({ to: "/s/$seriesId/c/$chapterId", params: { seriesId: sid, chapterId: only } });
       } else props.onCreated?.();
     },
   });

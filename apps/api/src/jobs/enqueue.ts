@@ -1,7 +1,7 @@
 /**
  * Tạo job (idempotent) và tiến trạng thái chương giữa 2 giai đoạn. Mọi hàm nhận `tx` của caller để
  * enqueue cùng transaction với thay đổi dữ liệu (VD ingest complete tạo pages + page.prepare một lần).
- * Route (Phase 4–6) gọi qua `inJobTx(tx => enqueueX(tx, ws, …))` — route không giữ kết nối DB thô.
+ * Route (Phase 4–6) gọi qua `inJobTx(tx => enqueueX(tx, userId, …))` — route không giữ kết nối DB thô.
  */
 
 import {
@@ -14,7 +14,7 @@ import {
   pages,
   series,
   sourceFiles,
-  workspaceSettings,
+  userSettings,
 } from "@mtl/db";
 import {
   ACTIVE_JOB_STATUSES,
@@ -24,6 +24,7 @@ import {
   type JobPayload,
   type JobType,
   LANG_NAMES,
+  LOCAL_OCR_ENGINES,
   ocrEngineFor,
   type PageFormat,
   type PipelineSettings,
@@ -33,6 +34,7 @@ import {
   type SourceLang,
   type TargetLang,
   type TranslateSettings,
+  userPrefix,
 } from "@mtl/shared";
 import { and, asc, eq, inArray, isNull, ne, sql } from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
@@ -76,7 +78,7 @@ export const notReadOnlyJob = ne(jobs.type, "chapter.proofread");
 export async function insertJob(
   tx: DbLike,
   v: {
-    workspaceId: string;
+    userId: string;
     payload: JobPayload;
     key: JobKey;
     chapterId?: string | null;
@@ -87,7 +89,7 @@ export async function insertJob(
   const [row] = await tx
     .insert(jobs)
     .values({
-      workspaceId: v.workspaceId,
+      userId: v.userId,
       type: v.payload.type,
       payload: v.payload,
       inputRev: v.key.inputRev,
@@ -107,11 +109,11 @@ export async function insertJob(
   return { job: existing, created: false };
 }
 
-export async function lockChapter(tx: DbLike, ws: string, chapterId: string): Promise<Chapter> {
+export async function lockChapter(tx: DbLike, userId: string, chapterId: string): Promise<Chapter> {
   const [ch] = await tx
     .select()
     .from(chapters)
-    .where(and(eq(chapters.workspaceId, ws), eq(chapters.id, chapterId)))
+    .where(and(eq(chapters.userId, userId), eq(chapters.id, chapterId)))
     .for("update");
   if (!ch) throw new NotFoundError("chapter");
   return ch;
@@ -146,12 +148,12 @@ async function activeJobOf(tx: DbLike, chapterId: string, type: JobType): Promis
 /** Commit chương (Phase 4) → ingest_rev + 1, chapter `ingesting`, enqueue chapter.ingest. */
 export async function enqueueIngest(
   tx: DbLike,
-  ws: string,
+  userId: string,
   chapterId: string,
   /** Bỏ trống → page_format của series (override chỉ dành cho test/tool). */
   mode?: PageFormat,
 ): Promise<{ job: Job; created: boolean }> {
-  const ch = await lockChapter(tx, ws, chapterId);
+  const ch = await lockChapter(tx, userId, chapterId);
   const active = await activeJobOf(tx, ch.id, "chapter.ingest");
   if (active) return { job: active, created: false };
   // Ingest complete xoá page cũ (cascade job của chúng) → không ingest lại khi page còn job đang chạy.
@@ -175,7 +177,7 @@ export async function enqueueIngest(
   const ingestRev = ch.ingestRev + 1;
   await tx.update(chapters).set({ ingestRev, ingestMode, status: "ingesting" }).where(eq(chapters.id, ch.id));
   return insertJob(tx, {
-    workspaceId: ws,
+    userId: userId,
     payload: { type: "chapter.ingest", chapter_id: ch.id, ingest_rev: ingestRev, mode: ingestMode },
     key: ingestKey(
       ch.id,
@@ -187,25 +189,35 @@ export async function enqueueIngest(
   });
 }
 
-/** Cài đặt pipeline của workspace (thiếu hàng / key → mặc định = hành vi cũ). */
-export async function pipelineSettingsOf(tx: DbLike, ws: string): Promise<PipelineSettings> {
+/** Cài đặt pipeline của người dùng (thiếu hàng / key → mặc định = hành vi cũ). */
+export async function pipelineSettingsOf(tx: DbLike, userId: string): Promise<PipelineSettings> {
   const [row] = await tx
-    .select({ pipeline: workspaceSettings.pipeline })
-    .from(workspaceSettings)
-    .where(eq(workspaceSettings.workspaceId, ws));
+    .select({ pipeline: userSettings.pipeline })
+    .from(userSettings)
+    .where(eq(userSettings.userId, userId));
   return resolvePipelineSettings(row?.pipeline);
+}
+
+/** page.prepare của series này có gọi LLM không (OCR engine theo cài đặt + ngôn ngữ nguồn) — để kiểm hạn mức. */
+export async function prepareUsesLlm(tx: DbLike, userId: string, seriesId: string): Promise<boolean> {
+  const [s] = await tx
+    .select({ sourceLang: series.sourceLang })
+    .from(series)
+    .where(and(eq(series.userId, userId), eq(series.id, seriesId)));
+  if (!s) return true;
+  return !LOCAL_OCR_ENGINES.includes(ocrEngineFor(await pipelineSettingsOf(tx, userId), s.sourceLang));
 }
 
 /**
  * Giai đoạn 1 cho 1 page; page → `pending`. Thứ tự đọc theo mode chương đã thực sự ingest (không theo
- * page_format hiện tại của series — đổi định dạng chỉ áp cho lần commit sau). Cài đặt pipeline của workspace được
+ * page_format hiện tại của series — đổi định dạng chỉ áp cho lần commit sau). Cài đặt pipeline của người dùng được
  * snapshot vào payload (`pipeline`); vòng lặp nhiều page truyền sẵn để khỏi đọc lại.
  */
 export async function enqueuePrepare(tx: DbLike, page: Page, s: Series, ch: Chapter, pipeline?: PipelineSettings) {
-  const options = prepareOptions(pipeline ?? (await pipelineSettingsOf(tx, page.workspaceId)), s.sourceLang);
+  const options = prepareOptions(pipeline ?? (await pipelineSettingsOf(tx, page.userId)), s.sourceLang);
   await tx.update(pages).set({ status: "pending" }).where(eq(pages.id, page.id));
   return insertJob(tx, {
-    workspaceId: page.workspaceId,
+    userId: page.userId,
     payload: {
       type: "page.prepare",
       page_id: page.id,
@@ -244,12 +256,12 @@ export async function translateSettings(tx: DbLike, s: Series): Promise<Translat
  */
 export async function enqueueTranslate(
   tx: DbLike,
-  ws: string,
+  userId: string,
   chapterId: string,
   pageIds: string[],
   context: "rolling" | "neighbors",
 ) {
-  const ch = await lockChapter(tx, ws, chapterId);
+  const ch = await lockChapter(tx, userId, chapterId);
   const s = await seriesOf(tx, ch);
   const rows = await tx
     .select()
@@ -262,7 +274,7 @@ export async function enqueueTranslate(
   if (unprepared.length) throw conflict("page_not_prepared", `${unprepared.length} page chưa qua giai đoạn 1`);
   await tx.update(chapters).set({ status: "processing" }).where(eq(chapters.id, ch.id));
   return insertJob(tx, {
-    workspaceId: ws,
+    userId: userId,
     payload: {
       type: "chapter.translate",
       chapter_id: ch.id,
@@ -284,8 +296,8 @@ export async function enqueueTranslate(
 }
 
 /** Chạy lại dịch: cả chương (rolling) hoặc tập page (neighbors). */
-export async function retranslate(tx: DbLike, ws: string, chapterId: string, pageIds?: string[]) {
-  if (pageIds?.length) return enqueueTranslate(tx, ws, chapterId, pageIds, "neighbors");
+export async function retranslate(tx: DbLike, userId: string, chapterId: string, pageIds?: string[]) {
+  if (pageIds?.length) return enqueueTranslate(tx, userId, chapterId, pageIds, "neighbors");
   const all = await tx
     .select({ id: pages.id })
     .from(pages)
@@ -293,7 +305,7 @@ export async function retranslate(tx: DbLike, ws: string, chapterId: string, pag
   if (all.length === 0) throw new NotFoundError("page");
   return enqueueTranslate(
     tx,
-    ws,
+    userId,
     chapterId,
     all.map((p) => p.id),
     "rolling",
@@ -304,15 +316,15 @@ export async function retranslate(tx: DbLike, ws: string, chapterId: string, pag
  * "Chạy lại trang lỗi" cấp chương: page lỗi giai đoạn 1 (chưa có OCR hợp lệ) → page.prepare (xong → chờ "Dịch");
  * page lỗi giai đoạn 2 → chapter.translate cho riêng chúng.
  */
-export async function retryFailedPages(tx: DbLike, ws: string, chapterId: string) {
-  const ch = await lockChapter(tx, ws, chapterId);
+export async function retryFailedPages(tx: DbLike, userId: string, chapterId: string) {
+  const ch = await lockChapter(tx, userId, chapterId);
   const s = await seriesOf(tx, ch);
   const failed = await tx
     .select()
     .from(pages)
     .where(and(eq(pages.chapterId, ch.id), eq(pages.status, "failed"), eq(pages.skipped, false)))
     .orderBy(asc(pages.ord));
-  const pipeline = await pipelineSettingsOf(tx, ws);
+  const pipeline = await pipelineSettingsOf(tx, userId);
   const options = prepareOptions(pipeline, s.sourceLang);
   const stage1 = failed.filter(
     (p) => !p.ocrResult || p.prepareInputRev !== prepareKey(p.id, p.originalSha256, s.settingsRev, options).inputRev,
@@ -325,7 +337,7 @@ export async function retryFailedPages(tx: DbLike, ws: string, chapterId: string
       (
         await enqueueTranslate(
           tx,
-          ws,
+          userId,
           ch.id,
           stage2.map((p) => p.id),
           "neighbors",
@@ -340,16 +352,19 @@ export async function retryFailedPages(tx: DbLike, ws: string, chapterId: string
 /** Re-inpaint theo mask người vẽ (Phase 5) — chỉ đổi pages.clean_rev khi complete. */
 export async function enqueueReinpaint(
   tx: DbLike,
-  ws: string,
+  userId: string,
   input: Omit<Extract<JobPayload, { type: "page.reinpaint" }>, "inpaint">,
 ) {
-  const page = await pageIn(tx, ws, input.page_id);
-  const payload = { ...input, inpaint: inpaintOptions(await pipelineSettingsOf(tx, ws)) };
-  if (!payload.user_mask_key.startsWith(`ws/${ws}/pg/${page.id}/user-mask/`) || payload.user_mask_key.includes("..")) {
+  const page = await pageIn(tx, userId, input.page_id);
+  const payload = { ...input, inpaint: inpaintOptions(await pipelineSettingsOf(tx, userId)) };
+  if (
+    !payload.user_mask_key.startsWith(`${userPrefix(userId)}pg/${page.id}/user-mask/`) ||
+    payload.user_mask_key.includes("..")
+  ) {
     throw new HTTPException(400, { message: "user_mask_key không thuộc page này" });
   }
   return insertJob(tx, {
-    workspaceId: ws,
+    userId: userId,
     payload,
     key: pageOpKey(payload),
     chapterId: page.chapterId,
@@ -360,28 +375,28 @@ export async function enqueueReinpaint(
 /** OCR + dịch 1 vùng (Phase 5) — kết quả nằm ở jobs.result, editor tự chèn. Ngôn ngữ lấy từ series của page. */
 export async function enqueueOcrRegion(
   tx: DbLike,
-  ws: string,
+  userId: string,
   input: Omit<
     Extract<JobPayload, { type: "page.ocr_region" }>,
     "source_lang" | "target_lang" | "ocr_engine" | "reading_order"
   >,
 ) {
-  const page = await pageIn(tx, ws, input.page_id);
+  const page = await pageIn(tx, userId, input.page_id);
   const [ch] = await tx
     .select()
     .from(chapters)
-    .where(and(eq(chapters.workspaceId, ws), eq(chapters.id, page.chapterId)));
+    .where(and(eq(chapters.userId, userId), eq(chapters.id, page.chapterId)));
   if (!ch) throw new NotFoundError("chapter");
   const s = await seriesOf(tx, ch);
   const payload = {
     ...input,
     source_lang: s.sourceLang,
     target_lang: s.targetLang,
-    ocr_engine: ocrEngineFor(await pipelineSettingsOf(tx, ws), s.sourceLang),
+    ocr_engine: ocrEngineFor(await pipelineSettingsOf(tx, userId), s.sourceLang),
     reading_order: readingOrder(s.sourceLang, ch.ingestMode),
   };
   return insertJob(tx, {
-    workspaceId: ws,
+    userId: userId,
     payload,
     key: pageOpKey(payload),
     chapterId: page.chapterId,
@@ -393,11 +408,15 @@ export async function enqueueOcrRegion(
  * Xuất chương (render phía server từ page_state hiện tại). Chương chưa có page → 409 `no_pages`; đang ingest/xử lý
  * → 409 `chapter_busy` (page đang dịch lại bị coi là chưa dịch → file thiếu trang mà không báo).
  */
-export async function enqueueExport(tx: DbLike, ws: string, payload: Extract<JobPayload, { type: "chapter.export" }>) {
+export async function enqueueExport(
+  tx: DbLike,
+  userId: string,
+  payload: Extract<JobPayload, { type: "chapter.export" }>,
+) {
   const [ch] = await tx
     .select({ id: chapters.id, status: chapters.status })
     .from(chapters)
-    .where(and(eq(chapters.workspaceId, ws), eq(chapters.id, payload.chapter_id)));
+    .where(and(eq(chapters.userId, userId), eq(chapters.id, payload.chapter_id)));
   if (!ch) throw new NotFoundError("chapter");
   if (ch.status === "ingesting" || ch.status === "processing") {
     throw conflict("chapter_busy", "chương đang xử lý — chờ xong rồi xuất");
@@ -410,7 +429,7 @@ export async function enqueueExport(tx: DbLike, ws: string, payload: Extract<Job
     .where(and(eq(pages.chapterId, ch.id), eq(pages.skipped, false)));
   if (rows.length === 0) throw conflict("no_pages", "chương chưa có trang để xuất");
   return insertJob(tx, {
-    workspaceId: ws,
+    userId: userId,
     payload,
     key: exportKey(
       payload,
@@ -425,10 +444,10 @@ const PROOFREAD_STATUSES = new Set(["review", "done", "partial_failed"]);
 
 /**
  * AI hiệu đính cả chương: các trang hiện (không ẩn) đã dịch xong (`ready`). Snapshot cài đặt dịch (glossary, xưng hô,
- * giọng văn) + model theo cài đặt pipeline của workspace. Không đổi trạng thái chương/trang (job chỉ đọc).
+ * giọng văn) + model theo cài đặt pipeline của người dùng. Không đổi trạng thái chương/trang (job chỉ đọc).
  */
-export async function enqueueProofread(tx: DbLike, ws: string, chapterId: string) {
-  const ch = await lockChapter(tx, ws, chapterId);
+export async function enqueueProofread(tx: DbLike, userId: string, chapterId: string) {
+  const ch = await lockChapter(tx, userId, chapterId);
   if (!PROOFREAD_STATUSES.has(ch.status)) {
     throw conflict("chapter_not_translated", "chương chưa dịch xong hoặc đang chạy — dịch xong rồi hiệu đính");
   }
@@ -440,9 +459,9 @@ export async function enqueueProofread(tx: DbLike, ws: string, chapterId: string
     .where(and(eq(pages.chapterId, ch.id), eq(pages.skipped, false), eq(pages.status, "ready")))
     .orderBy(asc(pages.ord));
   if (rows.length === 0) throw conflict("no_translated_pages", "chương chưa có trang đã dịch");
-  const tier = (await pipelineSettingsOf(tx, ws)).proofread_tier;
+  const tier = (await pipelineSettingsOf(tx, userId)).proofread_tier;
   return insertJob(tx, {
-    workspaceId: ws,
+    userId: userId,
     payload: {
       type: "chapter.proofread",
       chapter_id: ch.id,
@@ -455,11 +474,11 @@ export async function enqueueProofread(tx: DbLike, ws: string, chapterId: string
   });
 }
 
-async function pageIn(tx: DbLike, ws: string, pageId: string): Promise<Page> {
+async function pageIn(tx: DbLike, userId: string, pageId: string): Promise<Page> {
   const [p] = await tx
     .select()
     .from(pages)
-    .where(and(eq(pages.workspaceId, ws), eq(pages.id, pageId)));
+    .where(and(eq(pages.userId, userId), eq(pages.id, pageId)));
   if (!p) throw new NotFoundError("page");
   return p;
 }
@@ -471,21 +490,19 @@ async function pageIn(tx: DbLike, ws: string, pageId: string): Promise<Page> {
 export async function createIngestedPages(
   tx: DbLike,
   ch: Chapter,
-  rows: Array<Omit<typeof pages.$inferInsert, "workspaceId" | "chapterId" | "status">>,
+  rows: Array<Omit<typeof pages.$inferInsert, "userId" | "chapterId" | "status">>,
 ) {
   const s = await seriesOf(tx, ch);
   // Không có chỉnh sửa tay (đã kiểm) → bỏ page của lần ingest trước (cascade page_states/history/job).
   await tx.delete(pages).where(eq(pages.chapterId, ch.id));
   const inserted = await tx
     .insert(pages)
-    .values(rows.map((r) => ({ ...r, workspaceId: ch.workspaceId, chapterId: ch.id, status: "pending" as const })))
+    .values(rows.map((r) => ({ ...r, userId: ch.userId, chapterId: ch.id, status: "pending" as const })))
     .returning();
   await tx
     .insert(pageStates)
-    .values(
-      inserted.map((p) => ({ pageId: p.id, workspaceId: ch.workspaceId, state: emptyPageState(p.width, p.height) })),
-    );
-  const pipeline = await pipelineSettingsOf(tx, ch.workspaceId);
+    .values(inserted.map((p) => ({ pageId: p.id, userId: ch.userId, state: emptyPageState(p.width, p.height) })));
+  const pipeline = await pipelineSettingsOf(tx, ch.userId);
   for (const p of inserted) await enqueuePrepare(tx, p, s, ch, pipeline);
   await tx.update(chapters).set({ status: "processing" }).where(eq(chapters.id, ch.id));
   return inserted;
@@ -495,8 +512,8 @@ export async function createIngestedPages(
  * Bước 2 "Dịch": chương `prepared` → chapter.translate cho mọi page đã qua giai đoạn 1 (chưa dịch). Cả chương đã
  * prepare → ngữ cảnh cuộn; có page lỗi giai đoạn 1 → chỉ dịch page sẵn sàng, ngữ cảnh trang lân cận.
  */
-export async function translatePrepared(tx: DbLike, ws: string, chapterId: string) {
-  const ch = await lockChapter(tx, ws, chapterId);
+export async function translatePrepared(tx: DbLike, userId: string, chapterId: string) {
+  const ch = await lockChapter(tx, userId, chapterId);
   if (ch.status !== "prepared") throw conflict("chapter_not_prepared", "chương chưa xong bước 1 hoặc đang dịch");
   const rows = await tx
     .select({ id: pages.id, status: pages.status })
@@ -504,7 +521,7 @@ export async function translatePrepared(tx: DbLike, ws: string, chapterId: strin
     .where(and(eq(pages.chapterId, ch.id), eq(pages.skipped, false)));
   const prepared = rows.filter((p) => p.status === "prepared").map((p) => p.id);
   if (prepared.length === 0) throw conflict("page_not_prepared", "không có trang nào chờ dịch");
-  return enqueueTranslate(tx, ws, ch.id, prepared, prepared.length === rows.length ? "rolling" : "neighbors");
+  return enqueueTranslate(tx, userId, ch.id, prepared, prepared.length === rows.length ? "rolling" : "neighbors");
 }
 
 const BUSY = new Set(["pending", "preparing", "translating"]);
@@ -513,8 +530,8 @@ const BUSY = new Set(["pending", "preparing", "translating"]);
  * Tính lại trạng thái chương sau mỗi sự kiện job (khoá dòng chapter → các complete song song tuần tự hoá, không bỏ
  * lỡ "page cuối cùng xong"). Không tự sang bước 2: hết việc mà còn page `prepared` → chương `prepared` (chờ "Dịch").
  */
-export async function refreshChapter(tx: DbLike, ws: string, chapterId: string): Promise<void> {
-  const ch = await lockChapter(tx, ws, chapterId);
+export async function refreshChapter(tx: DbLike, userId: string, chapterId: string): Promise<void> {
+  const ch = await lockChapter(tx, userId, chapterId);
   if (ch.status === "ingesting" || ch.status === "draft") return;
   // Trang ẩn không tính: chương "xong" khi mọi trang còn hiện đã xong.
   const rows = await tx

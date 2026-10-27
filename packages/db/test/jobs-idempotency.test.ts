@@ -2,23 +2,23 @@ import { idempotencyKey, type JobPayload } from "@mtl/shared";
 import { eq } from "drizzle-orm";
 import { v7 as uuidv7 } from "uuid";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createDb, jobs, organization } from "../src/index.ts";
+import { createDb, jobs, user } from "../src/index.ts";
 
 const { db, close } = createDb(process.env.DATABASE_URL ?? "", { max: 2 });
-let ws: string;
+let userId: string;
 
 beforeAll(async () => {
-  const [org] = await db
-    .insert(organization)
-    .values({ name: "ws", slug: `ws-${uuidv7()}`, createdAt: new Date() })
+  const [u] = await db
+    .insert(user)
+    .values({ name: "u", email: `u-${uuidv7()}@test.local` })
     .returning();
-  ws = org?.id ?? "";
+  userId = u?.id ?? "";
 });
 afterAll(() => close());
 
 function job(key: string) {
   const payload: JobPayload = { type: "page.prepare", page_id: uuidv7(), source_lang: "ko" };
-  return { workspaceId: ws, type: payload.type, payload, inputRev: "r1", idempotencyKey: key };
+  return { userId, type: payload.type, payload, inputRev: "r1", idempotencyKey: key };
 }
 
 /** postgres-js bọc lỗi PG; drizzle bọc thêm một lớp → tìm code ở cause. */

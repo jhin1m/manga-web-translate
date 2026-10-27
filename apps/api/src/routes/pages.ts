@@ -13,7 +13,7 @@ import { z } from "zod";
 import { inJobTx, lockChapter, refreshChapter } from "../jobs/enqueue.ts";
 import { assertChapterLock } from "../lib/chapter-lock.ts";
 import { parseJson } from "../lib/validate.ts";
-import { type AppEnv, requireWorkspace } from "../middleware/workspace.ts";
+import type { AppEnv } from "../middleware/user.ts";
 import { MAX_GET_TTL_S, presignGet } from "../storage.ts";
 
 const THUMB_TTL_S = MAX_GET_TTL_S;
@@ -24,9 +24,9 @@ const conflict = (error: string, message: string) =>
 
 export const pageRoutes = new Hono<AppEnv>();
 
-pageRoutes.get("/w/:ws/chapters/:chapterId/pages", requireWorkspace(), async (c) => {
+pageRoutes.get("/chapters/:chapterId/pages", async (c) => {
   const sdb = c.get("sdb");
-  const ws = c.get("workspaceId");
+  const userId = c.get("userId");
   const ch = await sdb.byId(chapters, c.req.param("chapterId"), "chapter");
   const rows = await sdb.select(pages, eq(pages.chapterId, ch.id));
   rows.sort((a, b) => a.ord - b.ord);
@@ -37,7 +37,7 @@ pageRoutes.get("/w/:ws/chapters/:chapterId/pages", requireWorkspace(), async (c)
       rows.map(async (p) => {
         const [original, clean] = await Promise.all([
           presignGet(p.originalKey, THUMB_TTL_S),
-          p.cleanRev !== null ? presignGet(storageKeys.clean(ws, p.id, p.cleanRev), THUMB_TTL_S) : null,
+          p.cleanRev !== null ? presignGet(storageKeys.clean(userId, p.id, p.cleanRev), THUMB_TTL_S) : null,
         ]);
         return {
           id: p.id,
@@ -59,7 +59,7 @@ pageRoutes.get("/w/:ws/chapters/:chapterId/pages", requireWorkspace(), async (c)
  * Ảnh gốc đã khai báo của chương theo thứ tự upload — xem trước khi chưa có page (nháp, đang cắt trang). Không HEAD
  * từng object: file chưa upload xong thì URL trả 404, client hiện ô "chưa tải".
  */
-pageRoutes.get("/w/:ws/chapters/:chapterId/source-files", requireWorkspace(), async (c) => {
+pageRoutes.get("/chapters/:chapterId/source-files", async (c) => {
   const sdb = c.get("sdb");
   const ch = await sdb.byId(chapters, c.req.param("chapterId"), "chapter");
   const rows = await sdb.select(sourceFiles, eq(sourceFiles.chapterId, ch.id));
@@ -84,18 +84,18 @@ pageRoutes.get("/w/:ws/chapters/:chapterId/source-files", requireWorkspace(), as
  * 409. Không cho ẩn trang cuối cùng còn hiện (chương rỗng không có trạng thái hợp lý). Trạng thái chương tính lại ngay
  * (ẩn trang lỗi cuối → "Chờ duyệt"; khôi phục trang chưa dịch → "Chờ dịch").
  */
-pageRoutes.patch("/w/:ws/pages/:pageId", requireWorkspace(), async (c) => {
+pageRoutes.patch("/pages/:pageId", async (c) => {
   const body = await parseJson(c, PageSkipBody);
   const sdb = c.get("sdb");
-  const ws = c.get("workspaceId");
+  const userId = c.get("userId");
   const page = await sdb.byId(pages, c.req.param("pageId"), "page");
-  await assertChapterLock(sdb, page.chapterId, c.get("user").id);
+  await assertChapterLock(sdb, page.chapterId, c.get("lockHolder"));
   await inJobTx(async (tx) => {
-    const ch = await lockChapter(tx, ws, page.chapterId);
+    const ch = await lockChapter(tx, userId, page.chapterId);
     if (ch.status === "ingesting" || ch.status === "processing") {
       throw conflict("chapter_busy", "chương đang xử lý — chờ xong rồi xoá / khôi phục trang");
     }
-    const t = scoped(tx, ws);
+    const t = scoped(tx, userId);
     if (body.skipped) {
       const visible = await t.select(pages, and(eq(pages.chapterId, ch.id), eq(pages.skipped, false)) as SQL);
       if (visible.every((p) => p.id === page.id)) throw conflict("last_page", "không xoá được trang cuối cùng");
@@ -104,8 +104,8 @@ pageRoutes.patch("/w/:ws/pages/:pageId", requireWorkspace(), async (c) => {
     await tx
       .update(pages)
       .set({ skipped: body.skipped, skipChangedAt: sql`now()` })
-      .where(and(eq(pages.workspaceId, ws), eq(pages.id, page.id), ne(pages.skipped, body.skipped)));
-    await refreshChapter(tx, ws, ch.id);
+      .where(and(eq(pages.userId, userId), eq(pages.id, page.id), ne(pages.skipped, body.skipped)));
+    await refreshChapter(tx, userId, ch.id);
   });
   return c.json({ id: page.id, skipped: body.skipped });
 });

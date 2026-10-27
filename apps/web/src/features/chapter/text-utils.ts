@@ -36,7 +36,7 @@ export function splitHighlight(text: string, needle: string, caseSensitive: bool
 
 /** Thông điệp lỗi apply/undo theo hợp đồng API (409 preview_stale/undo_conflict, 423 chapter_locked). */
 export function describeWriteError(status: number, code: string | undefined, fallback: string): string {
-  if (status === 423 || code === "chapter_locked") return "Chương đang được người khác giữ khoá — chỉ xem trước được.";
+  if (status === 423 || code === "chapter_locked") return "Chương đang mở ở tab khác — chỉ xem trước được.";
   if (code === "preview_stale") return "Có trang vừa bị sửa sau lúc xem trước. Hãy bấm “Xem trước” lại rồi áp dụng.";
   if (code === "undo_conflict") return "Không hoàn tác được: một số trang đã được sửa tiếp sau lần áp dụng.";
   if (status === 404) return "Lần áp dụng này không còn để hoàn tác.";

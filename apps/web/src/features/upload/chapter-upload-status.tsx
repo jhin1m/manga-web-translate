@@ -9,14 +9,13 @@ import { collectPages } from "./files.ts";
 import { uploadManager, useChapterUpload } from "./upload-manager.ts";
 
 /** Thả lại file của chương nháp → khớp với source_files → upload phần thiếu (ném lỗi nếu bộ file không khớp). */
-export async function resumeFromFiles(ws: string, chapterId: string, files: File[]) {
-  const [pages, chapter] = await Promise.all([collectPages(files), fetchChapter(ws, chapterId)]);
+export async function resumeFromFiles(chapterId: string, files: File[]) {
+  const [pages, chapter] = await Promise.all([collectPages(files), fetchChapter(chapterId)]);
   if (chapter.status !== "draft") throw new Error("Chương đã dịch — không tải thêm ảnh được.");
-  return uploadManager.resumeChapter({ ws, chapter, pages });
+  return uploadManager.resumeChapter({ chapter, pages });
 }
 
 export function ChapterUploadStatus(props: {
-  ws: string;
   chapterId: string;
   onResume: (files: File[]) => void;
   resumeError?: string | null;

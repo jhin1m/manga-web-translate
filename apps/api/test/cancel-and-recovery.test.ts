@@ -4,7 +4,7 @@ import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { enqueueIngest, enqueueReinpaint, inJobTx, retranslate } from "../src/jobs/enqueue.ts";
 import { cancelJob } from "../src/jobs/queue.ts";
-import { db, seedWorkspace } from "./helpers.ts";
+import { db, seedUser } from "./helpers.ts";
 import {
   addSources,
   type Claimed,
@@ -20,10 +20,10 @@ import {
 } from "./worker-helpers.ts";
 
 async function ingested(label: string, n: number) {
-  const S = await seedWorkspace(label);
-  const token = (await workerToken(S.workspaceId)).token;
-  await addSources(S.workspaceId, S.chapterId, n);
-  await inJobTx((tx) => enqueueIngest(tx, S.workspaceId, S.chapterId));
+  const S = await seedUser(label);
+  const token = (await workerToken("mac")).token;
+  await addSources(S.userId, S.chapterId, n);
+  await inJobTx((tx) => enqueueIngest(tx, S.userId, S.chapterId));
   const [ij] = await claimJobs(token, { caps: ["chapter.ingest"] });
   expect((await doIngest(token, ij as Claimed)).status).toBe(200);
   return { S, token };
@@ -33,10 +33,10 @@ const chapterStatus = async (id: string) => (await db.select().from(chapters).wh
 
 describe("cancel paths", () => {
   it("cancelling an unclaimed ingest returns the chapter to draft", async () => {
-    const S = await seedWorkspace("cing");
-    await addSources(S.workspaceId, S.chapterId, 1);
-    const { job } = await inJobTx((tx) => enqueueIngest(tx, S.workspaceId, S.chapterId));
-    await cancelJob(S.workspaceId, job.id);
+    const S = await seedUser("cing");
+    await addSources(S.userId, S.chapterId, 1);
+    const { job } = await inJobTx((tx) => enqueueIngest(tx, S.userId, S.chapterId));
+    await cancelJob(S.userId, job.id);
     expect(await chapterStatus(S.chapterId)).toBe("draft");
   });
 
@@ -48,7 +48,7 @@ describe("cancel paths", () => {
       (j) => j.type === "page.prepare" && j.status === "queued",
     );
     expect(queued).toBeDefined();
-    await cancelJob(S.workspaceId, queued?.id as string);
+    await cancelJob(S.userId, queued?.id as string);
     expect(await chapterStatus(S.chapterId)).toBe("prepared");
     await translateIfPrepared(S.chapterId);
     const [t] = await claimJobs(token, { caps: ["chapter.translate"] });
@@ -65,7 +65,7 @@ describe("cancel paths", () => {
     const tr = (await db.select().from(jobs).where(eq(jobs.chapterId, S.chapterId))).find(
       (j) => j.type === "chapter.translate",
     );
-    await cancelJob(S.workspaceId, tr?.id as string);
+    await cancelJob(S.userId, tr?.id as string);
     expect(await chapterStatus(S.chapterId)).toBe("partial_failed");
     expect((await pageRows(S.chapterId))[0]?.status).toBe("failed");
   });
@@ -78,7 +78,7 @@ describe("cancel paths", () => {
     const [t] = await claimJobs(token, { caps: ["chapter.translate"] });
     await doTranslate(token, t as Claimed);
     const [pg] = await pageRows(S.chapterId);
-    await inJobTx((tx) => retranslate(tx, S.workspaceId, S.chapterId, [pg?.id as string]));
+    await inJobTx((tx) => retranslate(tx, S.userId, S.chapterId, [pg?.id as string]));
     const [t2] = await claimJobs(token, { caps: ["chapter.translate"] });
     expect((await failJob(token, t2 as Claimed, "invalid_input")).status).toBe(200);
     expect((await pageRows(S.chapterId))[0]?.status).toBe("ready");
@@ -92,11 +92,11 @@ describe("recovery", () => {
     const [a] = await claimJobs(token, { caps: ["page.prepare"] });
     await doPrepare(token, a as Claimed);
     const [pg] = await pageRows(S.chapterId);
-    // Job hỏng: base_clean_rev hợp lệ nhưng key mask thuộc workspace khác (chèn thẳng, bỏ qua kiểm ở enqueue).
+    // Job hỏng: base_clean_rev hợp lệ nhưng key mask thuộc người dùng khác (chèn thẳng, bỏ qua kiểm ở enqueue).
     const [bad] = await db
       .insert(jobs)
       .values({
-        workspaceId: S.workspaceId,
+        userId: S.userId,
         type: "page.reinpaint",
         payload: {
           type: "page.reinpaint",
@@ -122,11 +122,11 @@ describe("recovery", () => {
     const { S } = await ingested("cmask", 1);
     const [pg] = await pageRows(S.chapterId);
     const err = await inJobTx((tx) =>
-      enqueueReinpaint(tx, S.workspaceId, {
+      enqueueReinpaint(tx, S.userId, {
         type: "page.reinpaint",
         page_id: pg?.id as string,
         base_clean_rev: 0,
-        user_mask_key: `ws/${S.workspaceId}/pg/other/user-mask/m.png`,
+        user_mask_key: `u/${S.userId}/pg/other/user-mask/m.png`,
         offset: { x: 0, y: 0 },
       }),
     ).catch((e: unknown) => e);
@@ -135,7 +135,7 @@ describe("recovery", () => {
 
   it("re-ingest while page jobs are active → 409 chapter_busy", async () => {
     const { S } = await ingested("cbusy", 2);
-    const err = await inJobTx((tx) => enqueueIngest(tx, S.workspaceId, S.chapterId)).catch((e: unknown) => e);
+    const err = await inJobTx((tx) => enqueueIngest(tx, S.userId, S.chapterId)).catch((e: unknown) => e);
     expect((err as { status?: number }).status).toBe(409);
     expect((await db.select().from(pages).where(eq(pages.chapterId, S.chapterId))).length).toBe(2);
   });

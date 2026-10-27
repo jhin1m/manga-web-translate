@@ -11,19 +11,26 @@ import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { v7 as uuidv7 } from "uuid";
 import { z } from "zod";
+import { assertQuota } from "../billing/user-quota.ts";
 import {
   enqueueIngest,
   inJobTx,
   lockChapter,
+  prepareUsesLlm,
   retranslate,
   retryFailedPages,
   translatePrepared,
 } from "../jobs/enqueue.ts";
-import { acquireChapterLock, activeLockHolder, LOCK_TTL_MS, releaseChapterLock } from "../lib/chapter-lock.ts";
+import {
+  acquireChapterLock,
+  activeLockHolder,
+  chapterLockedError,
+  LOCK_TTL_MS,
+  releaseChapterLock,
+} from "../lib/chapter-lock.ts";
 import { cancelChapterJobs, removeChapters } from "../lib/chapter-removal.ts";
-import { memberNames } from "../lib/member-names.ts";
 import { parseJson } from "../lib/validate.ts";
-import { type AppEnv, requireWorkspace } from "../middleware/workspace.ts";
+import type { AppEnv } from "../middleware/user.ts";
 import { head, MAX_POST_TTL_S, presignPost, readPrefix } from "../storage.ts";
 import { jobView } from "./jobs.ts";
 import { chapterStats, chapterSummary, exportStatus } from "./series.ts";
@@ -121,12 +128,12 @@ async function mapLimit<T, R>(items: T[], limit: number, fn: (t: T) => Promise<R
 export const chapterRoutes = new Hono<AppEnv>();
 
 /**
- * Chương gần đây của workspace cho "Việc cần làm" ở home. Path riêng (không `/chapters/recent`) để không đụng
- * `/chapters/:chapterId`. Thứ tự: chương mình đang giữ khoá trước, rồi `updated_at` mới nhất (heartbeat khoá cũng
- * bump cột này = "đang làm"). `open=1` bỏ chương đã xuất/xong (trừ chương sửa sau lần xuất cuối); nháp upload dở
+ * Chương gần đây cho "Việc cần làm" ở home. Path riêng (không `/chapters/recent`) để không đụng
+ * `/chapters/:chapterId`. Thứ tự: chương đang mở sửa (khoá còn hạn) trước, rồi `updated_at` mới nhất (heartbeat khoá
+ * cũng bump cột này = "đang làm"). `open=1` bỏ chương đã xuất/xong (trừ chương sửa sau lần xuất cuối); nháp upload dở
  * vẫn có.
  */
-chapterRoutes.get("/w/:ws/recent-chapters", requireWorkspace(), async (c) => {
+chapterRoutes.get("/recent-chapters", async (c) => {
   const q = RecentQuery.safeParse(c.req.query());
   if (!q.success) {
     throw new HTTPException(400, {
@@ -134,14 +141,13 @@ chapterRoutes.get("/w/:ws/recent-chapters", requireWorkspace(), async (c) => {
     });
   }
   const sdb = c.get("sdb");
-  const me = c.get("user").id;
   const all = await sdb.select(chapters);
   // open=1: bỏ chương đã xuất mà chưa sửa gì sau đó (chương cần "Xuất lại" vẫn còn trong danh sách).
   const exported = q.data.open === "1" ? (await exportStatus(sdb, all)).exported : new Set<string>();
-  const mine = (ch: (typeof all)[number]) => activeLockHolder(ch) === me;
+  const open = (ch: (typeof all)[number]) => activeLockHolder(ch) !== null;
   const picked = all
     .filter((ch) => !exported.has(ch.id))
-    .sort((a, b) => Number(mine(b)) - Number(mine(a)) || b.updatedAt.getTime() - a.updatedAt.getTime())
+    .sort((a, b) => Number(open(b)) - Number(open(a)) || b.updatedAt.getTime() - a.updatedAt.getTime())
     .slice(0, q.data.limit);
   const [seriesRows, pickedStats] = await Promise.all([
     picked.length
@@ -157,7 +163,6 @@ chapterRoutes.get("/w/:ws/recent-chapters", requireWorkspace(), async (c) => {
       page_counts: pickedStats.pageCounts(ch.id),
       exported: pickedStats.exported(ch.id),
       reexport: pickedStats.reexport(ch.id),
-      lock_holder_is_me: mine(ch),
     })),
   });
 });
@@ -166,16 +171,16 @@ chapterRoutes.get("/w/:ws/recent-chapters", requireWorkspace(), async (c) => {
  * Tạo chương (draft) + source_files theo thứ tự + presigned POST cho từng file. Ảnh khớp ảnh credit series đã học
  * được bỏ qua sẵn (`skip = 'credit'`, khôi phục được như ảnh xoá tay).
  */
-chapterRoutes.post("/w/:ws/chapters", requireWorkspace(), async (c) => {
+chapterRoutes.post("/chapters", async (c) => {
   const body = await parseJson(c, ChapterCreate);
-  const ws = c.get("workspaceId");
+  const userId = c.get("userId");
   const { chapter, files } = await c.get("sdb").transaction(async (tx) => {
     const s = await tx.byId(series, body.series_id, "series");
     const chapter = await tx.insert(chapters, { seriesId: s.id, number: body.number, title: body.title });
     const credit = await creditMatcher(tx, s.id);
     const files: SourceFile[] = [];
     for (const [ord, f] of body.files.entries()) {
-      const key = storageKeys.source(ws, chapter.id, uuidv7(), CHAPTER_UPLOAD_TYPES[f.content_type]);
+      const key = storageKeys.source(userId, chapter.id, uuidv7(), CHAPTER_UPLOAD_TYPES[f.content_type]);
       files.push(
         await tx.insert(sourceFiles, {
           chapterId: chapter.id,
@@ -203,10 +208,10 @@ chapterRoutes.post("/w/:ws/chapters", requireWorkspace(), async (c) => {
 });
 
 /**
- * Đổi số chương và/hoặc series (series đích cùng workspace, không thì 404). Mọi trạng thái chương: storage key theo
+ * Đổi số chương và/hoặc series (series đích của cùng người dùng, không thì 404). Mọi trạng thái chương: storage key theo
  * id chương nên không phải chép object; lần xuất sau đặt tên file theo số mới. Trùng số trong series đích → 409.
  */
-chapterRoutes.patch("/w/:ws/chapters/:chapterId", requireWorkspace(), async (c) => {
+chapterRoutes.patch("/chapters/:chapterId", async (c) => {
   const body = await parseJson(c, ChapterPatch);
   const updated = await c.get("sdb").transaction(async (tx) => {
     const ch = await tx.byId(chapters, c.req.param("chapterId"), "chapter");
@@ -225,7 +230,7 @@ chapterRoutes.patch("/w/:ws/chapters/:chapterId", requireWorkspace(), async (c) 
 });
 
 /** Ký lại POST cho file chưa upload xong (retry sau mất mạng / policy hết hạn). Chỉ khi chương còn draft. */
-chapterRoutes.post("/w/:ws/chapters/:chapterId/presign", requireWorkspace(), async (c) => {
+chapterRoutes.post("/chapters/:chapterId/presign", async (c) => {
   const body = await parseJson(c, PresignBody);
   const sdb = c.get("sdb");
   const ch = await sdb.byId(chapters, c.req.param("chapterId"), "chapter");
@@ -239,14 +244,12 @@ chapterRoutes.post("/w/:ws/chapters/:chapterId/presign", requireWorkspace(), asy
 });
 
 /**
- * Chương còn sửa được bộ ảnh gốc (commit, bỏ qua ảnh): nháp, hoặc cắt trang lỗi mà chưa có page. Người khác giữ
- * khoá còn hạn → 423 (không đổi bộ ảnh dưới tay người đang làm).
+ * Chương còn sửa được bộ ảnh gốc (commit, bỏ qua ảnh): nháp, hoặc cắt trang lỗi mà chưa có page. Tab khác giữ
+ * khoá còn hạn → 423 (không đổi bộ ảnh dưới tay tab đang làm).
  */
-async function assertSourcesEditable(sdb: Scoped, ch: Chapter, userId: string) {
-  const holder = activeLockHolder(ch);
-  if (holder && holder !== userId) {
-    throw new HTTPException(423, { res: Response.json({ error: "chapter_locked", holder }, { status: 423 }) });
-  }
+async function assertSourcesEditable(sdb: Scoped, ch: Chapter, holder: string) {
+  const current = activeLockHolder(ch);
+  if (current && current !== holder) throw chapterLockedError();
   const ingestFailed = ch.status === "partial_failed" && !(await sdb.find(pages, eq(pages.chapterId, ch.id)));
   if (ch.status !== "draft" && !ingestFailed) {
     throw conflict("chapter_not_draft", "chương đã xử lý — tạo chương mới để upload lại");
@@ -261,12 +264,12 @@ async function assertSourcesEditable(sdb: Scoped, ch: Chapter, userId: string) {
  * từ chối (409) thì không mất source_files nào. Ảnh bỏ qua không kiểm, không xoá; bộ ảnh đổi giữa lúc kiểm và lúc
  * enqueue (bỏ/dùng lại ảnh ở tab khác) → 409 `sources_changed`, không ghép ảnh chưa kiểm.
  */
-chapterRoutes.post("/w/:ws/chapters/:chapterId/commit", requireWorkspace(), async (c) => {
+chapterRoutes.post("/chapters/:chapterId/commit", async (c) => {
   const body = await parseJson(c, CommitBody);
   const sdb = c.get("sdb");
-  const ws = c.get("workspaceId");
+  const userId = c.get("userId");
   const ch = await sdb.byId(chapters, c.req.param("chapterId"), "chapter");
-  await assertSourcesEditable(sdb, ch, c.get("user").id);
+  await assertSourcesEditable(sdb, ch, c.get("lockHolder"));
   const all = await sdb.select(sourceFiles, eq(sourceFiles.chapterId, ch.id));
   if (all.length === 0) throw new HTTPException(400, { message: "chapter has no source files" });
   // Ảnh bỏ qua không kiểm, không xoá (giữ để hoàn tác); ingest cũng chỉ lấy ảnh không bỏ qua.
@@ -292,8 +295,10 @@ chapterRoutes.post("/w/:ws/chapters/:chapterId/commit", requireWorkspace(), asyn
     });
   }
   const { job, created } = await inJobTx(async (tx) => {
-    await lockChapter(tx, ws, ch.id);
-    const t = scoped(tx, ws);
+    await lockChapter(tx, userId, ch.id);
+    // Ingest xong tự nối page.prepare — OCR bằng LLM thì tốn tiền → kiểm hạn mức ngay khi bấm.
+    if (await prepareUsesLlm(tx, userId, ch.seriesId)) await assertQuota(tx, userId);
+    const t = scoped(tx, userId);
     const now = await t.select(sourceFiles, and(eq(sourceFiles.chapterId, ch.id), isNull(sourceFiles.skip)) as SQL);
     const checkedIds = new Set(files.map((f) => f.id));
     if (now.length !== checkedIds.size || now.some((f) => !checkedIds.has(f.id))) {
@@ -312,22 +317,22 @@ chapterRoutes.post("/w/:ws/chapters/:chapterId/commit", requireWorkspace(), asyn
     for (const r of valid) {
       if (r.bytes !== r.file.bytes) await t.update(sourceFiles, eq(sourceFiles.id, r.file.id), { bytes: r.bytes });
     }
-    return enqueueIngest(tx, ws, ch.id, body.mode);
+    return enqueueIngest(tx, userId, ch.id, body.mode);
   });
   return c.json({ job: jobView(job), created, accepted: valid.length, rejected: rejectedView }, 202);
 });
 
 /** Bỏ qua / dùng lại 1 ảnh gốc trước Bước 1 (hoàn tác được; hàng vẫn giữ để tải tiếp khớp đúng bộ file). */
-chapterRoutes.patch("/w/:ws/chapters/:chapterId/source-files/:fileId", requireWorkspace(), async (c) => {
+chapterRoutes.patch("/chapters/:chapterId/source-files/:fileId", async (c) => {
   const body = await parseJson(c, SourceSkipBody);
-  const ws = c.get("workspaceId");
+  const userId = c.get("userId");
   const fileId = c.req.param("fileId");
   const ch = await c.get("sdb").byId(chapters, c.req.param("chapterId"), "chapter");
   if (!isUuid(fileId)) throw new NotFoundError("source file");
   // Khoá dòng chương (như commit/enqueueIngest) → không đổi bộ ảnh xen giữa lúc Bước 1 đang enqueue.
   const row = await inJobTx(async (tx) => {
-    const t = scoped(tx, ws);
-    await assertSourcesEditable(t, await lockChapter(tx, ws, ch.id), c.get("user").id);
+    const t = scoped(tx, userId);
+    await assertSourcesEditable(t, await lockChapter(tx, userId, ch.id), c.get("lockHolder"));
     const [r] = await t.update(sourceFiles, and(eq(sourceFiles.chapterId, ch.id), eq(sourceFiles.id, fileId)) as SQL, {
       skip: body.skip,
     });
@@ -341,13 +346,13 @@ chapterRoutes.patch("/w/:ws/chapters/:chapterId/source-files/:fileId", requireWo
  * Đổi thứ tự ảnh gốc trước Bước 1: `ids` là toàn bộ source file của chương theo thứ tự mới (đúng bộ — không thiếu,
  * không thừa, không trùng), ghi `ord = vị trí`. Ảnh bỏ qua vẫn nằm trong thứ tự. Ingest đọc theo `ord` nên worker không đổi.
  */
-chapterRoutes.put("/w/:ws/chapters/:chapterId/source-files/order", requireWorkspace(), async (c) => {
+chapterRoutes.put("/chapters/:chapterId/source-files/order", async (c) => {
   const body = await parseJson(c, SourceOrderBody);
-  const ws = c.get("workspaceId");
+  const userId = c.get("userId");
   const ch = await c.get("sdb").byId(chapters, c.req.param("chapterId"), "chapter");
   const files = await inJobTx(async (tx) => {
-    const t = scoped(tx, ws);
-    await assertSourcesEditable(t, await lockChapter(tx, ws, ch.id), c.get("user").id);
+    const t = scoped(tx, userId);
+    await assertSourcesEditable(t, await lockChapter(tx, userId, ch.id), c.get("lockHolder"));
     const current = await t.select(sourceFiles, eq(sourceFiles.chapterId, ch.id));
     const wanted = new Set(body.ids);
     if (wanted.size !== body.ids.length || wanted.size !== current.length || current.some((f) => !wanted.has(f.id))) {
@@ -367,7 +372,7 @@ chapterRoutes.put("/w/:ws/chapters/:chapterId/source-files/order", requireWorksp
 });
 
 /** Chi tiết chương + khoá + danh sách source file (để tiếp tục upload/commit chương draft). */
-chapterRoutes.get("/w/:ws/chapters/:chapterId", requireWorkspace(), async (c) => {
+chapterRoutes.get("/chapters/:chapterId", async (c) => {
   const sdb = c.get("sdb");
   const ch = await sdb.byId(chapters, c.req.param("chapterId"), "chapter");
   const [s, files] = await Promise.all([
@@ -375,82 +380,78 @@ chapterRoutes.get("/w/:ws/chapters/:chapterId", requireWorkspace(), async (c) =>
     sdb.select(sourceFiles, eq(sourceFiles.chapterId, ch.id)),
   ]);
   const holder = activeLockHolder(ch);
-  const names = holder ? await memberNames(c.get("workspaceId"), [holder]) : new Map<string, string>();
   return c.json({
     ...chapterSummary(ch),
     ingest_rev: ch.ingestRev,
     series: { id: s.id, title: s.title },
-    lock:
-      holder && ch.lockedAt
-        ? {
-            holder,
-            holder_name: names.get(holder) ?? null,
-            is_me: holder === c.get("user").id,
-            expires_at: new Date(ch.lockedAt.getTime() + LOCK_TTL_MS),
-          }
-        : null,
+    lock: holder && ch.lockedAt ? { expires_at: new Date(ch.lockedAt.getTime() + LOCK_TTL_MS) } : null,
     source_files: files.sort((a, b) => a.ord - b.ord).map(sourceFileView),
   });
 });
 
 /** Bước 2 "Dịch": chương xong bước 1 (`prepared`) → dịch + chèn chữ các page đã OCR. */
-chapterRoutes.post("/w/:ws/chapters/:chapterId/translate-prepared", requireWorkspace(), async (c) => {
+chapterRoutes.post("/chapters/:chapterId/translate-prepared", async (c) => {
   const ch = await c.get("sdb").byId(chapters, c.req.param("chapterId"), "chapter");
-  const { job, created } = await inJobTx((tx) => translatePrepared(tx, c.get("workspaceId"), ch.id));
+  const { job, created } = await inJobTx(async (tx) => {
+    await assertQuota(tx, c.get("userId"));
+    return translatePrepared(tx, c.get("userId"), ch.id);
+  });
   return c.json({ job: jobView(job), created }, 202);
 });
 
 /** Page lỗi giai đoạn 1 → page.prepare; lỗi giai đoạn 2 → chapter.translate cho riêng chúng. */
-chapterRoutes.post("/w/:ws/chapters/:chapterId/retry-failed", requireWorkspace(), async (c) => {
+chapterRoutes.post("/chapters/:chapterId/retry-failed", async (c) => {
   const ch = await c.get("sdb").byId(chapters, c.req.param("chapterId"), "chapter");
-  const created = await inJobTx((tx) => retryFailedPages(tx, c.get("workspaceId"), ch.id));
+  const created = await inJobTx(async (tx) => {
+    await assertQuota(tx, c.get("userId"));
+    return retryFailedPages(tx, c.get("userId"), ch.id);
+  });
   return c.json({ jobs: created.map(jobView) }, 202);
 });
 
 /** Dịch lại cả chương (ngữ cảnh cuộn) hoặc tập page (`page_ids`, dùng ngữ cảnh trang lân cận). */
-chapterRoutes.post("/w/:ws/chapters/:chapterId/translate", requireWorkspace(), async (c) => {
+chapterRoutes.post("/chapters/:chapterId/translate", async (c) => {
   const body = await parseJson(c, TranslateBody);
   const sdb = c.get("sdb");
   const ch = await sdb.byId(chapters, c.req.param("chapterId"), "chapter");
   if (!(await sdb.find(pages, and(eq(pages.chapterId, ch.id), eq(pages.skipped, false)) as SQL))) {
     throw conflict("no_pages", "chương chưa có trang để dịch");
   }
-  const { job, created } = await inJobTx((tx) => retranslate(tx, c.get("workspaceId"), ch.id, body.page_ids));
+  const { job, created } = await inJobTx(async (tx) => {
+    await assertQuota(tx, c.get("userId"));
+    return retranslate(tx, c.get("userId"), ch.id, body.page_ids);
+  });
   return c.json({ job: jobView(job), created }, 202);
 });
 
 /** Huỷ mọi job đang hoạt động của chương. */
-chapterRoutes.post("/w/:ws/chapters/:chapterId/cancel", requireWorkspace(), async (c) => {
+chapterRoutes.post("/chapters/:chapterId/cancel", async (c) => {
   const sdb = c.get("sdb");
   const ch = await sdb.byId(chapters, c.req.param("chapterId"), "chapter");
-  const cancelled = await cancelChapterJobs(sdb, c.get("workspaceId"), ch.id);
+  const cancelled = await cancelChapterJobs(sdb, ch.id);
   const after = await sdb.byId(chapters, ch.id, "chapter");
   return c.json({ cancelled, chapter: chapterSummary(after) });
 });
 
-/** Xoá hẳn chương (mọi trạng thái): huỷ job, xoá dữ liệu + file. Người khác đang giữ khoá → 423. */
-chapterRoutes.delete("/w/:ws/chapters/:chapterId", requireWorkspace(), async (c) => {
+/** Xoá hẳn chương (mọi trạng thái): huỷ job, xoá dữ liệu + file. Tab khác đang giữ khoá → 423. */
+chapterRoutes.delete("/chapters/:chapterId", async (c) => {
   const sdb = c.get("sdb");
   const ch = await sdb.byId(chapters, c.req.param("chapterId"), "chapter");
-  await removeChapters(sdb, c.get("workspaceId"), c.get("user").id, [ch], async () => {
+  await removeChapters(sdb, c.get("lockHolder"), [ch], async () => {
     await sdb.delete(chapters, eq(chapters.id, ch.id));
   });
   return c.body(null, 204);
 });
 
-/** Lấy/gia hạn khoá (heartbeat từ editor). Người khác giữ → 423 kèm tên người giữ. */
-chapterRoutes.post("/w/:ws/chapters/:chapterId/lock", requireWorkspace(), async (c) => {
-  const sdb = c.get("sdb");
-  const user = c.get("user");
-  const r = await acquireChapterLock(sdb, c.req.param("chapterId"), user.id);
-  if (!r.ok) {
-    const names = await memberNames(c.get("workspaceId"), [r.holder]);
-    return c.json({ error: "chapter_locked", holder: r.holder, holder_name: names.get(r.holder) ?? null }, 423);
+/** Lấy/gia hạn khoá cho tab này (heartbeat từ editor). Tab khác đang giữ → 423. */
+chapterRoutes.post("/chapters/:chapterId/lock", async (c) => {
+  if (!(await acquireChapterLock(c.get("sdb"), c.req.param("chapterId"), c.get("lockHolder")))) {
+    throw chapterLockedError();
   }
-  return c.json({ holder: user.id, expires_at: new Date(Date.now() + LOCK_TTL_MS) });
+  return c.json({ expires_at: new Date(Date.now() + LOCK_TTL_MS) });
 });
 
-chapterRoutes.delete("/w/:ws/chapters/:chapterId/lock", requireWorkspace(), async (c) => {
-  await releaseChapterLock(c.get("sdb"), c.req.param("chapterId"), c.get("user").id);
+chapterRoutes.delete("/chapters/:chapterId/lock", async (c) => {
+  await releaseChapterLock(c.get("sdb"), c.req.param("chapterId"), c.get("lockHolder"));
   return c.body(null, 204);
 });

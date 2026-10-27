@@ -4,7 +4,7 @@ import { chapters, jobs, pages, scoped, series } from "@mtl/db";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { enqueueIngest, enqueueOcrRegion, enqueuePrepare, inJobTx, translateSettings } from "../src/jobs/enqueue.ts";
-import { call, db, seedWorkspace } from "./helpers.ts";
+import { call, db, seedUser } from "./helpers.ts";
 import { addSources } from "./worker-helpers.ts";
 
 type SeriesView = { id: string; source_lang: string; target_lang: string; page_format: string; settings_rev: number };
@@ -15,12 +15,12 @@ async function json<T>(res: Response, status: number): Promise<T> {
 }
 
 async function setup(label: string) {
-  const A = await seedWorkspace(label);
+  const A = await seedUser(label);
   const api = (path: string, init: { method?: string; body?: unknown } = {}) =>
-    call(`/api/w/${A.workspaceId}${path}`, { cookie: A.cookie, ...init });
+    call(`/api${path}`, { cookie: A.cookie, ...init });
   const create = async (body: Record<string, unknown>) =>
     json<SeriesView>(await api("/series", { method: "POST", body: { title: "T", ...body } }), 201);
-  return { A, api, create, sdb: scoped(db, A.workspaceId) };
+  return { A, api, create, sdb: scoped(db, A.userId) };
 }
 
 describe("series languages + page_format", () => {
@@ -65,14 +65,14 @@ describe("series languages + page_format", () => {
   it("commit không gửi mode → ingest theo page_format của series; mode tường minh vẫn override", async () => {
     const { A, sdb } = await setup("ser-ingest");
     await sdb.update(series, eq(series.id, A.seriesId), { pageFormat: "pages" });
-    await addSources(A.workspaceId, A.chapterId, 2);
-    const { job } = await inJobTx((tx) => enqueueIngest(tx, A.workspaceId, A.chapterId));
+    await addSources(A.userId, A.chapterId, 2);
+    const { job } = await inJobTx((tx) => enqueueIngest(tx, A.userId, A.chapterId));
     expect(job.payload).toMatchObject({ type: "chapter.ingest", mode: "pages" });
     expect((await sdb.byId(chapters, A.chapterId)).ingestMode).toBe("pages");
 
     const ch2 = await sdb.insert(chapters, { seriesId: A.seriesId, number: "2" });
-    await addSources(A.workspaceId, ch2.id, 1);
-    const { job: j2 } = await inJobTx((tx) => enqueueIngest(tx, A.workspaceId, ch2.id, "strip"));
+    await addSources(A.userId, ch2.id, 1);
+    const { job: j2 } = await inJobTx((tx) => enqueueIngest(tx, A.userId, ch2.id, "strip"));
     expect(j2.payload).toMatchObject({ mode: "strip" });
   });
 
@@ -84,7 +84,7 @@ describe("series languages + page_format", () => {
       ord: 0,
       width: 800,
       height: 1200,
-      originalKey: `ws/${A.workspaceId}/x.png`,
+      originalKey: `u/${A.userId}/x.png`,
       originalSha256: "ab".repeat(32),
     });
     // Thứ tự đọc theo mode chương đã ingest (chapters.ingest_mode), không theo page_format hiện tại của series.
@@ -105,7 +105,7 @@ describe("series languages + page_format", () => {
 
     const [s] = await sdb.update(series, eq(series.id, A.seriesId), { sourceLang: "ja", targetLang: "en" });
     const { job } = await inJobTx((tx) =>
-      enqueueOcrRegion(tx, A.workspaceId, { type: "page.ocr_region", page_id: page.id, bbox: [0, 0, 10, 10] }),
+      enqueueOcrRegion(tx, A.userId, { type: "page.ocr_region", page_id: page.id, bbox: [0, 0, 10, 10] }),
     );
     expect(job.payload).toMatchObject({ source_lang: "ja", target_lang: "en" });
 

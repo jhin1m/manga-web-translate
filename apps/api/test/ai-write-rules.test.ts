@@ -6,15 +6,15 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { inJobTx } from "../src/jobs/enqueue.ts";
 import { HISTORY_KEEP, writeAiState } from "../src/jobs/page-state-writer.ts";
 import { acquireChapterLock, assertChapterLock, isChapterLocked, releaseChapterLock } from "../src/lib/chapter-lock.ts";
-import { db, seedWorkspace } from "./helpers.ts";
+import { db, seedUser } from "./helpers.ts";
 import { aiState, SHA } from "./worker-helpers.ts";
 
-type Seed = Awaited<ReturnType<typeof seedWorkspace>>;
+type Seed = Awaited<ReturnType<typeof seedUser>>;
 let A: Seed;
 let ord = 0;
 
 async function newPage() {
-  const sdb = scoped(db, A.workspaceId);
+  const sdb = scoped(db, A.userId);
   const id = pageId(A.chapterId, 1, ord++);
   await sdb.insert(pages, {
     id,
@@ -22,7 +22,7 @@ async function newPage() {
     ord,
     width: 720,
     height: 3000,
-    originalKey: `ws/${A.workspaceId}/x/${id}.png`,
+    originalKey: `u/${A.userId}/x/${id}.png`,
     originalSha256: SHA,
   });
   await sdb.insert(pageStates, { pageId: id, state: emptyPageState(720, 3000) });
@@ -32,7 +32,7 @@ async function newPage() {
 const write = (id: string, text: string, locked = false) =>
   inJobTx((tx) =>
     writeAiState(tx, {
-      workspaceId: A.workspaceId,
+      userId: A.userId,
       pageId: id,
       aiState: aiState(720, 3000, text),
       actor: "job:test",
@@ -42,7 +42,7 @@ const write = (id: string, text: string, locked = false) =>
 const stateOf = async (id: string) => (await db.select().from(pageStates).where(eq(pageStates.pageId, id)))[0];
 
 beforeAll(async () => {
-  A = await seedWorkspace("aiw");
+  A = await seedUser("aiw");
 });
 
 describe("AI write rules", () => {
@@ -87,23 +87,26 @@ describe("AI write rules", () => {
 
 describe("chapter lock", () => {
   it("one holder at a time; non-holders get 423; release frees it", async () => {
-    const sdb = scoped(db, A.workspaceId);
-    expect(await acquireChapterLock(sdb, A.chapterId, "u1")).toEqual({ ok: true });
-    expect(await acquireChapterLock(sdb, A.chapterId, "u2")).toEqual({ ok: false, holder: "u1" });
+    const sdb = scoped(db, A.userId);
+    expect(await acquireChapterLock(sdb, A.chapterId, "u1")).toBe(true);
+    expect(await acquireChapterLock(sdb, A.chapterId, "u2")).toBe(false);
     await expect(assertChapterLock(sdb, A.chapterId, "u2")).rejects.toMatchObject({ status: 423 });
     await expect(assertChapterLock(sdb, A.chapterId, "u1")).resolves.toBeUndefined();
     const [ch] = await db.select().from(chapters).where(eq(chapters.id, A.chapterId));
     expect(isChapterLocked(ch as NonNullable<typeof ch>)).toBe(true);
+    // Holder khác (tab khác) nhả không ảnh hưởng; đúng holder nhả mới tự do.
+    await releaseChapterLock(sdb, A.chapterId, "u2");
+    expect(await acquireChapterLock(sdb, A.chapterId, "u2")).toBe(false);
     await releaseChapterLock(sdb, A.chapterId, "u1");
-    expect(await acquireChapterLock(sdb, A.chapterId, "u2")).toEqual({ ok: true });
+    expect(await acquireChapterLock(sdb, A.chapterId, "u2")).toBe(true);
   });
 
   it("an expired lock can be taken over", async () => {
-    const sdb = scoped(db, A.workspaceId);
+    const sdb = scoped(db, A.userId);
     await db
       .update(chapters)
       .set({ lockedBy: "old", lockedAt: new Date(Date.now() - 16 * 60 * 1000) })
       .where(eq(chapters.id, A.chapterId));
-    expect(await acquireChapterLock(sdb, A.chapterId, "u3")).toEqual({ ok: true });
+    expect(await acquireChapterLock(sdb, A.chapterId, "u3")).toBe(true);
   });
 });

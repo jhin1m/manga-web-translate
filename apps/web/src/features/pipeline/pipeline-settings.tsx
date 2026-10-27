@@ -1,8 +1,7 @@
 /**
- * Cài đặt nhóm → tab Pipeline: detector, OCR engine theo ngôn ngữ nguồn, inpainter, model hiệu đính; ngưỡng / nới
+ * Cài đặt chung → tab Pipeline: detector, OCR engine theo ngôn ngữ nguồn, inpainter, model hiệu đính; ngưỡng / nới
  * mask / cỡ vùng xoá chữ gom ở "Nâng cao". Mỗi option: nhãn tiếng Việt + thuật ngữ gốc + tooltip (dấu ?).
  * Có hiệu lực từ lần chạy sau (Bước 1, xoá chữ lại, OCR vùng, AI hiệu đính); job đang chờ giữ cài đặt cũ.
- * Owner/admin sửa, thành viên chỉ xem.
  */
 import {
   DEFAULT_PIPELINE_SETTINGS,
@@ -21,7 +20,7 @@ import {
 } from "@mtl/shared";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { type ReactNode, useEffect, useRef, useState } from "react";
-import { api, errorMessage, wsPath } from "../../lib/api.ts";
+import { api, errorMessage } from "../../lib/api.ts";
 
 const DETECTOR_LABEL: Record<(typeof TEXT_DETECTORS)[number], string> = {
   rtdetr_v2_comic: "RT-DETR v2 comic — bóng thoại + chữ (mặc định)",
@@ -71,11 +70,10 @@ function Group(props: { legend: string; children: ReactNode }) {
   );
 }
 
-export function PipelineSettingsForm(props: { ws: string; value: PipelineSettings; canManage: boolean }) {
-  const { ws, canManage } = props;
+export function PipelineSettingsForm(props: { value: PipelineSettings }) {
   const qc = useQueryClient();
   const [f, setF] = useState<PipelineSettings>(props.value);
-  // Giá trị server đổi (lưu xong, người khác lưu): chỉ nạp lại khi form chưa sửa dở — không đè chỉnh sửa đang làm.
+  // Giá trị server đổi (lưu xong, tab khác lưu): chỉ nạp lại khi form chưa sửa dở — không đè chỉnh sửa đang làm.
   const base = useRef(props.value);
   useEffect(() => {
     setF((cur) => (JSON.stringify(cur) === JSON.stringify(base.current) ? props.value : cur));
@@ -85,8 +83,8 @@ export function PipelineSettingsForm(props: { ws: string; value: PipelineSetting
   const set = <K extends keyof PipelineSettings>(k: K, v: PipelineSettings[K]) => setF((s) => ({ ...s, [k]: v }));
   const save = useMutation({
     mutationFn: (pipeline: PipelineSettings) =>
-      api<{ pipeline: PipelineSettings }>(wsPath(ws, "/settings/pipeline"), { method: "PUT", body: { pipeline } }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["workspace", ws] }),
+      api<{ pipeline: PipelineSettings }>("/api/settings/pipeline", { method: "PUT", body: { pipeline } }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["me"] }),
   });
   const dirty = JSON.stringify(f) !== JSON.stringify(props.value);
 
@@ -102,11 +100,10 @@ export function PipelineSettingsForm(props: { ws: string; value: PipelineSetting
       }}
     >
       <p className="muted small">
-        Áp dụng cho mọi series của nhóm từ lần chạy sau (Bước 1, xoá chữ lại, OCR vùng tự vẽ, AI hiệu đính). Chương đã
-        xử lý không tự chạy lại.
-        {!canManage && " Chỉ chủ nhóm / quản trị viên sửa được."}
+        Áp dụng cho mọi series của bạn từ lần chạy sau (Bước 1, xoá chữ lại, OCR vùng tự vẽ, AI hiệu đính). Chương đã xử
+        lý không tự chạy lại.
       </p>
-      <fieldset disabled={!canManage || save.isPending} className="pipe-fields">
+      <fieldset disabled={save.isPending} className="pipe-fields">
         <Group legend="Phát hiện chữ">
           <Term
             htmlFor="p-detector"
@@ -264,31 +261,29 @@ export function PipelineSettingsForm(props: { ws: string; value: PipelineSetting
           </div>
         </details>
       </fieldset>
-      {canManage && (
-        <div className="row">
-          <button type="submit" className="btn-primary" disabled={!dirty || save.isPending}>
-            {save.isPending ? "Đang lưu…" : "Lưu cài đặt pipeline"}
-          </button>
-          <button
-            type="button"
-            className="btn-ghost"
-            disabled={JSON.stringify(f) === JSON.stringify(DEFAULT_PIPELINE_SETTINGS)}
-            onClick={() => setF(structuredClone(DEFAULT_PIPELINE_SETTINGS))}
-          >
-            Về mặc định
-          </button>
-          {save.isSuccess && !dirty && (
-            <span className="muted small" role="status">
-              Đã lưu.
-            </span>
-          )}
-          {save.isError && (
-            <span className="error" role="alert">
-              {errorMessage(save.error)}
-            </span>
-          )}
-        </div>
-      )}
+      <div className="row">
+        <button type="submit" className="btn-primary" disabled={!dirty || save.isPending}>
+          {save.isPending ? "Đang lưu…" : "Lưu cài đặt pipeline"}
+        </button>
+        <button
+          type="button"
+          className="btn-ghost"
+          disabled={JSON.stringify(f) === JSON.stringify(DEFAULT_PIPELINE_SETTINGS)}
+          onClick={() => setF(structuredClone(DEFAULT_PIPELINE_SETTINGS))}
+        >
+          Về mặc định
+        </button>
+        {save.isSuccess && !dirty && (
+          <span className="muted small" role="status">
+            Đã lưu.
+          </span>
+        )}
+        {save.isError && (
+          <span className="error" role="alert">
+            {errorMessage(save.error)}
+          </span>
+        )}
+      </div>
     </form>
   );
 }

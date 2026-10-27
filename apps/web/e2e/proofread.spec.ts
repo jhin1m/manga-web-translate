@@ -6,25 +6,23 @@ import { expect, test } from "@playwright/test";
 import { runFakeWorker } from "./fake-worker.ts";
 import { apiReadyChapter, login, openPanel, state } from "./helpers.ts";
 
-const ws = state.workspaceId;
-
 test("run AI proofread, accept a suggestion through the normal edit path, undo, dismiss", async ({ page }) => {
   const pageErrors: string[] = [];
   page.on("pageerror", (e) => pageErrors.push(e.message));
   await login(page);
   const chapterId = await apiReadyChapter(page, "4101");
-  const pages = (await (await page.request.get(`/api/w/${ws}/chapters/${chapterId}/pages`)).json()) as {
+  const pages = (await (await page.request.get(`/api/chapters/${chapterId}/pages`)).json()) as {
     pages: { id: string }[];
   };
   const pageId = pages.pages[0]?.id ?? "";
   const translation = async () =>
     (
-      (await (await page.request.get(`/api/w/${ws}/pages/${pageId}`)).json()) as {
+      (await (await page.request.get(`/api/pages/${pageId}`)).json()) as {
         state: { regions: { translation: string }[] };
       }
     ).state.regions[0]?.translation;
 
-  await page.goto(`/w/${ws}/s/${state.seriesId}/c/${chapterId}`);
+  await page.goto(`/s/${state.seriesId}/c/${chapterId}`);
   await expect(page.locator(".ed-canvas canvas").first()).toBeVisible();
   const panel = await openPanel(page, "proofread");
   await panel.getByRole("button", { name: "Chạy AI hiệu đính" }).click();

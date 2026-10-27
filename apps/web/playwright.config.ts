@@ -20,7 +20,7 @@ export default defineConfig({
     {
       command: "pnpm --filter @mtl/api exec tsx src/index.ts",
       // 401 cũng tính là "đã lên" (Playwright chấp nhận 2xx–403).
-      url: `${API_URL}/api/me/workspaces`,
+      url: `${API_URL}/api/me`,
       env: { ...E2E_ENV, NODE_ENV: "development" },
       reuseExistingServer: false,
       timeout: 60_000,

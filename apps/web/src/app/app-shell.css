@@ -23,14 +23,6 @@
 .shell-brand:hover {
   text-decoration: none;
 }
-.shell-ws {
-  color: var(--c-fg-muted);
-}
-.shell-ws-select {
-  width: auto;
-  height: 32px;
-  color: var(--c-fg-muted);
-}
 .shell-menu {
   position: relative;
 }

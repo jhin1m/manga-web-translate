@@ -1,7 +1,7 @@
 /**
  * Form cài đặt dịch của series (chia nhóm Chung / Dịch / Font / Xưng hô): ngôn ngữ, định dạng truyện, kính ngữ, tier
  * model, giọng văn, chữ bỏ qua (watermark),
- * font mặc định (owner/admin tải font nhóm ngay trong dropdown), quy tắc xưng hô theo cặp nhân vật. Server tăng settings_rev khi trường ảnh hưởng dịch đổi. Kèm vùng
+ * font mặc định (tải font của bạn ngay trong dropdown), quy tắc xưng hô theo cặp nhân vật. Server tăng settings_rev khi trường ảnh hưởng dịch đổi. Kèm vùng
  * xoá series. Dùng ở `?tab=settings` của màn series.
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -12,10 +12,10 @@ import { loadFonts } from "../editor/fonts.ts";
 import {
   FONT_ACCEPT,
   fontKeys,
+  type UserFont,
   uploadCheckedFont,
   useBundledFontIds,
-  useWorkspaceFonts,
-  type WorkspaceFont,
+  useUserFonts,
 } from "../fonts/api.ts";
 import { fetchGlossary, glossaryKey } from "../glossary/api.ts";
 import {
@@ -46,7 +46,7 @@ const FONT_SLOTS: { slot: FontSlot; label: string; empty: string; hint?: string 
   { slot: "narration", label: "Dẫn truyện", empty: "Giống font thoại", hint: "Áp dụng cho chữ ngoài bóng." },
 ];
 
-/** Giá trị option "Tải font lên…" — không phải font id (font nhóm là `custom-…`, font gói sẵn là tên file). */
+/** Giá trị option "Tải font lên…" — không phải font id (font của bạn là `custom-…`, font gói sẵn là tên file). */
 const UPLOAD_OPTION = "__upload__";
 
 /** Vẽ tên font bằng chính font đó (FontFace family = font id); chưa nạp xong → font giao diện. */
@@ -67,20 +67,12 @@ const toForm = (s: Series): Form => ({
   llm_tier: s.llm_tier,
 });
 
-export function SeriesSettingsForm({
-  ws,
-  series,
-  canUploadFont,
-}: {
-  ws: string;
-  series: Series;
-  canUploadFont: boolean;
-}) {
+export function SeriesSettingsForm({ series }: { series: Series }) {
   const qc = useQueryClient();
   const [f, setF] = useState<Form>(() => toForm(series));
   const bundled = useBundledFontIds();
-  const custom = useWorkspaceFonts(ws);
-  // Nạp font gói sẵn + font nhóm vào trình duyệt để dropdown xem trước được (lỗi → chỉ mất preview).
+  const custom = useUserFonts();
+  // Nạp font gói sẵn + font của bạn vào trình duyệt để dropdown xem trước được (lỗi → chỉ mất preview).
   const customFonts = custom.data;
   useEffect(() => {
     loadFonts(customFonts && (() => Promise.resolve(customFonts))).catch(() => {});
@@ -90,12 +82,12 @@ export function SeriesSettingsForm({
   const ignore = parseIgnoreText(ignoreRaw);
   const glossaryScope = { seriesId: series.id };
   const glossary = useQuery({
-    queryKey: glossaryKey(ws, glossaryScope),
-    queryFn: () => fetchGlossary(ws, glossaryScope),
+    queryKey: glossaryKey(glossaryScope),
+    queryFn: () => fetchGlossary(glossaryScope),
   });
   const langWarning = langChangeWarning(series, f, glossary.data?.entries.length);
   const save = useMutation({
-    mutationFn: () => patchSeries(ws, series.id, { ...f, ignore_text: ignore.list }),
+    mutationFn: () => patchSeries(series.id, { ...f, ignore_text: ignore.list }),
     onSuccess: (s) => {
       setSaved(
         s.settings_rev !== series.settings_rev || s.glossary_rev !== series.glossary_rev
@@ -103,10 +95,10 @@ export function SeriesSettingsForm({
           : "Đã lưu.",
       );
       setIgnoreRaw(s.ignore_text.join("\n"));
-      void qc.invalidateQueries({ queryKey: ["series", ws] });
+      void qc.invalidateQueries({ queryKey: ["series"] });
       // Key glossary series không chứa cặp → làm mới để mục kế thừa / Áp glossary theo cặp mới.
       if (s.source_lang !== series.source_lang || s.target_lang !== series.target_lang) {
-        void qc.invalidateQueries({ queryKey: ["glossary", ws] });
+        void qc.invalidateQueries({ queryKey: ["glossary"] });
       }
     },
   });
@@ -124,11 +116,11 @@ export function SeriesSettingsForm({
   const fileInput = useRef<HTMLInputElement>(null);
   const uploadSlot = useRef<FontSlot>("dialogue");
   const upload = useMutation({
-    mutationFn: ({ file }: { file: File; slot: FontSlot }) => uploadCheckedFont(ws, file, custom.data?.length ?? 0),
+    mutationFn: ({ file }: { file: File; slot: FontSlot }) => uploadCheckedFont(file, custom.data?.length ?? 0),
     onSuccess: (font, { slot }) => {
       // Thêm ngay vào danh sách để select có option khớp giá trị mới trước khi refetch xong.
-      qc.setQueryData<WorkspaceFont[]>(fontKeys.list(ws), (cur) => [...(cur ?? []), font]);
-      void qc.invalidateQueries({ queryKey: fontKeys.list(ws) });
+      qc.setQueryData<UserFont[]>(fontKeys.list(), (cur) => [...(cur ?? []), font]);
+      void qc.invalidateQueries({ queryKey: fontKeys.list() });
       setFont(slot, font.id);
     },
   });
@@ -256,7 +248,6 @@ export function SeriesSettingsForm({
         )}
         {series.ignore_text.length > 0 && (
           <IgnoreApplySection
-            ws={ws}
             seriesId={series.id}
             disabledReason={
               ignoreRaw !== series.ignore_text.join("\n") ? "Lưu cài đặt trước để áp danh sách mới." : null
@@ -290,7 +281,7 @@ export function SeriesSettingsForm({
                   </option>
                 ))}
                 {(custom.data ?? []).length > 0 && (
-                  <optgroup label="Font của nhóm">
+                  <optgroup label="Font của bạn">
                     {(custom.data ?? []).map((font) => (
                       <option key={font.id} value={font.id} style={fontPreview(font.id)}>
                         {font.name}
@@ -298,26 +289,24 @@ export function SeriesSettingsForm({
                     ))}
                   </optgroup>
                 )}
-                {canUploadFont && <option value={UPLOAD_OPTION}>+ Tải font lên…</option>}
+                <option value={UPLOAD_OPTION}>+ Tải font lên…</option>
               </select>
               {hint && <span className="hint">{hint}</span>}
             </div>
           ))}
         </div>
-        {canUploadFont && (
-          <input
-            ref={fileInput}
-            type="file"
-            hidden
-            accept={FONT_ACCEPT}
-            aria-label="Chọn file font"
-            onChange={(e) => {
-              const file = e.target.files?.[0];
-              e.target.value = "";
-              if (file) upload.mutate({ file, slot: uploadSlot.current });
-            }}
-          />
-        )}
+        <input
+          ref={fileInput}
+          type="file"
+          hidden
+          accept={FONT_ACCEPT}
+          aria-label="Chọn file font"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            e.target.value = "";
+            if (file) upload.mutate({ file, slot: uploadSlot.current });
+          }}
+        />
         {upload.isPending && <span className="hint">Đang tải font lên…</span>}
         {upload.error && (
           <span className="small error" role="alert">
@@ -326,7 +315,7 @@ export function SeriesSettingsForm({
         )}
         {upload.isSuccess && (
           <span className="hint" role="status">
-            Đã thêm font {upload.data.name} vào font của nhóm
+            Đã thêm font {upload.data.name} vào font của bạn
             {upload.data.vi_complete ? "" : " (thiếu một số dấu tiếng Việt)"}. Bấm Lưu cài đặt để dùng làm mặc định.
           </span>
         )}
@@ -429,15 +418,15 @@ export function SeriesSettingsForm({
 }
 
 /** Xoá series: gõ đúng tên để mở khoá nút (xoá luôn mọi chương + glossary riêng, không hoàn tác). */
-export function DeleteSeries({ ws, series }: { ws: string; series: Series & { chapters?: unknown[] } }) {
+export function DeleteSeries({ series }: { series: Series & { chapters?: unknown[] } }) {
   const qc = useQueryClient();
   const navigate = useNavigate();
   const [typed, setTyped] = useState("");
   const del = useMutation({
-    mutationFn: () => deleteSeries(ws, series.id),
+    mutationFn: () => deleteSeries(series.id),
     onSuccess: () => {
-      qc.removeQueries({ queryKey: seriesKeys.detail(ws, series.id) });
-      void qc.invalidateQueries({ queryKey: seriesKeys.list(ws) });
+      qc.removeQueries({ queryKey: seriesKeys.detail(series.id) });
+      void qc.invalidateQueries({ queryKey: seriesKeys.list() });
       void navigate({ to: "/" });
     },
   });

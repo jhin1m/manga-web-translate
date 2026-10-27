@@ -7,17 +7,18 @@
  * `ai_update_available` giữ nguyên khi người sửa lưu — chỉ tắt bằng ack sau khi đã xem kết quả AI mới.
  */
 import { chapters, pageStateHistory, pageStates, pages, type Scoped } from "@mtl/db";
-import { BBox, PageState, storageKeys } from "@mtl/shared";
+import { BBox, PageState, storageKeys, userPrefix } from "@mtl/shared";
 import { and, eq, inArray, lt, type SQL } from "drizzle-orm";
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { v7 as uuidv7 } from "uuid";
 import { z } from "zod";
+import { assertQuota } from "../billing/user-quota.ts";
 import { enqueueOcrRegion, enqueueReinpaint, inJobTx } from "../jobs/enqueue.ts";
 import { HISTORY_KEEP } from "../jobs/page-state-writer.ts";
 import { assertChapterLock } from "../lib/chapter-lock.ts";
 import { parseJson } from "../lib/validate.ts";
-import { type AppEnv, requireWorkspace } from "../middleware/workspace.ts";
+import type { AppEnv } from "../middleware/user.ts";
 import { head, MAX_GET_TTL_S, presignGet, presignPost, readPrefix } from "../storage.ts";
 import { jobView } from "./jobs.ts";
 
@@ -67,15 +68,15 @@ export async function pruneHistory(tx: Scoped, pageId: string) {
 export const pageStateRoutes = new Hono<AppEnv>();
 
 /** State + ai_state + ảnh (presigned GET TTL ngắn) cho editor. */
-pageStateRoutes.get("/w/:ws/pages/:pageId", requireWorkspace(), async (c) => {
+pageStateRoutes.get("/pages/:pageId", async (c) => {
   const sdb = c.get("sdb");
-  const ws = c.get("workspaceId");
+  const userId = c.get("userId");
   const page = await sdb.byId(pages, c.req.param("pageId"), "page");
   const st = await stateOf(sdb, page.id);
   const ttl = MAX_GET_TTL_S;
   const [original, clean] = await Promise.all([
     presignGet(page.originalKey, ttl),
-    page.cleanRev !== null ? presignGet(storageKeys.clean(ws, page.id, page.cleanRev), ttl) : null,
+    page.cleanRev !== null ? presignGet(storageKeys.clean(userId, page.id, page.cleanRev), ttl) : null,
   ]);
   c.header("ETag", `"${st.version}"`);
   return c.json({
@@ -103,7 +104,7 @@ pageStateRoutes.get("/w/:ws/pages/:pageId", requireWorkspace(), async (c) => {
  * State mọi page của chương (màn chương vẽ cả strip): theo `ord`, KHÔNG kèm `ai_state` (lấy theo page khi cần).
  * 2 truy vấn: pages của chương rồi page_states theo danh sách id.
  */
-pageStateRoutes.get("/w/:ws/chapters/:chapterId/states", requireWorkspace(), async (c) => {
+pageStateRoutes.get("/chapters/:chapterId/states", async (c) => {
   const sdb = c.get("sdb");
   const ch = await sdb.byId(chapters, c.req.param("chapterId"), "chapter");
   const rows = await sdb.select(pages, eq(pages.chapterId, ch.id));
@@ -142,13 +143,13 @@ pageStateRoutes.get("/w/:ws/chapters/:chapterId/states", requireWorkspace(), asy
  * Ghi state của người sửa. Điều kiện version nằm trong WHERE của UPDATE → hai lần ghi đua nhau (hoặc job AI ghi
  * giữa chừng, cũng +1 version) thì đúng một bên thắng, bên kia nhận 409.
  */
-pageStateRoutes.put("/w/:ws/pages/:pageId/state", requireWorkspace(), async (c) => {
+pageStateRoutes.put("/pages/:pageId/state", async (c) => {
   const sdb = c.get("sdb");
   const user = c.get("user");
   const page = await sdb.byId(pages, c.req.param("pageId"), "page");
   const expected = ifMatchVersion(c.req.header("if-match"));
   const body = await parseJson(c, PutStateBody);
-  await assertChapterLock(sdb, page.chapterId, user.id);
+  await assertChapterLock(sdb, page.chapterId, c.get("lockHolder"));
   if (body.state.size.w !== page.width || body.state.size.h !== page.height) {
     throw httpError(400, { error: "size_mismatch", message: "state.size khác kích thước page" });
   }
@@ -175,7 +176,7 @@ pageStateRoutes.put("/w/:ws/pages/:pageId/state", requireWorkspace(), async (c) 
 });
 
 /** Đã xem kết quả AI mới → tắt cờ. Chỉ tắt khi đúng ai_rev đã xem (AI ghi bản mới hơn giữa chừng thì cờ giữ nguyên). */
-pageStateRoutes.post("/w/:ws/pages/:pageId/ai-update/ack", requireWorkspace(), async (c) => {
+pageStateRoutes.post("/pages/:pageId/ai-update/ack", async (c) => {
   const body = await parseJson(c, AckBody);
   const sdb = c.get("sdb");
   const page = await sdb.byId(pages, c.req.param("pageId"), "page");
@@ -189,10 +190,10 @@ pageStateRoutes.post("/w/:ws/pages/:pageId/ai-update/ack", requireWorkspace(), a
 });
 
 /** Presigned POST cho mask người vẽ (PNG, ≤ 5MB); key bất biến `user-mask/{uuid}.png` của page. */
-pageStateRoutes.post("/w/:ws/pages/:pageId/mask-upload", requireWorkspace(), async (c) => {
+pageStateRoutes.post("/pages/:pageId/mask-upload", async (c) => {
   const sdb = c.get("sdb");
   const page = await sdb.byId(pages, c.req.param("pageId"), "page");
-  const key = storageKeys.userMask(c.get("workspaceId"), page.id, uuidv7());
+  const key = storageKeys.userMask(c.get("userId"), page.id, uuidv7());
   const post = await presignPost(key, "image/png", MAX_USER_MASK_BYTES, MASK_POST_TTL_S);
   return c.json({ key, url: post.url, fields: post.fields, expires_at: post.expiresAt }, 201);
 });
@@ -201,17 +202,20 @@ pageStateRoutes.post("/w/:ws/pages/:pageId/mask-upload", requireWorkspace(), asy
  * Re-inpaint theo mask đã upload. Cần khoá chương; `base_clean_rev` phải là rev ảnh sạch hiện tại (người khác
  * vừa reinpaint → 409, tránh dựng trên ảnh cũ). Mask phải tồn tại, là PNG, ≤ 5MB.
  */
-pageStateRoutes.post("/w/:ws/pages/:pageId/reinpaint", requireWorkspace(), async (c) => {
+pageStateRoutes.post("/pages/:pageId/reinpaint", async (c) => {
   const body = await parseJson(c, ReinpaintBody);
   const sdb = c.get("sdb");
-  const ws = c.get("workspaceId");
+  const userId = c.get("userId");
   const page = await sdb.byId(pages, c.req.param("pageId"), "page");
-  await assertChapterLock(sdb, page.chapterId, c.get("user").id);
+  await assertChapterLock(sdb, page.chapterId, c.get("lockHolder"));
   if (page.cleanRev === null) throw httpError(409, { error: "page_not_prepared" });
   if (page.cleanRev !== body.base_clean_rev) {
     throw httpError(409, { error: "clean_rev_changed", clean_rev: page.cleanRev });
   }
-  if (!body.user_mask_key.startsWith(`ws/${ws}/pg/${page.id}/user-mask/`) || body.user_mask_key.includes("..")) {
+  if (
+    !body.user_mask_key.startsWith(`${userPrefix(userId)}pg/${page.id}/user-mask/`) ||
+    body.user_mask_key.includes("..")
+  ) {
     throw httpError(400, { error: "invalid_mask_key" });
   }
   const h = await head(body.user_mask_key);
@@ -222,7 +226,7 @@ pageStateRoutes.post("/w/:ws/pages/:pageId/reinpaint", requireWorkspace(), async
   }
   const [x, y] = body.offset;
   const { job, created } = await inJobTx((tx) =>
-    enqueueReinpaint(tx, ws, {
+    enqueueReinpaint(tx, userId, {
       type: "page.reinpaint",
       page_id: page.id,
       base_clean_rev: body.base_clean_rev,
@@ -234,7 +238,7 @@ pageStateRoutes.post("/w/:ws/pages/:pageId/reinpaint", requireWorkspace(), async
 });
 
 /** OCR + dịch 1 vùng người kéo; editor poll `/jobs/:id` rồi tự chèn region (không ghi state ở server). */
-pageStateRoutes.post("/w/:ws/pages/:pageId/ocr-region", requireWorkspace(), async (c) => {
+pageStateRoutes.post("/pages/:pageId/ocr-region", async (c) => {
   const body = await parseJson(c, OcrRegionBody);
   const sdb = c.get("sdb");
   const page = await sdb.byId(pages, c.req.param("pageId"), "page");
@@ -242,8 +246,10 @@ pageStateRoutes.post("/w/:ws/pages/:pageId/ocr-region", requireWorkspace(), asyn
   if (w < 4 || h < 4 || x < 0 || y < 0 || x + w > page.width || y + h > page.height) {
     throw httpError(400, { error: "bbox_out_of_page" });
   }
-  const { job, created } = await inJobTx((tx) =>
-    enqueueOcrRegion(tx, c.get("workspaceId"), { type: "page.ocr_region", page_id: page.id, bbox: body.bbox }),
-  );
+  // OCR vùng (engine theo cài đặt) + dịch bằng LLM → luôn tốn tiền: kiểm hạn mức.
+  const { job, created } = await inJobTx(async (tx) => {
+    await assertQuota(tx, c.get("userId"));
+    return enqueueOcrRegion(tx, c.get("userId"), { type: "page.ocr_region", page_id: page.id, bbox: body.bbox });
+  });
   return c.json({ job: jobView(job), created }, 202);
 });

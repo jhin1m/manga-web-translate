@@ -1,13 +1,13 @@
-/** `fonts` trong inputs translate/export: chỉ font tuỳ chỉnh có thật của workspace, font đã xoá bị bỏ. */
-import { type jobs, pageStates, pages, scoped, series, workspaceFonts } from "@mtl/db";
+/** `fonts` trong inputs translate/export: chỉ font tuỳ chỉnh có thật của người dùng, font đã xoá bị bỏ. */
+import { type jobs, pageStates, pages, scoped, series, userFonts } from "@mtl/db";
 import { ExportInputs, emptyPageState, pageId, storageKeys, TranslateInputs } from "@mtl/shared";
 import { eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { buildInputs } from "../src/jobs/claim-inputs.ts";
-import { db, seedWorkspace } from "./helpers.ts";
+import { db, seedUser } from "./helpers.ts";
 import { aiState, SHA } from "./worker-helpers.ts";
 
-type Seed = Awaited<ReturnType<typeof seedWorkspace>>;
+type Seed = Awaited<ReturnType<typeof seedUser>>;
 type Job = typeof jobs.$inferSelect;
 let A: Seed;
 let B: Seed;
@@ -21,7 +21,7 @@ const sha = (c: string) => c.repeat(64);
 const font = (fontId: string, ws: Seed, hex: string) => ({
   fontId,
   name: fontId,
-  fileKey: `ws/${ws.workspaceId}/fonts/${fontId}`,
+  fileKey: `u/${ws.userId}/fonts/${fontId}`,
   sha256: sha(hex),
   bytes: 10,
   unitsPerEm: 1000,
@@ -32,8 +32,7 @@ const font = (fontId: string, ws: Seed, hex: string) => ({
   missing: [],
 });
 
-const job = (ws: Seed, payload: Record<string, unknown>) =>
-  ({ workspaceId: ws.workspaceId, payload }) as unknown as Job;
+const job = (ws: Seed, payload: Record<string, unknown>) => ({ userId: ws.userId, payload }) as unknown as Job;
 
 const exportJob = (ws: Seed) =>
   job(ws, {
@@ -66,7 +65,7 @@ const translateJob = (ws: Seed, pageIds: string[], s: ReturnType<typeof settings
   });
 
 async function seedPage(ws: Seed, boxFonts: string[], ready = true) {
-  const sdb = scoped(db, ws.workspaceId);
+  const sdb = scoped(db, ws.userId);
   const id = pageId(ws.chapterId, 1, 0);
   await sdb.insert(pages, {
     id,
@@ -74,7 +73,7 @@ async function seedPage(ws: Seed, boxFonts: string[], ready = true) {
     ord: 0,
     width: 400,
     height: 900,
-    originalKey: storageKeys.ingestPage(ws.workspaceId, ws.chapterId, 1, 0),
+    originalKey: storageKeys.ingestPage(ws.userId, ws.chapterId, 1, 0),
     originalSha256: SHA,
     cleanRev: 1,
     status: ready ? "ready" : "failed",
@@ -111,10 +110,10 @@ async function seedPage(ws: Seed, boxFonts: string[], ready = true) {
 }
 
 beforeAll(async () => {
-  [A, B] = await Promise.all([seedWorkspace("cf-a"), seedWorkspace("cf-b")]);
-  await scoped(db, A.workspaceId).insert(workspaceFonts, font(FONT_A, A, "a"));
-  await scoped(db, A.workspaceId).insert(workspaceFonts, font(FONT_A2, A, "c"));
-  await scoped(db, B.workspaceId).insert(workspaceFonts, font(FONT_B, B, "b"));
+  [A, B] = await Promise.all([seedUser("cf-a"), seedUser("cf-b")]);
+  await scoped(db, A.userId).insert(userFonts, font(FONT_A, A, "a"));
+  await scoped(db, A.userId).insert(userFonts, font(FONT_A2, A, "c"));
+  await scoped(db, B.userId).insert(userFonts, font(FONT_B, B, "b"));
 });
 
 describe("translate inputs fonts", () => {
@@ -124,11 +123,11 @@ describe("translate inputs fonts", () => {
     );
     expect(inputs.fonts).toHaveLength(1);
     expect(inputs.fonts?.[0]).toMatchObject({ id: FONT_A, sha256: sha("a") });
-    expect(inputs.fonts?.[0]?.url).toContain(`ws/${A.workspaceId}/fonts/${FONT_A}`);
+    expect(inputs.fonts?.[0]?.url).toContain(`u/${A.userId}/fonts/${FONT_A}`);
     expect(inputs.fonts?.[0]?.url).toContain("X-Amz-Signature");
   });
 
-  it("covers dialogue and narration fonts, and omits other workspaces' and deleted fonts", async () => {
+  it("covers dialogue and narration fonts, and omits other users' and deleted fonts", async () => {
     const both = TranslateInputs.parse(await buildInputs(db, translateJob(A, [], settings(FONT_A, FONT_A2))));
     expect(both.fonts?.map((f) => f.id)).toEqual([FONT_A2, FONT_A]);
     const foreign = TranslateInputs.parse(await buildInputs(db, translateJob(A, [], settings(FONT_B, GONE))));
@@ -137,7 +136,7 @@ describe("translate inputs fonts", () => {
 });
 
 describe("export inputs fonts", () => {
-  it("lists fonts used by page boxes and series defaults, only of this workspace, without deleted ones", async () => {
+  it("lists fonts used by page boxes and series defaults, only of this user, without deleted ones", async () => {
     await seedPage(A, [FONT_A, "Bangers-Regular", GONE, FONT_B, FONT_A]);
     await db
       .update(series)

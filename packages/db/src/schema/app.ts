@@ -1,7 +1,7 @@
 /**
- * Bảng nghiệp vụ. Mọi bảng có workspace_id (FK organization, cascade); quan hệ cha-con dùng FK kép
- * (workspace_id, parent_id) → bản ghi con không thể trỏ sang cha của workspace khác, kể cả khi code sai.
- * Mọi truy vấn từ route đi qua `scoped(db, wsId)` (xem ../scoped.ts).
+ * Bảng nghiệp vụ. Mọi bảng có user_id (FK user, cascade); quan hệ cha-con dùng FK kép (user_id, parent_id) → bản
+ * ghi con không thể trỏ sang cha của người dùng khác, kể cả khi code sai.
+ * Mọi truy vấn từ route đi qua `scoped(db, userId)` (xem ../scoped.ts).
  */
 import {
   ACTIVE_JOB_STATUSES,
@@ -40,7 +40,7 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
-import { organization } from "./auth.ts";
+import { user } from "./auth.ts";
 import { idPk, inList, timestamps } from "./columns.ts";
 import { dispatches } from "./dispatches.ts";
 
@@ -48,30 +48,26 @@ type ChapterStatus = (typeof CHAPTER_STATUSES)[number];
 type PageStatus = (typeof PAGE_STATUSES)[number];
 type UsageKind = (typeof USAGE_KINDS)[number];
 
-const workspaceId = () =>
-  uuid("workspace_id")
+const userId = () =>
+  uuid("user_id")
     .notNull()
-    .references(() => organization.id, { onDelete: "cascade" });
+    .references(() => user.id, { onDelete: "cascade" });
 
-export const workspaceSettings = pgTable(
-  "workspace_settings",
-  {
-    workspaceId: uuid("workspace_id")
-      .primaryKey()
-      .references(() => organization.id, { onDelete: "cascade" }),
-    workerMode: text("worker_mode").$type<"mac" | "modal">().notNull().default("mac"),
-    /** Cài đặt pipeline (PipelineSettings, có thể thiếu key) — đọc qua `resolvePipelineSettings`; `{}` = mặc định. */
-    pipeline: jsonb("pipeline").$type<Partial<PipelineSettings>>().notNull().default({}),
-    ...timestamps,
-  },
-  (t) => [check("workspace_settings_worker_mode_chk", inList(sql`${t.workerMode}`, ["mac", "modal"]))],
-);
+/** Cài đặt chung của người dùng. Thiếu dòng = mặc định; PUT upsert. */
+export const userSettings = pgTable("user_settings", {
+  userId: uuid("user_id")
+    .primaryKey()
+    .references(() => user.id, { onDelete: "cascade" }),
+  /** Cài đặt pipeline (PipelineSettings, có thể thiếu key) — đọc qua `resolvePipelineSettings`; `{}` = mặc định. */
+  pipeline: jsonb("pipeline").$type<Partial<PipelineSettings>>().notNull().default({}),
+  ...timestamps,
+});
 
 export const series = pgTable(
   "series",
   {
     id: idPk(),
-    workspaceId: workspaceId(),
+    userId: userId(),
     title: text("title").notNull(),
     sourceLang: text("source_lang").notNull().default("ko"),
     targetLang: text("target_lang").notNull().default("vi"),
@@ -82,7 +78,7 @@ export const series = pgTable(
     llmTier: text("llm_tier").notNull().default("default"),
     /** Cách commit chương: strip (manhwa/manhua) hoặc pages (manga) — xem PAGE_FORMATS. */
     pageFormat: text("page_format").$type<PageFormat>().notNull().default("strip"),
-    /** Tăng khi sửa glossary của series (sửa entry cấp workspace → tăng mọi series cùng transaction). */
+    /** Tăng khi sửa glossary của series (sửa entry chung → tăng mọi series của người dùng cùng transaction). */
     glossaryRev: integer("glossary_rev").notNull().default(0),
     /** Tăng khi đổi cài đặt ảnh hưởng dịch/typeset. */
     settingsRev: integer("settings_rev").notNull().default(0),
@@ -91,8 +87,8 @@ export const series = pgTable(
     ...timestamps,
   },
   (t) => [
-    unique("series_ws_id_uq").on(t.workspaceId, t.id),
-    index("series_ws_idx").on(t.workspaceId),
+    unique("series_user_id_uq").on(t.userId, t.id),
+    index("series_user_idx").on(t.userId),
     check("series_page_format_chk", inList(sql`${t.pageFormat}`, PAGE_FORMATS)),
   ],
 );
@@ -101,7 +97,7 @@ export const chapters = pgTable(
   "chapters",
   {
     id: idPk(),
-    workspaceId: workspaceId(),
+    userId: userId(),
     seriesId: uuid("series_id").notNull(),
     number: numeric("number").notNull(),
     title: text("title").notNull().default(""),
@@ -114,10 +110,8 @@ export const chapters = pgTable(
     ...timestamps,
   },
   (t) => [
-    unique("chapters_ws_id_uq").on(t.workspaceId, t.id),
-    foreignKey({ columns: [t.workspaceId, t.seriesId], foreignColumns: [series.workspaceId, series.id] }).onDelete(
-      "cascade",
-    ),
+    unique("chapters_user_id_uq").on(t.userId, t.id),
+    foreignKey({ columns: [t.userId, t.seriesId], foreignColumns: [series.userId, series.id] }).onDelete("cascade"),
     index("chapters_series_idx").on(t.seriesId),
     check("chapters_status_chk", inList(sql`${t.status}`, CHAPTER_STATUSES)),
     check("chapters_ingest_mode_chk", inList(sql`${t.ingestMode}`, PAGE_FORMATS)),
@@ -128,7 +122,7 @@ export const sourceFiles = pgTable(
   "source_files",
   {
     id: idPk(),
-    workspaceId: workspaceId(),
+    userId: userId(),
     chapterId: uuid("chapter_id").notNull(),
     ord: integer("ord").notNull(),
     storageKey: text("storage_key").notNull().unique(),
@@ -143,7 +137,7 @@ export const sourceFiles = pgTable(
     ...timestamps,
   },
   (t) => [
-    foreignKey({ columns: [t.workspaceId, t.chapterId], foreignColumns: [chapters.workspaceId, chapters.id] }).onDelete(
+    foreignKey({ columns: [t.userId, t.chapterId], foreignColumns: [chapters.userId, chapters.id] }).onDelete(
       "cascade",
     ),
     index("source_files_chapter_idx").on(t.chapterId, t.ord),
@@ -159,7 +153,7 @@ export const seriesSkipImages = pgTable(
   "series_skip_images",
   {
     id: idPk(),
-    workspaceId: workspaceId(),
+    userId: userId(),
     seriesId: uuid("series_id").notNull(),
     dhash: text("dhash").notNull(),
     width: integer("width").notNull(),
@@ -171,22 +165,20 @@ export const seriesSkipImages = pgTable(
     ...timestamps,
   },
   (t) => [
-    foreignKey({ columns: [t.workspaceId, t.seriesId], foreignColumns: [series.workspaceId, series.id] }).onDelete(
-      "cascade",
-    ),
+    foreignKey({ columns: [t.userId, t.seriesId], foreignColumns: [series.userId, series.id] }).onDelete("cascade"),
     index("series_skip_images_series_idx").on(t.seriesId),
   ],
 );
 
 /**
- * Font tuỳ chỉnh của workspace (TTF/OTF đã qua kiểm tra). `font_id` (`custom-<8 hex>`) là định danh dùng chung ở
+ * Font tuỳ chỉnh của người dùng (TTF/OTF đã qua kiểm tra). `font_id` (`custom-<8 hex>`) là định danh dùng chung ở
  * series.default_fonts, TextBox.font_family và job; metrics đọc từ file lúc upload theo đúng quy tắc của worker.
  */
-export const workspaceFonts = pgTable(
-  "workspace_fonts",
+export const userFonts = pgTable(
+  "user_fonts",
   {
     id: idPk(),
-    workspaceId: workspaceId(),
+    userId: userId(),
     fontId: text("font_id").notNull().unique(),
     name: text("name").notNull(),
     fileKey: text("file_key").notNull(),
@@ -202,7 +194,7 @@ export const workspaceFonts = pgTable(
     createdBy: text("created_by"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [unique("workspace_fonts_ws_sha_uq").on(t.workspaceId, t.sha256)],
+  (t) => [unique("user_fonts_user_sha_uq").on(t.userId, t.sha256)],
 );
 
 export const pages = pgTable(
@@ -210,7 +202,7 @@ export const pages = pgTable(
   {
     /** Tất định: uuid v5(chapter_id, "{ingest_rev}:{ord}") — xem pageId() ở @mtl/shared. Không có default. */
     id: uuid("id").primaryKey(),
-    workspaceId: workspaceId(),
+    userId: userId(),
     chapterId: uuid("chapter_id").notNull(),
     ord: integer("ord").notNull(),
     width: integer("width").notNull(),
@@ -235,8 +227,8 @@ export const pages = pgTable(
     ...timestamps,
   },
   (t) => [
-    unique("pages_ws_id_uq").on(t.workspaceId, t.id),
-    foreignKey({ columns: [t.workspaceId, t.chapterId], foreignColumns: [chapters.workspaceId, chapters.id] }).onDelete(
+    unique("pages_user_id_uq").on(t.userId, t.id),
+    foreignKey({ columns: [t.userId, t.chapterId], foreignColumns: [chapters.userId, chapters.id] }).onDelete(
       "cascade",
     ),
     index("pages_chapter_idx").on(t.chapterId, t.ord),
@@ -248,7 +240,7 @@ export const pageStates = pgTable(
   "page_states",
   {
     pageId: uuid("page_id").primaryKey(),
-    workspaceId: workspaceId(),
+    userId: userId(),
     /** Không bao giờ reset — mọi lần ghi (AI hay người) +1. */
     version: bigint("version", { mode: "number" }).notNull().default(0),
     state: jsonb("state").$type<PageState>(),
@@ -260,9 +252,7 @@ export const pageStates = pgTable(
     ...timestamps,
   },
   (t) => [
-    foreignKey({ columns: [t.workspaceId, t.pageId], foreignColumns: [pages.workspaceId, pages.id] }).onDelete(
-      "cascade",
-    ),
+    foreignKey({ columns: [t.userId, t.pageId], foreignColumns: [pages.userId, pages.id] }).onDelete("cascade"),
     check("page_states_origin_chk", inList(sql`${t.stateOrigin}`, ["ai", "user"])),
   ],
 );
@@ -271,7 +261,7 @@ export const pageStateHistory = pgTable(
   "page_state_history",
   {
     id: idPk(),
-    workspaceId: workspaceId(),
+    userId: userId(),
     pageId: uuid("page_id").notNull(),
     version: bigint("version", { mode: "number" }).notNull(),
     state: jsonb("state").$type<PageState>(),
@@ -282,9 +272,7 @@ export const pageStateHistory = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
-    foreignKey({ columns: [t.workspaceId, t.pageId], foreignColumns: [pages.workspaceId, pages.id] }).onDelete(
-      "cascade",
-    ),
+    foreignKey({ columns: [t.userId, t.pageId], foreignColumns: [pages.userId, pages.id] }).onDelete("cascade"),
     index("page_state_history_page_idx").on(t.pageId, t.version),
     index("page_state_history_batch_idx").on(t.batchId).where(sql`${t.batchId} is not null`),
   ],
@@ -294,8 +282,8 @@ export const glossaryEntries = pgTable(
   "glossary_entries",
   {
     id: idPk(),
-    workspaceId: workspaceId(),
-    /** null = áp cho toàn workspace. */
+    userId: userId(),
+    /** null = entry chung, áp cho mọi series của người dùng (theo cặp ngôn ngữ). */
     seriesId: uuid("series_id"),
     /** Chỉ entry chung (series_id null) mang cặp nguồn→đích; entry series theo cặp của series (API đảm bảo). */
     sourceLang: text("source_lang"),
@@ -307,14 +295,12 @@ export const glossaryEntries = pgTable(
     ...timestamps,
   },
   (t) => [
-    foreignKey({ columns: [t.workspaceId, t.seriesId], foreignColumns: [series.workspaceId, series.id] }).onDelete(
-      "cascade",
-    ),
-    index("glossary_ws_series_idx").on(t.workspaceId, t.seriesId),
-    // Một term mỗi phạm vi (series, hoặc cặp ngôn ngữ của workspace khi series_id null) — chặn tạo trùng khi
+    foreignKey({ columns: [t.userId, t.seriesId], foreignColumns: [series.userId, series.id] }).onDelete("cascade"),
+    index("glossary_user_series_idx").on(t.userId, t.seriesId),
+    // Một term mỗi phạm vi (series, hoặc cặp ngôn ngữ của người dùng khi series_id null) — chặn tạo trùng khi
     // request đua nhau.
     unique("glossary_entries_scope_term_uq")
-      .on(t.workspaceId, t.seriesId, t.sourceLang, t.targetLang, t.sourceTerm)
+      .on(t.userId, t.seriesId, t.sourceLang, t.targetLang, t.sourceTerm)
       .nullsNotDistinct(),
   ],
 );
@@ -326,21 +312,21 @@ export const workerTokens = pgTable(
     name: text("name").notNull(),
     /** sha256 của token; token gốc chỉ hiện một lần lúc tạo. */
     tokenHash: text("token_hash").notNull().unique(),
-    /** null = worker nền tảng (Modal), nhận job mọi workspace có worker_mode='modal'. */
-    workspaceId: uuid("workspace_id").references(() => organization.id, { onDelete: "cascade" }),
+    /** Worker chung toàn hệ thống: `mac` (máy người vận hành, ưu tiên) | `modal` (GPU thuê, qua dispatcher). */
+    kind: text("kind").$type<"mac" | "modal">().notNull(),
     capabilities: text("capabilities").array().notNull().default(sql`'{}'::text[]`),
     lastSeenAt: timestamp("last_seen_at", { withTimezone: true }),
     revokedAt: timestamp("revoked_at", { withTimezone: true }),
     ...timestamps,
   },
-  (t) => [index("worker_tokens_ws_idx").on(t.workspaceId)],
+  (t) => [check("worker_tokens_kind_chk", inList(sql`${t.kind}`, ["mac", "modal"]))],
 );
 
 export const jobs = pgTable(
   "jobs",
   {
     id: idPk(),
-    workspaceId: workspaceId(),
+    userId: userId(),
     type: text("type").$type<(typeof JOB_TYPES)[number]>().notNull(),
     status: text("status").$type<(typeof JOB_STATUSES)[number]>().notNull().default("queued"),
     priority: integer("priority").notNull().default(100),
@@ -380,18 +366,16 @@ export const jobs = pgTable(
       .on(t.idempotencyKey)
       .where(inList(sql`${t.status}`, ACTIVE_JOB_STATUSES)),
     index("jobs_claim_idx").on(t.priority, t.createdAt).where(sql`${t.status} = 'queued'`),
-    index("jobs_ws_idx").on(t.workspaceId, t.createdAt),
+    index("jobs_user_idx").on(t.userId, t.createdAt),
     index("jobs_chapter_idx").on(t.chapterId),
     index("jobs_page_idx").on(t.pageId),
     index("jobs_lease_owner_idx").on(t.leaseOwner),
     // Reaper quét lease hết hạn.
     index("jobs_running_lease_idx").on(t.leaseExpiresAt).where(sql`${t.status} = 'running'`),
-    foreignKey({ columns: [t.workspaceId, t.chapterId], foreignColumns: [chapters.workspaceId, chapters.id] }).onDelete(
+    foreignKey({ columns: [t.userId, t.chapterId], foreignColumns: [chapters.userId, chapters.id] }).onDelete(
       "cascade",
     ),
-    foreignKey({ columns: [t.workspaceId, t.pageId], foreignColumns: [pages.workspaceId, pages.id] }).onDelete(
-      "cascade",
-    ),
+    foreignKey({ columns: [t.userId, t.pageId], foreignColumns: [pages.userId, pages.id] }).onDelete("cascade"),
     check("jobs_type_chk", inList(sql`${t.type}`, JOB_TYPES)),
     check("jobs_status_chk", inList(sql`${t.status}`, JOB_STATUSES)),
     check("jobs_error_class_chk", sql`${t.errorClass} is null or ${inList(sql`${t.errorClass}`, ERROR_CLASSES)}`),
@@ -407,7 +391,7 @@ export const proofreadSuggestions = pgTable(
   "proofread_suggestions",
   {
     id: idPk(),
-    workspaceId: workspaceId(),
+    userId: userId(),
     chapterId: uuid("chapter_id").notNull(),
     pageId: uuid("page_id").notNull(),
     jobId: uuid("job_id"),
@@ -419,19 +403,17 @@ export const proofreadSuggestions = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
-    foreignKey({ columns: [t.workspaceId, t.chapterId], foreignColumns: [chapters.workspaceId, chapters.id] }).onDelete(
+    foreignKey({ columns: [t.userId, t.chapterId], foreignColumns: [chapters.userId, chapters.id] }).onDelete(
       "cascade",
     ),
-    foreignKey({ columns: [t.workspaceId, t.pageId], foreignColumns: [pages.workspaceId, pages.id] }).onDelete(
-      "cascade",
-    ),
+    foreignKey({ columns: [t.userId, t.pageId], foreignColumns: [pages.userId, pages.id] }).onDelete("cascade"),
     index("proofread_suggestions_chapter_idx").on(t.chapterId),
     unique("proofread_suggestions_page_region_uq").on(t.pageId, t.regionId),
   ],
 );
 
 /**
- * Append-only. workspace_id null = chi phí nền tảng (VD GPU rỗi). Giá tính ở server từ số đếm thô.
+ * Append-only. user_id null = chi phí nền tảng (VD GPU rỗi). Giá tính ở server từ số đếm thô.
  * Khử trùng: dòng theo job → unique (job_id, attempt, seq, kind); dòng nền tảng theo dispatch (job_id null) →
  * unique (dispatch_id, kind) — sessions/end gửi lại hoặc reaper ước lượng sau đó không ghi lần 2.
  */
@@ -439,7 +421,7 @@ export const usageLedger = pgTable(
   "usage_ledger",
   {
     id: idPk(),
-    workspaceId: uuid("workspace_id").references(() => organization.id, { onDelete: "cascade" }),
+    userId: uuid("user_id").references(() => user.id, { onDelete: "cascade" }),
     jobId: uuid("job_id").references(() => jobs.id, { onDelete: "set null" }),
     dispatchId: uuid("dispatch_id").references(() => dispatches.id, { onDelete: "restrict" }),
     attempt: integer("attempt").notNull().default(0),
@@ -453,8 +435,8 @@ export const usageLedger = pgTable(
   (t) => [
     unique("usage_ledger_job_attempt_seq_kind_uq").on(t.jobId, t.attempt, t.seq, t.kind),
     uniqueIndex("usage_ledger_dispatch_kind_uq").on(t.dispatchId, t.kind).where(sql`${t.dispatchId} is not null`),
-    index("usage_ledger_ws_created_idx").on(t.workspaceId, t.createdAt),
-    // Kill-switch ngân sách cộng cost_usd toàn cục theo ngày/tháng.
+    index("usage_ledger_user_created_idx").on(t.userId, t.createdAt),
+    // Kill-switch ngân sách cộng cost_usd toàn cục theo ngày/tháng; hạn mức ngày từng user dùng index theo user.
     index("usage_ledger_created_idx").on(t.createdAt),
     check("usage_ledger_kind_chk", inList(sql`${t.kind}`, USAGE_KINDS)),
   ],

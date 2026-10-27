@@ -1,5 +1,5 @@
 /**
- * Nạp font editor từ /fonts (bản sao worker/fonts — scripts/sync-fonts.ts) + font tuỳ chỉnh của workspace (URL
+ * Nạp font editor từ /fonts (bản sao worker/fonts — scripts/sync-fonts.ts) + font tuỳ chỉnh của bạn (URL
  * presigned từ API) bằng FontFace, đợi `document.fonts.ready`, và cấp metric từ manifest / API (không dùng metric
  * trình duyệt — hợp đồng layout quy tắc 2). `family` của FontFace = font_id nên canvas dùng `${size}px "${font_id}"`.
  * Font không biết (đã xoá, state cũ) → metric + nét vẽ đều theo font thoại mặc định.
@@ -10,7 +10,7 @@ import { type FontMetrics, layoutBox, type MeasureFn } from "./measure.ts";
 export type FontEntry = FontMetrics & { file: string; viComplete: boolean };
 export type FontManifest = { version: number; defaults: string[]; fonts: Record<string, FontEntry> };
 
-/** Font tuỳ chỉnh của workspace (một phần của `WorkspaceFont` ở features/fonts/api.ts). */
+/** Font tuỳ chỉnh của bạn (một phần của `UserFont` ở features/fonts/api.ts). */
 export type CustomFont = {
   id: string;
   name: string;
@@ -24,7 +24,7 @@ export type FontKit = {
   manifest: FontManifest;
   /** Id font gói sẵn. */
   ids: string[];
-  /** Font tuỳ chỉnh đã nạp được (chọn được trong panel; nhóm "Font của nhóm"). */
+  /** Font tuỳ chỉnh đã nạp được (chọn được trong panel; nhóm "Font của bạn"). */
   custom: { id: string; name: string }[];
   /** Id có font thật (gói sẵn hoặc tuỳ chỉnh đã nạp) — không thì metric/nét vẽ rơi về font mặc định. */
   knows(fontId: string): boolean;
@@ -33,7 +33,7 @@ export type FontKit = {
   layout: Layout;
 };
 
-/** Font thiếu (state cũ/đổi bộ font/font nhóm đã xoá) → metric font mặc định đầu tiên. */
+/** Font thiếu (state cũ/đổi bộ font/font riêng đã xoá) → metric font mặc định đầu tiên. */
 function metricsOf(manifest: FontManifest, custom: ReadonlyMap<string, FontMetrics>, fontId: string): FontMetrics {
   const own = custom.get(fontId);
   if (own) return own;
@@ -124,8 +124,8 @@ async function loadCustomFaces(fonts: CustomFont[]): Promise<CustomFont[]> {
 }
 
 /**
- * Bộ font cho 1 phiên editor: gói sẵn + font workspace. `fetchCustom` lấy danh sách kèm URL mới; font nào nạp lỗi
- * (URL hết hạn) → lấy lại danh sách 1 lần rồi nạp lại. Không lấy được font nhóm → vẫn dùng được font gói sẵn.
+ * Bộ font cho 1 phiên editor: gói sẵn + font riêng. `fetchCustom` lấy danh sách kèm URL mới; font nào nạp lỗi
+ * (URL hết hạn) → lấy lại danh sách 1 lần rồi nạp lại. Không lấy được font riêng → vẫn dùng được font gói sẵn.
  */
 export async function loadFonts(fetchCustom?: () => Promise<CustomFont[]>): Promise<FontKit> {
   const { manifest, measure } = await loadBase();
@@ -141,7 +141,7 @@ export async function loadFonts(fetchCustom?: () => Promise<CustomFont[]>): Prom
       for (const id of loadedCustom.keys()) if (!listed.has(id)) loadedCustom.delete(id);
       await document.fonts.ready;
     } catch (e) {
-      console.warn("không nạp được font của nhóm", e);
+      console.warn("không nạp được font riêng", e);
     }
   }
   const custom = new Map<string, FontMetrics>(

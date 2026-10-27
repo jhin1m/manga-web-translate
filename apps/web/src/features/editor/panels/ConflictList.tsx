@@ -6,8 +6,8 @@ import type { Conflict } from "../rebase.ts";
 import { editorStore, useEditor } from "../store.ts";
 
 const REASON: Record<Conflict["reason"], string> = {
-  deleted_on_server: "Người khác đã xoá mục bạn đang sửa",
-  changed_on_server: "Người khác đã sửa cùng chỗ",
+  deleted_on_server: "Bản trên server (tab khác) đã xoá mục bạn đang sửa",
+  changed_on_server: "Bản trên server (tab khác) đã sửa cùng chỗ",
   removed_but_changed: "Bạn xoá mục mà người khác vừa sửa",
   id_exists: "Mục bạn thêm đã có ở bản mới với nội dung khác",
 };

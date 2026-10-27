@@ -10,7 +10,6 @@ import { exportWarnings, warningLines } from "./export-warnings.ts";
 import type { Row } from "./text-table/rows.ts";
 
 export function ExportDrawer(props: {
-  ws: string;
   chapterId: string;
   detail: ChapterDetail | undefined;
   pages: ProgressPage[];
@@ -26,7 +25,6 @@ export function ExportDrawer(props: {
   return (
     <Drawer title="Xuất chương" onClose={props.onClose}>
       <ExportPanel
-        ws={props.ws}
         chapterId={props.chapterId}
         fileBase={fileBase}
         pageCount={pages.length}

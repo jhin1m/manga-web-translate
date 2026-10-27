@@ -1,5 +1,5 @@
 /**
- * Màn chương = editor gộp (`/w/:ws/s/:s/c/:c?page=`): thanh trên (+ băng cảnh báo khi có) | rail công cụ · panel ngữ
+ * Màn chương = editor gộp (`/s/:s/c/:c?page=`): thanh trên (+ băng cảnh báo khi có) | rail công cụ · panel ngữ
  * cảnh (mỗi lúc 1 panel: công cụ đang chọn / Bản dịch cả chương / Tìm–Thay · Glossary; bấm lại icon đang mở thì thu) ·
  * canvas từng trang · cột trang. Chương chưa có page (nháp, đang cắt trang, cắt lỗi): cột trang là từng ảnh gốc (xoá /
  * khôi phục trước Bước 1), canvas là ảnh đang chọn + tiến độ upload + vùng thả để tải tiếp. Upload xong không tự chạy: "Bước 1" = cắt trang + xoá chữ + OCR, xong dừng ở "Chờ dịch" (xem ảnh
@@ -86,7 +86,7 @@ const NOTICE_MS = 6000;
 const NO_PAGES: never[] = [];
 
 type DrawerKind = "export" | "activity" | "help";
-type Props = { ws: string; seriesId: string; chapterId: string; page?: string; drawer?: "export" };
+type Props = { seriesId: string; chapterId: string; page?: string; drawer?: "export" };
 /** Mảng rỗng cố định (series chưa tải) — không đổi tham chiếu mỗi lần render. */
 const NO_IGNORE: readonly string[] = [];
 /**
@@ -125,15 +125,14 @@ export function ChapterWorkspace(props: Props) {
   return ready ? <Workspace {...props} /> : null;
 }
 
-function Workspace({ ws, seriesId, chapterId, page: searchPage, drawer: searchDrawer }: Props) {
+function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer }: Props) {
   const navigate = useNavigate();
-  const data = useChapterData(ws, chapterId);
+  const data = useChapterData(chapterId);
   const status = data.progress?.chapter.status ?? data.detail?.status;
   const settled = isChapterSettled(status);
   const pages = data.progress?.pages ?? NO_PAGES;
   const pageIds = useMemo(() => pages.map((p) => p.id), [pages]);
   const session = useChapterSession({
-    ws,
     chapterId,
     settled,
     pageIds,
@@ -141,7 +140,7 @@ function Workspace({ ws, seriesId, chapterId, page: searchPage, drawer: searchDr
   });
   const { kit } = session;
   // Font thoại của series cho box tạo tay (cùng key với màn series → lưu cài đặt là cập nhật).
-  const series = useQuery({ queryKey: seriesKeys.detail(ws, seriesId), queryFn: () => fetchSeries(ws, seriesId) });
+  const series = useQuery({ queryKey: seriesKeys.detail(seriesId), queryFn: () => fetchSeries(seriesId) });
   const queryClient = useQueryClient();
   const activeId = useEditor((s) => s.pageId);
   const [notice, setNotice] = useState<Notice | null>(null);
@@ -205,12 +204,12 @@ function Workspace({ ws, seriesId, chapterId, page: searchPage, drawer: searchDr
   useEffect(() => {
     if (!searchDrawer) return;
     void navigate({
-      to: "/w/$ws/s/$seriesId/c/$chapterId",
-      params: { ws, seriesId, chapterId },
+      to: "/s/$seriesId/c/$chapterId",
+      params: { seriesId, chapterId },
       search: searchPage ? { page: searchPage } : {},
       replace: true,
     });
-  }, [searchDrawer, searchPage, navigate, ws, seriesId, chapterId]);
+  }, [searchDrawer, searchPage, navigate, seriesId, chapterId]);
   // Đổi trang → `?page=` = page active (replace, gộp). URL chưa có `?page=` = đang ở trang đầu → mở chương không
   // ghi thêm gì.
   useEffect(() => {
@@ -218,14 +217,14 @@ function Workspace({ ws, seriesId, chapterId, page: searchPage, drawer: searchDr
     const t = setTimeout(() => {
       lastUrlPage.current = activeId;
       void navigate({
-        to: "/w/$ws/s/$seriesId/c/$chapterId",
-        params: { ws, seriesId, chapterId },
+        to: "/s/$seriesId/c/$chapterId",
+        params: { seriesId, chapterId },
         search: { page: activeId },
         replace: true,
       });
     }, URL_SYNC_MS);
     return () => clearTimeout(t);
-  }, [activeId, firstId, navigate, ws, seriesId, chapterId]);
+  }, [activeId, firstId, navigate, seriesId, chapterId]);
 
   // ---- Bảng văn bản ↔ canvas ↔ panel Chọn ----
   const allRows = useChapterRows(kit, series.data?.ignore_text ?? NO_IGNORE);
@@ -373,29 +372,29 @@ function Workspace({ ws, seriesId, chapterId, page: searchPage, drawer: searchDr
       kind: "retry" | "retranslate" | "retranslate-page" | "cancel" | "commit" | "translate",
     ): Promise<Notice | null> => {
       const info = (text: string): Notice => ({ tone: "info", text });
-      if (kind === "cancel") return info(`Đã huỷ ${(await cancelChapter(ws, chapterId)).cancelled} job.`);
+      if (kind === "cancel") return info(`Đã huỷ ${(await cancelChapter(chapterId)).cancelled} job.`);
       if (kind === "retry") {
-        const r = await runAi(() => retryFailed(ws, chapterId));
+        const r = await runAi(() => retryFailed(chapterId));
         return info(r.jobs.length ? `Đã xếp lại ${r.jobs.length} job cho trang lỗi.` : "Không có trang lỗi.");
       }
       if (kind === "retranslate-page") {
         const id = editorStore.getState().pageId;
         const ord = pages.find((p) => p.id === id)?.ord ?? 0;
         if (!id) return info("Chưa chọn trang.");
-        await runAi(() => retranslate(ws, chapterId, [id]));
+        await runAi(() => retranslate(chapterId, [id]));
         return info(`Đã xếp dịch lại trang ${ord + 1} (chỉnh sửa tay được giữ nguyên).`);
       }
       if (kind === "translate") {
         // Bước 2: chip đã đổi sang "Đang dịch" — không báo thêm.
-        await runAi(() => translatePrepared(ws, chapterId));
+        await runAi(() => translatePrepared(chapterId));
         return null;
       }
       if (kind === "retranslate") {
-        await runAi(() => retranslate(ws, chapterId));
+        await runAi(() => retranslate(chapterId));
         return info("Đã xếp dịch lại cả chương (chỉnh sửa tay được giữ nguyên).");
       }
       // Bước 1 thành công: chip đã nói "Bước 1 · …" — chỉ báo khi có ảnh bị loại.
-      const r = await commitChapter(ws, chapterId);
+      const r = await commitChapter(chapterId);
       return r.rejected.length ? rejectedNotice(r.accepted, r.rejected) : null;
     },
     onMutate: () => notify(null),
@@ -465,19 +464,19 @@ function Workspace({ ws, seriesId, chapterId, page: searchPage, drawer: searchDr
   const [resumeError, setResumeError] = useState<string | null>(null);
   const resume = (files: File[]) => {
     setResumeError(null);
-    resumeFromFiles(ws, chapterId, files).catch((e: unknown) => setResumeError(errorMessage(e)));
+    resumeFromFiles(chapterId, files).catch((e: unknown) => setResumeError(errorMessage(e)));
   };
   const flush = useCallback(() => session.saver.flush(), [session.saver]);
 
   const back = async () => {
     await session.saver.flush();
-    void navigate({ to: "/w/$ws/s/$seriesId", params: { ws, seriesId } });
+    void navigate({ to: "/s/$seriesId", params: { seriesId } });
   };
 
   // ---- Ảnh gốc khi chưa có page (rail + canvas) ----
   // Chờ có tiến độ (danh sách page) mới quyết: chi tiết về trước thì chương đã có page cũng chớp sang ảnh gốc.
   const sourceMode = !!data.progress && pages.length === 0;
-  const sources = useSourceImages(ws, chapterId, sourceMode);
+  const sources = useSourceImages(chapterId, sourceMode);
   const [sourcePick, setSourcePick] = useState<string | null>(null);
   const sourceId = sources.some((it) => it.id === sourcePick) ? sourcePick : (sources[0]?.id ?? null);
   const sourceIdx = sources.findIndex((it) => it.id === sourceId);
@@ -492,7 +491,7 @@ function Workspace({ ws, seriesId, chapterId, page: searchPage, drawer: searchDr
   }, [sourceMode]);
   // "Luôn bỏ ở series này" (toast sau khi xoá ảnh / trang): học ảnh credit → chương sau tự bỏ ảnh giống.
   const learnSkip = useMutation({
-    mutationFn: (from: { source_file_id: string } | { page_id: string }) => learnSkipImage(ws, seriesId, from),
+    mutationFn: (from: { source_file_id: string } | { page_id: string }) => learnSkipImage(seriesId, from),
     // Thay toast có nút ngay khi bấm → không bấm 2 lần.
     onMutate: () => notify({ tone: "info", text: "Đang lưu ảnh tự bỏ…" }),
     onSuccess: (r) => {
@@ -502,7 +501,7 @@ function Workspace({ ws, seriesId, chapterId, page: searchPage, drawer: searchDr
           ? `Đã học ${r.learned} ảnh — chương sau của series tự bỏ ảnh giống.`
           : "Ảnh này đã có trong danh sách tự bỏ của series.",
       });
-      void queryClient.invalidateQueries({ queryKey: seriesKeys.skipImages(ws, seriesId) });
+      void queryClient.invalidateQueries({ queryKey: seriesKeys.skipImages(seriesId) });
     },
     // Ảnh chưa tải lên xong (thường là ảnh cuối, xoá ngay khi thả) → giữ nút thử lại thay vì mất hẳn lựa chọn.
     onError: (e, from) =>
@@ -521,7 +520,7 @@ function Workspace({ ws, seriesId, chapterId, page: searchPage, drawer: searchDr
     }),
     [learnSkip.mutate],
   );
-  const sourceSkip = useSetSourceSkip(ws, chapterId, (e) => notify({ tone: "danger", text: errorMessage(e) }));
+  const sourceSkip = useSetSourceSkip(chapterId, (e) => notify({ tone: "danger", text: errorMessage(e) }));
   const skipSource = useCallback(
     (it: SourceItem, skip: "user" | null) =>
       sourceSkip.mutate(
@@ -544,7 +543,7 @@ function Workspace({ ws, seriesId, chapterId, page: searchPage, drawer: searchDr
       ),
     [sourceSkip.mutate, notify, alwaysSkip],
   );
-  const sourceReorder = useReorderSources(ws, chapterId, (e) => notify({ tone: "danger", text: errorMessage(e) }));
+  const sourceReorder = useReorderSources(chapterId, (e) => notify({ tone: "danger", text: errorMessage(e) }));
   /** Đưa ảnh `id` tới vị trí `to` (0-based); toast "Hoàn tác" trả đúng thứ tự trước đó. */
   const moveSource = useCallback(
     (id: string, to: number) => {
@@ -578,7 +577,7 @@ function Workspace({ ws, seriesId, chapterId, page: searchPage, drawer: searchDr
   // ---- Xoá (ẩn) / khôi phục trang sau Bước 1 ----
   const pagesEditable = session.lockEnabled && session.lock.state.status === "held";
   const pageSkip = useMutation({
-    mutationFn: ({ page, skipped }: { page: ProgressPage; skipped: boolean }) => setPageSkip(ws, page.id, skipped),
+    mutationFn: ({ page, skipped }: { page: ProgressPage; skipped: boolean }) => setPageSkip(page.id, skipped),
     onSuccess: (_r, { page, skipped }) => {
       if (skipped) {
         notify({
@@ -636,7 +635,7 @@ function Workspace({ ws, seriesId, chapterId, page: searchPage, drawer: searchDr
   const defaultFont = kit
     ? dialogueFont(kit.manifest, series.data?.default_fonts.dialogue, kit.knows)
     : "Bangers-Regular";
-  const ocr = useOcrRegion(ws, activeId ?? "", defaultFont, { w: activeMeta?.width ?? 0, h: activeMeta?.height ?? 0 });
+  const ocr = useOcrRegion(activeId ?? "", defaultFont, { w: activeMeta?.width ?? 0, h: activeMeta?.height ?? 0 });
   const ocrStart = ocr.start;
   const onOcr = useCallback((r: PageRect) => void ocrStart(r), [ocrStart]);
   /** "Sửa chữ" ở thanh nổi: mở panel Chọn + focus ô Bản dịch. */
@@ -746,16 +745,13 @@ function Workspace({ ws, seriesId, chapterId, page: searchPage, drawer: searchDr
 
   // ---- Drawer ----
   const uploadCount = useUploadCount();
-  const exportsActive = (useExports(ws, chapterId).q.data?.exports ?? []).filter((x) =>
-    isExportActive(x.status),
-  ).length;
+  const exportsActive = (useExports(chapterId).q.data?.exports ?? []).filter((x) => isExportActive(x.status)).length;
   const activityCount = uploadCount + chapterActivityCount(data.progress, exportsActive);
   const closeDrawer = useCallback(() => setDrawer(null), []);
 
   return (
     <div className="cw">
       <ChapterTopbar
-        ws={ws}
         seriesId={seriesId}
         detail={data.detail}
         chip={chip}
@@ -767,8 +763,8 @@ function Workspace({ ws, seriesId, chapterId, page: searchPage, drawer: searchDr
         onBack={() => void back()}
         onMoved={(to) =>
           void navigate({
-            to: "/w/$ws/s/$seriesId/c/$chapterId",
-            params: { ws, seriesId: to, chapterId },
+            to: "/s/$seriesId/c/$chapterId",
+            params: { seriesId: to, chapterId },
             search: searchPage ? { page: searchPage } : {},
             replace: true,
           })
@@ -807,7 +803,6 @@ function Workspace({ ws, seriesId, chapterId, page: searchPage, drawer: searchDr
           <div className="cw-panel-tool">
             {tool === "select" || sourceMode ? (
               <SelectPanel
-                ws={ws}
                 page={activeMeta}
                 row={currentRow}
                 blockTotal={activeBlocks}
@@ -846,7 +841,6 @@ function Workspace({ ws, seriesId, chapterId, page: searchPage, drawer: searchDr
               <OcrToolView lang={series.data?.source_lang} pending={ocr.pending.length} />
             ) : activeMeta ? (
               <MaskPanel
-                ws={ws}
                 pageId={activeMeta.id}
                 cleanRev={activeMeta.clean_rev}
                 page={{ w: activeMeta.width, h: activeMeta.height }}
@@ -868,7 +862,6 @@ function Workspace({ ws, seriesId, chapterId, page: searchPage, drawer: searchDr
         )}
         {view === "proofread" && (
           <ProofreadPanel
-            ws={ws}
             chapterId={chapterId}
             status={status}
             rows={allRows}
@@ -890,7 +883,6 @@ function Workspace({ ws, seriesId, chapterId, page: searchPage, drawer: searchDr
             </fieldset>
             <fieldset className="cw-find-part" aria-label="Tìm / Thay" hidden={findTab !== "find"}>
               <FindReplacePanel
-                ws={ws}
                 seriesId={seriesId}
                 chapterId={chapterId}
                 lock={session.lock}
@@ -900,7 +892,6 @@ function Workspace({ ws, seriesId, chapterId, page: searchPage, drawer: searchDr
             </fieldset>
             <fieldset className="cw-find-part" aria-label="Áp glossary" hidden={findTab !== "glossary"}>
               <ApplyGlossaryPanel
-                ws={ws}
                 seriesId={seriesId}
                 chapterId={chapterId}
                 lock={session.lock}
@@ -918,7 +909,7 @@ function Workspace({ ws, seriesId, chapterId, page: searchPage, drawer: searchDr
             <div className="cw-source-band">
               {isDraft ? (
                 <>
-                  <ChapterUploadStatus ws={ws} chapterId={chapterId} onResume={resume} resumeError={resumeError} />
+                  <ChapterUploadStatus chapterId={chapterId} onResume={resume} resumeError={resumeError} />
                   {primary?.command === "upload" && (
                     <DropZone
                       label="Tải tiếp ảnh"
@@ -999,7 +990,6 @@ function Workspace({ ws, seriesId, chapterId, page: searchPage, drawer: searchDr
       )}
       {drawer === "export" && (
         <ExportDrawer
-          ws={ws}
           chapterId={chapterId}
           detail={data.detail}
           pages={pages}
@@ -1019,7 +1009,6 @@ function Workspace({ ws, seriesId, chapterId, page: searchPage, drawer: searchDr
       )}
       {drawer === "activity" && (
         <ActivityDrawer
-          ws={ws}
           chapter={{
             id: chapterId,
             progress: data.progress,

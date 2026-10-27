@@ -31,7 +31,7 @@ function useBoxStyle() {
   return { box, readOnly, style };
 }
 
-/** `fonts`: font gói sẵn; `customFonts`: font của nhóm (nhóm riêng trong select). */
+/** `fonts`: font gói sẵn; `customFonts`: font của bạn (nhóm riêng trong select). */
 export function BasicStyle({
   fonts,
   customFonts = [],
@@ -60,7 +60,7 @@ export function BasicStyle({
               </option>
             ))}
             {customFonts.length > 0 && (
-              <optgroup label="Font của nhóm">
+              <optgroup label="Font của bạn">
                 {customFonts.map((f) => (
                   <option key={f.id} value={f.id}>
                     {f.name}

@@ -33,7 +33,7 @@ const Env = z.object({
     .default("0.4.0"),
   /**
    * Worker có pipeline_version thấp hơn → claim trả 426. 0.4.1: worker hiểu settings.narration_font.
-   * 0.4.2: export pages[].skipped. 0.5.1: translate/export inputs.fonts (font tuỳ chỉnh của workspace).
+   * 0.4.2: export pages[].skipped. 0.5.1: translate/export inputs.fonts (font tuỳ chỉnh của người dùng).
    * 0.6.0: payload có cài đặt pipeline (page.prepare.pipeline, page.reinpaint.inpaint, page.ocr_region.ocr_engine).
    */
   MIN_PIPELINE_VERSION: z
@@ -41,7 +41,7 @@ const Env = z.object({
     .regex(/^\d+\.\d+\.\d+$/)
     .default("0.6.0"),
   /**
-   * Kill-switch ngân sách toàn cục (USD, cộng usage_ledger.cost_usd mọi workspace + chi phí nền tảng, ngày/tháng
+   * Kill-switch ngân sách toàn cục (USD, cộng usage_ledger.cost_usd mọi người dùng + chi phí nền tảng, ngày/tháng
    * theo UTC). Bắt buộc ở production; 0 = chặn mọi job tốn tiền. Không đặt (dev/test) = không giới hạn.
    */
   GLOBAL_DAILY_USD: optionalUsd,
@@ -57,16 +57,16 @@ const Env = z.object({
   MODAL_MAX_LIFETIME_S: blank(z.coerce.number().int().positive().default(3600)),
   /** Kênh cảnh báo duy nhất: topic ntfy (VD https://ntfy.sh/<topic-bí-mật>). Không đặt → chỉ log. */
   ALERT_NTFY_URL: blank(z.string().url().optional()),
-  /** Gửi email lời mời: `smtp://` hoặc `smtps://user:pass@host:port`. Không đặt → chỉ log link (UI vẫn hiện link). */
-  SMTP_URL: blank(
-    z
-      .string()
-      .url()
-      .refine((u) => /^smtps?:\/\//.test(u), "SMTP_URL phải bắt đầu bằng smtp:// hoặc smtps://")
-      .optional(),
-  ),
-  /** Địa chỉ người gửi (VD `MTL <no-reply@domain>`); bắt buộc khi có SMTP_URL. */
-  MAIL_FROM: blank(z.string().min(3).optional()),
+  /**
+   * Mở đăng ký email/mật khẩu (POST /api/auth/sign-up/email). Mặc định tắt mọi môi trường; bật thì bắt buộc
+   * GLOBAL_DAILY_USD + USER_DAILY_USD (bất kể NODE_ENV). Tắt → chỉ `pnpm create-user` tạo được tài khoản.
+   */
+  SIGNUP_ENABLED: flag,
+  /**
+   * Hạn mức chi phí mỗi người dùng mỗi ngày UTC (USD, mọi chi phí của user: LLM + GPU). Vượt → endpoint LLM 402,
+   * job LLM fail `quota_exceeded`. 0 = chặn mọi job LLM; không đặt = không giới hạn.
+   */
+  USER_DAILY_USD: optionalUsd,
   /** Chỉ dev: tài khoản SPA tự đăng nhập (POST /api/dev/auto-login). Đặt ở production → API không khởi động. */
   DEV_AUTO_LOGIN_EMAIL: blank(z.string().email().optional()),
   DEV_AUTO_LOGIN_PASSWORD: blank(z.string().min(10).optional()),
@@ -82,8 +82,8 @@ export function parseEnv(raw: Record<string, string | undefined>): Env {
     if (e.DISPATCHER_ENABLED && (!e.MODAL_DRAIN_URL || !e.MODAL_DRAIN_SECRET)) {
       ctx.addIssue({ code: "custom", message: "DISPATCHER_ENABLED cần MODAL_DRAIN_URL và MODAL_DRAIN_SECRET" });
     }
-    if (e.SMTP_URL && !e.MAIL_FROM) {
-      ctx.addIssue({ code: "custom", message: "SMTP_URL cần MAIL_FROM" });
+    if (e.SIGNUP_ENABLED && (e.GLOBAL_DAILY_USD === undefined || e.USER_DAILY_USD === undefined)) {
+      ctx.addIssue({ code: "custom", message: "SIGNUP_ENABLED=true cần GLOBAL_DAILY_USD và USER_DAILY_USD" });
     }
     if (e.NODE_ENV === "production" && (e.DEV_AUTO_LOGIN_EMAIL || e.DEV_AUTO_LOGIN_PASSWORD)) {
       ctx.addIssue({ code: "custom", message: "DEV_AUTO_LOGIN_* chỉ dùng ở dev — bỏ khỏi môi trường production" });

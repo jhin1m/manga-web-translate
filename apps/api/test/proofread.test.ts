@@ -4,24 +4,24 @@ import { chapters, jobs, pageStates, pages, scoped } from "@mtl/db";
 import type { JobResult } from "@mtl/shared";
 import { eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { call, db, seedWorkspace } from "./helpers.ts";
+import { call, db, seedUser } from "./helpers.ts";
 import { aiState, type Claimed, claimJobs, complete, usage, workerToken } from "./worker-helpers.ts";
 
-type Seed = Awaited<ReturnType<typeof seedWorkspace>>;
+type Seed = Awaited<ReturnType<typeof seedUser>>;
 let A: Seed;
 let token: string;
 const api = (path: string, init: { method?: string; body?: unknown } = {}) =>
-  call(`/api/w/${A.workspaceId}${path}`, { cookie: A.cookie, ...init });
+  call(`/api${path}`, { cookie: A.cookie, ...init });
 
 async function readyPage(ord: number, text: string, skipped = false) {
-  const sdb = scoped(db, A.workspaceId);
+  const sdb = scoped(db, A.userId);
   const p = await sdb.insert(pages, {
     id: randomUUID(),
     chapterId: A.chapterId,
     ord,
     width: 200,
     height: 300,
-    originalKey: `ws/${A.workspaceId}/ch/${A.chapterId}/ingest/1/${ord}.png`,
+    originalKey: `u/${A.userId}/ch/${A.chapterId}/ingest/1/${ord}.png`,
     originalSha256: "ef".repeat(32),
     status: "ready",
     skipped,
@@ -31,13 +31,13 @@ async function readyPage(ord: number, text: string, skipped = false) {
 }
 
 beforeAll(async () => {
-  A = await seedWorkspace("proofread");
-  token = (await workerToken(A.workspaceId, "proofread-test")).token;
+  A = await seedUser("proofread");
+  token = (await workerToken("mac", "proofread-test")).token;
 });
 
 describe("chapter.proofread", () => {
   it("chương chưa dịch → 409; đã dịch → job với trang ready (bỏ trang ẩn), inputs có bản dịch + ảnh gốc", async () => {
-    const sdb = scoped(db, A.workspaceId);
+    const sdb = scoped(db, A.userId);
     await sdb.update(chapters, eq(chapters.id, A.chapterId), { status: "processing" });
     expect((await api(`/chapters/${A.chapterId}/proofread`, { method: "POST" })).status).toBe(409);
 
@@ -97,7 +97,7 @@ describe("chapter.proofread", () => {
   });
 
   it("lượt cũ xong sau lượt mới hơn không đè gợi ý mới", async () => {
-    const sdb = scoped(db, A.workspaceId);
+    const sdb = scoped(db, A.userId);
     const [first] = await sdb.select(pages, eq(pages.chapterId, A.chapterId));
     const pageIdOf = first?.id ?? "";
     const runOnce = async () => {

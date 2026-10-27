@@ -1,15 +1,13 @@
 /**
- * Cài đặt nhóm → Pipeline: owner đổi OCR engine tiếng Nhật + nới mask (Nâng cao), lưu, tải lại vẫn giữ; về mặc định.
+ * Cài đặt chung → Pipeline: người dùng đổi OCR engine tiếng Nhật + nới mask (Nâng cao), lưu, tải lại vẫn giữ; về mặc định.
  * Tab Font vẫn là mặc định của trang.
  */
 import { expect, test } from "@playwright/test";
-import { login, state } from "./helpers.ts";
-
-const ws = state.workspaceId;
+import { login } from "./helpers.ts";
 
 test("owner edits pipeline settings and they persist", async ({ page }) => {
   await login(page);
-  await page.goto(`/w/${ws}/settings`);
+  await page.goto(`/settings`);
   await page.getByRole("link", { name: "Pipeline" }).click();
   await expect(page).toHaveURL(/tab=pipeline/);
 

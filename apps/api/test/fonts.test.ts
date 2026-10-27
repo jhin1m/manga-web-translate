@@ -4,7 +4,7 @@ import { scoped } from "@mtl/db";
 import { describe, expect, it } from "vitest";
 import { DEFAULT_DIALOGUE_FONT } from "../src/jobs/enqueue.ts";
 import { BUNDLED_FONT_IDS, isKnownFont, resolveCustomFonts, unknownFonts } from "../src/lib/fonts.ts";
-import { db, seedWorkspace } from "./helpers.ts";
+import { db, seedUser } from "./helpers.ts";
 
 const manifest = JSON.parse(readFileSync(new URL("../../../worker/fonts/manifest.json", import.meta.url), "utf8")) as {
   defaults: string[];
@@ -22,8 +22,8 @@ describe("fonts", () => {
   });
 
   it("isKnownFont accepts bundled ids and rejects unknown / foreign custom ids", async () => {
-    const A = await seedWorkspace("fontknown");
-    const sdb = scoped(db, A.workspaceId);
+    const A = await seedUser("fontknown");
+    const sdb = scoped(db, A.userId);
     expect(await isKnownFont(sdb, "Bangers-Regular")).toBe(true);
     expect(await isKnownFont(sdb, "custom-deadbeef")).toBe(false);
     expect(await unknownFonts(sdb, ["Anton-Regular", "nope", "nope"])).toEqual(["nope"]);

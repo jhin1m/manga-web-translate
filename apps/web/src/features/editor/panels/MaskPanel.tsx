@@ -10,7 +10,6 @@ import { renderMaskPng } from "../canvas/MaskLayer.tsx";
 import { editorStore, useEditor } from "../store.ts";
 
 export function MaskPanel(props: {
-  ws: string;
   pageId: string;
   cleanRev: number | null;
   page: { w: number; h: number };
@@ -34,15 +33,15 @@ export function MaskPanel(props: {
       setBusy("Đang tạo mask…");
       const { blob, offset } = await renderMaskPng(strokes, props.page);
       setBusy("Đang tải mask lên…");
-      const post = await requestMaskUpload(props.ws, props.pageId);
+      const post = await requestMaskUpload(props.pageId);
       await uploadMask(post, blob);
       setBusy("Đang xoá chữ vùng đã vẽ…");
-      const { job } = await startReinpaint(props.ws, props.pageId, {
+      const { job } = await startReinpaint(props.pageId, {
         user_mask_key: post.key,
         offset,
         base_clean_rev: props.cleanRev,
       });
-      const done = await waitJob(props.ws, job.id, ctl.signal, 1000);
+      const done = await waitJob(job.id, ctl.signal, 1000);
       if (done.status !== "succeeded") throw new Error(done.error ?? "Xoá chữ thất bại");
       if (editorStore.getState().pageId === props.pageId) editorStore.getState().setMask({ strokes: [] });
       props.onDone();

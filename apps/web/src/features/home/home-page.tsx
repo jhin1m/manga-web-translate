@@ -1,12 +1,11 @@
 /**
- * Home của workspace, từ trên xuống: vùng thả lớn (thả bất kỳ đâu trên trang cũng được; đoán được series → tạo
+ * Home, từ trên xuống: vùng thả lớn (thả bất kỳ đâu trên trang cũng được; đoán được series → tạo
  * chương + tự dịch + mở màn chương, không thì dòng xác nhận inline) → danh sách series (tìm, "+ Series mới"; bấm
  * hàng để mở series, icon Sửa → cài đặt series, icon Xoá → xác nhận tại chỗ rồi xoá cả series).
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { type FormEvent, useState } from "react";
-import { useWorkspace } from "../../app/app-shell.tsx";
 import { ApiError, errorMessage } from "../../lib/api.ts";
 import { needsWork, nextAction } from "../chapter/next-action.ts";
 import { createSeries, deleteSeries, fetchSeriesList, type SeriesListItem, seriesKeys } from "../series/api.ts";
@@ -21,10 +20,10 @@ import "./home.css";
 
 type Pending = { files: File[]; seriesId?: string; seq: number };
 
-export function HomePage({ ws }: { ws: string }) {
-  const seriesQ = useQuery({ queryKey: seriesKeys.list(ws), queryFn: () => fetchSeriesList(ws) });
+export function HomePage() {
+  const seriesQ = useQuery({ queryKey: seriesKeys.list(), queryFn: () => fetchSeriesList() });
   const [pending, setPending] = useState<Pending | null>(null);
-  const auto = useDropToTranslate(ws, (files, seriesId) =>
+  const auto = useDropToTranslate((files, seriesId) =>
     setPending((p) => ({ files, seriesId, seq: (p?.seq ?? 0) + 1 })),
   );
   const drop = (files: File[], seriesId?: string) => {
@@ -51,7 +50,6 @@ export function HomePage({ ws }: { ws: string }) {
       {pending && series && (
         <NewChapterConfirmRow
           key={pending.seq}
-          ws={ws}
           files={pending.files}
           series={series}
           fixedSeriesId={pending.seriesId}
@@ -59,28 +57,25 @@ export function HomePage({ ws }: { ws: string }) {
           onCreated={() => setPending(null)}
         />
       )}
-      <SeriesRows ws={ws} series={series} error={seriesQ.error} />
+      <SeriesRows series={series} error={seriesQ.error} />
     </main>
   );
 }
 
-function SeriesRows(props: { ws: string; series: SeriesListItem[] | undefined; error: unknown }) {
-  const { ws } = props;
+function SeriesRows(props: { series: SeriesListItem[] | undefined; error: unknown }) {
   const qc = useQueryClient();
   const navigate = useNavigate();
-  // Xoá series cần quyền admin trở lên (API cũng chặn); member chỉ thấy icon Sửa.
-  const canDelete = useWorkspace().role !== "member";
   const [search, setSearch] = useState("");
   const [adding, setAdding] = useState(false);
   const [title, setTitle] = useState("");
   const [sourceLang, setSourceLang] = useState<SourceLang>("ko");
   const create = useMutation({
-    mutationFn: () => createSeries(ws, { title: title.trim(), source_lang: sourceLang }),
+    mutationFn: () => createSeries({ title: title.trim(), source_lang: sourceLang }),
     onSuccess: (s) => {
       setTitle("");
       setAdding(false);
-      void qc.invalidateQueries({ queryKey: seriesKeys.list(ws) });
-      void navigate({ to: "/w/$ws/s/$seriesId", params: { ws, seriesId: s.id } });
+      void qc.invalidateQueries({ queryKey: seriesKeys.list() });
+      void navigate({ to: "/s/$seriesId", params: { seriesId: s.id } });
     },
   });
   const submit = (e: FormEvent) => {
@@ -139,14 +134,14 @@ function SeriesRows(props: { ws: string; series: SeriesListItem[] | undefined; e
           </div>
         )}
         {list.map((s) => (
-          <SeriesRow key={s.id} ws={ws} s={s} canDelete={canDelete} />
+          <SeriesRow key={s.id} s={s} />
         ))}
       </div>
     </section>
   );
 }
 
-function SeriesRow({ ws, s, canDelete }: { ws: string; s: SeriesListItem; canDelete: boolean }) {
+function SeriesRow({ s }: { s: SeriesListItem }) {
   const [confirming, setConfirming] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const latest = s.latest_chapter;
@@ -156,7 +151,7 @@ function SeriesRow({ ws, s, canDelete }: { ws: string; s: SeriesListItem; canDel
   const tone = !latest || !a ? "idle" : needsWork(latest) ? a.tone : "ok";
   return (
     <div className="row-item" data-series={s.id}>
-      <Link className="row-open" to="/w/$ws/s/$seriesId" params={{ ws, seriesId: s.id }}>
+      <Link className="row-open" to="/s/$seriesId" params={{ seriesId: s.id }}>
         <span className="cover" aria-hidden="true">
           {s.title.trim().charAt(0).toUpperCase()}
         </span>
@@ -175,7 +170,6 @@ function SeriesRow({ ws, s, canDelete }: { ws: string; s: SeriesListItem; canDel
       </Link>
       {confirming ? (
         <DeleteSeriesConfirm
-          ws={ws}
           s={s}
           onDone={() => setConfirming(false)}
           onError={(text) => {
@@ -187,29 +181,27 @@ function SeriesRow({ ws, s, canDelete }: { ws: string; s: SeriesListItem; canDel
         <>
           <Link
             className="btn icon-btn"
-            to="/w/$ws/s/$seriesId"
-            params={{ ws, seriesId: s.id }}
+            to="/s/$seriesId"
+            params={{ seriesId: s.id }}
             search={{ tab: "settings" }}
             aria-label={`Sửa series ${s.title}`}
             title="Sửa series"
           >
             <PencilIcon />
           </Link>
-          {canDelete && (
-            <button
-              type="button"
-              className="icon-btn"
-              data-danger
-              aria-label={`Xoá series ${s.title}`}
-              title="Xoá series"
-              onClick={() => {
-                setMsg(null);
-                setConfirming(true);
-              }}
-            >
-              <TrashIcon />
-            </button>
-          )}
+          <button
+            type="button"
+            className="icon-btn"
+            data-danger
+            aria-label={`Xoá series ${s.title}`}
+            title="Xoá series"
+            onClick={() => {
+              setMsg(null);
+              setConfirming(true);
+            }}
+          >
+            <TrashIcon />
+          </button>
         </>
       )}
       {msg && <div className="row-error">{msg}</div>}
@@ -218,25 +210,20 @@ function SeriesRow({ ws, s, canDelete }: { ws: string; s: SeriesListItem; canDel
 }
 
 /** Xác nhận tại chỗ: xoá series cùng mọi chương + glossary riêng (không hoàn tác). */
-function DeleteSeriesConfirm(props: {
-  ws: string;
-  s: SeriesListItem;
-  onDone: () => void;
-  onError: (text: string) => void;
-}) {
-  const { ws, s } = props;
+function DeleteSeriesConfirm(props: { s: SeriesListItem; onDone: () => void; onError: (text: string) => void }) {
+  const { s } = props;
   const qc = useQueryClient();
   const del = useMutation({
-    mutationFn: () => deleteSeries(ws, s.id),
+    mutationFn: () => deleteSeries(s.id),
     onSuccess: () => {
       props.onDone();
-      qc.removeQueries({ queryKey: seriesKeys.detail(ws, s.id) });
-      void qc.invalidateQueries({ queryKey: seriesKeys.list(ws) });
+      qc.removeQueries({ queryKey: seriesKeys.detail(s.id) });
+      void qc.invalidateQueries({ queryKey: seriesKeys.list() });
     },
     onError: (e) =>
       props.onError(
         e instanceof ApiError && e.status === 423
-          ? `${String(e.body.holder_name ?? "Người khác")} đang mở sửa một chương của series này — đợi họ đóng chương rồi xoá.`
+          ? "Một chương của series này đang mở để sửa ở một tab — đóng tab đó rồi xoá."
           : errorMessage(e),
       ),
   });

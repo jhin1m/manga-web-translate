@@ -1,7 +1,7 @@
 import { jsonb, pgTable, text, timestamp } from "drizzle-orm/pg-core";
 
 /**
- * Cờ vận hành toàn cục (không thuộc workspace), VD `llm_paused` (circuit breaker, `until`),
+ * Cờ vận hành toàn cục (không thuộc người dùng nào), VD `llm_paused` (circuit breaker, `until`),
  * `llm_errors` (cửa sổ lỗi provider), `runner_heartbeat` (healthz Phase 7).
  */
 export const runtimeFlags = pgTable("runtime_flags", {

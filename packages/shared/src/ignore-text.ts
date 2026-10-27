@@ -29,7 +29,7 @@ const ANY_QUANTIFIER = /^(?:[*+]|\{\d+(?:,\d*)?\})/;
 /**
  * Lượng từ lồng kiểu `(a+)+`, `(.*)*`, `((a+))*`: nhóm chứa lượng từ không giới hạn mà chính nhóm lại bị lặp →
  * backtracking luỹ thừa. Quét nhanh, bỏ qua ký tự thoát và lớp `[...]`; không chặn hết mọi mẫu xấu (vd `(a|a)+`),
- * chỉ loại các dạng phổ biến — đầu vào đến từ thành viên nhóm, độ dài đã bị giới hạn.
+ * chỉ loại các dạng phổ biến — đầu vào đến từ chính người dùng, độ dài đã bị giới hạn.
  */
 function hasNestedQuantifier(src: string): boolean {
   const open: boolean[] = []; // mỗi nhóm đang mở: bên trong có lượng từ không giới hạn?

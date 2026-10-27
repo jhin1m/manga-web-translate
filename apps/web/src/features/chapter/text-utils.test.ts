@@ -32,7 +32,7 @@ describe("splitHighlight", () => {
 
 describe("describeWriteError", () => {
   it("map mã lỗi", () => {
-    expect(describeWriteError(423, "chapter_locked", "x")).toMatch(/khoá/);
+    expect(describeWriteError(423, "chapter_locked", "x")).toMatch(/tab khác/);
     expect(describeWriteError(409, "preview_stale", "x")).toMatch(/Xem trước/);
     expect(describeWriteError(409, "undo_conflict", "x")).toMatch(/hoàn tác/);
     expect(describeWriteError(500, undefined, "boom")).toBe("boom");

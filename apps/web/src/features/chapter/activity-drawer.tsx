@@ -88,7 +88,6 @@ export function ActivityButton({ count, onClick, icon }: { count: number; onClic
 }
 
 export function ActivityDrawer(props: {
-  ws: string;
   /** Màn chương: job + xuất của chương đang mở. */
   chapter?: {
     id: string;
@@ -101,31 +100,31 @@ export function ActivityDrawer(props: {
 }) {
   return (
     <Drawer title="Hoạt động" onClose={props.onClose}>
-      <UploadSection ws={props.ws} />
+      <UploadSection />
       {props.chapter && <ChapterSection {...props.chapter} />}
-      {props.chapter && <ExportSection ws={props.ws} chapterId={props.chapter.id} />}
+      {props.chapter && <ExportSection chapterId={props.chapter.id} />}
     </Drawer>
   );
 }
 
 /** Nút + drawer Hoạt động cho app shell (home, series…): chỉ mục Upload. */
-export function ShellActivity({ ws }: { ws: string }) {
+export function ShellActivity() {
   const [open, setOpen] = useState(false);
   const count = useUploadCount();
   return (
     <>
       <ActivityButton count={count} onClick={() => setOpen(true)} />
-      {open && <ActivityDrawer ws={ws} onClose={() => setOpen(false)} />}
+      {open && <ActivityDrawer onClose={() => setOpen(false)} />}
     </>
   );
 }
 
-function UploadSection({ ws }: { ws: string }) {
+function UploadSection() {
   const uploads = Object.values(useUploads());
   // Tên chương: danh sách "Việc cần làm" (gồm chương nháp đang tải) — cùng query với home, không poll thêm.
   const recent = useQuery({
-    queryKey: seriesKeys.recent(ws),
-    queryFn: () => fetchRecentChapters(ws),
+    queryKey: seriesKeys.recent(),
+    queryFn: () => fetchRecentChapters(),
     enabled: uploads.length > 0,
   }).data?.chapters;
   return (
@@ -151,10 +150,7 @@ function UploadSection({ ws }: { ws: string }) {
                 <div className="drawer-item-head">
                   <span className="grow">
                     {ch ? (
-                      <Link
-                        to="/w/$ws/s/$seriesId/c/$chapterId"
-                        params={{ ws, seriesId: ch.series_id, chapterId: ch.id }}
-                      >
+                      <Link to="/s/$seriesId/c/$chapterId" params={{ seriesId: ch.series_id, chapterId: ch.id }}>
                         {name}
                       </Link>
                     ) : (
@@ -262,10 +258,10 @@ function ChapterSection(props: {
   );
 }
 
-function ExportSection({ ws, chapterId }: { ws: string; chapterId: string }) {
-  const { q, refresh } = useExports(ws, chapterId);
+function ExportSection({ chapterId }: { chapterId: string }) {
+  const { q, refresh } = useExports(chapterId);
   const exports = q.data?.exports ?? [];
-  const cancel = useMutation({ mutationFn: (id: string) => cancelJob(ws, id), onSettled: refresh });
+  const cancel = useMutation({ mutationFn: (id: string) => cancelJob(id), onSettled: refresh });
   return (
     <section className="drawer-section" aria-label="Xuất gần đây">
       <h3>Xuất gần đây</h3>

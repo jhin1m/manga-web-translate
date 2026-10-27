@@ -35,23 +35,18 @@ import "../home/home.css";
 export type SeriesTab = "chapters" | "glossary" | "settings";
 type Filter = "todo" | "exported" | "all";
 
-const useSeries = (ws: string, seriesId: string) =>
+const useSeries = (seriesId: string) =>
   useQuery({
-    queryKey: seriesKeys.detail(ws, seriesId),
-    queryFn: () => fetchSeries(ws, seriesId),
+    queryKey: seriesKeys.detail(seriesId),
+    queryFn: () => fetchSeries(seriesId),
     // Trạng thái chương đổi theo worker — làm mới chậm khi còn chương đang chạy.
     refetchInterval: (query) =>
       query.state.data?.chapters.some((c) => c.status === "ingesting" || c.status === "processing") ? 5000 : false,
   });
 
-export function SeriesPage(props: {
-  ws: string;
-  seriesId: string;
-  tab?: SeriesTab /** owner/admin: xoá series, tải font nhóm. */;
-  canManage: boolean;
-}) {
-  const { ws, seriesId, tab = "chapters" } = props;
-  const q = useSeries(ws, seriesId);
+export function SeriesPage(props: { seriesId: string; tab?: SeriesTab }) {
+  const { seriesId, tab = "chapters" } = props;
+  const q = useSeries(seriesId);
   const s = q.data;
   return (
     <div className="series-layout">
@@ -63,30 +58,25 @@ export function SeriesPage(props: {
         {s && (
           <>
             <SeriesHead series={s} />
-            <SeriesTabs ws={ws} series={s} />
-            {tab === "chapters" && <ChapterList ws={ws} series={s} />}
+            <SeriesTabs series={s} />
+            {tab === "chapters" && <ChapterList series={s} />}
             {/* key: dựng lại form khi dữ liệu server đổi rev (sau khi lưu). */}
             {tab === "settings" && (
               <div className="tab-panel">
-                <SeriesSettingsForm
-                  key={`${s.id}:${s.settings_rev}`}
-                  ws={ws}
-                  series={s}
-                  canUploadFont={props.canManage}
-                />
-                <SkipImagesSection ws={ws} seriesId={s.id} />
-                {props.canManage && <DeleteSeries ws={ws} series={s} />}
+                <SeriesSettingsForm key={`${s.id}:${s.settings_rev}`} series={s} />
+                <SkipImagesSection seriesId={s.id} />
+                <DeleteSeries series={s} />
               </div>
             )}
             {tab === "glossary" && (
               <section aria-label="Glossary của series (đầy đủ)" className="tab-panel">
-                <GlossaryEditor ws={ws} scope={{ seriesId }} inheritedLabel={`từ glossary chung (${pairLabel(s)})`} />
+                <GlossaryEditor scope={{ seriesId }} inheritedLabel={`từ glossary chung (${pairLabel(s)})`} />
               </section>
             )}
           </>
         )}
       </main>
-      {s && tab === "chapters" && <SeriesSidebar ws={ws} series={s} />}
+      {s && tab === "chapters" && <SeriesSidebar series={s} />}
     </div>
   );
 }
@@ -110,9 +100,9 @@ function SeriesHead({ series }: { series: SeriesDetail }) {
 }
 
 /** Tab đang mở do router đánh dấu (`aria-current`), so cả `?tab`. */
-function SeriesTabs({ ws, series }: { ws: string; series: SeriesDetail }) {
+function SeriesTabs({ series }: { series: SeriesDetail }) {
   const scope = { seriesId: series.id };
-  const glossary = useQuery({ queryKey: glossaryKey(ws, scope), queryFn: () => fetchGlossary(ws, scope) });
+  const glossary = useQuery({ queryKey: glossaryKey(scope), queryFn: () => fetchGlossary(scope) });
   const terms = glossary.data?.entries.length;
   const tabs: [SeriesTab, string][] = [
     ["chapters", `Chương · ${series.chapters.length}`],
@@ -124,8 +114,8 @@ function SeriesTabs({ ws, series }: { ws: string; series: SeriesDetail }) {
       {tabs.map(([t, label]) => (
         <Link
           key={t}
-          to="/w/$ws/s/$seriesId"
-          params={{ ws, seriesId: series.id }}
+          to="/s/$seriesId"
+          params={{ seriesId: series.id }}
           search={t === "chapters" ? {} : { tab: t }}
           // So cả `?tab` (mặc định router chỉ so path → tab Chương luôn "active").
           activeOptions={{ exact: true, includeSearch: true }}
@@ -137,12 +127,12 @@ function SeriesTabs({ ws, series }: { ws: string; series: SeriesDetail }) {
   );
 }
 
-function ChapterList({ ws, series }: { ws: string; series: SeriesDetail }) {
-  const listQ = useQuery({ queryKey: seriesKeys.list(ws), queryFn: () => fetchSeriesList(ws) });
+function ChapterList({ series }: { series: SeriesDetail }) {
+  const listQ = useQuery({ queryKey: seriesKeys.list(), queryFn: () => fetchSeriesList() });
   const uploads = useUploads();
   const [filter, setFilter] = useState<Filter>("todo");
   const [pending, setPending] = useState<{ files: File[]; seq: number } | null>(null);
-  const auto = useDropToTranslate(ws, (files) => setPending((p) => ({ files, seq: (p?.seq ?? 0) + 1 })));
+  const auto = useDropToTranslate((files) => setPending((p) => ({ files, seq: (p?.seq ?? 0) + 1 })));
   const drop = (files: File[]) => {
     setPending(null);
     auto.mutate({ files, seriesId: series.id });
@@ -173,7 +163,6 @@ function ChapterList({ ws, series }: { ws: string; series: SeriesDetail }) {
       {pending && listQ.data && (
         <NewChapterConfirmRow
           key={pending.seq}
-          ws={ws}
           files={pending.files}
           series={listQ.data.series}
           fixedSeriesId={series.id}
@@ -204,7 +193,7 @@ function ChapterList({ ws, series }: { ws: string; series: SeriesDetail }) {
           </div>
         )}
         {shown.map((c) => (
-          <ChapterLine key={c.id} ws={ws} ch={c} upload={uploadManager.view(c.id, uploads[c.id])} />
+          <ChapterLine key={c.id} ch={c} upload={uploadManager.view(c.id, uploads[c.id])} />
         ))}
       </div>
       {filter === "todo" && exported > 0 && (
@@ -214,27 +203,22 @@ function ChapterList({ ws, series }: { ws: string; series: SeriesDetail }) {
   );
 }
 
-function ChapterLine(props: { ws: string; ch: ChapterRow; upload: ReturnType<typeof uploadManager.view> }) {
-  const { ws, ch } = props;
+function ChapterLine(props: { ch: ChapterRow; upload: ReturnType<typeof uploadManager.view> }) {
+  const { ch } = props;
   const [msg, setMsg] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
   const a = nextAction(ch, props.upload);
-  const params = { ws, seriesId: ch.series_id, chapterId: ch.id };
+  const params = { seriesId: ch.series_id, chapterId: ch.id };
   // Chương nháp upload dở: thả lại file thẳng vào hàng.
   const target = useDropTarget((files) => {
     setMsg(null);
-    resumeFromFiles(ws, ch.id, files).catch((e: unknown) => setMsg(errorMessage(e)));
+    resumeFromFiles(ch.id, files).catch((e: unknown) => setMsg(errorMessage(e)));
   });
   const dropProps = a.kind === "resume" ? target.props : {};
 
   return (
     <div className="row-item" data-chapter={ch.id} data-drop={a.kind === "resume" && target.over} {...dropProps}>
-      <Link
-        className="ch-open"
-        to="/w/$ws/s/$seriesId/c/$chapterId"
-        params={params}
-        aria-label={`Mở chương ${ch.number}`}
-      >
+      <Link className="ch-open" to="/s/$seriesId/c/$chapterId" params={params} aria-label={`Mở chương ${ch.number}`}>
         <span className="ch-num">Ch.{ch.number}</span>
         <span className="ch-body">
           <span className="ch-line">
@@ -255,7 +239,6 @@ function ChapterLine(props: { ws: string; ch: ChapterRow; upload: ReturnType<typ
       </Link>
       {confirming ? (
         <DeleteChapterConfirm
-          ws={ws}
           ch={ch}
           onDone={() => setConfirming(false)}
           onError={(text) => {
@@ -267,7 +250,7 @@ function ChapterLine(props: { ws: string; ch: ChapterRow; upload: ReturnType<typ
         <>
           <Link
             className="btn icon-btn"
-            to="/w/$ws/s/$seriesId/c/$chapterId"
+            to="/s/$seriesId/c/$chapterId"
             params={params}
             aria-label={`Sửa chương ${ch.number}`}
             title="Sửa chương"
@@ -294,24 +277,19 @@ function ChapterLine(props: { ws: string; ch: ChapterRow; upload: ReturnType<typ
   );
 }
 
-function DeleteChapterConfirm(props: {
-  ws: string;
-  ch: ChapterRow;
-  onDone: () => void;
-  onError: (text: string) => void;
-}) {
-  const { ws, ch } = props;
+function DeleteChapterConfirm(props: { ch: ChapterRow; onDone: () => void; onError: (text: string) => void }) {
+  const { ch } = props;
   const qc = useQueryClient();
   const del = useMutation({
-    mutationFn: () => deleteChapter(ws, ch.id),
+    mutationFn: () => deleteChapter(ch.id),
     onSuccess: () => {
       props.onDone();
-      void qc.invalidateQueries({ queryKey: ["series", ws] });
+      void qc.invalidateQueries({ queryKey: ["series"] });
     },
     onError: (e) =>
       props.onError(
         e instanceof ApiError && e.status === 423
-          ? `${String(e.body.holder_name ?? "Người khác")} đang mở sửa chương này — đợi họ đóng chương rồi xoá.`
+          ? "Chương đang mở để sửa ở một tab — đóng tab đó rồi xoá."
           : errorMessage(e),
       ),
   });

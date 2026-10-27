@@ -11,7 +11,7 @@ import { editorStore, useEditor } from "../store.ts";
 
 const KIND = { changed: "đổi", added: "mới", removed: "AI bỏ" } as const;
 
-export function AiUpdatePanel({ ws }: { ws: string }) {
+export function AiUpdatePanel() {
   const ai = useEditor((s) => s.ai);
   const doc = useEditor((s) => s.doc);
   const pageId = useEditor((s) => s.pageId);
@@ -33,7 +33,7 @@ export function AiUpdatePanel({ ws }: { ws: string }) {
   const ack = async () => {
     setError(null);
     try {
-      const r = await ackAiUpdate(ws, pageId, ai.rev);
+      const r = await ackAiUpdate(pageId, ai.rev);
       st.setAi({ available: r.ai_update_available, rev: r.ai_rev });
       if (r.ai_update_available) setError("Đã có kết quả AI mới hơn — xem lại danh sách.");
     } catch (e) {

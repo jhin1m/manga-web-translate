@@ -1,6 +1,6 @@
 /**
  * Kill-switch ngân sách toàn cục (red team #14): tổng `usage_ledger.cost_usd` (server tính, gồm chi phí nền tảng
- * workspace_id null) theo ngày/tháng UTC so với GLOBAL_DAILY_USD / GLOBAL_MONTHLY_USD.
+ * user_id null) theo ngày/tháng UTC so với GLOBAL_DAILY_USD / GLOBAL_MONTHLY_USD.
  * - claim: vượt → job tốn tiền đang `queued` chuyển `paused_budget`, claim không trả loại đó (Mac lẫn Modal);
  * - heartbeat: job tốn tiền đang chạy → `paused_budget` + `stop: "paused_budget"` (không tính attempt);
  * - mtl-jobs: hết vượt (sang ngày/tháng mới hoặc nâng ngưỡng) → `paused_budget → queued`; cảnh báo 50/80/100%.

@@ -71,9 +71,9 @@ workerRoutes.post("/jobs/:id/fail", async (c) => {
   return c.json(await fail(c.get("worker"), jobId(c.req.param("id")), body));
 });
 
-// Container Modal báo lúc thoát (chỉ token nền tảng): GPU rỗi = lifetime − busy → ledger chi phí nền tảng.
+// Container Modal báo lúc thoát (chỉ token kind=modal): GPU rỗi = lifetime − busy → ledger chi phí nền tảng.
 workerRoutes.post("/sessions/end", async (c) => {
-  if (c.get("worker").workspaceId) throw new JobHttpError(403, "platform_token_required");
+  if (c.get("worker").kind !== "modal") throw new JobHttpError(403, "platform_token_required");
   const body = await parseJson(c, SessionsEndRequest);
   return c.json(await endSession(body));
 });

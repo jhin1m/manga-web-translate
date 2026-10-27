@@ -1,5 +1,5 @@
 /**
- * Panel "AI hiệu đính" (rail công cụ): chạy hiệu đính cả chương (job chapter.proofread, model theo Cài đặt nhóm →
+ * Panel "AI hiệu đính" (rail công cụ): chạy hiệu đính cả chương (job chapter.proofread, model theo Cài đặt chung →
  * Pipeline), xem gợi ý theo trang (bản hiện tại → đề xuất + lý do), Nhận / Bỏ từng gợi ý, "Nhận tất cả" ở trang đang
  * mở. Nhận = sửa bản dịch như gõ tay (`setRegionTranslation` qua editorStore: undo/redo, autosave, version, khoá
  * chương, ngắt dòng lại box) — gợi ý không bao giờ tự ghi đè. Trạng thái gợi ý suy từ bản dịch hiện tại
@@ -52,7 +52,6 @@ function jobNotice(job: JobView | null): { text: string; tone: "info" | "danger"
 }
 
 export function ProofreadPanel(props: {
-  ws: string;
   chapterId: string;
   status: string | undefined;
   rows: Row[];
@@ -60,23 +59,23 @@ export function ProofreadPanel(props: {
   onPick(row: Row): Promise<void>;
   beforeRun(): Promise<unknown>;
 }) {
-  const { ws, chapterId, rows, activeId } = props;
+  const { chapterId, rows, activeId } = props;
   const qc = useQueryClient();
   const readOnly = useEditor((s) => !!s.readOnly);
   const q = useQuery({
-    queryKey: proofreadKey(ws, chapterId),
-    queryFn: () => fetchProofread(ws, chapterId),
+    queryKey: proofreadKey(chapterId),
+    queryFn: () => fetchProofread(chapterId),
     refetchInterval: (query) => (query.state.data?.job && ACTIVE.has(query.state.data.job.status) ? 2500 : false),
   });
-  const refresh = () => qc.invalidateQueries({ queryKey: proofreadKey(ws, chapterId) });
+  const refresh = () => qc.invalidateQueries({ queryKey: proofreadKey(chapterId) });
   const run = useMutation({
     mutationFn: async () => {
       await props.beforeRun();
-      return runProofread(ws, chapterId);
+      return runProofread(chapterId);
     },
     onSettled: refresh,
   });
-  const dismiss = useMutation({ mutationFn: (id: string) => dismissSuggestion(ws, id), onSettled: refresh });
+  const dismiss = useMutation({ mutationFn: (id: string) => dismissSuggestion(id), onSettled: refresh });
   const [acceptError, setAcceptError] = useState<string | null>(null);
 
   const byKey = useMemo(() => new Map(rows.map((r) => [r.key, r])), [rows]);
@@ -93,7 +92,7 @@ export function ProofreadPanel(props: {
 
   const job = q.data?.job ?? null;
   const running = !!job && ACTIVE.has(job.status);
-  // Chỉ xem (người khác giữ khoá…) → không chạy lại / bỏ: lượt mới thay toàn bộ gợi ý (cả lượt Bỏ) của chương.
+  // Chỉ xem (tab khác giữ khoá…) → không chạy lại / bỏ: lượt mới thay toàn bộ gợi ý (cả lượt Bỏ) của chương.
   const canRun = TRANSLATED.has(props.status ?? "") && !running && !readOnly;
   const notice = running && job?.status === "running" ? null : jobNotice(job);
   const pendingHere = items.filter((it) => it.page_id === activeId && it.state === "pending" && it.row?.regionId);
@@ -176,7 +175,7 @@ export function ProofreadPanel(props: {
         <p className="muted small cw-pad">
           {job?.status === "succeeded"
             ? "AI không thấy khối nào cần sửa (hoặc mọi gợi ý đã được bỏ)."
-            : "AI đọc bản dịch cả chương (kèm ảnh trang, glossary, quy tắc xưng hô, giọng văn của series) và đề xuất sửa từng khối. Gợi ý không tự ghi đè bản dịch — bạn Nhận hoặc Bỏ từng cái. Model chọn ở Cài đặt nhóm → Pipeline."}
+            : "AI đọc bản dịch cả chương (kèm ảnh trang, glossary, quy tắc xưng hô, giọng văn của series) và đề xuất sửa từng khối. Gợi ý không tự ghi đè bản dịch — bạn Nhận hoặc Bỏ từng cái. Model chọn ở Cài đặt chung → Pipeline."}
         </p>
       )}
       <ol className="cw-proofread-list" aria-label="Gợi ý hiệu đính">

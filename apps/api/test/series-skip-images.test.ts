@@ -6,10 +6,10 @@ import { pages, seriesSkipImages, sourceFiles } from "@mtl/db";
 import { eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { deletePrefix, head } from "../src/storage.ts";
-import { call, db, seedWorkspace } from "./helpers.ts";
+import { call, db, seedUser } from "./helpers.ts";
 import { type Claimed, claimJobs, doIngest, makeRunnable, PNG_1PX, workerToken } from "./worker-helpers.ts";
 
-type Seed = Awaited<ReturnType<typeof seedWorkspace>>;
+type Seed = Awaited<ReturnType<typeof seedUser>>;
 type Upload = { id: string; url: string; fields: Record<string, string> };
 type Fp = { dhash?: string; width?: number; height?: number };
 type SkipImage = { id: string; width: number; height: number; url: string };
@@ -18,12 +18,12 @@ let A: Seed;
 let token: string;
 
 beforeAll(async () => {
-  A = await seedWorkspace("skipimg");
-  token = (await workerToken(A.workspaceId, "skip-images-test")).token;
+  A = await seedUser("skipimg");
+  token = (await workerToken("mac", "skip-images-test")).token;
 });
 
 const api = (path: string, init: { method?: string; body?: unknown; cookie?: string } = {}) =>
-  call(`/api/w/${A.workspaceId}${path}`, { cookie: A.cookie, ...init });
+  call(`/api${path}`, { cookie: A.cookie, ...init });
 
 async function json<T>(res: Response, status: number): Promise<T> {
   expect(res.status, await res.clone().text()).toBe(status);
@@ -133,7 +133,7 @@ describe("series skip images", () => {
     expect((await fetch(img?.url ?? "")).status).toBe(200);
     const [row] = await db.select().from(seriesSkipImages).where(eq(seriesSkipImages.seriesId, s));
     expect(row?.learnedFromChapterId).toBe(one.ch);
-    expect(row?.thumbKey.startsWith(`ws/${A.workspaceId}/series/${s}/`)).toBe(true);
+    expect(row?.thumbKey.startsWith(`u/${A.userId}/series/${s}/`)).toBe(true);
 
     // Body phải có đúng 1 nguồn.
     expect((await learn(s, {})).status).toBe(400);
@@ -193,24 +193,21 @@ describe("series skip images", () => {
     await json(await api(`/chapters/${ch}/cancel`, { method: "POST", body: {} }), 200);
   });
 
-  it("other workspaces can neither read, learn into nor delete a series' images", async () => {
-    const B = await seedWorkspace("skipimg-b");
+  it("other users can neither read, learn into nor delete a series' images", async () => {
+    const B = await seedUser("skipimg-b");
     const s = await newSeries("Credit tenant");
     const { files } = await draft(s, "1", [credit]);
     await json(await learn(s, { source_file_id: files[0]?.id as string }), 200);
     const [img] = await list(s);
     const asB = (path: string, init: { method?: string; body?: unknown } = {}) =>
-      call(`/api/w/${B.workspaceId}${path}`, { cookie: B.cookie, ...init });
+      call(`/api${path}`, { cookie: B.cookie, ...init });
     expect((await asB(`/series/${s}/skip-images`)).status).toBe(404);
     expect((await asB(`/series/${s}/skip-images/${img?.id}`, { method: "DELETE" })).status).toBe(404);
     expect(
       (await asB(`/series/${B.seriesId}/skip-images`, { method: "POST", body: { source_file_id: files[0]?.id } }))
         .status,
     ).toBe(404);
-    // Workspace của B trên URL, người gọi thuộc A → 403.
-    expect((await call(`/api/w/${B.workspaceId}/series/${B.seriesId}/skip-images`, { cookie: A.cookie })).status).toBe(
-      403,
-    );
+    expect((await call(`/api/series/${B.seriesId}/skip-images`, { cookie: A.cookie })).status).toBe(404);
     expect(await list(s)).toHaveLength(1);
   });
 
@@ -222,7 +219,7 @@ describe("series skip images", () => {
     expect(await head(row?.thumbKey ?? "")).not.toBeNull();
     expect((await api(`/series/${s}`, { method: "DELETE" })).status).toBe(204);
     expect(await db.select().from(seriesSkipImages).where(eq(seriesSkipImages.seriesId, s))).toEqual([]);
-    expect(await deletePrefix(`ws/${A.workspaceId}/series/${s}/`)).toBe(0);
+    expect(await deletePrefix(`u/${A.userId}/series/${s}/`)).toBe(0);
     expect(
       await db
         .select()

@@ -1,6 +1,6 @@
 /**
  * Áp glossary (đoạn "Glossary" của panel Tìm màn chương) — áp lại glossary vào bản dịch có sẵn (không gọi LLM): mỗi
- * entry của glossary series (series đè workspace) có ô "cụm cũ trong bản dịch" (mặc định = từ gốc để bắt chữ chưa
+ * entry của glossary series (series đè glossary chung) có ô "cụm cũ trong bản dịch" (mặc định = từ gốc để bắt chữ chưa
  * dịch). Chọn entry → xem trước → áp dụng → hoàn tác.
  */
 import { useQuery } from "@tanstack/react-query";
@@ -12,16 +12,16 @@ import { FlowPanel, type ToolPanelProps, useBatchFlow } from "../chapter/FindRep
 import { LockBanner } from "../chapter/lock-banner.tsx";
 import { fetchGlossary, type GlossaryEntry, glossaryKey } from "./api.ts";
 
-/** Gộp glossary: entry series đè entry workspace trùng từ gốc (không phân biệt hoa thường). */
+/** Gộp glossary: entry series đè entry chung trùng từ gốc (không phân biệt hoa thường). */
 export function mergeGlossary(entries: GlossaryEntry[], inherited: GlossaryEntry[]): GlossaryEntry[] {
   const own = new Set(entries.map((e) => e.source_term.toLowerCase()));
   return [...entries, ...inherited.filter((e) => !own.has(e.source_term.toLowerCase()))];
 }
 
 export function ApplyGlossaryPanel(props: ToolPanelProps) {
-  const { ws, seriesId, chapterId, lock, beforeWrite, onJump } = props;
+  const { seriesId, chapterId, lock, beforeWrite, onJump } = props;
   const scope = { seriesId };
-  const q = useQuery({ queryKey: glossaryKey(ws, scope), queryFn: () => fetchGlossary(ws, scope) });
+  const q = useQuery({ queryKey: glossaryKey(scope), queryFn: () => fetchGlossary(scope) });
   const entries = useMemo(() => (q.data ? mergeGlossary(q.data.entries, q.data.inherited) : []), [q.data]);
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [from, setFrom] = useState<Record<string, string>>({});
@@ -33,12 +33,12 @@ export function ApplyGlossaryPanel(props: ToolPanelProps) {
   const picks = entries.filter((e) => picked.has(e.id));
 
   const flow = useBatchFlow(
-    { ws, chapterId },
+    { chapterId },
     {
       input: rules,
       beforeWrite,
-      preview: (r) => previewGlossaryApply(ws, chapterId, r),
-      apply: (r, versions) => applyGlossaryRules(ws, chapterId, r, versions),
+      preview: (r) => previewGlossaryApply(chapterId, r),
+      apply: (r, versions) => applyGlossaryRules(chapterId, r, versions),
     },
   );
   const [used, setUsed] = useState<{ from: string; to: string }[]>([]);
@@ -50,7 +50,7 @@ export function ApplyGlossaryPanel(props: ToolPanelProps) {
       <p className="muted small" style={{ marginTop: 0 }}>
         Thay “cụm cũ” bằng bản dịch trong glossary, chỉ ở vùng có chữ gốc chứa từ gốc. Không gọi AI. Muốn dịch lại theo
         glossary mới: dùng “Dịch lại cả chương”.{" "}
-        <Link to="/w/$ws/s/$seriesId" params={{ ws, seriesId }} search={{ tab: "glossary" }}>
+        <Link to="/s/$seriesId" params={{ seriesId }} search={{ tab: "glossary" }}>
           Sửa glossary series
         </Link>
       </p>
@@ -99,7 +99,7 @@ export function ApplyGlossaryPanel(props: ToolPanelProps) {
                       }}
                     />
                   </td>
-                  <td className="small muted">{e.series_id ? "Series" : "Workspace"}</td>
+                  <td className="small muted">{e.series_id ? "Series" : "Chung"}</td>
                 </tr>
               ))}
             </tbody>

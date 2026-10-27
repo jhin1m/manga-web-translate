@@ -5,7 +5,7 @@
 import { expect, type Locator, type Page, test } from "@playwright/test";
 import { WEB_URL } from "./env.ts";
 import { PNG_1PX } from "./fake-worker.ts";
-import { apiReadyChapter, login, state } from "./helpers.ts";
+import { apiReadyChapter, login } from "./helpers.ts";
 
 const NUMBER = "8001";
 
@@ -18,7 +18,7 @@ async function navClick(page: Page, target: Locator, count: { n: number }) {
 }
 
 async function expectChapterCanvas(page: Page) {
-  await expect(page).toHaveURL(/\/w\/.+\/s\/.+\/c\/[0-9a-f-]{36}/);
+  await expect(page).toHaveURL(/\/s\/.+\/c\/[0-9a-f-]{36}/);
   await expect(page.getByRole("heading", { name: new RegExp(`^Chương ${NUMBER}`) })).toBeVisible();
   await expect(page.locator(".ed-canvas canvas").first()).toBeVisible();
 }
@@ -60,7 +60,7 @@ test("drop 5 images on home → chapter screen; one click on Bước 1 starts it
         buffer: PNG_1PX,
       })),
     );
-  await expect(page).toHaveURL(/\/w\/.+\/s\/.+\/c\/[0-9a-f-]{36}$/, { timeout: 30_000 });
+  await expect(page).toHaveURL(/\/s\/.+\/c\/[0-9a-f-]{36}$/, { timeout: 30_000 });
   const chip = page.getByRole("status", { name: "Trạng thái chương" });
   const step1 = page.getByRole("button", { name: "Bước 1 · Xoá chữ + OCR" });
   await expect(step1).toBeEnabled({ timeout: 30_000 });
@@ -71,9 +71,9 @@ test("drop 5 images on home → chapter screen; one click on Bước 1 starts it
   await expect(chip).toHaveText(/^Bước 1/, { timeout: 30_000 });
   expect(clicks.n).toBe(1);
 
-  // Dọn: không để job ingest treo cho spec sau (worker giả claim mọi job của workspace).
+  // Dọn: không để job ingest treo cho spec sau (worker giả claim mọi job).
   const chapterId = page.url().split("/").pop() ?? "";
-  const r = await page.request.post(`/api/w/${state.workspaceId}/chapters/${chapterId}/cancel`, {
+  const r = await page.request.post(`/api/chapters/${chapterId}/cancel`, {
     headers: { origin: WEB_URL },
   });
   expect(r.status()).toBe(200);

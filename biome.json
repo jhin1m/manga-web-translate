@@ -29,10 +29,10 @@
               "level": "error",
               "options": {
                 "paths": {
-                  "../db.ts": "Route không dùng db thô — dùng c.get(\"sdb\") (scoped theo workspace).",
-                  "../db": "Route không dùng db thô — dùng c.get(\"sdb\") (scoped theo workspace).",
-                  "../../db.ts": "Route không dùng db thô — dùng c.get(\"sdb\") (scoped theo workspace).",
-                  "../../db": "Route không dùng db thô — dùng c.get(\"sdb\") (scoped theo workspace).",
+                  "../db.ts": "Route không dùng db thô — dùng c.get(\"sdb\") (scoped theo người dùng).",
+                  "../db": "Route không dùng db thô — dùng c.get(\"sdb\") (scoped theo người dùng).",
+                  "../../db.ts": "Route không dùng db thô — dùng c.get(\"sdb\") (scoped theo người dùng).",
+                  "../../db": "Route không dùng db thô — dùng c.get(\"sdb\") (scoped theo người dùng).",
                   "postgres": "Route không mở kết nối DB.",
                   "drizzle-orm/postgres-js": "Route không mở kết nối DB.",
                   "@mtl/db": {

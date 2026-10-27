@@ -25,7 +25,6 @@ import { KIND_LABEL, type Row } from "./text-table/rows.ts";
 import { setRowTranslation } from "./text-table/text-table.tsx";
 
 export type SelectPanelProps = {
-  ws: string;
   page: ProgressPage | undefined;
   /** Khối đang chọn trên page active (null: chưa chọn). */
   row: Row | null;
@@ -77,7 +76,7 @@ export function SelectPanel(props: SelectPanelProps) {
   if (!page) return <p className="muted small cw-pad">Chưa có trang để sửa.</p>;
   return (
     <>
-      <AiUpdatePanel ws={props.ws} />
+      <AiUpdatePanel />
       {row ? <BlockView {...props} page={page} row={row} /> : <PageView {...props} page={page} />}
     </>
   );

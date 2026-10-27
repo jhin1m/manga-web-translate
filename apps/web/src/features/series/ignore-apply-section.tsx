@@ -17,27 +17,19 @@ import { appliedSummary, describeSkipped, previewSummary, undoneSummary } from "
 
 type Notice = { tone: "info" | "danger"; text: string; skipped?: string; undo?: string };
 
-export function IgnoreApplySection({
-  ws,
-  seriesId,
-  disabledReason,
-}: {
-  ws: string;
-  seriesId: string;
-  disabledReason: string | null;
-}) {
+export function IgnoreApplySection({ seriesId, disabledReason }: { seriesId: string; disabledReason: string | null }) {
   const qc = useQueryClient();
   const [preview, setPreview] = useState<IgnorePreview | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
   // Chương đổi trạng thái (cần xuất lại) và state trang đổi → làm mới màn chương + danh sách.
   const refresh = () => {
-    void qc.invalidateQueries({ queryKey: ["series", ws] });
-    void qc.invalidateQueries({ queryKey: ["chapter", ws] });
+    void qc.invalidateQueries({ queryKey: ["series"] });
+    void qc.invalidateQueries({ queryKey: ["chapter"] });
   };
   const fail = (e: unknown) => setNotice({ tone: "danger", text: errorMessage(e) });
 
   const previewM = useMutation({
-    mutationFn: () => previewIgnoreApply(ws, seriesId),
+    mutationFn: () => previewIgnoreApply(seriesId),
     onSuccess: (p) => {
       setNotice(null);
       setPreview(p);
@@ -46,7 +38,7 @@ export function IgnoreApplySection({
   });
   const applyM = useMutation({
     mutationFn: (p: IgnorePreview) =>
-      applyIgnoreApply(ws, seriesId, Object.assign({}, ...p.chapters.map((c) => c.versions))),
+      applyIgnoreApply(seriesId, Object.assign({}, ...p.chapters.map((c) => c.versions))),
     onSuccess: (r: IgnoreApplied) => {
       setPreview(null);
       setNotice({
@@ -60,7 +52,7 @@ export function IgnoreApplySection({
     onError: fail,
   });
   const undoM = useMutation({
-    mutationFn: (batchId: string) => undoIgnoreApply(ws, seriesId, batchId),
+    mutationFn: (batchId: string) => undoIgnoreApply(seriesId, batchId),
     onSuccess: (r) => {
       setNotice({ tone: "info", text: undoneSummary(r), skipped: describeSkipped(r.skipped) });
       refresh();

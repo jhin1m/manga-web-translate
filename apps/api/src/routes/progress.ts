@@ -6,14 +6,14 @@ import { chapters, jobs, pageStates, pages } from "@mtl/db";
 import { ACTIVE_JOB_STATUSES } from "@mtl/shared";
 import { and, eq, gt, inArray, or } from "drizzle-orm";
 import { Hono } from "hono";
-import { type AppEnv, requireWorkspace } from "../middleware/workspace.ts";
+import type { AppEnv } from "../middleware/user.ts";
 import { jobView } from "./jobs.ts";
 
 const RECENT_MS = 24 * 60 * 60 * 1000;
 
 export const progressRoutes = new Hono<AppEnv>();
 
-progressRoutes.get("/w/:ws/chapters/:chapterId/progress", requireWorkspace(), async (c) => {
+progressRoutes.get("/chapters/:chapterId/progress", async (c) => {
   const sdb = c.get("sdb");
   const ch = await sdb.byId(chapters, c.req.param("chapterId"), "chapter");
   const [pageRows, jobRows] = await Promise.all([

@@ -43,16 +43,16 @@ export function useStableImages(list: PageImage[] | undefined): Map<string, Page
   return out;
 }
 
-export function useChapterData(ws: string, chapterId: string) {
+export function useChapterData(chapterId: string) {
   const qc = useQueryClient();
   const detailQ = useQuery({
-    queryKey: chapterKeys.detail(ws, chapterId),
-    queryFn: () => fetchChapter(ws, chapterId),
+    queryKey: chapterKeys.detail(chapterId),
+    queryFn: () => fetchChapter(chapterId),
     refetchInterval: LOCK_POLL_MS,
   });
   const progressQ = useQuery({
-    queryKey: chapterKeys.progress(ws, chapterId),
-    queryFn: () => fetchProgress(ws, chapterId),
+    queryKey: chapterKeys.progress(chapterId),
+    queryFn: () => fetchProgress(chapterId),
     // Dừng khi chương ổn định hoặc request lỗi (refetch lại khi người dùng thao tác/focus tab).
     refetchInterval: (q) =>
       q.state.status === "error" || isChapterSettled(q.state.data?.chapter.status) ? false : PROGRESS_POLL_MS,
@@ -68,16 +68,16 @@ export function useChapterData(ws: string, chapterId: string) {
   // URL ảnh ký 15': lấy lại danh sách khi tập page/clean_rev đổi hoặc gần hết hạn.
   const pagesSig = (progressPages ?? []).map((p) => `${p.id}:${p.clean_rev ?? "o"}`).join(",");
   const pagesQ = useQuery({
-    queryKey: chapterKeys.pages(ws, chapterId, pagesSig),
-    queryFn: () => fetchPages(ws, chapterId),
+    queryKey: chapterKeys.pages(chapterId, pagesSig),
+    queryFn: () => fetchPages(chapterId),
     enabled: hasPages,
     staleTime: 10 * 60_000,
     refetchInterval: 12 * 60_000,
     placeholderData: (prev) => prev,
   });
   const statesQ = useQuery({
-    queryKey: chapterKeys.states(ws, chapterId),
-    queryFn: () => fetchChapterStates(ws, chapterId),
+    queryKey: chapterKeys.states(chapterId),
+    queryFn: () => fetchChapterStates(chapterId),
     enabled: hasPages,
     staleTime: Number.POSITIVE_INFINITY,
   });
@@ -113,22 +113,22 @@ export function useChapterData(ws: string, chapterId: string) {
     const stale = progressPages.some((p) => p.version > (cache[p.id]?.version ?? -1));
     if (!stale) return;
     const t = setTimeout(
-      () => void qc.invalidateQueries({ queryKey: chapterKeys.states(ws, chapterId) }),
+      () => void qc.invalidateQueries({ queryKey: chapterKeys.states(chapterId) }),
       STATES_DEBOUNCE_MS,
     );
     return () => clearTimeout(t);
-  }, [progressPages, statesQ.data, qc, ws, chapterId]);
+  }, [progressPages, statesQ.data, qc, chapterId]);
 
   // Trạng thái chương đổi (worker xong, commit…) → danh sách ở home/series ("Việc cần làm", hàng chương) cũ.
   const liveStatus = progressQ.data?.chapter.status;
   useEffect(() => {
-    if (liveStatus) void qc.invalidateQueries({ queryKey: seriesKeys.list(ws) });
-  }, [liveStatus, qc, ws]);
+    if (liveStatus) void qc.invalidateQueries({ queryKey: seriesKeys.list() });
+  }, [liveStatus, qc]);
 
   const refresh = useCallback(() => {
-    void qc.invalidateQueries({ queryKey: ["chapter", ws, chapterId] });
-    void qc.invalidateQueries({ queryKey: seriesKeys.list(ws) });
-  }, [qc, ws, chapterId]);
+    void qc.invalidateQueries({ queryKey: ["chapter", chapterId] });
+    void qc.invalidateQueries({ queryKey: seriesKeys.list() });
+  }, [qc, chapterId]);
 
   /** Tải lại tiến độ ngay; trả chương có ổn định không. */
   const refetchProgress = useCallback(async () => {

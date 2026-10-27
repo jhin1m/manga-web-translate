@@ -1,12 +1,12 @@
 /**
- * Font tuỳ chỉnh của workspace: owner/admin upload TTF/OTF (presigned POST → API kiểm magic bytes, kích thước,
+ * Font tuỳ chỉnh của người dùng: upload TTF/OTF (presigned POST → API kiểm magic bytes, kích thước,
  * parse bằng fontkit rồi lưu metrics), mọi thành viên xem danh sách. Xoá bị chặn khi series còn dùng làm font mặc định.
  * Font đã kiểm được chép sang key theo font_id rồi xoá key upload: presigned POST còn hạn không ghi đè được font đã lưu,
  * và commit lặp trên key upload cũ không tạo được hàng thứ hai dùng chung object.
  */
 import { createHash } from "node:crypto";
-import { series, workspaceFonts } from "@mtl/db";
-import { keyBelongsToWorkspace, storageKeys } from "@mtl/shared";
+import { series, userFonts } from "@mtl/db";
+import { keyBelongsToUser, storageKeys, userPrefix } from "@mtl/shared";
 import { eq } from "drizzle-orm";
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
@@ -15,10 +15,10 @@ import { z } from "zod";
 import { MAX_FONT_BYTES, readFontInfo, sniffFont } from "../lib/font-metrics.ts";
 import { newCustomFontId } from "../lib/fonts.ts";
 import { parseJson } from "../lib/validate.ts";
-import { type AppEnv, requireWorkspace } from "../middleware/workspace.ts";
+import type { AppEnv } from "../middleware/user.ts";
 import { copyObject, deleteObject, head, presignGet, presignPost, readObject } from "../storage.ts";
 
-export const MAX_WORKSPACE_FONTS = 20;
+export const MAX_USER_FONTS = 20;
 const UPLOAD_TTL_S = 10 * 60;
 /** URL tải font trong danh sách: ngắn; editor tải lại khi gần hết hạn (`url_expires_at`). */
 export const FONT_URL_TTL_S = 10 * 60;
@@ -27,7 +27,7 @@ const FONT_CONTENT_TYPE = "application/octet-stream";
 const UploadRequest = z.object({ bytes: z.number().int().min(1).max(MAX_FONT_BYTES) });
 const CommitRequest = z.object({ key: z.string().min(1).max(300) });
 
-type FontRow = typeof workspaceFonts.$inferSelect;
+type FontRow = typeof userFonts.$inferSelect;
 
 const fail = (status: 400 | 409, error: string, message: string) =>
   new HTTPException(status, { res: Response.json({ error, message }, { status }) });
@@ -58,27 +58,27 @@ async function discard(key: string) {
 
 export const fontRoutes = new Hono<AppEnv>();
 
-fontRoutes.get("/w/:ws/fonts", requireWorkspace(), async (c) => {
-  const rows = await c.get("sdb").select(workspaceFonts);
+fontRoutes.get("/fonts", async (c) => {
+  const rows = await c.get("sdb").select(userFonts);
   rows.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
   return c.json({ fonts: await Promise.all(rows.map(fontView)) });
 });
 
-fontRoutes.post("/w/:ws/fonts/upload-url", requireWorkspace("admin"), async (c) => {
+fontRoutes.post("/fonts/upload-url", async (c) => {
   const body = await parseJson(c, UploadRequest);
   const uploadId = uuidv7();
-  const key = storageKeys.font(c.get("workspaceId"), uploadId);
+  const key = storageKeys.font(c.get("userId"), uploadId);
   const post = await presignPost(key, FONT_CONTENT_TYPE, body.bytes, UPLOAD_TTL_S);
   return c.json({ upload_id: uploadId, key, url: post.url, fields: post.fields, expires_at: post.expiresAt }, 201);
 });
 
-/** Xác nhận font đã upload: kiểm tra rồi lưu. Trùng sha256 trong workspace → trả font có sẵn (200). */
-fontRoutes.post("/w/:ws/fonts", requireWorkspace("admin"), async (c) => {
+/** Xác nhận font đã upload: kiểm tra rồi lưu. Trùng sha256 trong font của người dùng → trả font có sẵn (200). */
+fontRoutes.post("/fonts", async (c) => {
   const { key } = await parseJson(c, CommitRequest);
-  const ws = c.get("workspaceId");
+  const userId = c.get("userId");
   const sdb = c.get("sdb");
-  if (!keyBelongsToWorkspace(key, ws) || !key.startsWith(`ws/${ws}/fonts/`)) {
-    throw fail(400, "invalid_key", "key không thuộc workspace này");
+  if (!keyBelongsToUser(key, userId) || !key.startsWith(`${userPrefix(userId)}fonts/`)) {
+    throw fail(400, "invalid_key", "key không thuộc dữ liệu của bạn");
   }
   const h = await head(key);
   if (!h) throw fail(409, "not_uploaded", "chưa thấy file font đã upload");
@@ -93,14 +93,14 @@ fontRoutes.post("/w/:ws/fonts", requireWorkspace("admin"), async (c) => {
   if (!sniffFont(bytes)) return reject("not_font", "chỉ nhận font TTF hoặc OTF (không nhận WOFF/WOFF2/TTC)");
   const sha256 = createHash("sha256").update(bytes).digest("hex");
 
-  const existing = await sdb.find(workspaceFonts, eq(workspaceFonts.sha256, sha256));
+  const existing = await sdb.find(userFonts, eq(userFonts.sha256, sha256));
   if (existing) {
     if (existing.fileKey !== key) await discard(key);
     return c.json(await fontView(existing));
   }
-  if ((await sdb.select(workspaceFonts)).length >= MAX_WORKSPACE_FONTS) {
+  if ((await sdb.select(userFonts)).length >= MAX_USER_FONTS) {
     await discard(key);
-    throw fail(409, "limit", `mỗi nhóm tối đa ${MAX_WORKSPACE_FONTS} font`);
+    throw fail(409, "limit", `mỗi tài khoản tối đa ${MAX_USER_FONTS} font`);
   }
 
   let info: ReturnType<typeof readFontInfo>;
@@ -110,11 +110,11 @@ fontRoutes.post("/w/:ws/fonts", requireWorkspace("admin"), async (c) => {
     return reject("corrupt_font", "không đọc được font (file hỏng)");
   }
   const fontId = newCustomFontId();
-  const finalKey = storageKeys.font(ws, fontId);
+  const finalKey = storageKeys.font(userId, fontId);
   await copyObject(key, finalKey);
   await discard(key);
   try {
-    const row = await sdb.insert(workspaceFonts, {
+    const row = await sdb.insert(userFonts, {
       fontId,
       name: info.name || `Font ${fontId}`,
       fileKey: finalKey,
@@ -130,17 +130,17 @@ fontRoutes.post("/w/:ws/fonts", requireWorkspace("admin"), async (c) => {
     });
     return c.json(await fontView(row), 201);
   } catch (err) {
-    // 2 request cùng font chạy song song: bên thua đụng unique (workspace, sha256) → trả font bên thắng.
+    // 2 request cùng font chạy song song: bên thua đụng unique (user, sha256) → trả font bên thắng.
     await discard(finalKey);
-    const winner = await sdb.find(workspaceFonts, eq(workspaceFonts.sha256, sha256));
+    const winner = await sdb.find(userFonts, eq(userFonts.sha256, sha256));
     if (!winner) throw err;
     return c.json(await fontView(winner));
   }
 });
 
-fontRoutes.delete("/w/:ws/fonts/:fontId", requireWorkspace("admin"), async (c) => {
+fontRoutes.delete("/fonts/:fontId", async (c) => {
   const sdb = c.get("sdb");
-  const font = await sdb.find(workspaceFonts, eq(workspaceFonts.fontId, c.req.param("fontId")));
+  const font = await sdb.find(userFonts, eq(userFonts.fontId, c.req.param("fontId")));
   if (!font) throw new HTTPException(404, { message: "font not found" });
   const users = (await sdb.select(series)).filter((s) => Object.values(s.defaultFonts).includes(font.fontId));
   if (users.length > 0) {
@@ -151,7 +151,7 @@ fontRoutes.delete("/w/:ws/fonts/:fontId", requireWorkspace("admin"), async (c) =
       ),
     });
   }
-  await sdb.delete(workspaceFonts, eq(workspaceFonts.id, font.id));
+  await sdb.delete(userFonts, eq(userFonts.id, font.id));
   await discard(font.fileKey);
   return c.body(null, 204);
 });

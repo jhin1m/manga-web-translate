@@ -1,7 +1,7 @@
 /**
- * Glossary riêng series hoặc glossary chung workspace theo cặp nguồn→đích (khớp apps/api/src/routes/glossary.ts).
+ * Glossary riêng series hoặc glossary chung theo cặp nguồn→đích (khớp apps/api/src/routes/glossary.ts).
  */
-import { api, wsPath } from "../../lib/api.ts";
+import { api } from "../../lib/api.ts";
 import type { SourceLang, TargetLang } from "../series/lang-labels.ts";
 
 export type GlossaryEntry = {
@@ -21,24 +21,24 @@ export type EntryInput = Pick<GlossaryEntry, "source_term" | "target_term" | "no
 export type LangPair = { source_lang: SourceLang; target_lang: TargetLang };
 export type GlossaryScope = { seriesId: string } | { pair: LangPair };
 
-export const scopePath = (ws: string, scope: GlossaryScope, path = "") =>
+export const scopePath = (scope: GlossaryScope, path = "") =>
   "seriesId" in scope
-    ? wsPath(ws, `/series/${scope.seriesId}/glossary${path}`)
-    : wsPath(ws, `/glossary${path}?source_lang=${scope.pair.source_lang}&target_lang=${scope.pair.target_lang}`);
+    ? `/api/series/${scope.seriesId}/glossary${path}`
+    : `/api/glossary${path}?source_lang=${scope.pair.source_lang}&target_lang=${scope.pair.target_lang}`;
 
-/** Mọi key bắt đầu bằng `["glossary", ws]` — invalidate theo prefix đó làm mới cả hai cấp. */
-export const glossaryKey = (ws: string, scope: GlossaryScope): readonly string[] =>
+/** Mọi key bắt đầu bằng `["glossary"]` — invalidate theo prefix đó làm mới cả hai cấp. */
+export const glossaryKey = (scope: GlossaryScope): readonly string[] =>
   "seriesId" in scope
-    ? ["glossary", ws, scope.seriesId]
-    : ["glossary", ws, "ws", scope.pair.source_lang, scope.pair.target_lang];
+    ? ["glossary", scope.seriesId]
+    : ["glossary", "shared", scope.pair.source_lang, scope.pair.target_lang];
 
-export const fetchGlossary = (ws: string, scope: GlossaryScope) =>
-  api<{ entries: GlossaryEntry[]; inherited: GlossaryEntry[] }>(scopePath(ws, scope));
-export const createEntry = (ws: string, scope: GlossaryScope, body: EntryInput) =>
-  api<GlossaryEntry>(scopePath(ws, scope), { method: "POST", body });
-export const updateEntry = (ws: string, id: string, body: Partial<EntryInput>) =>
-  api<GlossaryEntry>(wsPath(ws, `/glossary/${id}`), { method: "PATCH", body });
-export const deleteEntry = (ws: string, id: string) => api<void>(wsPath(ws, `/glossary/${id}`), { method: "DELETE" });
-export const importCsv = (ws: string, scope: GlossaryScope, csv: string, mode: "merge" | "replace") =>
-  api<{ created: number; updated: number }>(scopePath(ws, scope, "/csv"), { method: "POST", body: { csv, mode } });
-export const exportCsvUrl = (ws: string, scope: GlossaryScope) => scopePath(ws, scope, "/csv");
+export const fetchGlossary = (scope: GlossaryScope) =>
+  api<{ entries: GlossaryEntry[]; inherited: GlossaryEntry[] }>(scopePath(scope));
+export const createEntry = (scope: GlossaryScope, body: EntryInput) =>
+  api<GlossaryEntry>(scopePath(scope), { method: "POST", body });
+export const updateEntry = (id: string, body: Partial<EntryInput>) =>
+  api<GlossaryEntry>(`/api/glossary/${id}`, { method: "PATCH", body });
+export const deleteEntry = (id: string) => api<void>(`/api/glossary/${id}`, { method: "DELETE" });
+export const importCsv = (scope: GlossaryScope, csv: string, mode: "merge" | "replace") =>
+  api<{ created: number; updated: number }>(scopePath(scope, "/csv"), { method: "POST", body: { csv, mode } });
+export const exportCsvUrl = (scope: GlossaryScope) => scopePath(scope, "/csv");

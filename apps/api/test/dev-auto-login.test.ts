@@ -2,7 +2,7 @@
 import { describe, expect, it } from "vitest";
 import { createApp } from "../src/app.ts";
 import { devAutoLoginEnabled, env, parseEnv } from "../src/env.ts";
-import { PASSWORD, seedWorkspace } from "./helpers.ts";
+import { PASSWORD, seedUser } from "./helpers.ts";
 
 // Bỏ DEV_AUTO_LOGIN_* thật (`.env` dev nạp vào process.env) → mỗi case chỉ thấy đúng biến nó đặt.
 const { DEV_AUTO_LOGIN_EMAIL: _email, DEV_AUTO_LOGIN_PASSWORD: _password, ...realEnv } = process.env;
@@ -39,11 +39,14 @@ describe("dev auto-login", () => {
   });
 
   it("does not mount the route by default (NODE_ENV=test)", async () => {
-    expect((await post(createApp())).status).toBe(404);
+    // Không mount → đường rơi vào router người dùng (bắt buộc đăng nhập) → 401, không có cookie phiên.
+    const res = await post(createApp());
+    expect(res.status).toBe(401);
+    expect(res.headers.getSetCookie()).toEqual([]);
   });
 
   it("signs in the configured user with a 7-day session cookie", async () => {
-    const { email } = await seedWorkspace("devlogin");
+    const { email } = await seedUser("devlogin");
     const res = await post(createApp({ devAutoLogin: { email, password: PASSWORD } }));
     expect(res.status, await res.clone().text()).toBe(200);
     const cookie = res.headers.getSetCookie().find((c) => c.includes("better-auth.session_token="));

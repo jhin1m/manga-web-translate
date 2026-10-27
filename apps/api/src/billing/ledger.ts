@@ -84,7 +84,7 @@ export function recordServerUsage(tx: DbLike, job: Job, attempt: number, kind: K
 }
 
 /**
- * Chi phí nền tảng theo dispatch Modal (workspace_id + job_id null), VD GPU rỗi của container. Unique
+ * Chi phí nền tảng theo dispatch Modal (user_id + job_id null), VD GPU rỗi của container. Unique
  * (dispatch_id, kind) → ghi tối đa 1 lần mỗi dispatch (báo lại / reaper ước lượng sau → bỏ qua). Trả true nếu ghi.
  */
 export async function recordDispatchUsage(
@@ -97,7 +97,7 @@ export async function recordDispatchUsage(
   const q = Math.round(Math.max(0, quantity) * 1000) / 1000;
   const inserted = await tx
     .insert(usageLedger)
-    .values({ workspaceId: null, jobId: null, dispatchId, kind, quantity: q, unitCostUsd: unit, costUsd: q * unit })
+    .values({ userId: null, jobId: null, dispatchId, kind, quantity: q, unitCostUsd: unit, costUsd: q * unit })
     .onConflictDoNothing()
     .returning({ id: usageLedger.id });
   return inserted.length > 0;
@@ -113,7 +113,7 @@ async function insertRows(
   const values = rows
     .filter((r) => r.quantity > 0)
     .map((r) => ({
-      workspaceId: job.workspaceId,
+      userId: job.userId,
       jobId: job.id,
       attempt,
       seq,

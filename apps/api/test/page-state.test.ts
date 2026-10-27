@@ -4,10 +4,10 @@ import { emptyPageState, type PageState, pageId, storageKeys } from "@mtl/shared
 import { eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { HISTORY_KEEP } from "../src/jobs/page-state-writer.ts";
-import { call, db, seedWorkspace } from "./helpers.ts";
+import { call, db, seedUser } from "./helpers.ts";
 import { aiState, PNG_1PX, SHA } from "./worker-helpers.ts";
 
-type Seed = Awaited<ReturnType<typeof seedWorkspace>>;
+type Seed = Awaited<ReturnType<typeof seedUser>>;
 let A: Seed;
 let ord = 0;
 
@@ -15,7 +15,7 @@ const W = 720;
 const H = 3000;
 
 async function newPage(cleanRev: number | null = 1) {
-  const sdb = scoped(db, A.workspaceId);
+  const sdb = scoped(db, A.userId);
   const id = pageId(A.chapterId, 1, ord++);
   await sdb.insert(pages, {
     id,
@@ -23,7 +23,7 @@ async function newPage(cleanRev: number | null = 1) {
     ord,
     width: W,
     height: H,
-    originalKey: `ws/${A.workspaceId}/ch/${A.chapterId}/ingest/1/${ord}.png`,
+    originalKey: `u/${A.userId}/ch/${A.chapterId}/ingest/1/${ord}.png`,
     originalSha256: SHA,
     cleanRev,
   });
@@ -31,10 +31,9 @@ async function newPage(cleanRev: number | null = 1) {
   return id;
 }
 
-const p = (id: string, path = "") => `/api/w/${A.workspaceId}/pages/${id}${path}`;
-const lock = () => call(`/api/w/${A.workspaceId}/chapters/${A.chapterId}/lock`, { method: "POST", cookie: A.cookie });
-const unlock = () =>
-  call(`/api/w/${A.workspaceId}/chapters/${A.chapterId}/lock`, { method: "DELETE", cookie: A.cookie });
+const p = (id: string, path = "") => `/api/pages/${id}${path}`;
+const lock = () => call(`/api/chapters/${A.chapterId}/lock`, { method: "POST", cookie: A.cookie });
+const unlock = () => call(`/api/chapters/${A.chapterId}/lock`, { method: "DELETE", cookie: A.cookie });
 
 function put(id: string, state: PageState, version?: number | string) {
   return call(p(id, "/state"), {
@@ -58,7 +57,7 @@ async function upload(post: { url: string; fields: Record<string, string> }, bod
 }
 
 beforeAll(async () => {
-  A = await seedWorkspace("pst");
+  A = await seedUser("pst");
 });
 
 describe("GET /pages/:id", () => {
@@ -75,7 +74,7 @@ describe("GET /pages/:id", () => {
     expect(body.ai_rev).toBe(1);
     expect(body.ai_update_available).toBe(false);
     expect(body.page).toMatchObject({ clean_rev: 3, width: W, chapter_id: A.chapterId });
-    expect(body.images.clean).toContain(storageKeys.clean(A.workspaceId, id, 3));
+    expect(body.images.clean).toContain(storageKeys.clean(A.userId, id, 3));
     expect(body.images.original).toContain("/ingest/1/");
   });
 
@@ -115,7 +114,7 @@ describe("PUT /pages/:id/state", () => {
     expect(hist).toHaveLength(1);
     expect(hist[0]?.version).toBe(0);
     expect(hist[0]?.state?.regions[0]?.translation).toBe("AI");
-    expect(hist[0]?.actor).toBe(`user:${A.ownerId}`);
+    expect(hist[0]?.actor).toBe(`user:${A.userId}`);
   });
 
   it("stale version → 409 with the current version, state unchanged (no blind overwrite)", async () => {
@@ -170,7 +169,7 @@ describe("mask upload → reinpaint", () => {
   it("signs a PNG-only POST under the page's user-mask prefix", async () => {
     const id = await newPage();
     const post = await maskUpload(id);
-    expect(post.key).toMatch(new RegExp(`^ws/${A.workspaceId}/pg/${id}/user-mask/[0-9a-f-]{36}\\.png$`));
+    expect(post.key).toMatch(new RegExp(`^u/${A.userId}/pg/${id}/user-mask/[0-9a-f-]{36}\\.png$`));
     expect(post.fields["Content-Type"]).toBe("image/png");
   });
 
@@ -190,7 +189,7 @@ describe("mask upload → reinpaint", () => {
       base_clean_rev: 4,
       user_mask_key: post.key,
       offset: { x: 10, y: 20 },
-      // Cài đặt pipeline mặc định của workspace (snapshot lúc enqueue).
+      // Cài đặt pipeline mặc định của người dùng (snapshot lúc enqueue).
       inpaint: { inpainter: "big_lama", inpaint_size: 512 },
     });
   });
@@ -201,7 +200,7 @@ describe("mask upload → reinpaint", () => {
     const post = await maskUpload(id);
     expect((await reinpaint(id, { user_mask_key: post.key, offset: [0, 0], base_clean_rev: 4 })).status).toBe(409);
     expect((await reinpaint(id, { user_mask_key: post.key, offset: [0, 0], base_clean_rev: 5 })).status).toBe(400);
-    const foreign = `ws/${A.workspaceId}/pg/other/user-mask/x.png`;
+    const foreign = `u/${A.userId}/pg/other/user-mask/x.png`;
     expect((await reinpaint(id, { user_mask_key: foreign, offset: [0, 0], base_clean_rev: 5 })).status).toBe(400);
     await unlock();
     expect((await reinpaint(id, { user_mask_key: post.key, offset: [0, 0], base_clean_rev: 5 })).status).toBe(423);
@@ -235,7 +234,7 @@ describe("GET /chapters/:id/states", () => {
     const first = ids[0] as string;
     expect((await put(first, edited("Sửa tay"), 0)).status).toBe(200);
     await unlock();
-    const res = await call(`/api/w/${A.workspaceId}/chapters/${A.chapterId}/states`, { cookie: A.cookie });
+    const res = await call(`/api/chapters/${A.chapterId}/states`, { cookie: A.cookie });
     expect(res.status).toBe(200);
     const { pages: list } = (await res.json()) as { pages: Record<string, unknown>[] };
     const ords = list.map((x) => x.ord as number);

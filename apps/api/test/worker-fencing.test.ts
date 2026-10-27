@@ -7,7 +7,7 @@ import { eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { enqueueIngest, inJobTx } from "../src/jobs/enqueue.ts";
 import { reapExpiredLeases } from "../src/jobs/reaper.ts";
-import { db, seedWorkspace } from "./helpers.ts";
+import { db, seedUser } from "./helpers.ts";
 import {
   addSources,
   type Claimed,
@@ -26,7 +26,7 @@ import {
   workerToken,
 } from "./worker-helpers.ts";
 
-type Seed = Awaited<ReturnType<typeof seedWorkspace>>;
+type Seed = Awaited<ReturnType<typeof seedUser>>;
 let A: Seed;
 let token: string;
 let otherToken: string;
@@ -39,11 +39,11 @@ async function claimPrepare(): Promise<Claimed> {
 }
 
 beforeAll(async () => {
-  A = await seedWorkspace("fence");
-  token = (await workerToken(A.workspaceId, "mac-a")).token;
-  otherToken = (await workerToken(A.workspaceId, "mac-a-2")).token;
-  await addSources(A.workspaceId, A.chapterId, 3);
-  await inJobTx((tx) => enqueueIngest(tx, A.workspaceId, A.chapterId));
+  A = await seedUser("fence");
+  token = (await workerToken("mac", "mac-a")).token;
+  otherToken = (await workerToken("mac", "mac-a-2")).token;
+  await addSources(A.userId, A.chapterId, 3);
+  await inJobTx((tx) => enqueueIngest(tx, A.userId, A.chapterId));
   const [ij] = await claimJobs(token, { caps: ["chapter.ingest"] });
   expect((await doIngest(token, ij as Claimed)).status).toBe(200);
 });
@@ -161,13 +161,13 @@ describe("worker fencing", () => {
     const [row] = await db
       .insert(jobs)
       .values({
-        workspaceId: A.workspaceId,
+        userId: A.userId,
         type: "page.reinpaint",
         payload: {
           type: "page.reinpaint",
           page_id: pg?.id as string,
           base_clean_rev: pg?.cleanRev ?? 0,
-          user_mask_key: `ws/${A.workspaceId}/pg/${pg?.id}/user-mask/m.png`,
+          user_mask_key: `u/${A.userId}/pg/${pg?.id}/user-mask/m.png`,
           offset: { x: 0, y: 0 },
         },
         inputRev: "r",

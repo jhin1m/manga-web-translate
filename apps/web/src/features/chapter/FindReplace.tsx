@@ -20,7 +20,7 @@ import { LockBanner } from "./lock-banner.tsx";
 import { describeWriteError, splitHighlight } from "./text-utils.ts";
 import type { LockState } from "./use-chapter-lock.ts";
 
-type Ids = { ws: string; seriesId: string; chapterId: string };
+type Ids = { seriesId: string; chapterId: string };
 
 const writeError = (e: unknown) => {
   if (e instanceof ApiError) {
@@ -35,7 +35,7 @@ const writeError = (e: unknown) => {
  * (chụp lúc bấm Xem trước), và kết quả xem trước về muộn sau khi input đã đổi bị bỏ — không bao giờ áp thứ chưa xem.
  */
 export function useBatchFlow<I>(
-  ids: Pick<Ids, "ws" | "chapterId">,
+  ids: Pick<Ids, "chapterId">,
   fns: {
     input: I;
     /** Chạy trước mỗi lượt gọi server (lưu phần đang sửa để server thấy bản mới nhất). */
@@ -44,14 +44,14 @@ export function useBatchFlow<I>(
     apply(input: I, versions: Record<string, number>): Promise<ApplyResult>;
   },
 ) {
-  const { ws, chapterId } = ids;
+  const { chapterId } = ids;
   const qc = useQueryClient();
   const [preview, setPreview] = useState<{ result: PreviewResult; input: I } | null>(null);
   const [applied, setApplied] = useState<ApplyResult | null>(null);
   const [message, setMessage] = useState<{ tone: "info" | "danger"; text: string } | null>(null);
   /** Tăng mỗi lần input đổi/xem trước mới — response mang số cũ thì bỏ. */
   const gen = useRef(0);
-  const refresh = () => void qc.invalidateQueries({ queryKey: ["chapter", ws, chapterId] });
+  const refresh = () => void qc.invalidateQueries({ queryKey: ["chapter", chapterId] });
 
   const previewM = useMutation({
     mutationFn: async (v: { input: I; gen: number }) => {
@@ -87,7 +87,7 @@ export function useBatchFlow<I>(
   const undoM = useMutation({
     mutationFn: async (batchId: string) => {
       await fns.beforeWrite?.();
-      return undoBatch(ws, chapterId, batchId);
+      return undoBatch(chapterId, batchId);
     },
     onSuccess: (r) => {
       setApplied(null);
@@ -264,18 +264,18 @@ export type ToolPanelProps = Ids & {
   onJump(m: FindMatch): void;
 };
 
-export function FindReplacePanel({ ws, chapterId, lock, beforeWrite, onJump }: ToolPanelProps) {
+export function FindReplacePanel({ chapterId, lock, beforeWrite, onJump }: ToolPanelProps) {
   const [find, setFind] = useState("");
   const [replace, setReplace] = useState("");
   const [cs, setCs] = useState(false);
   const input = { find, replace, case_sensitive: cs };
   const flow = useBatchFlow(
-    { ws, chapterId },
+    { chapterId },
     {
       input,
       beforeWrite,
-      preview: (i) => previewFindReplace(ws, chapterId, i),
-      apply: (i, versions) => applyFindReplace(ws, chapterId, i, versions),
+      preview: (i) => previewFindReplace(chapterId, i),
+      apply: (i, versions) => applyFindReplace(chapterId, i, versions),
     },
   );
   // Highlight theo đúng cụm của lần xem trước đang hiển thị.

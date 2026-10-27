@@ -106,6 +106,27 @@
       "when": 1792778623019,
       "tag": "0014_proofread_suggestions",
       "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1792838023849,
+      "tag": "0015_single_user_guard_worker_kind",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1792838093523,
+      "tag": "0016_drop_workspaces",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1792838108794,
+      "tag": "0017_user_ownership",
+      "breakpoints": true
     }
   ]
 }

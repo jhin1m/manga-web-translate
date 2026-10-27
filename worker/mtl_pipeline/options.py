@@ -1,4 +1,4 @@
-"""Cài đặt pipeline của workspace snapshot trong payload job (packages/shared/src/pipeline-settings.ts).
+"""Cài đặt pipeline của người dùng snapshot trong payload job (packages/shared/src/pipeline-settings.ts).
 
 Payload thiếu (job xếp hàng trước 0.6.0) hoặc thiếu field → mặc định = hành vi trước khi có cài đặt."""
 

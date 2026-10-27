@@ -47,6 +47,11 @@ export const ACTIVE_JOB_STATUSES = ["queued", "running", "paused_budget"] as con
 /** provider = 5xx/timeout LLM; rate_limited = 429; schema = JSON LLM sai sau retry; invalid_input = ảnh hỏng/vượt trần. */
 export const ERROR_CLASSES = ["provider", "rate_limited", "schema", "invalid_input", "internal"] as const;
 export const ErrorClass = z.enum(ERROR_CLASSES);
+/**
+ * Người dùng vượt hạn mức chi phí ngày: mã lỗi 402 của API và tiền tố `jobs.error` của job LLM bị dừng
+ * (error_class `internal`, không tính attempt).
+ */
+export const QUOTA_EXCEEDED = "quota_exceeded";
 export type ErrorClass = z.infer<typeof ErrorClass>;
 
 /** `prepared` = xong bước 1 (cắt trang + xoá chữ + OCR), chờ người dùng bấm "Dịch". */
@@ -94,7 +99,7 @@ export const IngestMode = z.enum(PAGE_FORMATS);
 
 /** Snapshot cài đặt dịch lúc enqueue (job tái lập được dù series đổi sau đó). */
 export const TranslateSettings = z.object({
-  /** source_term → target_term (đã gộp entry workspace + series). */
+  /** source_term → target_term (đã gộp entry chung + series). */
   glossary: z.record(z.string(), z.string()),
   /** Optional: job xếp hàng trước pipeline 0.4.0 không có → worker mặc định ko → vi. */
   source_lang: z.string().min(2).optional(),
@@ -117,7 +122,7 @@ export const JobPayload = z.discriminatedUnion("type", [
     source_lang: z.string().min(2),
     /** Optional: job xếp hàng trước pipeline 0.4.0 không có → worker mặc định ltr. */
     reading_order: z.enum(["ltr", "rtl"]).optional(),
-    /** Cài đặt pipeline của workspace lúc enqueue (0.6.0). Thiếu → worker dùng mặc định cũ. */
+    /** Cài đặt pipeline của người dùng lúc enqueue (0.6.0). Thiếu → worker dùng mặc định cũ. */
     pipeline: PrepareOptions.optional(),
   }),
   z.object({
@@ -135,7 +140,7 @@ export const JobPayload = z.discriminatedUnion("type", [
     base_clean_rev: Rev,
     user_mask_key: z.string().min(1),
     offset: z.object({ x: z.number().int(), y: z.number().int() }),
-    /** Inpainter của workspace lúc enqueue (0.6.0). Thiếu → big_lama 512. */
+    /** Inpainter của người dùng lúc enqueue (0.6.0). Thiếu → big_lama 512. */
     inpaint: InpaintOptions.optional(),
   }),
   z.object({
@@ -145,7 +150,7 @@ export const JobPayload = z.discriminatedUnion("type", [
     /** Optional: job xếp hàng trước pipeline 0.4.0 không có → worker mặc định ko → vi. */
     source_lang: z.string().min(2).optional(),
     target_lang: z.string().min(2).optional(),
-    /** OCR engine theo cài đặt workspace (0.6.0). Thiếu → llm. Dịch vẫn qua LLM. */
+    /** OCR engine theo cài đặt người dùng (0.6.0). Thiếu → llm. Dịch vẫn qua LLM. */
     ocr_engine: OcrEngineSchema.optional(),
     /** Thứ tự đọc của chương (0.6.0): `rtl` → OCR local đọc khối chữ cao theo cột dọc. Thiếu → ltr. */
     reading_order: z.enum(["ltr", "rtl"]).optional(),

@@ -1,7 +1,7 @@
 /**
- * Cài đặt pipeline cấp workspace (Cài đặt nhóm → Pipeline). Worker không đọc DB: API snapshot phần cần thiết vào
+ * Cài đặt pipeline của người dùng (Cài đặt chung → Pipeline). Worker không đọc DB: API snapshot phần cần thiết vào
  * payload job lúc enqueue (`page.prepare.pipeline`, `page.reinpaint.inpaint`, `page.ocr_region.ocr_engine`).
- * Mặc định = hành vi trước khi có cài đặt → workspace chưa cấu hình chạy y hệt.
+ * Mặc định = hành vi trước khi có cài đặt → người dùng chưa cấu hình chạy y hệt.
  */
 import { z } from "zod";
 import { SOURCE_LANGS, type SourceLang } from "./series-lang.ts";

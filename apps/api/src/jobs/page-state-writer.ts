@@ -16,17 +16,17 @@ export type AiWriteOutcome = "applied" | "ai_update_available";
 /** Ghi kết quả AI cho 1 page trong transaction của complete; khoá dòng page_states để không đua với editor. */
 export async function writeAiState(
   tx: DbLike,
-  opts: { workspaceId: string; pageId: string; aiState: PageState; actor: string; chapterLocked: boolean },
+  opts: { userId: string; pageId: string; aiState: PageState; actor: string; chapterLocked: boolean },
 ): Promise<AiWriteOutcome> {
   const [cur] = await tx
     .select()
     .from(pageStates)
-    .where(and(eq(pageStates.pageId, opts.pageId), eq(pageStates.workspaceId, opts.workspaceId)))
+    .where(and(eq(pageStates.pageId, opts.pageId), eq(pageStates.userId, opts.userId)))
     .for("update");
   if (!cur) throw new Error(`page_states missing for page ${opts.pageId}`);
 
   await tx.insert(pageStateHistory).values({
-    workspaceId: opts.workspaceId,
+    userId: opts.userId,
     pageId: opts.pageId,
     version: cur.version,
     state: cur.state,

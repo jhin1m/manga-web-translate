@@ -31,7 +31,6 @@ const SAVE_TONE = { saved: "ok", dirty: "idle", saving: "busy", error: "danger" 
 export type EditAccess = { lock: LockState; lockEnabled: boolean; hasPages: boolean };
 
 export function ChapterTopbar(props: {
-  ws: string;
   seriesId: string;
   detail: ChapterDetail | undefined;
   /** Chip trạng thái chương (status.ts chapterChip). */
@@ -57,8 +56,8 @@ export function ChapterTopbar(props: {
   return (
     <header className="cw-top">
       <Link
-        to="/w/$ws/s/$seriesId"
-        params={{ ws: props.ws, seriesId: props.seriesId }}
+        to="/s/$seriesId"
+        params={{ seriesId: props.seriesId }}
         className="cw-back"
         title={detail?.series.title}
         onClick={(e) => {
@@ -80,7 +79,7 @@ export function ChapterTopbar(props: {
         </svg>
         <span className="cw-back-name">{detail?.series.title ?? "Series"}</span>
       </Link>
-      <ChapterMetaPopover ws={props.ws} detail={detail} onMoved={props.onMoved} />
+      <ChapterMetaPopover detail={detail} onMoved={props.onMoved} />
       {/* Luôn render vùng live (rỗng khi chưa tải) để trình đọc màn hình báo được lần đổi đầu tiên. */}
       <span className="cw-chip" role="status" aria-live="polite" aria-label="Trạng thái chương">
         {chip && (
@@ -183,7 +182,7 @@ function EditState(props: EditAccess) {
   else if (props.lock.status === "acquiring")
     view = { short: "Đang lấy khoá…", long: "Đang lấy khoá chương…", tone: "busy" };
   else if (props.lock.status === "denied")
-    view = { short: "Chỉ xem", long: `${props.lock.holderName ?? "Người khác"} đang sửa chương này`, tone: "warn" };
+    view = { short: "Chỉ xem", long: "Chương đang mở ở tab khác — chỉ xem ở tab này", tone: "warn" };
   else if (props.lock.status === "error")
     view = { short: "Chỉ xem", long: "Không lấy được khoá chương", tone: "danger" };
   else if (readOnly === "lock_lost")
@@ -216,11 +215,11 @@ function EditState(props: EditAccess) {
 }
 
 const READ_ONLY_TEXT: Partial<Record<Exclude<ReadOnlyReason, null>, string>> = {
-  lock_lost: "Mất khoá chương (hết hạn hoặc người khác đã mở) — thay đổi chưa lưu vẫn giữ trên máy này; đang chỉ xem",
+  lock_lost: "Mất khoá chương (hết hạn hoặc tab khác đã mở) — thay đổi chưa lưu vẫn giữ trên máy này; đang chỉ xem",
 };
 
 /**
- * Băng cảnh báo dưới thanh trên: chỉ render khi có việc người dùng phải biết/làm — người khác giữ khoá, lỗi khoá,
+ * Băng cảnh báo dưới thanh trên: chỉ render khi có việc người dùng phải biết/làm — tab khác giữ khoá, lỗi khoá,
  * mất khoá, khôi phục thay đổi từ phiên trước, lỗi lưu, trang đang chờ AI tự thử lại (hết hạn mức/quá tải). Bình
  * thường không chiếm chỗ (trạng thái ở topbar).
  */
@@ -249,11 +248,7 @@ export function LockBand(props: {
     items.push({
       key: "lock",
       tone: "warn",
-      body: (
-        <>
-          {lock.holderName ?? "Người khác"} đang sửa chương này — bạn chỉ xem được. {retry}
-        </>
-      ),
+      body: <>Chương đang mở ở tab khác — chỉ xem ở tab này. {retry}</>,
     });
   } else if (hasPages && lockEnabled && lock.status === "error") {
     items.push({

@@ -4,10 +4,10 @@ import { compileIgnoreList, emptyPageState, type PageState, pageId, type TextBox
 import { eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { hideIgnored } from "../src/routes/series-ignore-apply.ts";
-import { call, db, seedWorkspace } from "./helpers.ts";
+import { call, db, seedUser } from "./helpers.ts";
 import { SHA } from "./worker-helpers.ts";
 
-type Seed = Awaited<ReturnType<typeof seedWorkspace>>;
+type Seed = Awaited<ReturnType<typeof seedUser>>;
 type Preview = {
   chapters: {
     chapter_id: string;
@@ -86,7 +86,7 @@ function state(n: number): PageState {
 let A: Seed;
 let seriesId = "";
 const OTHER_USER = "0190a000-0000-7000-8000-0000000000aa";
-const sdb = () => scoped(db, A.workspaceId);
+const sdb = () => scoped(db, A.userId);
 
 async function newSeries(ignore: string[]) {
   const s = await sdb().insert(series, { title: "Ẩn chữ", ignoreText: ignore });
@@ -104,7 +104,7 @@ async function newChapter(sid: string, number: string, nPages: number) {
       ord: i,
       width: 400,
       height: 600,
-      originalKey: `ws/${A.workspaceId}/ch/${ch.id}/ingest/1/${i}.png`,
+      originalKey: `u/${A.userId}/ch/${ch.id}/ingest/1/${i}.png`,
       originalSha256: SHA,
       status: "ready",
     });
@@ -115,7 +115,7 @@ async function newChapter(sid: string, number: string, nPages: number) {
 }
 
 const api = (path: string, body: unknown, sid = seriesId) =>
-  call(`/api/w/${A.workspaceId}/series/${sid}/ignore-apply${path}`, { method: "POST", cookie: A.cookie, body });
+  call(`/api/series/${sid}/ignore-apply${path}`, { method: "POST", cookie: A.cookie, body });
 const stateOf = async (id: string) => {
   const [row] = await sdb().select(pageStates, eq(pageStates.pageId, id));
   if (!row?.state) throw new Error("no state");
@@ -125,7 +125,7 @@ const hiddenOf = async (id: string) => (await stateOf(id)).state.text_boxes.filt
 const mergedVersions = (pv: Preview) => Object.assign({}, ...pv.chapters.map((c) => c.versions));
 
 beforeAll(async () => {
-  A = await seedWorkspace("ignore-apply");
+  A = await seedUser("ignore-apply");
 });
 
 describe("hideIgnored", () => {
@@ -154,7 +154,7 @@ describe("hideIgnored", () => {
 describe("ignore list validation on the series form route", () => {
   it("rejects a broken or nested-quantifier regex with a reason, accepts a valid one", async () => {
     const patch = (ignore_text: string[]) =>
-      call(`/api/w/${A.workspaceId}/series/${A.seriesId}`, {
+      call(`/api/series/${A.seriesId}`, {
         method: "PATCH",
         cookie: A.cookie,
         body: { ignore_text },
@@ -248,10 +248,9 @@ describe("preview → apply → undo", () => {
     const pv = (await (await api("/preview", {})).json()) as Preview;
     const applied = (await (await api("/apply", { versions: mergedVersions(pv) })).json()) as Applied;
     const edited = await stateOf(c1.pageIds[0] as string);
-    const lock = (method: string) =>
-      call(`/api/w/${A.workspaceId}/chapters/${c1.id}/lock`, { method, cookie: A.cookie });
+    const lock = (method: string) => call(`/api/chapters/${c1.id}/lock`, { method, cookie: A.cookie });
     expect((await lock("POST")).status).toBe(200);
-    const put = await call(`/api/w/${A.workspaceId}/pages/${c1.pageIds[0]}/state`, {
+    const put = await call(`/api/pages/${c1.pageIds[0]}/state`, {
       method: "PUT",
       cookie: A.cookie,
       body: { state: edited.state },
@@ -395,7 +394,7 @@ describe("chapters that cannot be touched", () => {
     const sid = await newSeries(["discord.gg"]);
     const ch = await newChapter(sid, "1", 1);
     const pv = (await (await api("/preview", {}, sid)).json()) as Preview;
-    await call(`/api/w/${A.workspaceId}/chapters/${ch.id}/lock`, { method: "POST", cookie: A.cookie });
+    await call(`/api/chapters/${ch.id}/lock`, { method: "POST", cookie: A.cookie });
     const body = (await (await api("/apply", { versions: mergedVersions(pv) }, sid)).json()) as Applied;
     expect(body.chapters.map((x) => x.chapter_id)).toEqual([ch.id]);
     const [row] = await sdb().select(chapters, eq(chapters.id, ch.id));

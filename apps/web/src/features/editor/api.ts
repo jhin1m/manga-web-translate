@@ -1,6 +1,6 @@
 /** Kiểu + gọi API editor (khớp apps/api/src/routes/page-state.ts và routes/jobs.ts). */
 import type { PageState, Region } from "@mtl/shared";
-import { api, wsPath } from "../../lib/api.ts";
+import { api } from "../../lib/api.ts";
 import type { JobView } from "../chapter/api.ts";
 
 export type PageDetail = {
@@ -25,44 +25,43 @@ export type PageDetail = {
 
 export type JobWithResult = JobView & { result: unknown };
 
-const page = (ws: string, id: string, path = "") => wsPath(ws, `/pages/${id}${path}`);
+const page = (id: string, path = "") => `/api/pages/${id}${path}`;
 
-export const fetchPageDetail = (ws: string, id: string) => api<PageDetail>(page(ws, id));
+export const fetchPageDetail = (id: string) => api<PageDetail>(page(id));
 
-export const putPageState = (ws: string, id: string, state: PageState, version: number) =>
-  api<{ version: number }>(page(ws, id, "/state"), {
+export const putPageState = (id: string, state: PageState, version: number) =>
+  api<{ version: number }>(page(id, "/state"), {
     method: "PUT",
     body: { state },
     headers: { "if-match": `"${version}"` },
   });
 
-export const ackAiUpdate = (ws: string, id: string, aiRev: number) =>
-  api<{ ai_rev: number; ai_update_available: boolean }>(page(ws, id, "/ai-update/ack"), {
+export const ackAiUpdate = (id: string, aiRev: number) =>
+  api<{ ai_rev: number; ai_update_available: boolean }>(page(id, "/ai-update/ack"), {
     method: "POST",
     body: { ai_rev: aiRev },
   });
 
-export const requestMaskUpload = (ws: string, id: string) =>
-  api<{ key: string; url: string; fields: Record<string, string> }>(page(ws, id, "/mask-upload"), { method: "POST" });
+export const requestMaskUpload = (id: string) =>
+  api<{ key: string; url: string; fields: Record<string, string> }>(page(id, "/mask-upload"), { method: "POST" });
 
 export const startReinpaint = (
-  ws: string,
   id: string,
   body: { user_mask_key: string; offset: [number, number]; base_clean_rev: number },
-) => api<{ job: JobWithResult }>(page(ws, id, "/reinpaint"), { method: "POST", body });
+) => api<{ job: JobWithResult }>(page(id, "/reinpaint"), { method: "POST", body });
 
-export const startOcrRegion = (ws: string, id: string, bbox: [number, number, number, number]) =>
-  api<{ job: JobWithResult }>(page(ws, id, "/ocr-region"), { method: "POST", body: { bbox } });
+export const startOcrRegion = (id: string, bbox: [number, number, number, number]) =>
+  api<{ job: JobWithResult }>(page(id, "/ocr-region"), { method: "POST", body: { bbox } });
 
-export const fetchJob = (ws: string, jobId: string) => api<JobWithResult>(wsPath(ws, `/jobs/${jobId}`));
+export const fetchJob = (jobId: string) => api<JobWithResult>(`/api/jobs/${jobId}`);
 
 const DONE = new Set(["succeeded", "failed", "cancelled"]);
 
 /** Poll job tới khi kết thúc (hoặc `signal` huỷ). */
-export async function waitJob(ws: string, jobId: string, signal?: AbortSignal, everyMs = 1500): Promise<JobWithResult> {
+export async function waitJob(jobId: string, signal?: AbortSignal, everyMs = 1500): Promise<JobWithResult> {
   for (;;) {
     signal?.throwIfAborted();
-    const j = await fetchJob(ws, jobId);
+    const j = await fetchJob(jobId);
     if (DONE.has(j.status)) return j;
     await new Promise<void>((resolve, reject) => {
       const onAbort = () => {

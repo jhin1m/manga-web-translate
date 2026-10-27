@@ -1,7 +1,8 @@
 /**
- * Dispatcher Modal (red team #9), chạy trong `mtl-jobs` mỗi 5s khi DISPATCHER_ENABLED. Chỉ phục vụ workspace
- * `worker_mode='modal'` (worker Mac phục vụ workspace `mac`, không ưu tiên chéo):
- *   age  = oldest_queued_age(modal, loại job claim được, trừ LLM khi breaker bật)
+ * Dispatcher Modal (red team #9), chạy trong `mtl-jobs` mỗi 5s khi DISPATCHER_ENABLED. Worker chung toàn hệ thống:
+ * Mac (máy người vận hành, $0) được ưu tiên — khi có token Mac sống (last_seen < 60s) chỉ tính job đã chờ quá
+ * MAC_GRACE_S, tránh bật Modal rồi để rỗi (GPU rỗi tính cho nền tảng):
+ *   age  = oldest_queued_age(job Modal được nhận — trừ LLM khi breaker bật, trừ job của người vượt hạn mức)
  *   open = dispatch pending (< 120s) + active
  *   age > 0  và open = 0                         và ngân sách ok → 1 dispatch + POST /drain (HMAC)
  *   age > 60s và không còn pending, active < max và ngân sách ok → thêm 1 dispatch
@@ -10,13 +11,14 @@
  * Không bắn thêm khi còn dispatch pending → cold start dài (≤ 120s) chỉ tốn 1 container.
  */
 import { createHmac } from "node:crypto";
-import { type DbLike, dispatches, jobs, runtimeFlags, workspaceSettings } from "@mtl/db";
+import { type DbLike, dispatches, jobs, runtimeFlags, workerTokens } from "@mtl/db";
 import type { JobType, SessionsEndRequest } from "@mtl/shared";
-import { and, eq, inArray, lt, lte, not, type SQL, sql } from "drizzle-orm";
+import { and, eq, gte, inArray, isNull, lt, lte, not, type SQL, sql } from "drizzle-orm";
 import type { z } from "zod";
 import { budgetStatus } from "../billing/budget.ts";
 import { recordDispatchUsage } from "../billing/ledger.ts";
 import { GPU_USD_PER_S } from "../billing/prices.ts";
+import { claimableSql } from "../billing/user-quota.ts";
 import { db } from "../db.ts";
 import { env } from "../env.ts";
 import { sendAlert } from "../lib/alert.ts";
@@ -28,6 +30,13 @@ export const DISPATCH_INTERVAL_MS = 5_000;
 export const DISPATCH_PENDING_S = 120;
 export const SCALE_UP_AGE_S = 60;
 export const NO_CLAIM_BACKOFF_S = [60, 120, 240, 480, 900] as const;
+/** Job chờ ít hơn mức này để Mac (đang sống) lấy trước, không bật Modal. */
+export const MAC_GRACE_S = 60;
+/**
+ * Token Mac coi là sống khi last_seen_at trong khoảng này. worker-token chỉ ghi last_seen_at khi cũ hơn 60s → Mac đang
+ * poll có last_seen tới ~60s + chu kỳ poll; lấy gấp đôi để không chập chờn.
+ */
+const MAC_ALIVE_S = 120;
 /** Bù trễ khi so lifetime container báo với thời gian từ lúc tạo dispatch. */
 const LIFETIME_SLACK_S = 30;
 const BACKOFF_KEY = "dispatch_backoff";
@@ -56,25 +65,39 @@ export const callModalDrain: DrainCall = async (dispatchId) => {
   if (!res.ok) throw new Error(`modal drain ${res.status}`);
 };
 
-/** Tuổi (giây) job đủ điều kiện claim lâu nhất; null khi không có. `mode` bỏ trống = mọi workspace. */
+/** Tuổi (giây) job chờ lâu nhất (đã tới run_after); null khi không có. `olderThanS` = chỉ tính job chờ quá mức này. */
 export async function oldestQueuedAgeS(
   t: DbLike,
-  opts: { mode?: "mac" | "modal"; types?: readonly JobType[]; where?: SQL } = {},
+  opts: { types?: readonly JobType[]; where?: SQL; olderThanS?: number } = {},
 ): Promise<number | null> {
   const [row] = await t
     .select({ age: sql<string | null>`extract(epoch from now() - min(${jobs.runAfter}))` })
     .from(jobs)
-    .leftJoin(workspaceSettings, eq(workspaceSettings.workspaceId, jobs.workspaceId))
     .where(
       and(
         eq(jobs.status, "queued"),
-        lte(jobs.runAfter, sql`now()`),
+        lte(jobs.runAfter, sql`now() - make_interval(secs => ${opts.olderThanS ?? 0})`),
         opts.types ? inArray(jobs.type, [...opts.types]) : undefined,
-        opts.mode ? sql`coalesce(${workspaceSettings.workerMode}, 'mac') = ${opts.mode}` : undefined,
         opts.where,
       ),
     );
   return row?.age == null ? null : Number(row.age);
+}
+
+/** Có worker Mac đang sống (token chưa thu hồi, last_seen gần đây). */
+async function macAlive(t: DbLike): Promise<boolean> {
+  const [row] = await t
+    .select({ id: workerTokens.id })
+    .from(workerTokens)
+    .where(
+      and(
+        eq(workerTokens.kind, "mac"),
+        isNull(workerTokens.revokedAt),
+        gte(workerTokens.lastSeenAt, sql`now() - make_interval(secs => ${MAC_ALIVE_S})`),
+      ),
+    )
+    .limit(1);
+  return !!row;
 }
 
 /**
@@ -126,8 +149,13 @@ async function decide(t: DbLike): Promise<Decision> {
   if (bo?.until && bo.until > new Date()) return done("backoff");
   if ((await budgetStatus(t)).exceeded) return done("budget");
 
-  // Breaker LLM bật: vẫn dispatch cho job không gọi LLM (gồm page.prepare OCR local) — cùng điều kiện với claim.
-  const age = await oldestQueuedAgeS(t, { mode: "modal", where: (await isLlmPaused(t)) ? not(llmJobSql) : undefined });
+  // Cùng điều kiện với claim của token Modal: breaker LLM bật → chỉ job không gọi LLM (gồm page.prepare OCR local);
+  // không tính job của người vượt hạn mức.
+  const breaker = await isLlmPaused(t);
+  const age = await oldestQueuedAgeS(t, {
+    where: and(breaker ? not(llmJobSql) : undefined, claimableSql("modal")),
+    olderThanS: (await macAlive(t)) ? MAC_GRACE_S : 0,
+  });
   if (age === null) return done("idle");
   const open = await t
     .select({ status: dispatches.status, n: sql<number>`count(*)::int` })

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { clock, describeJobError, providerWait, providerWaitText } from "./job-error.ts";
+import { clock, describeJobError, nextQuotaReset, providerWait, providerWaitText } from "./job-error.ts";
 
 const RAW =
   "gemini 429: 429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota'}}";
@@ -33,6 +33,17 @@ describe("job error text", () => {
     expect(d?.text).toContain("AI trả sai định dạng");
     expect(d?.text).toContain("Dịch lại trang này");
     expect(describeJobError(job({ status: "failed" }))?.text).toContain("đã thử lại nhiều lần");
+  });
+
+  it("job stopped by the daily quota says so with the reset time", () => {
+    const d = describeJobError(
+      job({ status: "failed", error_class: "internal", error: "quota_exceeded: vượt hạn mức" }),
+    );
+    expect(d).toEqual({
+      text: `Đã dùng hết hạn mức AI hôm nay — thử lại sau ${clock(nextQuotaReset())}.`,
+      waiting: false,
+    });
+    expect(nextQuotaReset(new Date("2026-10-24T23:59:00Z"))).toBe("2026-10-25T00:00:00.000Z");
   });
 
   it("cancelled job says so instead of a bare error", () => {

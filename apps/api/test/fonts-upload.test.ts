@@ -1,18 +1,17 @@
 /**
- * Font tuỳ chỉnh của workspace: upload (presigned POST → commit kiểm magic bytes / kích thước / parse), trùng sha256,
- * giới hạn 20 font, quyền (member chỉ xem), xoá font đang là mặc định series, `default_fonts` kiểm động.
+ * Font tuỳ chỉnh của người dùng: upload (presigned POST → commit kiểm magic bytes / kích thước / parse), trùng sha256,
+ * giới hạn 20 font, xoá font đang là mặc định series, `default_fonts` kiểm động.
  * Cần MinIO dev (pnpm infra:up).
  */
 import { readFileSync } from "node:fs";
-import { scoped, workspaceFonts } from "@mtl/db";
+import { scoped, userFonts } from "@mtl/db";
 import { beforeAll, describe, expect, it } from "vitest";
-import { INVITATION_HEADER, INVITATION_TOKEN_HEADER } from "../src/auth.ts";
 import { MAX_FONT_BYTES } from "../src/lib/font-metrics.ts";
-import { MAX_WORKSPACE_FONTS } from "../src/routes/fonts.ts";
+import { MAX_USER_FONTS } from "../src/routes/fonts.ts";
 import { head, presignPut } from "../src/storage.ts";
-import { call, cookieFrom, db, invite, PASSWORD, seedWorkspace, uniq } from "./helpers.ts";
+import { call, db, seedUser } from "./helpers.ts";
 
-type Seed = Awaited<ReturnType<typeof seedWorkspace>>;
+type Seed = Awaited<ReturnType<typeof seedUser>>;
 type UploadUrl = { key: string; url: string; fields: Record<string, string> };
 type FontView = {
   id: string;
@@ -30,36 +29,13 @@ const fontFile = (name: string) => readFileSync(new URL(`../../../worker/fonts/$
 const ITIM = fontFile("Itim-Regular.ttf");
 
 let A: Seed;
-let memberCookie: string;
-
-async function joinAsMember(): Promise<string> {
-  const email = `${uniq("member")}@example.com`;
-  const id = await invite(A.cookie, A.workspaceId, email);
-  const link = await call(`/api/w/${A.workspaceId}/invitations/${id}/link`, { cookie: A.cookie });
-  const t = new URL(((await link.json()) as { link: string }).link).searchParams.get("token") ?? "";
-  const res = await call("/api/auth/sign-up/email", {
-    method: "POST",
-    body: { email, password: PASSWORD, name: "Lan" },
-    headers: { [INVITATION_HEADER]: id, [INVITATION_TOKEN_HEADER]: t },
-  });
-  expect(res.status).toBe(200);
-  const cookie = cookieFrom(res);
-  const acc = await call("/api/auth/organization/accept-invitation", {
-    method: "POST",
-    cookie,
-    body: { invitationId: id },
-  });
-  expect(acc.status).toBe(200);
-  return cookie;
-}
 
 beforeAll(async () => {
-  A = await seedWorkspace("fontup");
-  memberCookie = await joinAsMember();
+  A = await seedUser("fontup");
 });
 
 const api = (path: string, init: { method?: string; body?: unknown; cookie?: string } = {}) =>
-  call(`/api/w/${A.workspaceId}${path}`, { cookie: A.cookie, ...init });
+  call(`/api${path}`, { cookie: A.cookie, ...init });
 
 async function json<T>(res: Response, status: number): Promise<T> {
   expect(res.status, await res.clone().text()).toBe(status);
@@ -177,22 +153,9 @@ describe("font upload", () => {
   it("rejects a key that was never uploaded or belongs elsewhere", async () => {
     const { key } = await json<UploadUrl>(await api("/fonts/upload-url", { method: "POST", body: { bytes: 10 } }), 201);
     expect((await commit(key)).status).toBe(409);
-    expect((await commit(`ws/${A.workspaceId}/ch/${A.chapterId}/src/x.png`)).status).toBe(400);
-    expect((await commit(`ws/${A.workspaceId}/fonts/../../other/x`)).status).toBe(400);
-    expect((await commit("ws/00000000-0000-7000-8000-000000000000/fonts/x")).status).toBe(400);
-  });
-});
-
-describe("permissions", () => {
-  it("members can list but not upload or delete", async () => {
-    expect((await api("/fonts", { cookie: memberCookie })).status).toBe(200);
-    expect((await api("/fonts/upload-url", { method: "POST", cookie: memberCookie, body: { bytes: 10 } })).status).toBe(
-      403,
-    );
-    expect((await commit("ws/x/fonts/y", memberCookie)).status).toBe(403);
-    const [font] = (await json<{ fonts: FontView[] }>(await api("/fonts"), 200)).fonts;
-    expect((await api(`/fonts/${font?.id}`, { method: "DELETE", cookie: memberCookie })).status).toBe(403);
-    expect((await api("/fonts")).status).toBe(200);
+    expect((await commit(`u/${A.userId}/ch/${A.chapterId}/src/x.png`)).status).toBe(400);
+    expect((await commit(`u/${A.userId}/fonts/../../other/x`)).status).toBe(400);
+    expect((await commit("u/00000000-0000-7000-8000-000000000000/fonts/x")).status).toBe(400);
   });
 });
 
@@ -221,12 +184,12 @@ describe("series default fonts", () => {
     expect((await patch({ dialogue: font.id })).status).toBe(400);
   });
 
-  it("a font of another workspace is not accepted", async () => {
-    const B = await seedWorkspace("fontup-b");
-    const res = await call(`/api/w/${B.workspaceId}/fonts`, { cookie: B.cookie });
+  it("a font of another user is not accepted", async () => {
+    const B = await seedUser("fontup-b");
+    const res = await call(`/api/fonts`, { cookie: B.cookie });
     expect(res.status).toBe(200);
     const mine = (await json<{ fonts: FontView[] }>(await api("/fonts"), 200)).fonts[0];
-    const patch = await call(`/api/w/${B.workspaceId}/series/${B.seriesId}`, {
+    const patch = await call(`/api/series/${B.seriesId}`, {
       method: "PATCH",
       cookie: B.cookie,
       body: { default_fonts: { dialogue: mine?.id } },
@@ -236,14 +199,14 @@ describe("series default fonts", () => {
 });
 
 describe("font limit", () => {
-  it("allows at most 20 fonts per workspace", async () => {
-    const C = await seedWorkspace("fontup-limit");
-    const sdb = scoped(db, C.workspaceId);
-    for (let i = 0; i < MAX_WORKSPACE_FONTS; i++) {
-      await sdb.insert(workspaceFonts, {
+  it("allows at most 20 fonts per user", async () => {
+    const C = await seedUser("fontup-limit");
+    const sdb = scoped(db, C.userId);
+    for (let i = 0; i < MAX_USER_FONTS; i++) {
+      await sdb.insert(userFonts, {
         fontId: `custom-${i.toString(16).padStart(8, "0")}`,
         name: `F${i}`,
-        fileKey: `ws/${C.workspaceId}/fonts/seed-${i}`,
+        fileKey: `u/${C.userId}/fonts/seed-${i}`,
         sha256: i.toString(16).padStart(64, "0"),
         bytes: 1,
         unitsPerEm: 1000,
@@ -255,7 +218,7 @@ describe("font limit", () => {
       });
     }
     const u = await json<UploadUrl>(
-      await call(`/api/w/${C.workspaceId}/fonts/upload-url`, {
+      await call(`/api/fonts/upload-url`, {
         method: "POST",
         cookie: C.cookie,
         body: { bytes: ITIM.length },
@@ -266,7 +229,7 @@ describe("font limit", () => {
     for (const [k, v] of Object.entries(u.fields)) form.append(k, v);
     form.append("file", new Blob([ITIM]));
     expect((await fetch(u.url, { method: "POST", body: form })).status).toBe(204);
-    const res = await call(`/api/w/${C.workspaceId}/fonts`, { method: "POST", cookie: C.cookie, body: { key: u.key } });
+    const res = await call(`/api/fonts`, { method: "POST", cookie: C.cookie, body: { key: u.key } });
     expect(await json<{ error: string }>(res, 409)).toMatchObject({ error: "limit" });
     expect(await head(u.key)).toBeNull();
   });

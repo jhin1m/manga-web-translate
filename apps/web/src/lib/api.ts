@@ -1,18 +1,33 @@
-import type { PipelineSettings } from "@mtl/shared";
-import { organizationClient } from "better-auth/client/plugins";
+import { type PipelineSettings, QUOTA_EXCEEDED } from "@mtl/shared";
 import { createAuthClient } from "better-auth/react";
 
-export const authClient = createAuthClient({ basePath: "/api/auth", plugins: [organizationClient()] });
+export const authClient = createAuthClient({ basePath: "/api/auth" });
 
-/** Header bắt buộc khi đăng ký từ link mời (server kiểm, xem apps/api/src/auth.ts). */
-export const INVITATION_HEADER = "x-invitation-id";
-export const INVITATION_TOKEN_HEADER = "x-invitation-token";
+const TAB_ID_KEY = "mtl.tab-id";
+let memoryTabId: string | null = null;
+
+/**
+ * Id của tab trình duyệt (uuid, giữ qua reload trong `sessionStorage`) — gửi ở header `x-tab-id` mọi request: khoá
+ * chương giữ theo từng tab (tab khác của cùng tài khoản chỉ xem). sessionStorage bị chặn → id trong bộ nhớ của trang.
+ */
+export function tabId(): string {
+  try {
+    const stored = sessionStorage.getItem(TAB_ID_KEY);
+    if (stored) return stored;
+    const id = crypto.randomUUID();
+    sessionStorage.setItem(TAB_ID_KEY, id);
+    return id;
+  } catch {
+    memoryTabId ??= crypto.randomUUID();
+    return memoryTabId;
+  }
+}
 
 export class ApiError extends Error {
   constructor(
     readonly status: number,
     message: string,
-    /** Body lỗi đầy đủ (VD `rejected`, `holder_name`) để UI hiển thị chi tiết. */
+    /** Body lỗi đầy đủ (VD `rejected`, `spent_usd`) để UI hiển thị chi tiết. */
     readonly body: Record<string, unknown> = {},
   ) {
     super(message);
@@ -25,7 +40,11 @@ export async function api<T>(path: string, init: Omit<RequestInit, "body"> & { b
   const res = await fetch(path, {
     ...rest,
     credentials: "same-origin",
-    headers: { ...(body === undefined ? {} : { "content-type": "application/json" }), ...rest.headers },
+    headers: {
+      "x-tab-id": tabId(),
+      ...(body === undefined ? {} : { "content-type": "application/json" }),
+      ...rest.headers,
+    },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   if (res.status === 204) return undefined as T;
@@ -37,14 +56,27 @@ export async function api<T>(path: string, init: Omit<RequestInit, "body"> & { b
   return data as T;
 }
 
-/** Đường dẫn API của workspace. */
-export const wsPath = (ws: string, path = "") => `/api/w/${ws}${path}`;
+/** Hạn mức chi phí hôm nay (`limit_usd` null = không giới hạn). */
+export type Quota = { spent_usd: number; limit_usd: number | null; resets_at: string };
 
-export type WorkspaceSummary = { id: string; name: string; slug: string };
-export type WorkspaceDetail = WorkspaceSummary & {
-  role: "owner" | "admin" | "member";
-  settings: { worker_mode: string; pipeline: PipelineSettings };
+/** `GET /api/me`: người đang đăng nhập + cài đặt chung + hạn mức hôm nay. */
+export type Me = {
+  id: string;
+  email: string;
+  name: string;
+  settings: { pipeline: PipelineSettings };
+  quota: Quota;
 };
 
-export const errorMessage = (e: unknown) =>
-  e && typeof e === "object" && "message" in e ? String((e as { message: unknown }).message) : "Có lỗi xảy ra";
+export const usd = (n: number) => `$${n.toFixed(2)}`;
+const clock = (iso: string) => new Date(iso).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" });
+
+/** Câu báo hết hạn mức ngày (402 `quota_exceeded`). */
+export const quotaText = (q: { spent_usd?: unknown; limit_usd?: unknown; resets_at?: unknown }) =>
+  `Đã dùng hết hạn mức hôm nay (${usd(Number(q.spent_usd ?? 0))} / ${usd(Number(q.limit_usd ?? 0))})` +
+  (typeof q.resets_at === "string" ? ` — thử lại sau ${clock(q.resets_at)}` : "");
+
+export const errorMessage = (e: unknown) => {
+  if (e instanceof ApiError && e.status === 402 && e.body.error === QUOTA_EXCEEDED) return quotaText(e.body);
+  return e && typeof e === "object" && "message" in e ? String((e as { message: unknown }).message) : "Có lỗi xảy ra";
+};

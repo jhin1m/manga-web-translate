@@ -26,13 +26,13 @@ const target = (id: string, ord: number) => ({
 function fakeServer(post: (fileId: string, attempt: number) => Promise<void> = async () => {}) {
   const calls = {
     create: [] as string[][],
-    createFiles: [] as Parameters<UploadDeps["createChapter"]>[1]["files"][],
+    createFiles: [] as Parameters<UploadDeps["createChapter"]>[0]["files"][],
     presign: [] as string[][],
     post: [] as string[],
   };
   const attempts = new Map<string, number>();
   const deps: UploadDeps = {
-    createChapter: async (_ws, body) => {
+    createChapter: async (body) => {
       calls.create.push(body.files.map((f) => f.name));
       calls.createFiles.push(body.files);
       return {
@@ -42,14 +42,14 @@ function fakeServer(post: (fileId: string, attempt: number) => Promise<void> = a
           number: body.number,
           title: "",
           status: "draft",
-          locked_by: null,
+          locked: false,
           created_at: "",
           updated_at: "",
         },
         files: body.files.map((f, ord) => ({ ...target(`f${ord}`, ord), name: f.name })),
       };
     },
-    presignAgain: async (_ws, _ch, ids) => {
+    presignAgain: async (_ch, ids) => {
       calls.presign.push(ids);
       return { files: ids.map((id) => target(id, Number(id.slice(1)))) };
     },
@@ -88,7 +88,6 @@ describe("upload manager", () => {
     const { deps, calls } = fakeServer();
     const m = createUploadManager(deps);
     await m.startNewChapter({
-      ws: "w",
       seriesId: "s",
       number: "1",
       pages: [png("10.png"), png("__MACOSX/._9.png"), png("9.png"), png("1.png")],
@@ -106,7 +105,7 @@ describe("upload manager", () => {
         return b.size === 2 ? null : { dhash: "0f0f0f0f0f0f0f0f", width: b.size, height: 100 };
       });
     const m = createUploadManager(deps);
-    await m.startNewChapter({ ws: "w", seriesId: "s", number: "1", pages: [png("2.png", 2), png("1.png", 1)] });
+    await m.startNewChapter({ seriesId: "s", number: "1", pages: [png("2.png", 2), png("1.png", 1)] });
     expect(seen).toEqual([1, 2]);
     expect(calls.createFiles[0]).toEqual([
       { name: "1.png", content_type: "image/png", bytes: 1, dhash: "0f0f0f0f0f0f0f0f", width: 1, height: 100 },
@@ -121,7 +120,7 @@ describe("upload manager", () => {
       throw new Error("decode");
     };
     const m = createUploadManager(deps);
-    await m.startNewChapter({ ws: "w", seriesId: "s", number: "1", pages: [png("1.png", 3)] });
+    await m.startNewChapter({ seriesId: "s", number: "1", pages: [png("1.png", 3)] });
     expect(calls.createFiles[0]).toEqual([{ name: "1.png", content_type: "image/png", bytes: 3 }]);
     await settled(m, "ch-1");
   });
@@ -133,7 +132,7 @@ describe("upload manager", () => {
     });
     const { deps } = fakeServer(() => gate);
     const m = createUploadManager(deps);
-    const { chapterId } = await m.startNewChapter({ ws: "w", seriesId: "s", number: "1", pages: [png("1.png")] });
+    const { chapterId } = await m.startNewChapter({ seriesId: "s", number: "1", pages: [png("1.png")] });
     expect(chapterId).toBe("ch-1");
     expect(m.store.getState().chapters[chapterId]?.phase).toBe("uploading");
     expect(m.view(chapterId)).toEqual({ phase: "uploading", done: 0, total: 1 });
@@ -152,7 +151,7 @@ describe("upload manager", () => {
       if (id === "f1" && attempt < 3) throw new Error("mất kết nối");
     });
     const m = createUploadManager(deps);
-    await m.startNewChapter({ ws: "w", seriesId: "s", number: "1", pages: [png("1.png"), png("2.png")] });
+    await m.startNewChapter({ seriesId: "s", number: "1", pages: [png("1.png"), png("2.png")] });
     await settled(m, "ch-1");
     expect(calls.presign).toEqual([["f1"], ["f1"]]);
     expect(calls.post.filter((id) => id === "f1")).toHaveLength(3);
@@ -174,16 +173,16 @@ describe("upload manager", () => {
     expect(m.view("ch-9")).toEqual({ phase: "incomplete", done: 1, total: 3 });
     // Tab cũ: id đã lên storage lấy từ dấu localStorage.
     expect(m.uploadedIds("ch-9")).toEqual(new Set(["f0"]));
-    expect(() => m.resumeChapter({ ws: "w", chapter, pages: [png("1.png"), png("2.png"), png("3.png", 10)] })).toThrow(
+    expect(() => m.resumeChapter({ chapter, pages: [png("1.png"), png("2.png"), png("3.png", 10)] })).toThrow(
       /khác dung lượng/,
     );
-    expect(() => m.resumeChapter({ ws: "w", chapter, pages: [png("1.png")] })).toThrow(/3 ảnh/);
+    expect(() => m.resumeChapter({ chapter, pages: [png("1.png")] })).toThrow(/3 ảnh/);
     expect(calls.post).toEqual([]);
 
-    const r = m.resumeChapter({ ws: "w", chapter, pages: [png("3.png", 20), png("2.png"), png("1.png")] });
+    const r = m.resumeChapter({ chapter, pages: [png("3.png", 20), png("2.png"), png("1.png")] });
     expect(r.uploading).toBe(2);
     // Lượt thứ 2 chồng lên lượt đang chạy bị từ chối (không để lượt xong trước báo "uploaded" sớm).
-    expect(() => m.resumeChapter({ ws: "w", chapter, pages: [png("3.png", 20), png("2.png"), png("1.png")] })).toThrow(
+    expect(() => m.resumeChapter({ chapter, pages: [png("3.png", 20), png("2.png"), png("1.png")] })).toThrow(
       /đang tải/,
     );
     await settled(m, "ch-9");
@@ -204,7 +203,7 @@ describe("upload manager", () => {
         { id: "f1", ord: 2, bytes: 11 },
       ],
     };
-    const r = m.resumeChapter({ ws: "w", chapter, pages: [png("1.png"), png("2.png", 11), png("3.png", 20)] });
+    const r = m.resumeChapter({ chapter, pages: [png("1.png"), png("2.png", 11), png("3.png", 20)] });
     expect(r.uploading).toBe(3);
     await settled(m, "ch-7");
     expect(m.localFiles("ch-7").size).toBe(3);
@@ -225,7 +224,7 @@ describe("upload manager", () => {
     const m = createUploadManager(deps);
     const seen: unknown[] = [];
     m.store.subscribe((st) => seen.push(st.chapters["ch-1"]?.files));
-    await m.startNewChapter({ ws: "w", seriesId: "s", number: "1", pages: [png("1.png")] });
+    await m.startNewChapter({ seriesId: "s", number: "1", pages: [png("1.png")] });
     await vi.waitFor(() => expect(seen.length).toBeGreaterThanOrEqual(4));
     release();
     await settled(m, "ch-1");

@@ -1,6 +1,7 @@
 /**
  * Process nền tách khỏi API (systemd `mtl-jobs`): API restart không làm ngừng reaper và ngược lại.
- * - 30s: reaper lease + dispatch bị kill, ngân sách (mở lại `paused_budget`, cảnh báo 50/80/100%),
+ * - 30s: reaper lease + dispatch bị kill, ngân sách (mở lại `paused_budget`, cảnh báo 50/80/100%), job LLM chờ của
+ *   người vượt hạn mức ngày → failed (khi chỉ có Modal, job đó không bị claim nên không qua nhánh fail ở claim),
  *   `runtime_flags.runner_heartbeat` cho healthz;
  * - 5s (DISPATCHER_ENABLED): dispatcher Modal.
  * Chạy: pnpm --filter @mtl/api jobs
@@ -11,6 +12,7 @@ import { budgetStatus, checkBudgetAlerts, resumeBudgetPaused } from "../billing/
 import { closeDb, db } from "../db.ts";
 import { env } from "../env.ts";
 import { DISPATCH_INTERVAL_MS, dispatchTick, reapDispatches } from "./dispatcher.ts";
+import { failOverQuotaQueued } from "./queue.ts";
 import { reapExpiredLeases } from "./reaper.ts";
 
 export const REAPER_INTERVAL_MS = 30_000;
@@ -42,6 +44,13 @@ async function tick() {
       },
     ],
     ["dispatch-reaper", async () => ((await reapDispatches()) ? "estimated killed dispatches" : null)],
+    [
+      "quota",
+      async () => {
+        const n = await db.transaction((t) => failOverQuotaQueued(t as unknown as DbLike));
+        return n ? `failed=${n}` : null;
+      },
+    ],
     [
       "budget",
       async () => {

@@ -8,7 +8,7 @@ import {
   EXPORT_OBJECT_TAG,
   type IgnoreMatcher,
   type JobPayload,
-  keyBelongsToWorkspace,
+  keyBelongsToUser,
   type OcrResult,
   type PageState,
   storageKeys,
@@ -44,14 +44,14 @@ export function outputKey(job: Job, name: string): { key: string; rev: number | 
   const p = job.payload;
   if ((name === "clean" || name === "mask") && job.outputRev !== null && job.pageId) {
     if (name === "mask" && p.type !== "page.prepare") return null;
-    return { key: storageKeys[name](job.workspaceId, job.pageId, job.outputRev), rev: job.outputRev };
+    return { key: storageKeys[name](job.userId, job.pageId, job.outputRev), rev: job.outputRev };
   }
   if (name === "export" && p.type === "chapter.export") {
-    return { key: storageKeys.export(job.workspaceId, p.chapter_id, job.id, EXPORT_FILE[p.format].ext), rev: null };
+    return { key: storageKeys.export(job.userId, p.chapter_id, job.id, EXPORT_FILE[p.format].ext), rev: null };
   }
   const m = /^page:(\d+)$/.exec(name);
   if (m && p.type === "chapter.ingest") {
-    return { key: storageKeys.ingestPage(job.workspaceId, p.chapter_id, p.ingest_rev, Number(m[1])), rev: null };
+    return { key: storageKeys.ingestPage(job.userId, p.chapter_id, p.ingest_rev, Number(m[1])), rev: null };
   }
   return null;
 }
@@ -141,9 +141,9 @@ async function neighborLines(tx: DbLike, chapterId: string, targetIds: string[],
   return lines.slice(0, MAX_CONTEXT_LINES);
 }
 
-/** Font tuỳ chỉnh của workspace trong `ids` → `{id, url, sha256}` (id gói sẵn / đã xoá / lạ bị bỏ, worker fallback). */
-async function fontInputs(tx: DbLike, ws: string, ids: Iterable<string | undefined>, ttl: number) {
-  const refs = await resolveCustomFonts(scoped(tx, ws), ids);
+/** Font tuỳ chỉnh của người dùng trong `ids` → `{id, url, sha256}` (id gói sẵn / đã xoá / lạ bị bỏ, worker fallback). */
+async function fontInputs(tx: DbLike, userId: string, ids: Iterable<string | undefined>, ttl: number) {
+  const refs = await resolveCustomFonts(scoped(tx, userId), ids);
   return Promise.all(refs.map(async (f) => ({ id: f.id, url: await presignGet(f.file_key, ttl), sha256: f.sha256 })));
 }
 
@@ -155,11 +155,7 @@ export async function buildInputs(tx: DbLike, job: Job): Promise<Record<string, 
         .select()
         .from(sourceFiles)
         .where(
-          and(
-            eq(sourceFiles.chapterId, p.chapter_id),
-            eq(sourceFiles.workspaceId, job.workspaceId),
-            isNull(sourceFiles.skip),
-          ),
+          and(eq(sourceFiles.chapterId, p.chapter_id), eq(sourceFiles.userId, job.userId), isNull(sourceFiles.skip)),
         )
         .orderBy(asc(sourceFiles.ord));
       return {
@@ -179,8 +175,8 @@ export async function buildInputs(tx: DbLike, job: Job): Promise<Record<string, 
       return {
         original: await get(page.originalKey),
         partial: partial && {
-          clean: await get(storageKeys.clean(job.workspaceId, page.id, partial.clean_rev)),
-          mask: await get(storageKeys.mask(job.workspaceId, page.id, partial.mask_rev)),
+          clean: await get(storageKeys.clean(job.userId, page.id, partial.clean_rev)),
+          mask: await get(storageKeys.mask(job.userId, page.id, partial.mask_rev)),
           regions: partial.regions,
         },
       };
@@ -192,12 +188,7 @@ export async function buildInputs(tx: DbLike, job: Job): Promise<Record<string, 
         .where(and(eq(pages.chapterId, p.chapter_id), inArray(pages.id, p.page_ids)))
         .orderBy(asc(pages.ord));
       const isIgnored = await ignoreMatcherOf(tx, p.chapter_id);
-      const fonts = await fontInputs(
-        tx,
-        job.workspaceId,
-        [p.settings.font, p.settings.narration_font],
-        INPUT_GET_TTL_S,
-      );
+      const fonts = await fontInputs(tx, job.userId, [p.settings.font, p.settings.narration_font], INPUT_GET_TTL_S);
       return {
         pages: await Promise.all(
           rows.map(async (pg) => {
@@ -208,7 +199,7 @@ export async function buildInputs(tx: DbLike, job: Job): Promise<Record<string, 
               width: pg.width,
               height: pg.height,
               ocr_result: withoutIgnored(pg.ocrResult, isIgnored),
-              clean: await get(storageKeys.clean(job.workspaceId, pg.id, pg.cleanRev)),
+              clean: await get(storageKeys.clean(job.userId, pg.id, pg.cleanRev)),
             };
           }),
         ),
@@ -217,9 +208,9 @@ export async function buildInputs(tx: DbLike, job: Job): Promise<Record<string, 
       };
     }
     case "page.reinpaint": {
-      if (!keyBelongsToWorkspace(p.user_mask_key, job.workspaceId)) throw new Error("user mask key outside workspace");
+      if (!keyBelongsToUser(p.user_mask_key, job.userId)) throw new Error("user mask key outside user data");
       return {
-        base_clean: await get(storageKeys.clean(job.workspaceId, p.page_id, p.base_clean_rev)),
+        base_clean: await get(storageKeys.clean(job.userId, p.page_id, p.base_clean_rev)),
         user_mask: await get(p.user_mask_key),
       };
     }
@@ -286,19 +277,19 @@ async function exportInputs(tx: DbLike, job: Job, p: Extract<JobPayload, { type:
     .select({ number: chapters.number, title: chapters.title, seriesTitle: series.title })
     .from(chapters)
     .innerJoin(series, eq(series.id, chapters.seriesId))
-    .where(and(eq(chapters.id, p.chapter_id), eq(chapters.workspaceId, job.workspaceId)));
+    .where(and(eq(chapters.id, p.chapter_id), eq(chapters.userId, job.userId)));
   if (!ch) throw new Error("chapter missing");
   const rows = await tx
     .select({ page: pages, state: pageStates.state })
     .from(pages)
     .leftJoin(pageStates, eq(pageStates.pageId, pages.id))
-    .where(and(eq(pages.chapterId, p.chapter_id), eq(pages.workspaceId, job.workspaceId)))
+    .where(and(eq(pages.chapterId, p.chapter_id), eq(pages.userId, job.userId)))
     .orderBy(asc(pages.ord));
   if (rows.length === 0) throw new Error("chapter has no pages");
   const sources = await tx
     .select({ id: sourceFiles.id, ord: sourceFiles.ord })
     .from(sourceFiles)
-    .where(and(eq(sourceFiles.chapterId, p.chapter_id), eq(sourceFiles.workspaceId, job.workspaceId)))
+    .where(and(eq(sourceFiles.chapterId, p.chapter_id), eq(sourceFiles.userId, job.userId)))
     .orderBy(asc(sourceFiles.ord));
   const sign = (key: string) => presignGet(key, MAX_GET_TTL_S);
   const [defaults] = await tx
@@ -313,7 +304,7 @@ async function exportInputs(tx: DbLike, job: Job, p: Extract<JobPayload, { type:
     }
   }
   return {
-    fonts: await fontInputs(tx, job.workspaceId, fontIds, MAX_GET_TTL_S),
+    fonts: await fontInputs(tx, job.userId, fontIds, MAX_GET_TTL_S),
     chapter: { series_title: ch.seriesTitle, number: ch.number, title: ch.title },
     pages: await Promise.all(
       rows.map(async ({ page: pg, state }) => {
@@ -327,7 +318,7 @@ async function exportInputs(tx: DbLike, job: Job, p: Extract<JobPayload, { type:
           translated,
           skipped: pg.skipped,
           background: await sign(
-            translated ? storageKeys.clean(job.workspaceId, pg.id, pg.cleanRev as number) : pg.originalKey,
+            translated ? storageKeys.clean(job.userId, pg.id, pg.cleanRev as number) : pg.originalKey,
           ),
           state: translated ? state : null,
           source_map: pg.sourceMap,

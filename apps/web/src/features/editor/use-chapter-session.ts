@@ -266,14 +266,14 @@ const loadedOf = (d: PageDetail): LoadedPage => ({
   ai: { state: d.ai_state, rev: d.ai_rev, available: d.ai_update_available },
 });
 
-/** Font gói sẵn + font của workspace (danh sách lấy tươi mỗi phiên để URL presigned còn hạn). */
-function useFontKit(ws: string) {
+/** Font gói sẵn + font riêng (danh sách lấy tươi mỗi phiên để URL presigned còn hạn). */
+function useFontKit() {
   const qc = useQueryClient();
   const [kit, setKit] = useState<FontKit | null>(null);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
     let live = true;
-    loadFonts(() => qc.fetchQuery({ queryKey: fontKeys.list(ws), queryFn: () => fetchFonts(ws), staleTime: 0 }))
+    loadFonts(() => qc.fetchQuery({ queryKey: fontKeys.list(), queryFn: () => fetchFonts(), staleTime: 0 }))
       .then((k) => {
         if (!live) return;
         setKit(k);
@@ -283,7 +283,7 @@ function useFontKit(ws: string) {
     return () => {
       live = false;
     };
-  }, [qc, ws]);
+  }, [qc]);
   return { kit, error };
 }
 
@@ -308,14 +308,13 @@ export function resetChapterSession(chapterId: string) {
  * `refetchProgress` trả trạng thái chương mới. Store phải được `resetChapterSession` trước lần render đầu.
  */
 export function useChapterSession(opts: {
-  ws: string;
   chapterId: string;
   settled: boolean;
   pageIds: string[];
   refetchProgress(): Promise<boolean | undefined>;
 }) {
-  const { ws, chapterId, settled, pageIds } = opts;
-  const { kit, error: fontError } = useFontKit(ws);
+  const { chapterId, settled, pageIds } = opts;
+  const { kit, error: fontError } = useFontKit();
   const queue = pendingQueue();
   const [error, setError] = useState<string | null>(null);
   const [paused, setPaused] = useState(false);
@@ -325,12 +324,12 @@ export function useChapterSession(opts: {
       new Saver(
         editorStore,
         {
-          put: (id, state, version) => putPageState(ws, id, state, version),
-          get: async (id) => loadedOf(await fetchPageDetail(ws, id)),
+          put: (id, state, version) => putPageState(id, state, version),
+          get: async (id) => loadedOf(await fetchPageDetail(id)),
         },
         queue,
       ),
-    [ws, queue],
+    [queue],
   );
   const session = useMemo(
     () =>
@@ -338,14 +337,14 @@ export function useChapterSession(opts: {
         editor: editorStore,
         chapter: chapterStore,
         saver,
-        fetchPage: async (id) => loadedOf(await fetchPageDetail(ws, id)),
-        putState: (id, state, version) => putPageState(ws, id, state, version),
-        unlock: () => unlockChapter(ws, chapterId),
+        fetchPage: async (id) => loadedOf(await fetchPageDetail(id)),
+        putState: (id, state, version) => putPageState(id, state, version),
+        unlock: () => unlockChapter(chapterId),
         queue,
         onPause: setPaused,
         onError: (e) => setError(errorMessage(e)),
       }),
-    [ws, chapterId, saver, queue],
+    [chapterId, saver, queue],
   );
 
   // Mọi thay đổi doc → lưu nháp IndexedDB + autosave. Phải khai báo TRƯỚC useChapterLock (thứ tự cleanup).
@@ -376,12 +375,12 @@ export function useChapterSession(opts: {
       if (activeSaver === saver) activeSaver = null;
       // Cleanup này chạy TRƯỚC cleanup của useChapterLock (khai báo trước) → lượt lưu cuối vào chuỗi khoá trước
       // lệnh nhả khoá.
-      void serial(() => finalSave(saver, editorStore, () => lockChapter(ws, chapterId)));
+      void serial(() => finalSave(saver, editorStore, () => lockChapter(chapterId)));
     };
-  }, [saver, ws, chapterId]);
+  }, [saver, chapterId]);
 
   const lockEnabled = settled && pageIds.length > 0 && !paused;
-  const lock = useChapterLock(ws, chapterId, lockEnabled);
+  const lock = useChapterLock(chapterId, lockEnabled);
   const [recovery, setRecovery] = useState<RecoveryItem[] | null>(null);
   /** Đã quét IndexedDB xong — trước đó chưa cho sửa (sửa sẽ ghi đè bản ghi đang chờ khôi phục). */
   const [scanDone, setScanDone] = useState(false);

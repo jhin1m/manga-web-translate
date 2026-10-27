@@ -17,7 +17,7 @@ import { applyBatch, chapterPages, httpError, previewPages, undoBatch } from "..
 import { assertChapterLock } from "../lib/chapter-lock.ts";
 import { mergeBySourceTerm, seriesGlossaryWhere } from "../lib/glossary-scope.ts";
 import { parseJson } from "../lib/validate.ts";
-import { type AppEnv, requireWorkspace } from "../middleware/workspace.ts";
+import type { AppEnv } from "../middleware/user.ts";
 
 const MAX_RULES = 200;
 
@@ -152,37 +152,37 @@ const findRule = (b: z.infer<typeof FindBody>): ReplaceRule[] => [
 ];
 
 export const findReplaceRoutes = new Hono<AppEnv>();
-const base = "/w/:ws/chapters/:chapterId";
+const base = "/chapters/:chapterId";
 
-findReplaceRoutes.post(`${base}/find-replace/preview`, requireWorkspace(), async (c) => {
+findReplaceRoutes.post(`${base}/find-replace/preview`, async (c) => {
   const body = await parseJson(c, FindBody);
   const sdb = c.get("sdb");
   const ch = await sdb.byId(chapters, c.req.param("chapterId"), "chapter");
   return c.json(previewPages(await chapterPages(sdb, ch.id), transformOf(findRule(body))));
 });
 
-findReplaceRoutes.post(`${base}/find-replace/apply`, requireWorkspace(), async (c) => {
+findReplaceRoutes.post(`${base}/find-replace/apply`, async (c) => {
   const body = await parseJson(c, FindBody.extend({ versions: Versions }));
   const sdb = c.get("sdb");
   const user = c.get("user");
   const ch = await sdb.byId(chapters, c.req.param("chapterId"), "chapter");
-  await assertChapterLock(sdb, ch.id, user.id);
+  await assertChapterLock(sdb, ch.id, c.get("lockHolder"));
   return c.json(await applyRulesToChapter(sdb, ch.id, user.id, findRule(body), body.versions));
 });
 
 /** Hoàn tác 1 batch (find/replace hoặc áp glossary). */
-findReplaceRoutes.post(`${base}/find-replace/undo`, requireWorkspace(), async (c) => {
+findReplaceRoutes.post(`${base}/find-replace/undo`, async (c) => {
   const body = await parseJson(c, UndoBody);
   const sdb = c.get("sdb");
   const user = c.get("user");
   const ch = await sdb.byId(chapters, c.req.param("chapterId"), "chapter");
-  await assertChapterLock(sdb, ch.id, user.id);
+  await assertChapterLock(sdb, ch.id, c.get("lockHolder"));
   const r = await undoBatch(sdb, ch.id, user.id, body.batch_id, "fail");
   if (!r.found) throw httpError(404, { error: "batch_not_found" });
   return c.json({ pages: r.restored });
 });
 
-findReplaceRoutes.post(`${base}/glossary-apply/preview`, requireWorkspace(), async (c) => {
+findReplaceRoutes.post(`${base}/glossary-apply/preview`, async (c) => {
   const body = await parseJson(c, GlossaryBody);
   const sdb = c.get("sdb");
   const ch = await sdb.byId(chapters, c.req.param("chapterId"), "chapter");
@@ -190,12 +190,12 @@ findReplaceRoutes.post(`${base}/glossary-apply/preview`, requireWorkspace(), asy
   return c.json(previewPages(await chapterPages(sdb, ch.id), transformOf(await glossaryRules(sdb, s, body))));
 });
 
-findReplaceRoutes.post(`${base}/glossary-apply/apply`, requireWorkspace(), async (c) => {
+findReplaceRoutes.post(`${base}/glossary-apply/apply`, async (c) => {
   const body = await parseJson(c, GlossaryBody.extend({ versions: Versions }));
   const sdb = c.get("sdb");
   const user = c.get("user");
   const ch = await sdb.byId(chapters, c.req.param("chapterId"), "chapter");
-  await assertChapterLock(sdb, ch.id, user.id);
+  await assertChapterLock(sdb, ch.id, c.get("lockHolder"));
   const s = await sdb.byId(series, ch.seriesId, "series");
   return c.json(await applyRulesToChapter(sdb, ch.id, user.id, await glossaryRules(sdb, s, body), body.versions));
 });

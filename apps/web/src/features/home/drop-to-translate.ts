@@ -4,7 +4,7 @@
  * series nào, hoặc nhiều series mà chưa từng có chương) hoặc file có vấn đề → trả về null để hiện dòng xác nhận.
  *
  * Series theo thứ tự: (a) series cố định (màn series, nút "+ Ch.N") → (b) tên file khớp series có sẵn → (c) series
- * của chương gần nhất → (d) series duy nhất của workspace.
+ * của chương gần nhất → (d) series duy nhất của bạn.
  */
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
@@ -32,7 +32,7 @@ export function resolveDropSeries(o: {
   fixedSeriesId?: string;
   fileNames: string[];
   series: readonly { id: string; title: string }[];
-  /** Series của chương gần nhất trong workspace. */
+  /** Series của chương gần nhất. */
   recentSeriesId?: string | null;
 }): string | null {
   if (o.fixedSeriesId) return o.fixedSeriesId;
@@ -85,16 +85,16 @@ export function chapterNumbers(guesses: (string | null)[], taken: readonly strin
  * Thả file → tạo chương + tự dịch + mở chương đầu. `onFallback` nhận lại bộ file khi không tự làm được (series
  * không đoán được, file lỗi) để hiện dòng xác nhận.
  */
-export function useDropToTranslate(ws: string, onFallback: (files: File[], seriesId?: string) => void) {
+export function useDropToTranslate(onFallback: (files: File[], seriesId?: string) => void) {
   const qc = useQueryClient();
   const navigate = useNavigate();
   return useMutation({
     mutationFn: async ({ files, seriesId: fixed }: { files: File[]; seriesId?: string }) => {
       const { series } = await qc.ensureQueryData({
-        queryKey: seriesKeys.list(ws),
-        queryFn: () => fetchSeriesList(ws),
+        queryKey: seriesKeys.list(),
+        queryFn: () => fetchSeriesList(),
       });
-      const recent = qc.getQueryData<{ chapters: RecentChapter[] }>(seriesKeys.recent(ws));
+      const recent = qc.getQueryData<{ chapters: RecentChapter[] }>(seriesKeys.recent());
       const seriesId = resolveDropSeries({
         fixedSeriesId: fixed,
         fileNames: files.map((f) => f.name),
@@ -108,8 +108,8 @@ export function useDropToTranslate(ws: string, onFallback: (files: File[], serie
       }
       // Danh sách chương mới nhất (vừa thả lần trước có thể chưa vào cache) → không cấp trùng số.
       const detail = await qc.fetchQuery({
-        queryKey: seriesKeys.detail(ws, seriesId),
-        queryFn: () => fetchSeries(ws, seriesId),
+        queryKey: seriesKeys.detail(seriesId),
+        queryFn: () => fetchSeries(seriesId),
         staleTime: 0,
       });
       const numbers = chapterNumbers(
@@ -119,7 +119,6 @@ export function useDropToTranslate(ws: string, onFallback: (files: File[], serie
       let first: string | null = null;
       for (const [i, g] of groups.entries()) {
         const { chapterId } = await uploadManager.startNewChapter({
-          ws,
           seriesId,
           number: numbers[i] ?? "1",
           pages: g.pages,
@@ -130,11 +129,11 @@ export function useDropToTranslate(ws: string, onFallback: (files: File[], serie
     },
     onSuccess: (r) => {
       if (r.fallback) return onFallback(r.files, r.seriesId);
-      void qc.invalidateQueries({ queryKey: seriesKeys.list(ws) });
+      void qc.invalidateQueries({ queryKey: seriesKeys.list() });
       if (r.chapterId) {
         void navigate({
-          to: "/w/$ws/s/$seriesId/c/$chapterId",
-          params: { ws, seriesId: r.seriesId, chapterId: r.chapterId },
+          to: "/s/$seriesId/c/$chapterId",
+          params: { seriesId: r.seriesId, chapterId: r.chapterId },
         });
       }
     },

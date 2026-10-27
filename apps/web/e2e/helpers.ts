@@ -29,7 +29,7 @@ export async function loginWithForm(page: Page) {
 /** Chương xong bước 1 (`prepared`) → bấm bước 2 "Dịch" qua API để worker giả dịch tiếp. */
 export async function translateIfPrepared(page: Page, chapterId: string, status: string) {
   if (status !== "prepared") return;
-  const r = await page.request.post(`/api/w/${state.workspaceId}/chapters/${chapterId}/translate-prepared`, {
+  const r = await page.request.post(`/api/chapters/${chapterId}/translate-prepared`, {
     headers: { origin: WEB_URL },
   });
   expect(r.status()).toBe(202);
@@ -37,9 +37,8 @@ export async function translateIfPrepared(page: Page, chapterId: string, status:
 
 /** Chương 1 ảnh nguồn tạo + upload + bước 1 (commit) qua API rồi chạy worker giả (+ bước 2) tới khi mọi page "ready". */
 export async function apiReadyChapter(page: Page, number: string, opts: FakeWorkerOptions = {}) {
-  const ws = state.workspaceId;
   const headers = { origin: WEB_URL };
-  const created = await page.request.post(`/api/w/${ws}/chapters`, {
+  const created = await page.request.post(`/api/chapters`, {
     headers,
     data: {
       series_id: state.seriesId,
@@ -58,16 +57,14 @@ export async function apiReadyChapter(page: Page, number: string, opts: FakeWork
   for (const [k, v] of Object.entries(f.fields)) form.append(k, v);
   form.append("file", new Blob([new Uint8Array(PNG_1PX)], { type: "image/png" }));
   expect((await fetch(f.url, { method: "POST", body: form })).status).toBe(204);
-  expect((await page.request.post(`/api/w/${ws}/chapters/${chapter.id}/commit`, { headers, data: {} })).status()).toBe(
-    202,
-  );
+  expect((await page.request.post(`/api/chapters/${chapter.id}/commit`, { headers, data: {} })).status()).toBe(202);
 
   let ready = false;
   let stop = false;
   const worker = runFakeWorker(state.token, () => stop, 30_000, opts);
   const deadline = Date.now() + 30_000;
   while (!ready && Date.now() < deadline) {
-    const p = (await (await page.request.get(`/api/w/${ws}/chapters/${chapter.id}/progress`)).json()) as {
+    const p = (await (await page.request.get(`/api/chapters/${chapter.id}/progress`)).json()) as {
       chapter: { status: string };
       pages: { status: string }[];
     };

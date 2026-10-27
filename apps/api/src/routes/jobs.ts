@@ -1,8 +1,8 @@
-/** Job theo workspace: xem trạng thái/kết quả (VD page.ocr_region cho editor) và huỷ. */
+/** Job của người dùng: xem trạng thái/kết quả (VD page.ocr_region cho editor) và huỷ. */
 import { jobs } from "@mtl/db";
 import { Hono } from "hono";
 import { cancelJob } from "../jobs/queue.ts";
-import { type AppEnv, requireWorkspace } from "../middleware/workspace.ts";
+import type { AppEnv } from "../middleware/user.ts";
 
 type Job = typeof jobs.$inferSelect;
 
@@ -27,13 +27,13 @@ export const jobView = (j: Job) => ({
 
 export const jobRoutes = new Hono<AppEnv>();
 
-jobRoutes.get("/w/:ws/jobs/:jobId", requireWorkspace(), async (c) => {
+jobRoutes.get("/jobs/:jobId", async (c) => {
   const job = await c.get("sdb").byId(jobs, c.req.param("jobId"), "job");
   return c.json(jobView(job));
 });
 
-jobRoutes.post("/w/:ws/jobs/:jobId/cancel", requireWorkspace(), async (c) => {
+jobRoutes.post("/jobs/:jobId/cancel", async (c) => {
   const job = await c.get("sdb").byId(jobs, c.req.param("jobId"), "job");
-  const after = await cancelJob(c.get("workspaceId"), job.id);
+  const after = await cancelJob(c.get("userId"), job.id);
   return c.json(jobView(after ?? job));
 });

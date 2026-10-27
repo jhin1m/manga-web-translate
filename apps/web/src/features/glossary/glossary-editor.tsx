@@ -26,17 +26,15 @@ const EMPTY: EntryInput = { source_term: "", target_term: "", note: "", case_sen
 
 /** `inheritedLabel`: nhãn dòng kế thừa từ glossary chung (chỉ cấp series, VD "từ glossary chung (Hàn → Việt)"). */
 export function GlossaryEditor({
-  ws,
   scope,
   inheritedLabel = "từ glossary chung",
 }: {
-  ws: string;
   scope: GlossaryScope;
   inheritedLabel?: string;
 }) {
   const qc = useQueryClient();
-  const key = glossaryKey(ws, scope);
-  const q = useQuery({ queryKey: key, queryFn: () => fetchGlossary(ws, scope) });
+  const key = glossaryKey(scope);
+  const q = useQuery({ queryKey: key, queryFn: () => fetchGlossary(scope) });
   const [draft, setDraft] = useState<EntryInput>(EMPTY);
   const [editing, setEditing] = useState<{ id: string; v: EntryInput } | null>(null);
   const [mode, setMode] = useState<"merge" | "replace">("merge");
@@ -46,8 +44,8 @@ export function GlossaryEditor({
 
   const done = (text?: string) => {
     if (text) setMessage({ tone: "info", text });
-    void qc.invalidateQueries({ queryKey: ["glossary", ws] });
-    void qc.invalidateQueries({ queryKey: ["series", ws] });
+    void qc.invalidateQueries({ queryKey: ["glossary"] });
+    void qc.invalidateQueries({ queryKey: ["series"] });
   };
   const fail = (e: unknown) => {
     const rows = e instanceof ApiError ? (e.body.errors as { line: number; message: string }[] | undefined) : undefined;
@@ -63,7 +61,7 @@ export function GlossaryEditor({
   };
 
   const add = useMutation({
-    mutationFn: () => createEntry(ws, scope, draft),
+    mutationFn: () => createEntry(scope, draft),
     onSuccess: () => {
       setDraft(EMPTY);
       done();
@@ -71,7 +69,7 @@ export function GlossaryEditor({
     onError: fail,
   });
   const save = useMutation({
-    mutationFn: (x: { id: string; v: EntryInput }) => updateEntry(ws, x.id, x.v),
+    mutationFn: (x: { id: string; v: EntryInput }) => updateEntry(x.id, x.v),
     onSuccess: () => {
       setEditing(null);
       done();
@@ -79,12 +77,12 @@ export function GlossaryEditor({
     onError: fail,
   });
   const remove = useMutation({
-    mutationFn: (id: string) => deleteEntry(ws, id),
+    mutationFn: (id: string) => deleteEntry(id),
     onSuccess: () => done(),
     onError: fail,
   });
   const upload = useMutation({
-    mutationFn: async (file: File) => importCsv(ws, scope, await file.text(), mode),
+    mutationFn: async (file: File) => importCsv(scope, await file.text(), mode),
     onSuccess: (r) => done(`Đã nhập: thêm ${r.created}, cập nhật ${r.updated}.`),
     onError: fail,
   });
@@ -163,7 +161,7 @@ export function GlossaryEditor({
           onChange={(e) => setFilter(e.target.value)}
         />
         <span className="spacer" />
-        <a className="btn" href={exportCsvUrl(ws, scope)} download>
+        <a className="btn" href={exportCsvUrl(scope)} download>
           Xuất CSV
         </a>
         <select
@@ -329,8 +327,8 @@ export function GlossaryEditor({
 }
 
 /** Glossary chung của một cặp nguồn→đích (cặp giữ trong URL `?src=&tgt=`, route đổi khi chọn). */
-export function WorkspaceGlossaryPage(props: { ws: string; pair: LangPair; onPairChange: (p: LangPair) => void }) {
-  const { ws, pair, onPairChange } = props;
+export function GlossaryPage(props: { pair: LangPair; onPairChange: (p: LangPair) => void }) {
+  const { pair, onPairChange } = props;
   return (
     <div className="page page-narrow">
       <div className="page-head">
@@ -352,7 +350,7 @@ export function WorkspaceGlossaryPage(props: { ws: string; pair: LangPair; onPai
       </div>
       <p className="muted small">Áp cho series dịch {pairLabel(pair)}; entry trùng ở series sẽ ghi đè.</p>
       {/* key: đổi cặp = bảng mới (bỏ nháp, bản sửa dở và xác nhận "thay toàn bộ" của cặp cũ). */}
-      <GlossaryEditor key={`${pair.source_lang}-${pair.target_lang}`} ws={ws} scope={{ pair }} />
+      <GlossaryEditor key={`${pair.source_lang}-${pair.target_lang}`} scope={{ pair }} />
     </div>
   );
 }

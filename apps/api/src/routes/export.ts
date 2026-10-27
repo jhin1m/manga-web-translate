@@ -1,6 +1,6 @@
 /**
  * Xuất chương PNG/ZIP/CBZ: render phía server (worker, cùng render.py với auto-typeset) từ page_state chốt lúc
- * claim. File nằm ở `ws/{ws}/ch/{ch}/export/{jobId}.{zip|cbz}`, chỉ tải qua endpoint có xác thực → 302 tới presigned
+ * claim. File nằm ở `u/{user}/ch/{ch}/export/{jobId}.{zip|cbz}`, chỉ tải qua endpoint có xác thực → 302 tới presigned
  * GET ≤ 5' + `Content-Disposition: attachment` (không phát link dài hạn). Lifecycle MinIO xoá file sau 7 ngày
  * (tag `EXPORT_OBJECT_TAG`); quá hạn → 410.
  */
@@ -12,7 +12,7 @@ import {
   ExportLayout,
   type JobPayload,
   type JobResult,
-  keyBelongsToWorkspace,
+  keyBelongsToUser,
   storageKeys,
 } from "@mtl/shared";
 import { and, eq, gt, type SQL } from "drizzle-orm";
@@ -21,7 +21,7 @@ import { HTTPException } from "hono/http-exception";
 import { z } from "zod";
 import { enqueueExport, inJobTx } from "../jobs/enqueue.ts";
 import { parseJson } from "../lib/validate.ts";
-import { type AppEnv, requireWorkspace } from "../middleware/workspace.ts";
+import type { AppEnv } from "../middleware/user.ts";
 import { EXPORT_GET_TTL_S, head, presignGet } from "../storage.ts";
 
 type Job = typeof jobs.$inferSelect;
@@ -43,7 +43,7 @@ const httpError = (status: 404 | 409 | 410, error: string, message = error) =>
 /** Hết hạn tính từ lúc job xong (updated_at của job succeeded). */
 const expiresAt = (j: Job) => (j.status === "succeeded" ? new Date(j.updatedAt.getTime() + RETENTION_MS) : null);
 
-function exportView(ws: string, j: Job) {
+function exportView(j: Job) {
   const p = j.payload as ExportPayload;
   const r = j.result as Extract<JobResult, { type: "chapter.export" }> | null;
   const exp = expiresAt(j);
@@ -61,7 +61,7 @@ function exportView(ws: string, j: Job) {
     bytes: r?.bytes ?? null,
     created_at: j.createdAt,
     expires_at: exp,
-    download_url: downloadable ? `/api/w/${ws}/exports/${j.id}/download` : null,
+    download_url: downloadable ? `/api/exports/${j.id}/download` : null,
   };
 }
 
@@ -80,18 +80,18 @@ export function attachmentDisposition(name: string): string {
 
 export const exportRoutes = new Hono<AppEnv>();
 
-exportRoutes.post("/w/:ws/chapters/:chapterId/export", requireWorkspace(), async (c) => {
+exportRoutes.post("/chapters/:chapterId/export", async (c) => {
   const body = await parseJson(c, ExportBody);
   const ch = await c.get("sdb").byId(chapters, c.req.param("chapterId"), "chapter");
-  const ws = c.get("workspaceId");
+  const userId = c.get("userId");
   const { job, created } = await inJobTx((tx) =>
-    enqueueExport(tx, ws, { type: "chapter.export", chapter_id: ch.id, ...body }),
+    enqueueExport(tx, userId, { type: "chapter.export", chapter_id: ch.id, ...body }),
   );
-  return c.json({ job: exportView(ws, job), created }, 202);
+  return c.json({ job: exportView(job), created }, 202);
 });
 
 /** Export gần đây của chương (mới nhất trước) — dialog mở lại vẫn thấy file vừa xuất. */
-exportRoutes.get("/w/:ws/chapters/:chapterId/exports", requireWorkspace(), async (c) => {
+exportRoutes.get("/chapters/:chapterId/exports", async (c) => {
   const sdb = c.get("sdb");
   const ch = await sdb.byId(chapters, c.req.param("chapterId"), "chapter");
   const since = new Date(Date.now() - RETENTION_MS);
@@ -100,7 +100,7 @@ exportRoutes.get("/w/:ws/chapters/:chapterId/exports", requireWorkspace(), async
     and(eq(jobs.chapterId, ch.id), eq(jobs.type, "chapter.export"), gt(jobs.createdAt, since)) as SQL,
   );
   rows.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
-  return c.json({ exports: rows.slice(0, LIST_LIMIT).map((j) => exportView(c.get("workspaceId"), j)) });
+  return c.json({ exports: rows.slice(0, LIST_LIMIT).map((j) => exportView(j)) });
 });
 
 async function exportJob(sdb: Scoped, jobId: string): Promise<Job> {
@@ -109,22 +109,22 @@ async function exportJob(sdb: Scoped, jobId: string): Promise<Job> {
   return job;
 }
 
-exportRoutes.get("/w/:ws/exports/:jobId", requireWorkspace(), async (c) => {
-  return c.json(exportView(c.get("workspaceId"), await exportJob(c.get("sdb"), c.req.param("jobId"))));
+exportRoutes.get("/exports/:jobId", async (c) => {
+  return c.json(exportView(await exportJob(c.get("sdb"), c.req.param("jobId"))));
 });
 
 /** 302 → presigned GET 5'. Chưa xong → 409; quá 7 ngày hoặc object đã bị lifecycle xoá → 410. */
-exportRoutes.get("/w/:ws/exports/:jobId/download", requireWorkspace(), async (c) => {
-  const ws = c.get("workspaceId");
+exportRoutes.get("/exports/:jobId/download", async (c) => {
+  const userId = c.get("userId");
   const job = await exportJob(c.get("sdb"), c.req.param("jobId"));
   if (job.status !== "succeeded") throw httpError(409, "export_not_ready", "file chưa xuất xong");
   const exp = expiresAt(job);
   const p = job.payload as ExportPayload;
   const ext = EXPORT_FILE[p.format].ext;
-  const key = storageKeys.export(ws, p.chapter_id, job.id, ext);
+  const key = storageKeys.export(userId, p.chapter_id, job.id, ext);
   const r = job.result as Extract<JobResult, { type: "chapter.export" }> | null;
-  // Key trong result đã được kiểm lúc complete; kiểm lại để không bao giờ ký URL ngoài workspace.
-  if (!r || r.key !== key || !keyBelongsToWorkspace(key, ws)) throw httpError(404, "not_found", "export not found");
+  // Key trong result đã được kiểm lúc complete; kiểm lại để không bao giờ ký URL ngoài dữ liệu người dùng.
+  if (!r || r.key !== key || !keyBelongsToUser(key, userId)) throw httpError(404, "not_found", "export not found");
   if (!exp || exp.getTime() <= Date.now() || !(await head(key)))
     throw httpError(410, "export_expired", "file đã hết hạn");
   const sdb = c.get("sdb");

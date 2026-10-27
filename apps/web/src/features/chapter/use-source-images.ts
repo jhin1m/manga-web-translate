@@ -22,11 +22,11 @@ import {
 } from "./api.ts";
 import { type SourceItem, sourceItems } from "./source-rail-model.ts";
 
-export function useSourceImages(ws: string, chapterId: string, enabled: boolean): SourceItem[] {
+export function useSourceImages(chapterId: string, enabled: boolean): SourceItem[] {
   const upload = useChapterUpload(chapterId);
   const q = useQuery({
-    queryKey: chapterKeys.sourceFiles(ws, chapterId),
-    queryFn: () => fetchSourceFiles(ws, chapterId),
+    queryKey: chapterKeys.sourceFiles(chapterId),
+    queryFn: () => fetchSourceFiles(chapterId),
     enabled,
     staleTime: 10 * 60_000,
     refetchInterval: 12 * 60_000,
@@ -54,10 +54,10 @@ type SkipVars = { id: string; skip: Extract<SourceSkipReason, "user"> | null };
 type SkipValue = SourceSkipReason | null;
 type FilesData = { expires_at: string; files: SourceFileImage[] };
 
-export function useSetSourceSkip(ws: string, chapterId: string, onError: (e: unknown) => void) {
+export function useSetSourceSkip(chapterId: string, onError: (e: unknown) => void) {
   const qc = useQueryClient();
-  const filesKey = chapterKeys.sourceFiles(ws, chapterId);
-  const detailKey = chapterKeys.detail(ws, chapterId);
+  const filesKey = chapterKeys.sourceFiles(chapterId);
+  const detailKey = chapterKeys.detail(chapterId);
   /** Lần bấm mới nhất của từng ảnh — kết quả của lần bấm cũ hơn không được ghi đè lên. */
   const latest = useRef(new Map<string, number>());
   const seq = useRef(0);
@@ -71,7 +71,7 @@ export function useSetSourceSkip(ws: string, chapterId: string, onError: (e: unk
   };
 
   return useMutation({
-    mutationFn: ({ id, skip }: SkipVars) => setSourceSkip(ws, chapterId, id, skip),
+    mutationFn: ({ id, skip }: SkipVars) => setSourceSkip(chapterId, id, skip),
     onMutate: async ({ id, skip }: SkipVars) => {
       // Chỉ huỷ đúng 2 truy vấn này (detailKey là tiền tố của progress/pages/states).
       await Promise.all([
@@ -102,10 +102,10 @@ const applyOrder = <T extends { id: string; ord: number }>(list: T[], ids: strin
 
 const idsOf = (list: { id: string }[] | undefined) => list?.map((f) => f.id);
 
-export function useReorderSources(ws: string, chapterId: string, onError: (e: unknown) => void) {
+export function useReorderSources(chapterId: string, onError: (e: unknown) => void) {
   const qc = useQueryClient();
-  const filesKey = chapterKeys.sourceFiles(ws, chapterId);
-  const detailKey = chapterKeys.detail(ws, chapterId);
+  const filesKey = chapterKeys.sourceFiles(chapterId);
+  const detailKey = chapterKeys.detail(chapterId);
   const seq = useRef(0);
 
   /** Ghi thứ tự `ids` vào cả 2 cache; cache nào chưa có dữ liệu thì bỏ qua. */
@@ -117,7 +117,7 @@ export function useReorderSources(ws: string, chapterId: string, onError: (e: un
   return useMutation({
     // Các lần đổi chạy lần lượt theo thứ tự bấm: PUT cuối cùng là thứ tự người dùng đang thấy.
     scope: { id: `reorder-sources-${chapterId}` },
-    mutationFn: ({ ids }: { ids: string[] }) => setSourceOrder(ws, chapterId, ids),
+    mutationFn: ({ ids }: { ids: string[] }) => setSourceOrder(chapterId, ids),
     onMutate: async ({ ids }) => {
       await Promise.all([
         qc.cancelQueries({ queryKey: filesKey, exact: true }),

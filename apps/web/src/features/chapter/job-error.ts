@@ -2,6 +2,7 @@
  * Lỗi job viết cho người: lỗi thô (VD nguyên JSON 429 của Gemini) chỉ để xem chi tiết. Lỗi provider/rate_limited
  * không làm job hỏng ngay — queue requeue có backoff (apps/api/src/jobs/errors.ts) → trang "đang chờ AI", tự thử lại.
  */
+import { QUOTA_EXCEEDED } from "@mtl/shared";
 import type { JobView } from "./api.ts";
 
 export const ERROR_CLASS: Record<string, string> = {
@@ -27,6 +28,10 @@ export const waitingOnProvider = (j: ErrorJob | null | undefined): boolean =>
 const providerText = (cls: string) =>
   cls === "rate_limited" ? "Nhà cung cấp AI báo hết hạn mức / quá nhiều yêu cầu (429)" : "Nhà cung cấp AI lỗi tạm thời";
 
+/** Đầu ngày UTC kế tiếp — lúc hạn mức chi phí ngày đặt lại (server tính theo ngày UTC). */
+export const nextQuotaReset = (now = new Date()) =>
+  new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1)).toISOString();
+
 /** null = job không có lỗi cần nói. `waiting` = đang tự thử lại, không cần làm gì. */
 export function describeJobError(j: ErrorJob | null | undefined): { text: string; waiting: boolean } | null {
   if (!j?.error_class && !j?.error) return null;
@@ -36,6 +41,9 @@ export function describeJobError(j: ErrorJob | null | undefined): { text: string
     return { text: `${providerText(cls)} — tự thử lại${at} (lần ${j.provider_retries}).`, waiting: true };
   }
   if (j.status === "cancelled") return { text: `Đã huỷ xử lý. ${RETRY_HINT}`, waiting: false };
+  if (j.status === "failed" && j.error?.startsWith(QUOTA_EXCEEDED)) {
+    return { text: `Đã dùng hết hạn mức AI hôm nay — thử lại sau ${clock(nextQuotaReset())}.`, waiting: false };
+  }
   if (j.status !== "failed") return null;
   const label = PROVIDER_CLASSES.has(cls) ? `${providerText(cls)}, đã thử lại nhiều lần` : (ERROR_CLASS[cls] ?? cls);
   return { text: `Lỗi: ${label}. ${RETRY_HINT}`, waiting: false };

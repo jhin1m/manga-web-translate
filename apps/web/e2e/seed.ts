@@ -10,16 +10,12 @@ await resetTestDatabase(url);
 
 const { scoped, series } = await import("../../../packages/db/src/index.ts");
 const { closeDb, db } = await import("../../api/src/db.ts");
-const { createWorkspace } = await import("../../api/src/lib/workspace-admin.ts");
+const { createUser } = await import("../../api/src/lib/create-user.ts");
 const { createWorkerToken } = await import("../../api/src/lib/worker-token.ts");
 
 const { email, password } = E2E_OWNER;
-const { workspaceId } = await createWorkspace({
-  name: "Nhóm e2e",
-  slug: "nhom-e2e",
-  owner: { email, name: "Owner", password },
-});
-const s = await scoped(db, workspaceId).insert(series, { title: "Series e2e", llmTier: "standard" });
-const { token } = await createWorkerToken({ name: "e2e-fake-worker", workspaceId, capabilities: [] });
+const { userId } = await createUser({ email, name: "Owner", password });
+const s = await scoped(db, userId).insert(series, { title: "Series e2e", llmTier: "standard" });
+const { token } = await createWorkerToken({ name: "e2e-fake-worker", kind: "mac", capabilities: [] });
 await closeDb();
-console.info(JSON.stringify({ workspaceId, seriesId: s.id, email, password, token }));
+console.info(JSON.stringify({ userId, seriesId: s.id, email, password, token }));

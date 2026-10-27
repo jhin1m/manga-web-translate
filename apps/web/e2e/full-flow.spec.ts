@@ -9,8 +9,6 @@ import { WEB_URL } from "./env.ts";
 import { PNG_1PX, runFakeWorker } from "./fake-worker.ts";
 import { login, openPanel, pageThumbs, state } from "./helpers.ts";
 
-const ws = state.workspaceId;
-
 type ProgressBody = { pages: { id: string; ord: number; status: string }[] };
 
 test("drop a strip on home → translate → edit → export", async ({ page }) => {
@@ -36,7 +34,7 @@ test("drop a strip on home → translate → edit → export", async ({ page }) 
     .setInputFiles({ name: "Series e2e chapter 7001.png", mimeType: "image/png", buffer: PNG_1PX });
 
   // Series + số chương đoán từ tên file → tạo chương ngay, không hỏi.
-  await expect(page).toHaveURL(/\/w\/.+\/s\/.+\/c\/[0-9a-f-]{36}$/, { timeout: 30_000 });
+  await expect(page).toHaveURL(/\/s\/.+\/c\/[0-9a-f-]{36}$/, { timeout: 30_000 });
   expect(page.url()).toContain(`/s/${state.seriesId}/`);
   const chapterId = page.url().split("/").pop() ?? "";
   await expect(page.getByRole("heading", { name: /^Chương 7001/ })).toBeVisible();
@@ -72,9 +70,7 @@ test("drop a strip on home → translate → edit → export", async ({ page }) 
   await expect(page.getByRole("alert", { name: "Cảnh báo chương" })).toHaveCount(0);
 
   // Sửa bản dịch trang 2 trong bảng văn bản → "Đã lưu" → API khớp.
-  const progress = (await (
-    await page.request.get(`/api/w/${ws}/chapters/${chapterId}/progress`)
-  ).json()) as ProgressBody;
+  const progress = (await (await page.request.get(`/api/chapters/${chapterId}/progress`)).json()) as ProgressBody;
   const p2 = progress.pages.find((p) => p.ord === 1)?.id ?? "";
   await openPanel(page, "table");
   const cell = page.getByLabel("Bản dịch trang 2 vùng 1", { exact: true });
@@ -84,7 +80,7 @@ test("drop a strip on home → translate → edit → export", async ({ page }) 
   await expect(page.locator(".status", { hasText: "Đã lưu" })).toBeVisible({ timeout: 10_000 });
   await expect
     .poll(async () => {
-      const r = (await (await page.request.get(`/api/w/${ws}/pages/${p2}`)).json()) as {
+      const r = (await (await page.request.get(`/api/pages/${p2}`)).json()) as {
         state: { regions: { translation: string }[] };
       };
       return r.state.regions[0]?.translation;

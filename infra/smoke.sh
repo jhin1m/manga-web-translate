@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Smoke test sau deploy: healthz 200 (chờ tối đa SMOKE_WAIT_S) + đăng ký không lời mời bị từ chối (invite-only).
+# Smoke test sau deploy: healthz 200 (chờ tối đa SMOKE_WAIT_S) + đăng ký công khai bị chặn (production giữ
+# SIGNUP_ENABLED=false tới khi có xác thực email + hạn mức dung lượng).
 #   infra/smoke.sh [base-url]   # mặc định http://127.0.0.1:$API_PORT (gọi thẳng API, không qua Cloudflare)
 set -euo pipefail
 cd "$(dirname "$0")"
@@ -17,7 +18,7 @@ out=$($CURL -s -w '\n%{http_code}' -m 10 -X POST "$BASE/api/auth/sign-up/email" 
   -H "content-type: application/json" -H "origin: $ORIGIN" \
   -d "{\"email\":\"$email\",\"password\":\"smoke-test-password-1\",\"name\":\"smoke\"}")
 code=${out##*$'\n'}
-# 403 phải đến từ cổng lời mời (không phải sai Origin) → kiểm cả thông điệp.
-[ "$code" = 403 ] && grep -qi invitation <<<"${out%$'\n'*}" ||
-  die "đăng ký không lời mời trả HTTP $code (cần 403 do thiếu lời mời): ${out%$'\n'*}"
-log "đăng ký không lời mời → 403"
+# 400 phải đến từ cờ tắt đăng ký (không phải sai Origin / sai body) → kiểm cả mã lỗi.
+[ "$code" = 400 ] && grep -q EMAIL_PASSWORD_SIGN_UP_DISABLED <<<"${out%$'\n'*}" ||
+  die "đăng ký công khai trả HTTP $code (cần 400 EMAIL_PASSWORD_SIGN_UP_DISABLED — SIGNUP_ENABLED phải false): ${out%$'\n'*}"
+log "đăng ký công khai bị chặn → 400"

@@ -1,5 +1,5 @@
 /** Worker giả lập trong test: gọi đúng giao thức HTTP có fencing, upload output thật qua presigned PUT. */
-import { chapters, jobs, pages, scoped, sourceFiles, workspaceSettings } from "@mtl/db";
+import { chapters, jobs, pages, scoped, sourceFiles } from "@mtl/db";
 import { emptyPageState, type JobResult, type PageState, storageKeys, type WorkerUsage } from "@mtl/shared";
 import { eq, sql } from "drizzle-orm";
 import { v7 as uuidv7 } from "uuid";
@@ -26,8 +26,8 @@ export type Claimed = {
   outputs: Record<string, { key: string; rev: number | null; put: string }>;
 };
 
-export async function workerToken(workspaceId: string | null, name = "test-worker", capabilities: string[] = []) {
-  const { id, token } = await createWorkerToken({ name, workspaceId, capabilities });
+export async function workerToken(kind: "mac" | "modal", name = "test-worker", capabilities: string[] = []) {
+  const { id, token } = await createWorkerToken({ name, kind, capabilities });
   return { id, token };
 }
 
@@ -87,7 +87,7 @@ export function failJob(
 /** Bấm bước 2 "Dịch" khi chương đã xong bước 1 (giống POST /translate-prepared); chưa xong → không làm gì. */
 export async function translateIfPrepared(chapterId: string) {
   const [ch] = await db
-    .select({ ws: chapters.workspaceId, status: chapters.status })
+    .select({ ws: chapters.userId, status: chapters.status })
     .from(chapters)
     .where(eq(chapters.id, chapterId));
   if (ch?.status !== "prepared") return null;
@@ -177,26 +177,19 @@ export async function doTranslate(token: string, j: Claimed, text = "Xin chào")
 }
 
 /** Thêm n source file (key giả — ingest giả lập không đọc ảnh nguồn). */
-export async function addSources(workspaceId: string, chapterId: string, n: number) {
-  const sdb = scoped(db, workspaceId);
+export async function addSources(userId: string, chapterId: string, n: number) {
+  const sdb = scoped(db, userId);
   for (let i = 0; i < n; i++) {
     await sdb.insert(sourceFiles, {
       chapterId,
       ord: i,
-      storageKey: storageKeys.source(workspaceId, chapterId, uuidv7(), "png"),
+      storageKey: storageKeys.source(userId, chapterId, uuidv7(), "png"),
       bytes: 100,
       mime: "image/png",
       width: 720,
       height: 3000,
     });
   }
-}
-
-export async function setWorkerMode(workspaceId: string, mode: "mac" | "modal") {
-  await db
-    .insert(workspaceSettings)
-    .values({ workspaceId, workerMode: mode })
-    .onConflictDoUpdate({ target: workspaceSettings.workspaceId, set: { workerMode: mode } });
 }
 
 /** Giả lập thời gian trôi: lease hết hạn ngay. */
