@@ -11,11 +11,20 @@ import sys
 
 from PIL import Image, ImageDraw, ImageFont
 
-from mtl_pipeline.fonts import FONTS_DIR, MANIFEST, missing_glyphs, read_metrics, vietnamese_chars
+from mtl_pipeline.fonts import (
+    FONTS_DIR,
+    MANIFEST,
+    font_langs,
+    missing_glyphs,
+    read_metrics,
+    target_lang_chars,
+    vietnamese_chars,
+)
 from mtl_pipeline.render import require_raqm
 
 SAMPLE = "ếệỗửữẫ ẤẬỖỬỮẪ Đường đời"
-# Thứ tự ưu tiên khi chọn font mặc định (thoại, lời dẫn, nhấn mạnh) — chỉ nhận font đủ dấu.
+# Thứ tự ưu tiên khi chọn font mặc định (thoại, lời dẫn, nhấn mạnh) — chỉ nhận font vẽ đủ mọi ngôn ngữ đích
+# (font mặc định là font dự phòng của mọi series).
 PREFERRED_DEFAULTS = ["Bangers-Regular", "BeVietnamPro-Regular", "Anton-Regular"]
 
 
@@ -38,13 +47,15 @@ def main() -> int:
             "metricsSource": m.source,
             "viComplete": not miss,
             "missing": miss,
+            "langs": font_langs(p),
         }
         print(
             f"{'OK  ' if not miss else 'MISS'} {p.stem:24} upm={m.units_per_em} asc={m.ascent} "
-            f"desc={m.descent} ({m.source}) missing={''.join(miss)}"
+            f"desc={m.descent} ({m.source}) langs={','.join(fonts[p.stem]['langs'])} missing={''.join(miss)}"
         )
 
-    defaults = [f for f in PREFERRED_DEFAULTS if fonts.get(f, {}).get("viComplete")]
+    all_langs = list(target_lang_chars())
+    defaults = [f for f in PREFERRED_DEFAULTS if fonts.get(f, {}).get("langs") == all_langs]
     MANIFEST.write_text(
         json.dumps({"version": 1, "defaults": defaults, "fonts": fonts}, ensure_ascii=False, indent=2) + "\n"
     )

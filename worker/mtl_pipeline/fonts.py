@@ -60,9 +60,29 @@ def vietnamese_chars() -> str:
     return "".join(sorted(chars))
 
 
+_LATIN_BASIC = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.,!?…'\"-"
+
+
+def target_lang_chars() -> dict[str, str]:
+    """Chữ font phải có để vẽ được từng ngôn ngữ đích (TARGET_LANGS ở @mtl/shared, cùng thứ tự). en/id chỉ cần Latin cơ bản."""
+    return {
+        "vi": vietnamese_chars() + _LATIN_BASIC,
+        "en": _LATIN_BASIC,
+        "id": _LATIN_BASIC,
+        "es": _LATIN_BASIC + "ñÑáéíóúüÁÉÍÓÚÜ¿¡",
+        "pt": _LATIN_BASIC + "ãõâêôàçÃÕÂÊÔÀÇáéíóú",
+        "fr": _LATIN_BASIC + "àâæçéèêëîïôœùûüÿÀÂÆÇÉÈÊËÎÏÔŒÙÛÜŸ«»",
+    }
+
+
 def missing_glyphs(path: Path, text: str) -> list[str]:
     cmap = TTFont(str(path), lazy=True).getBestCmap()
     return [ch for ch in dict.fromkeys(text) if ord(ch) not in cmap]
+
+
+def font_langs(path: Path) -> list[str]:
+    """Ngôn ngữ đích font vẽ đủ chữ (ghi vào manifest `langs`; editor chỉ gợi ý font hợp ngôn ngữ series)."""
+    return [lang for lang, chars in target_lang_chars().items() if not missing_glyphs(path, chars)]
 
 
 # Font tuỳ chỉnh của job đang chạy (id → file, không đuôi — Pillow/fontTools đọc theo nội dung). Worker chạy tuần tự

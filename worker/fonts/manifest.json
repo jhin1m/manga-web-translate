@@ -6,6 +6,37 @@
     "Anton-Regular"
   ],
   "fonts": {
+    "AnimeAce-Bold": {
+      "file": "AnimeAce-Bold.ttf",
+      "unitsPerEm": 1024,
+      "ascent": 969,
+      "descent": 160,
+      "metricsSource": "hhea",
+      "viComplete": true,
+      "missing": [],
+      "langs": [
+        "vi",
+        "en",
+        "id"
+      ]
+    },
+    "AnimeAce3-Italic": {
+      "file": "AnimeAce3-Italic.ttf",
+      "unitsPerEm": 1000,
+      "ascent": 1100,
+      "descent": 234,
+      "metricsSource": "hhea",
+      "viComplete": true,
+      "missing": [],
+      "langs": [
+        "vi",
+        "en",
+        "id",
+        "es",
+        "pt",
+        "fr"
+      ]
+    },
     "Anton-Regular": {
       "file": "Anton-Regular.ttf",
       "unitsPerEm": 2048,
@@ -13,7 +44,29 @@
       "descent": 674,
       "metricsSource": "OS/2.typo",
       "viComplete": true,
-      "missing": []
+      "missing": [],
+      "langs": [
+        "vi",
+        "en",
+        "id",
+        "es",
+        "pt",
+        "fr"
+      ]
+    },
+    "Augie-Regular": {
+      "file": "Augie-Regular.ttf",
+      "unitsPerEm": 2048,
+      "ascent": 1536,
+      "descent": 512,
+      "metricsSource": "OS/2.typo",
+      "viComplete": true,
+      "missing": [],
+      "langs": [
+        "vi",
+        "en",
+        "id"
+      ]
     },
     "Baloo2-Variable": {
       "file": "Baloo2-Variable.ttf",
@@ -22,7 +75,15 @@
       "descent": 524,
       "metricsSource": "OS/2.typo",
       "viComplete": true,
-      "missing": []
+      "missing": [],
+      "langs": [
+        "vi",
+        "en",
+        "id",
+        "es",
+        "pt",
+        "fr"
+      ]
     },
     "Bangers-Regular": {
       "file": "Bangers-Regular.ttf",
@@ -31,7 +92,15 @@
       "descent": 181,
       "metricsSource": "OS/2.typo",
       "viComplete": true,
-      "missing": []
+      "missing": [],
+      "langs": [
+        "vi",
+        "en",
+        "id",
+        "es",
+        "pt",
+        "fr"
+      ]
     },
     "BeVietnamPro-Bold": {
       "file": "BeVietnamPro-Bold.ttf",
@@ -40,7 +109,15 @@
       "descent": 265,
       "metricsSource": "OS/2.typo",
       "viComplete": true,
-      "missing": []
+      "missing": [],
+      "langs": [
+        "vi",
+        "en",
+        "id",
+        "es",
+        "pt",
+        "fr"
+      ]
     },
     "BeVietnamPro-Regular": {
       "file": "BeVietnamPro-Regular.ttf",
@@ -49,7 +126,108 @@
       "descent": 265,
       "metricsSource": "OS/2.typo",
       "viComplete": true,
-      "missing": []
+      "missing": [],
+      "langs": [
+        "vi",
+        "en",
+        "id",
+        "es",
+        "pt",
+        "fr"
+      ]
+    },
+    "BeatDown-Regular": {
+      "file": "BeatDown-Regular.ttf",
+      "unitsPerEm": 1000,
+      "ascent": 750,
+      "descent": 250,
+      "metricsSource": "OS/2.typo",
+      "viComplete": true,
+      "missing": [],
+      "langs": [
+        "vi",
+        "en",
+        "id",
+        "pt"
+      ]
+    },
+    "BlambotClassic-Regular": {
+      "file": "BlambotClassic-Regular.ttf",
+      "unitsPerEm": 1000,
+      "ascent": 911,
+      "descent": 89,
+      "metricsSource": "hhea",
+      "viComplete": true,
+      "missing": [],
+      "langs": [
+        "vi",
+        "en",
+        "id",
+        "es",
+        "pt"
+      ]
+    },
+    "Bungee-Regular": {
+      "file": "Bungee-Regular.ttf",
+      "unitsPerEm": 1000,
+      "ascent": 1020,
+      "descent": 300,
+      "metricsSource": "OS/2.typo",
+      "viComplete": true,
+      "missing": [],
+      "langs": [
+        "vi",
+        "en",
+        "id",
+        "es",
+        "pt",
+        "fr"
+      ]
+    },
+    "Chinacat-Regular": {
+      "file": "Chinacat-Regular.ttf",
+      "unitsPerEm": 1000,
+      "ascent": 800,
+      "descent": 200,
+      "metricsSource": "OS/2.typo",
+      "viComplete": true,
+      "missing": [],
+      "langs": [
+        "vi",
+        "en",
+        "id"
+      ]
+    },
+    "Felt-Regular": {
+      "file": "Felt-Regular.ttf",
+      "unitsPerEm": 1000,
+      "ascent": 814,
+      "descent": 219,
+      "metricsSource": "OS/2.typo",
+      "viComplete": true,
+      "missing": [],
+      "langs": [
+        "vi",
+        "en",
+        "id"
+      ]
+    },
+    "Grandstander-Bold": {
+      "file": "Grandstander-Bold.ttf",
+      "unitsPerEm": 2000,
+      "ascent": 1465,
+      "descent": 530,
+      "metricsSource": "OS/2.typo",
+      "viComplete": true,
+      "missing": [],
+      "langs": [
+        "vi",
+        "en",
+        "id",
+        "es",
+        "pt",
+        "fr"
+      ]
     },
     "Itim-Regular": {
       "file": "Itim-Regular.ttf",
@@ -58,7 +236,46 @@
       "descent": 250,
       "metricsSource": "hhea",
       "viComplete": true,
-      "missing": []
+      "missing": [],
+      "langs": [
+        "vi",
+        "en",
+        "id",
+        "es",
+        "pt",
+        "fr"
+      ]
+    },
+    "JimLeeThought-Regular": {
+      "file": "JimLeeThought-Regular.ttf",
+      "unitsPerEm": 4096,
+      "ascent": 3424,
+      "descent": 422,
+      "metricsSource": "hhea",
+      "viComplete": true,
+      "missing": [],
+      "langs": [
+        "vi",
+        "en",
+        "id"
+      ]
+    },
+    "KomikaText-Regular": {
+      "file": "KomikaText-Regular.otf",
+      "unitsPerEm": 1000,
+      "ascent": 970,
+      "descent": 194,
+      "metricsSource": "hhea",
+      "viComplete": true,
+      "missing": [],
+      "langs": [
+        "vi",
+        "en",
+        "id",
+        "es",
+        "pt",
+        "fr"
+      ]
     },
     "Lexend-Variable": {
       "file": "Lexend-Variable.ttf",
@@ -67,7 +284,80 @@
       "descent": 250,
       "metricsSource": "OS/2.typo",
       "viComplete": true,
-      "missing": []
+      "missing": [],
+      "langs": [
+        "vi",
+        "en",
+        "id",
+        "es",
+        "pt",
+        "fr"
+      ]
+    },
+    "MTOAstroCity-Regular": {
+      "file": "MTOAstroCity-Regular.ttf",
+      "unitsPerEm": 2048,
+      "ascent": 2084,
+      "descent": 483,
+      "metricsSource": "OS/2.typo",
+      "viComplete": true,
+      "missing": [],
+      "langs": [
+        "vi",
+        "en",
+        "id",
+        "es",
+        "pt",
+        "fr"
+      ]
+    },
+    "MTOChiller-Regular": {
+      "file": "MTOChiller-Regular.ttf",
+      "unitsPerEm": 2048,
+      "ascent": 1738,
+      "descent": 625,
+      "metricsSource": "OS/2.typo",
+      "viComplete": true,
+      "missing": [],
+      "langs": [
+        "vi",
+        "en",
+        "id",
+        "es",
+        "pt",
+        "fr"
+      ]
+    },
+    "MTOComic-Regular": {
+      "file": "MTOComic-Regular.ttf",
+      "unitsPerEm": 2048,
+      "ascent": 1434,
+      "descent": 410,
+      "metricsSource": "OS/2.typo",
+      "viComplete": true,
+      "missing": [],
+      "langs": [
+        "vi",
+        "en",
+        "id"
+      ]
+    },
+    "MTOGrungeSans-Regular": {
+      "file": "MTOGrungeSans-Regular.ttf",
+      "unitsPerEm": 2048,
+      "ascent": 1929,
+      "descent": 426,
+      "metricsSource": "OS/2.typo",
+      "viComplete": true,
+      "missing": [],
+      "langs": [
+        "vi",
+        "en",
+        "id",
+        "es",
+        "pt",
+        "fr"
+      ]
     },
     "Mali-Regular": {
       "file": "Mali-Regular.ttf",
@@ -76,7 +366,46 @@
       "descent": 250,
       "metricsSource": "OS/2.typo",
       "viComplete": true,
-      "missing": []
+      "missing": [],
+      "langs": [
+        "vi",
+        "en",
+        "id",
+        "es",
+        "pt",
+        "fr"
+      ]
+    },
+    "MightyZeo-Regular": {
+      "file": "MightyZeo-Regular.ttf",
+      "unitsPerEm": 2200,
+      "ascent": 1775,
+      "descent": 569,
+      "metricsSource": "OS/2.typo",
+      "viComplete": true,
+      "missing": [],
+      "langs": [
+        "vi",
+        "en",
+        "id"
+      ]
+    },
+    "Pangolin-Regular": {
+      "file": "Pangolin-Regular.ttf",
+      "unitsPerEm": 1000,
+      "ascent": 937,
+      "descent": 312,
+      "metricsSource": "OS/2.typo",
+      "viComplete": true,
+      "missing": [],
+      "langs": [
+        "vi",
+        "en",
+        "id",
+        "es",
+        "pt",
+        "fr"
+      ]
     },
     "PatrickHand-Regular": {
       "file": "PatrickHand-Regular.ttf",
@@ -85,7 +414,142 @@
       "descent": 312,
       "metricsSource": "hhea",
       "viComplete": true,
-      "missing": []
+      "missing": [],
+      "langs": [
+        "vi",
+        "en",
+        "id",
+        "es",
+        "pt",
+        "fr"
+      ]
+    },
+    "SedgwickAve-Regular": {
+      "file": "SedgwickAve-Regular.ttf",
+      "unitsPerEm": 1000,
+      "ascent": 937,
+      "descent": 312,
+      "metricsSource": "OS/2.typo",
+      "viComplete": true,
+      "missing": [],
+      "langs": [
+        "vi",
+        "en",
+        "id",
+        "es",
+        "pt",
+        "fr"
+      ]
+    },
+    "ShantellSans-Variable": {
+      "file": "ShantellSans-Variable.ttf",
+      "unitsPerEm": 1000,
+      "ascent": 1020,
+      "descent": 320,
+      "metricsSource": "OS/2.typo",
+      "viComplete": true,
+      "missing": [],
+      "langs": [
+        "vi",
+        "en",
+        "id",
+        "es",
+        "pt",
+        "fr"
+      ]
+    },
+    "SigmarOne-Regular": {
+      "file": "SigmarOne-Regular.ttf",
+      "unitsPerEm": 1000,
+      "ascent": 1172,
+      "descent": 466,
+      "metricsSource": "OS/2.typo",
+      "viComplete": true,
+      "missing": [],
+      "langs": [
+        "vi",
+        "en",
+        "id",
+        "es",
+        "pt",
+        "fr"
+      ]
+    },
+    "Sriracha-Regular": {
+      "file": "Sriracha-Regular.ttf",
+      "unitsPerEm": 1000,
+      "ascent": 1220,
+      "descent": 550,
+      "metricsSource": "hhea",
+      "viComplete": true,
+      "missing": [],
+      "langs": [
+        "vi",
+        "en",
+        "id",
+        "es",
+        "pt",
+        "fr"
+      ]
+    },
+    "WildWords-BoldItalic": {
+      "file": "WildWords-BoldItalic.ttf",
+      "unitsPerEm": 1500,
+      "ascent": 1500,
+      "descent": 288,
+      "metricsSource": "hhea",
+      "viComplete": true,
+      "missing": [],
+      "langs": [
+        "vi",
+        "en",
+        "id"
+      ]
+    },
+    "WildWords-Roman": {
+      "file": "WildWords-Roman.ttf",
+      "unitsPerEm": 1500,
+      "ascent": 1363,
+      "descent": 229,
+      "metricsSource": "hhea",
+      "viComplete": true,
+      "missing": [],
+      "langs": [
+        "vi",
+        "en",
+        "id"
+      ]
+    },
+    "ZapRaygun-Regular": {
+      "file": "ZapRaygun-Regular.otf",
+      "unitsPerEm": 1024,
+      "ascent": 934,
+      "descent": 200,
+      "metricsSource": "hhea",
+      "viComplete": true,
+      "missing": [],
+      "langs": [
+        "vi",
+        "en",
+        "id"
+      ]
+    },
+    "Zoinks-Regular": {
+      "file": "Zoinks-Regular.ttf",
+      "unitsPerEm": 1000,
+      "ascent": 739,
+      "descent": 261,
+      "metricsSource": "hhea",
+      "viComplete": true,
+      "missing": [],
+      "langs": [
+        "vi",
+        "en",
+        "id",
+        "es",
+        "pt",
+        "fr"
+      ]
     }
   }
 }
