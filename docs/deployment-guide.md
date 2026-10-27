@@ -1,6 +1,6 @@
-# Deploy production (MVP, nhóm được mời) — runbook
+# Deploy production (MVP, tài khoản tạo tay) — runbook
 
-VPS chạy API + SPA tĩnh + Postgres + MinIO sau Cloudflare; worker GPU là Modal (serverless) hoặc Mac của nhóm.
+VPS chạy API + SPA tĩnh + Postgres + MinIO sau Cloudflare; worker GPU là Modal (serverless) hoặc Mac của người vận hành.
 Artifact trong repo: `infra/` (systemd, Caddy, compose prod, deploy/backup/restore/alert/smoke) và
 `worker/modal_app.py`. **Chưa deploy thật** — mọi bước dưới đây đã kiểm bằng Docker local (xem
 [Kết quả kiểm local](#kết-quả-kiểm-local-20102026)); phần cần owner làm trên hạ tầng thật ở
@@ -12,7 +12,7 @@ Cloudflare (Full strict) ─> VPS: caddy ─┬─> mtl-api (systemd, :8787) ─
                                         └─> files.<domain> ─> MinIO (nosniff, CORS chỉ app domain)
                          mtl-jobs (systemd): reaper 30s + kill-switch ngân sách + dispatcher 5s ─> POST Modal /drain (HMAC)
 Modal container: mtl-worker --mode drain ── HTTPS ──> /worker/v1/claim|heartbeat|complete|fail|sessions/end
-Mac worker:      mtl-worker --mode loop (token workspace, worker_mode='mac') ── cùng giao thức
+Mac worker:      mtl-worker --mode loop (token kind=mac, chỉ người vận hành) ── cùng giao thức
 ```
 
 ## 1. Chuẩn bị VPS (1 lần)
@@ -51,7 +51,8 @@ Như `.env.example` + giá trị production. File được đọc bởi Node, sy
 | `DISPATCHER_ENABLED`, `MODAL_DRAIN_URL`, `MODAL_DRAIN_SECRET` (≥ 32) | Modal, xem mục 5 |
 | `MODAL_MAX_CONTAINERS=2`, `MODAL_SCALEDOWN_S=60`, `MODAL_MAX_LIFETIME_S=3600` | **khớp** `worker/modal_app.py` |
 | `ALERT_NTFY_URL=https://ntfy.sh/<topic-ngẫu-nhiên>` | kênh cảnh báo duy nhất |
-| `SMTP_URL=smtps://user:pass@host:465`, `MAIL_FROM='MTL <no-reply@<domain>>'` | tuỳ chọn: gửi email lời mời (`MAIL_FROM` bắt buộc khi có `SMTP_URL`). Dùng SMTP của nhà cung cấp đã verify domain (SPF/DKIM) kẻo vào spam; mật khẩu có ký tự đặc biệt phải URL-encode. Không đặt / gửi lỗi → lời mời vẫn tạo, link nằm trên UI và log API |
+| `SIGNUP_ENABLED=false` | **Production giữ `false` tới Phase 8** (xác thực email + hạn mức dung lượng). `true` = ai cũng đăng ký được ở `/login` (rate limit 5/giờ/IP) và API từ chối khởi động nếu thiếu `GLOBAL_DAILY_USD` hoặc `USER_DAILY_USD`. Tắt → tạo tài khoản bằng `pnpm create-user --email …` (`OWNER_PASSWORD=…` hoặc nhập trên terminal) |
+| `USER_DAILY_USD` | hạn mức chi phí AI mỗi người mỗi ngày UTC (LLM + GPU); `0` = chặn mọi job LLM; không đặt = không giới hạn. Hành vi: [job-queue-worker.md](./job-queue-worker.md#hạn-mức-mỗi-người-user_daily_usd) |
 | `BACKUP_S3_ENDPOINT/ACCESS_KEY/SECRET_KEY`, `BACKUP_BUCKET` | đích backup ở nhà cung cấp **khác** |
 | Caddy: `APP_DOMAIN`, `FILES_DOMAIN`, `ORIGIN_CERT`, `ORIGIN_KEY`, `MTL_ROOT=/srv/mtl` | `systemctl edit caddy` → `EnvironmentFile=` |
 
@@ -75,7 +76,7 @@ sudo systemctl enable --now mtl-api mtl-jobs mtl-backup.timer mtl-alert.timer
 - `mtl-api` (HTTP) và `mtl-jobs` (reaper + dispatcher + ngân sách) **tách unit**: restart API không làm job kẹt.
 - `infra/deploy.sh <ref>`: `git archive` commit → `releases/<utc>-<sha12>` → `pnpm install --frozen-lockfile`, build
   SPA, `pnpm db:migrate` → `minio-setup.sh` (bucket private + lifecycle export 7 ngày) → đổi symlink `current`
-  (nguyên tử) → restart → `smoke.sh` (healthz 200 + đăng ký không lời mời bị 403 *do cổng lời mời*). Smoke hỏng →
+  (nguyên tử) → restart → `smoke.sh` (healthz 200 + đăng ký công khai bị chặn: 400 `EMAIL_PASSWORD_SIGN_UP_DISABLED`). Smoke hỏng →
   tự quay về bản đang chạy, xoá release hỏng, cảnh báo.
 - `infra/deploy.sh rollback`: đổi `current` ↔ `previous` + restart + smoke, không build/migrate.
 - Migration chỉ thêm (additive) nên rollback app không cần down DB; down tay ở `packages/db/migrations-down/`.
@@ -96,18 +97,18 @@ sudo systemctl enable --now mtl-api mtl-jobs mtl-backup.timer mtl-alert.timer
   > 20 lần sẽ `failed` ở lỗi provider kế tiếp.
 - Container chết không báo chiếm slot `active` tới khi reaper ước lượng (~`MAX_LIFETIME + SCALEDOWN`); trong lúc đó
   dispatcher không scale-up quá `MODAL_MAX_CONTAINERS`.
-- Khẩn cấp: `DISPATCHER_ENABLED=false` (chỉ worker Mac, đổi `worker_mode` workspace), hoặc kill-switch = đặt ngưỡng 0.
+- Khẩn cấp: `DISPATCHER_ENABLED=false` (chỉ worker Mac), hoặc kill-switch = đặt ngưỡng 0.
 
-**Checklist release "small-features-batch"** (migration 0011 `pages_skip_changed_at` + 0012 `workspace_fonts`, pipeline 0.5.1):
+**Checklist release "small-features-batch"** (migration 0011 `pages_skip_changed_at` + 0012 `workspace_fonts` (tên lịch sử, nay là font theo người dùng), pipeline 0.5.1):
 
 1. Worker trước: cập nhật worker Mac + deploy lại image Modal (`PIPELINE_VERSION` 0.5.1); thử `uv run mtl-worker --once`.
-2. VPS: `re2` dựng được (mục 1: ra được `github.com` hoặc có `build-essential` + `python3`); `.env` có/không `SMTP_URL` + `MAIL_FROM` (cùng có hoặc cùng không).
+2. VPS: `re2` dựng được (mục 1: ra được `github.com` hoặc có `build-essential` + `python3`); (`SMTP_URL` / `MAIL_FROM` từng nằm ở bước này đã bỏ — xoá khỏi `.env` nếu còn.)
 3. `.env` không ghi đè `MIN_PIPELINE_VERSION` thấp hơn 0.5.1 (mặc định trong `env.ts` đã là 0.5.1; `PIPELINE_VERSION` giữ 0.4.0).
 4. `infra/deploy.sh <ref>`: `pnpm db:migrate` tự chạy 0011 + 0012 (additive; down tay `0011_*.down.sql`, `0012_*.down.sql`).
-5. Smoke tay: `/w/<ws>/settings` upload 1 font TTF; mời thành viên (có SMTP: mail tới, "Gửi lại email"); dịch + xuất 1 chương dùng font nhóm.
+5. Smoke tay: `/settings` upload 1 font TTF; dịch + xuất 1 chương dùng font đó.
 6. Rollback: API/web quay về được (migration additive); worker **không** hạ xuống < 0.5.0 (xem bullet trên).
 
-**Checklist release "pipeline-settings-local-ocr-proofread"** (migration 0013 `workspace_pipeline_settings` + 0014
+**Checklist release "pipeline-settings-local-ocr-proofread"** (migration 0013 `workspace_pipeline_settings` (tên lịch sử) + 0014
 `proofread_suggestions`, pipeline 0.6.0):
 
 1. Worker trước: `cd worker && uv sync && uv run python scripts/fetch_models.py` (tải thêm model *optional*: LaMa manga
@@ -123,16 +124,41 @@ sudo systemctl enable --now mtl-api mtl-jobs mtl-backup.timer mtl-alert.timer
 3. `.env` API không ghi đè `MIN_PIPELINE_VERSION` thấp hơn 0.6.0 (mặc định `env.ts` = 0.6.0; `PIPELINE_VERSION` giữ
    0.4.0 nên job đã chạy không bị chạy lại). Worker < 0.6.0 nhận 426 ngay khi API mới lên — vì payload có field mới
    (`pipeline`, `inpaint`, `ocr_engine`, job `chapter.proofread`) mà schema worker cũ `additionalProperties: false`.
-4. `infra/deploy.sh <ref>`: `pnpm db:migrate` chạy 0013 (cột `workspace_settings.pipeline`, mặc định `{}` = hành vi cũ)
+4. `infra/deploy.sh <ref>`: `pnpm db:migrate` chạy 0013 (cột `pipeline` của bảng cài đặt, mặc định `{}` = hành vi cũ)
    + 0014 (bảng `proofread_suggestions`, nới `jobs_type_chk` thêm `chapter.proofread`). Down tay: `0013_*.down.sql`,
    `0014_*.down.sql` (0014 xoá job `chapter.proofread` trước khi khôi phục check cũ).
-5. Smoke tay: Cài đặt nhóm → Pipeline (owner/admin) lưu được; chương tiếng Nhật với OCR = MangaOCR chạy Bước 1 không
+5. Smoke tay: Cài đặt chung → Pipeline lưu được; chương tiếng Nhật với OCR = MangaOCR chạy Bước 1 không
    tốn token (Hoạt động/ledger không có `llm_tokens_*` của `page.prepare`); "Hiệu đính" trên rail chạy và Nhận được 1
-   gợi ý; workspace không cấu hình → Bước 1 cho kết quả như trước.
+   gợi ý; người dùng chưa cấu hình → Bước 1 cho kết quả như trước.
 6. Token worker tạo với danh sách capability tường minh (không có `chapter.proofread`): worker 0.6.0 mặc định khai mọi
    loại job → claim 400 `capability_not_allowed`. Chạy worker với `--capabilities` khớp token, hoặc cấp lại token.
 7. Rollback: API/web quay về được (migration additive) **miễn worker giữ 0.6.0** (worker mới đọc được payload cũ);
    job đang xếp hàng có field mới không chạy được trên worker cũ. Gợi ý hiệu đính còn trong DB không ảnh hưởng bản cũ.
+
+**Checklist release "single-user-accounts"** (migration 0015 `single_user_guard_worker_kind` + 0016 `drop_workspaces` +
+0017 `user_ownership`) — **bắt buộc, không phải gợi ý**: bỏ workspace / thành viên / lời mời, mỗi người một tài khoản,
+dữ liệu gắn `user_id`. Release này không có đường lên mượt từ dữ liệu cũ và không rollback bằng down DB.
+
+1. Chuẩn bị: dừng `mtl-api` + `mtl-jobs`; backup nếu cần giữ gì đó (không có công cụ chuyển workspace → user).
+2. **Reset DB + MinIO**: `0015` raise lỗi nếu còn bất kỳ dòng `organization` nào; `0016`/`0017` có down chỉ báo lỗi ("không
+   rollback được — reset DB + checkout bản cũ"; 0015 down chỉ bỏ cột `kind`). Tạo lại Postgres rỗng và xoá object bucket
+   (key cũ `ws/{ws}/…`, key mới `u/{userId}/…`) — `infra/minio-setup.sh` dựng lại bucket private + lifecycle export.
+   Chạy `infra/deploy.sh <ref>` hoặc `pnpm db:migrate` để áp 0015–0017 trên DB rỗng.
+3. **Token worker**: DB mới nên token cũ mất; nếu vì lý do nào còn bảng cũ thì `pnpm worker-token revoke --id …` mọi token.
+   Tạo lại: Mac `pnpm worker-token create --name mac-<tên> --kind mac --out ~/.config/mtl/worker.token` (**chỉ người vận
+   hành** — token Mac claim được job và URL ảnh của mọi người dùng); Modal `… --kind modal --out ./modal.token` rồi cập nhật
+   secret Modal `MTL_TOKEN` (mục 5: `modal secret create mtl-worker …`) và `modal deploy modal_app.py`. Cờ `--workspace` /
+   `--platform` không còn.
+4. **Env** (`/srv/mtl/shared/.env`): `SIGNUP_ENABLED=false` (**bắt buộc ở production tới Phase 8**; bật mà thiếu
+   `GLOBAL_DAILY_USD`/`USER_DAILY_USD` thì API không khởi động); đặt `USER_DAILY_USD`; xoá `SMTP_URL` / `MAIL_FROM`
+   (mailer đã xoá, không còn email mời).
+5. **Smoke**: (a) healthz 200; (b) đăng ký bị chặn khi tắt — cả email mới lẫn email đã tồn tại đều bị từ chối trước khi tra
+   email (HTTP 400, `code: EMAIL_PASSWORD_SIGN_UP_DISABLED`):
+   `curl -s -X POST https://<app>/api/auth/sign-up/email -H 'content-type: application/json' -H 'origin: https://<app>' -d '{"email":"x@example.invalid","password":"smoke-test-password-1","name":"smoke"}'`;
+   (c) `OWNER_PASSWORD=… pnpm create-user --email <bạn>` → đăng nhập ở `/login` (không còn `/workspaces`, `/w/…`,
+   `/accept-invite`; không redirect) → dịch 1 chương, xuất; (d) `GET /api/me` có `quota` đúng `USER_DAILY_USD`.
+   `infra/smoke.sh` (gọi bởi `deploy.sh`) tự kiểm (a) + (b) — production lỡ bật `SIGNUP_ENABLED` thì deploy tự rollback.
+6. Rollback: **không** lùi bằng down DB. Lùi = reset DB + MinIO và checkout bản cũ (cũng mất dữ liệu).
 
 Log: `journalctl -u mtl-api -o cat` (JSON mỗi request: method, path, status, ms — không query/header/body),
 `journalctl -u mtl-jobs`.
@@ -143,7 +169,7 @@ Log: `journalctl -u mtl-api -o cat` (JSON mỗi request: method, path, status, m
 cd worker
 uv run python scripts/fetch_models.py                     # tải + kiểm sha256 theo models.lock.json
 modal volume create mtl-models && modal volume put mtl-models models/ /
-pnpm worker-token create --name modal --platform --out ./modal.token   # token nền tảng, file 600
+pnpm worker-token create --name modal --kind modal --out ./modal.token   # token Modal, file 600
 modal secret create mtl-worker MTL_TOKEN="$(cat modal.token)" MTL_API_URL=https://<app> \
   MODAL_DRAIN_SECRET=<trùng .env> GEMINI_API_KEY=<…>
 rm modal.token
@@ -154,18 +180,20 @@ modal deploy modal_app.py                                 # URL app `mtl-drain` 
   CUDA → worker dừng, không âm thầm chạy CPU — kiểm log lần deploy đầu), weights từ Volume,
   `HF_HUB_OFFLINE=1`, chạy `mtl-worker --mode drain` tới khi hàng đợi rỗng 20s, báo
   `POST /worker/v1/sessions/end {dispatch_id, lifetime_s, busy_s}` → ledger `gpu_idle_seconds = lifetime − busy +
-  MODAL_SCALEDOWN_S` (đuôi rỗi sau khi function trả về; workspace null = chi phí nền tảng, 1 dòng/dispatch). Bị kill không kịp báo → `mtl-jobs` ước lượng = `MODAL_SCALEDOWN_S` sau
+  MODAL_SCALEDOWN_S` (đuôi rỗi sau khi function trả về; `user_id` null = chi phí nền tảng, 1 dòng/dispatch). Bị kill không kịp báo → `mtl-jobs` ước lượng = `MODAL_SCALEDOWN_S` sau
   `MAX_LIFETIME + SCALEDOWN`.
 - Endpoint `/drain` kiểm HMAC-SHA256 body `{dispatch_id, ts}` (`x-mtl-signature`), ts lệch > 5' → 401;
   hợp lệ → `drain.spawn()` trả 202. **Chấp nhận cho MVP (controller chốt 20/10/2026):** request hợp lệ bị gửi lại
   trong cửa sổ 5' sinh thêm container (cùng dispatch_id), luôn trong giới hạn `max_containers`; container thừa thấy
   hàng đợi rỗng sẽ thoát sau 20s. Chống phát lại triệt để (Modal Dict lưu dispatch_id đã nhận) để sau MVP.
-- Dispatcher (5s) chỉ phục vụ workspace `worker_mode='modal'`: dispatch đầu khi có job đủ điều kiện và không có
+- Dispatcher (5s) phục vụ job của mọi người dùng: dispatch đầu khi có job đủ điều kiện và không có
+  dispatch mở (khi token Mac thấy trong 60s qua, chỉ tính job đã chờ > `MAC_GRACE_S` = 60s); thêm 1 khi job cũ > 60s, **không còn dispatch pending** và active < max; pending > 120s không claim →
   dispatch mở; thêm 1 khi job cũ > 60s, **không còn dispatch pending** và active < max; pending > 120s không claim →
   `no_claim` + backoff 1'→2'→4'→8'→15' + cảnh báo; container thoát mà không chạy job nào → cũng backoff (tránh vòng
   container rỗng); phiên có việc → hết backoff. Hết ngân sách → không dispatch.
-- Worker Mac: token workspace (file 600 hoặc Keychain, xem [job-queue-worker.md](./job-queue-worker.md)), chỉ nhận
-  job workspace `mac`; không chặn Modal phục vụ workspace `modal`.
+- Worker Mac: token `kind=mac` (file 600 hoặc Keychain, xem [job-queue-worker.md](./job-queue-worker.md)). Worker chung
+  toàn hệ thống nên token Mac claim được job và URL ảnh của **mọi** người dùng — credential toàn nền tảng, chỉ cấp cho
+  người vận hành. Người dùng vượt `USER_DAILY_USD` thì job không-LLM của họ chỉ chạy trên Mac (Modal không nhận).
 
 ## 6. Kill-switch ngân sách + guardrail token
 
@@ -211,9 +239,9 @@ systemctl start mtl-backup  # chạy tay lần đầu; timer 03:30 UTC hằng đ
 - `infra/alert.sh` (timer 1'): healthz lỗi 2 lần liên tiếp → urgent (báo lặp tối đa 1 lần/giờ, báo hồi phục);
   hàng đợi cũ > 15' → high. Ngân sách 50/80/100% và Modal `no_claim` do `mtl-jobs` báo — cùng 1 topic ntfy.
 
-## 9. Pháp lý tối thiểu (nhóm được mời)
+## 9. Pháp lý tối thiểu (tài khoản tạo tay)
 
-Đăng ký chỉ qua lời mời (smoke kiểm sau mỗi deploy); bucket private (`mc anonymous set none`), chỉ presigned URL
+Production tắt đăng ký công khai (`SIGNUP_ENABLED=false`, tài khoản tạo bằng `pnpm create-user`; smoke kiểm sau mỗi deploy); bucket private (`mc anonymous set none`), chỉ presigned URL
 TTL ngắn, không link chia sẻ công khai; không train model trên dữ liệu người dùng. ToS/takedown → Phase 8.
 
 ## Kết quả kiểm local (20/10/2026)
@@ -226,7 +254,7 @@ TTL ngắn, không link chia sẻ công khai; không train model trên dữ li�
 | Smoke hỏng | release ném lỗi lúc start | quay về bản đang chạy, xoá release hỏng, `previous` giữ nguyên |
 | Rollback | `deploy.sh rollback` | ~2–23s (≤ 2') |
 | Backup/restore | `backup.sh init` + `backup.sh` → `restore.sh latest` sang stack đích | 3 page, mọi ảnh có object, 4 migration |
-| Smoke prod mode | API `NODE_ENV=production` + runner | healthz 200, sign-up không lời mời → 403 (cổng lời mời) |
+| Smoke prod mode (20/10/2026, trước khi bỏ lời mời) | API `NODE_ENV=production` + runner | healthz 200, sign-up không lời mời → 403 |
 | Cảnh báo | ntfy giả (HTTP local) | hàng đợi cũ 20', healthz lỗi khi tắt Postgres (sau 2 lần), hồi phục, ngân sách ngày 80% |
 | Dispatcher | Modal giả kiểm HMAC bằng `mtl_worker.dispatch_auth` → chạy `mtl-worker --mode drain` thật | dispatch → active → sessions/end → `gpu_idle_seconds`; container rỗng → backoff |
 
@@ -241,7 +269,7 @@ Không làm được trong phiên này (cần hạ tầng thật, key LLM, máy/
 - [ ] Kill-switch thật: `GLOBAL_DAILY_USD` thấp → claim rỗng ≤ 1 chu kỳ ở cả Mac và Modal, job đang chạy về
       `paused_budget`, không mất artifact.
 - [ ] Cảnh báo tới ntfy thật khi tắt Postgres và khi hàng đợi cũ > 15'.
-- [ ] Đăng ký không lời mời ở production → 403 (smoke tự kiểm, xác nhận bằng trình duyệt).
+- [ ] Đăng ký ở production khi `SIGNUP_ENABLED=false` bị chặn (smoke tự kiểm, xác nhận bằng trình duyệt).
 - [ ] Hiệu năng editor với trang 12k/20k px + Safari.
 - [ ] Re-inpaint ≤ 15s với worker thật; `kill -9` worker → job về hàng đợi ≤ 150s.
 - [ ] Export 100 trang thật; mở CBZ bằng YACReader/Komga; soi mắt 5 trang.

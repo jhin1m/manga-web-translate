@@ -1,7 +1,7 @@
 # Editor (react-konva)
 
-Editor là một phần của **màn chương** gộp: `/w/$ws/s/$seriesId/c/$chapterId[?page=<pageId>][&drawer=export]`
-(toàn màn hình, ngoài app shell; route cũ `.../chapters/$c/edit/$pageId` redirect sang `?page=`). Bố cục: rail công cụ
+Editor là một phần của **màn chương** gộp: `/s/$seriesId/c/$chapterId[?page=<pageId>][&drawer=export]`
+(toàn màn hình, ngoài app shell). Bố cục: rail công cụ
 (trái, 64px) | panel ngữ cảnh (288px; 560px cho Bản dịch / Tìm; bấm lại icon đang mở để thu) | canvas Konva từng trang
 | cột thumbnail trang (phải, 112px) — xem [design-guidelines.md](./design-guidelines.md#màn-chương). Code: màn ở `apps/web/src/features/chapter/`, editor ở
 `apps/web/src/features/editor/`, API ở `apps/api/src/routes/page-state.ts`.
@@ -21,11 +21,13 @@ nháp, lần mở sau đề nghị khôi phục) — xem `use-chapter-session.ts
 
 ## Khoá chương theo trạng thái
 
+Khoá theo **tab trình duyệt**, không theo tài khoản: web gửi header `x-tab-id` (uuid trong `sessionStorage`) ở mọi request, holder = `<userId>:<tabId>` (thiếu header → tab `default`). Cùng tài khoản mở chương ở tab thứ hai → tab đó nhận 423 `{error:"chapter_locked"}` và chỉ xem ("Chương đang mở ở tab khác — chỉ xem ở tab này"); đóng tab chỉ nhả khoá của chính tab đó. Response không còn tên người giữ khoá.
+
 Khoá chỉ giữ khi chương **ổn định** (`prepared` / `review` / `partial_failed` / `done`, đã có page; `isChapterSettled` +
 `pageIds.length > 0`, `lockEnabled` trong `use-chapter-session.ts`). Chương đang cắt/dịch → không giữ khoá, chỉ xem.
 "Bước 2 · Dịch" / "Dịch lại" / "Chạy lại trang lỗi" đi qua `runAi`: lưu hết (`saver.flush`) → tạm dừng giữ khoá →
-nhả khoá (cùng chuỗi `serial` với lock) → gọi API; khoá được lấy lại khi chương ổn định trở lại. Người khác đang giữ
-khoá → băng cảnh báo báo tên + "Thử lại", chỉ báo cạnh chip đổi thành "Chỉ xem", editor chỉ xem. Đang giữ khoá
+nhả khoá (cùng chuỗi `serial` với lock) → gọi API; khoá được lấy lại khi chương ổn định trở lại. Tab khác đang giữ
+khoá → băng cảnh báo + "Thử lại", chỉ báo cạnh chip đổi thành "Chỉ xem", editor chỉ xem. Đang giữ khoá
 bình thường không có băng (chỉ báo nhỏ icon khoá + "Đã lưu" ở thanh trên).
 
 ## Ảnh gốc trước Bước 1, xoá ảnh / trang, ảnh tự bỏ
@@ -36,13 +38,13 @@ upload (`source-rail.tsx`, `use-source-images.ts`): ảnh thả trong tab hiện
 ←/→ chuyển ảnh; panel Chọn hiện ảnh đang xem. Xoá / Khôi phục ảnh khi còn sửa được bộ ảnh — menu chuột phải thumbnail
 (Shift+F10 / phím Menu khi đang focus) hoặc nút "Xoá ảnh này" / "Khôi phục ảnh này" ở panel Chọn: `PATCH …/chapters/:id/source-files/:fileId {skip}` đặt
 `source_files.skip = 'user'` (giữ hàng để hoàn tác và để tải tiếp khớp bộ file); commit/ingest bỏ ảnh `skip`, nút
-Bước 1 đếm ảnh còn dùng. Người khác giữ khoá → 423; đã có page → 409.
+Bước 1 đếm ảnh còn dùng. Chương đang mở ở tab khác → 423; đã có page → 409.
 
 Đổi thứ tự ảnh (cùng điều kiện `editable`, thứ tự này là thứ tự Bước 1 ghép/cắt): kéo-thả thumbnail (vạch xanh báo chỗ
 thả), menu chuột phải "Đưa lên đầu / Lên 1 / Xuống 1 / Đưa xuống cuối", hoặc Alt+↑/↓ trên thumbnail đang focus (focus đi
 theo ảnh). Cập nhật lạc quan, lỗi → trả thứ tự cũ + toast; toast "Đã đổi thứ tự" có "Hoàn tác". Ảnh đã xoá vẫn giữ chỗ.
 `PUT …/chapters/:id/source-files/order {ids}`: `ids` phải đúng bộ source file của chương (thiếu / thừa / trùng → 400
-`source_set_mismatch`), ghi `ord = vị trí`; cùng guard với PATCH skip (423 người khác giữ khoá, 409 `chapter_not_draft`).
+`source_set_mismatch`), ghi `ord = vị trí`; cùng guard với PATCH skip (423 chương đang mở ở tab khác, 409 `chapter_not_draft`).
 Ingest đọc theo `ord` nên worker không đổi. Kéo-thả HTML5 gốc không chạy trên màn cảm ứng — dùng menu.
 
 **Sau Bước 1** "Ẩn trang n" ở menu chuột phải thumbnail hoặc "Ẩn trang này" ở panel Chọn (chưa chọn khối) ẩn trang
@@ -72,7 +74,7 @@ trang); credit cùng mẫu nhưng đổi chữ có thể không khớp; chưa c�
 
 - Nguồn sự thật: `page_states.state` (zod `PageState`, `packages/shared/src/page-state.ts`). Store zustand giữ `doc`
   (đang sửa) và `base` + `baseVersion` (bản server đã xác nhận); Konva chỉ render từ store.
-- Ghi: `PUT /api/w/:ws/pages/:id/state` với `If-Match: "<version>"`. Không giữ khoá chương → 423 (editor chuyển chỉ
+- Ghi: `PUT /api/pages/:id/state` với `If-Match: "<version>"`. Không giữ khoá chương → 423 (editor chuyển chỉ
   xem); version lệch → 409 kèm version hiện tại. Mỗi lần ghi đẩy bản cũ vào `page_state_history` (≤ 50/page),
   `state_origin = 'user'`, `ai_update_available` giữ nguyên.
 - Autosave (`save.ts`): debounce 2s, lưu ngay khi chuyển page/ẩn tab/rời màn chương. Lượt lưu tuần tự: ghi
@@ -103,18 +105,18 @@ người gõ = xuống dòng. Box có `text` mà `lines` rỗng (find/replace, �
 `layoutBox` lúc hiển thị, không ghi state; export phía server làm y hệt (`render.ensure_lines`). Font: `apps/web/public/fonts/` là bản sao `worker/fonts/` —
 `pnpm --filter @mtl/web fonts:sync` sau khi đổi font; `pnpm test` của web fail nếu lệch.
 
-**Font của nhóm** (Cài đặt nhóm → tab Font, `/w/$ws/settings`, owner/admin upload TTF/OTF ≤ 10MB, ≤ 20 font): `loadFonts(fetchCustom)` ở
+**Font của bạn** (Cài đặt chung → tab Font, `/settings`, upload TTF/OTF ≤ 10MB, ≤ 20 font): `loadFonts(fetchCustom)` ở
 `fonts.ts` nạp thêm từng font bằng `FontFace(font_id, url(presigned))` (`font_id` = `custom-<8 hex>`), metric
 (`units_per_em/ascent/descent`) lấy từ API — API đọc bằng fontkit theo đúng quy tắc `read_metrics` của worker (test parity
 với manifest). Danh sách lấy tươi mỗi phiên chương (`staleTime: 0`) nên URL còn hạn; font nạp lỗi (URL hết hạn) → lấy lại danh sách
-1 lần rồi nạp lại; không lấy được font nhóm thì editor vẫn chạy với font gói sẵn. Panel Chọn liệt kê thêm nhóm "Font của nhóm".
-Box có font không biết (font nhóm đã xoá, state cũ): metric theo font thoại mặc định và `canvasFont` có family dự phòng là font đó
+1 lần rồi nạp lại; không lấy được font tuỳ chỉnh thì editor vẫn chạy với font gói sẵn. Panel Chọn liệt kê thêm nhóm "Font của bạn".
+Box có font không biết (font tuỳ chỉnh đã xoá, state cũ): metric theo font thoại mặc định và `canvasFont` có family dự phòng là font đó
 (`"<font_id>", "<mặc định>"`) nên đo và vẽ nhất quán, không lỗi; select hiện `<id> (thiếu)`. Font thoại mặc định của series dùng
-được khi là font gói sẵn hoặc font nhóm đã nạp (`kit.knows`).
+được khi là font gói sẵn hoặc font tuỳ chỉnh đã nạp (`kit.knows`).
 
 Cài đặt series (`?tab=settings`, `series-settings-form.tsx`) cũng gọi `loadFonts` để dropdown Font mặc định vẽ mỗi option bằng
-chính font đó (`.font-select` bật `appearance: base-select` khi trình duyệt hỗ trợ). Owner/admin có option "+ Tải font lên…"
-cuối dropdown: chọn file → `uploadCheckedFont` (cùng kiểm tra đuôi / 10MB / 20 font với Cài đặt nhóm) → font mới được chọn
+chính font đó (`.font-select` bật `appearance: base-select` khi trình duyệt hỗ trợ). Dropdown có option "+ Tải font lên…"
+cuối dropdown: chọn file → `uploadCheckedFont` (cùng kiểm tra đuôi / 10MB / 20 font với Cài đặt chung) → font mới được chọn
 cho đúng ô, chỉ thành mặc định khi bấm Lưu.
 
 Cờ "tràn khung" (bảng văn bản, cột thumbnail, panel Chọn, cảnh báo xuất) dùng chung `boxOverflow` trong `measure.ts`, có dung

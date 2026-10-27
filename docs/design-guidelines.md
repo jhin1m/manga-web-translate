@@ -76,7 +76,7 @@ Toàn màn hình (ngoài app shell), `chapter-workspace.css`. Nguyên tắc (own
 - **Trạng thái chương ở 1 chỗ**: chip cạnh tên chương (`status.ts` `chapterChip`, `role="status"`, aria-live
   polite): "Đang tải ảnh 2/5", "Đang dịch 3/5", "Chờ duyệt · 2 cần xem", "Xong". Cột thumbnail chỉ giữ trạng thái
   theo trang. Cạnh chip: chỉ báo nhỏ khoá + lưu (icon khoá + Đã lưu / Đang lưu…, hoặc "Chỉ xem").
-- **Băng cảnh báo** (`LockBand`, `role="alert"`): chỉ hiện khi người dùng phải biết/làm — người khác giữ khoá (Thử
+- **Băng cảnh báo** (`LockBand`, `role="alert"`): chỉ hiện khi người dùng phải biết/làm — chương đang mở ở tab khác (Thử
   lại), lỗi khoá, mất khoá, khôi phục thay đổi từ phiên trước, lỗi lưu, trang đang chờ AI tự thử lại (provider lỗi
   tạm / 429 hết hạn mức: "trang 1, 2 đang chờ, tự thử lại lúc HH:MM … muốn dừng thì bấm Huỷ xử lý"). Trạng thái bình
   thường không chiếm dải.
@@ -99,11 +99,11 @@ Toàn màn hình (ngoài app shell), `chapter-workspace.css`. Nguyên tắc (own
 - **Home** (`/`): vùng thả file lớn (đoán được series → tạo chương nháp + upload + mở màn chương, chờ bấm Bước 1; không
   đoán được / file lỗi → dòng xác nhận "Sau khi thả file"; chọn "+ Series mới…" thì có thêm select ngôn ngữ gốc) →
   hàng series (tên dài cắt "…" + `title`, không đè cột trạng thái; bấm hàng để mở, icon Sửa → tab Cài đặt,
-  icon Xoá xác nhận tại chỗ rồi xoá cả series — chỉ admin/owner). **Series**: đầu trang +
+  icon Xoá xác nhận tại chỗ rồi xoá cả series). **Series**: đầu trang +
   tab Chương / Glossary / Cài đặt dịch (`?tab=`) dùng chung; tab Chương = vùng thả cho chương kế (series cố định, cũng
   tự tạo chương nháp) + hàng chương (bấm cả hàng hoặc icon Sửa để mở, icon Xoá xác nhận tại chỗ). Hàng danh sách không
   có nút "bước tiếp theo" — dịch / xuất / chạy lại làm trong màn chương. Ngoài icon Xoá ở home, cuối tab Cài
-  đặt cũng xoá được series (gõ tên để xác nhận, chỉ admin/owner). Tạo series (home) = tên + select ngôn ngữ gốc; tab Cài đặt sửa
+  đặt cũng xoá được series (gõ tên để xác nhận). Tạo series (home) = tên + select ngôn ngữ gốc; tab Cài đặt sửa
   ngôn ngữ gốc / đích và định dạng truyện (Cuộn dọc / Từng trang — áp cho chương upload sau khi lưu).
 
 ## Thành phần

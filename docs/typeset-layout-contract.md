@@ -27,7 +27,7 @@ lệch bbox mực từng dòng ≤ 1px — xem `benchmarks/phase-01-results.md`)
    `scripts/font_glyph_check.py` sinh từ bảng font: nếu `OS/2.fsSelection` có bit `USE_TYPO_METRICS` → `sTypoAscender`
    / `-sTypoDescender`; ngược lại `hhea.ascent` / `-hhea.descent`. **Không** dùng metric trình duyệt
    (`fontBoundingBoxAscent`…) hay của Konva.Text.
-   Font tuỳ chỉnh của workspace (`custom-<8 hex>`) theo **đúng quy tắc này**: API đọc từ file lúc upload
+   Font tuỳ chỉnh của người dùng (`custom-<8 hex>`) theo **đúng quy tắc này**: API đọc từ file lúc upload
    (`apps/api/src/lib/font-metrics.ts`, `fontkit`, test parity với manifest) cho editor, worker đọc từ chính file đó
    bằng `read_metrics`. Id không có file (font đã xoá, hoặc worker không tải được) → cả hai rơi về font thoại mặc định.
    `ascentPx = ascent · size / unitsPerEm`, tương tự `descentPx`.

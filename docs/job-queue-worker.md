@@ -11,8 +11,8 @@ pnpm infra:up && pnpm db:migrate
 pnpm dev                      # API :8787
 pnpm jobs                     # process riêng: reaper 30s + runtime_flags.runner_heartbeat
 
-# token worker cho 1 workspace (file mode 600, token gốc không in ra terminal)
-pnpm worker-token create --name mac-$(whoami) --workspace <ws-id> --out ~/.config/mtl/worker.token
+# token worker (file mode 600, token gốc không in ra terminal); --kind mac | modal
+pnpm worker-token create --name mac-$(whoami) --kind mac --out ~/.config/mtl/worker.token
 
 cd worker && uv sync && uv run python scripts/fetch_models.py
 export GEMINI_API_KEY=…                       # không commit
@@ -24,6 +24,10 @@ MTL_TOKEN_FILE=~/.config/mtl/worker.token uv run mtl-worker --api http://localho
   `MTL_TOKEN_FILE`; đổi account bằng `MTL_KEYCHAIN_ACCOUNT`).
 - Chạy nền: `worker/launchd/com.mtl.worker.plist` (sửa đường dẫn, `launchctl bootstrap gui/$(id -u) …`).
 - Thu hồi: `pnpm worker-token revoke --id <token-id>`.
+- **Worker chung toàn hệ thống**: token không gắn người dùng. `worker_tokens.kind` = `mac` (máy người vận hành) hoặc
+  `modal` (qua dispatcher); `--capabilities a,b` (tuỳ chọn) giới hạn loại job. Token nào cũng claim được job — và nhận
+  URL ảnh presigned — của **mọi** người dùng, nên token Mac là credential toàn nền tảng: chỉ cấp cho người vận hành,
+  không đưa cho người dùng thường. Cờ cũ `--workspace` / `--platform` và setting `worker_mode` đã bỏ.
 - Worker chỉ gọi ra ngoài (API + domain file `FILES_DOMAIN`) → chạy sau NAT được.
 
 ## Luồng 2 giai đoạn
@@ -40,19 +44,19 @@ chapter.translate (tuần tự, lô ≤ 4 trang): dịch + typeset → ai_state 
 ```
 
 Gọi từ route (Phase 4–6): `inJobTx(tx => enqueueIngest | translatePrepared | retranslate | retryFailedPages | enqueueReinpaint |
-enqueueOcrRegion(tx, ws, …))` trong `apps/api/src/jobs/enqueue.ts`. Ghi page state từ người dùng: giữ khoá chương qua
+enqueueOcrRegion(tx, userId, …))` trong `apps/api/src/jobs/enqueue.ts`. Ghi page state từ người dùng: giữ khoá chương qua
 `apps/api/src/lib/chapter-lock.ts` (`assertChapterLock` → 423).
 
 ## Giao thức worker
 
 | Lệnh | Body chính | Ghi chú |
 |---|---|---|
-| `POST /claim` | `worker_id, capabilities, max ≤ 8, pipeline_version, dispatch_id` | 426 khi `< MIN_PIPELINE_VERSION`; 400 capability lạ/không được cấp. Token workspace → chỉ workspace đó, `worker_mode='mac'`; token nền tảng → `worker_mode='modal'`. Breaker bật → bỏ qua loại job cần LLM |
+| `POST /claim` | `worker_id, capabilities, max ≤ 8, pipeline_version, dispatch_id` | 426 khi `< MIN_PIPELINE_VERSION`; 400 capability lạ/không được cấp. Token `mac` và `modal` cùng thấy job của mọi người dùng; token `modal` không nhận job nào của người đã vượt hạn mức, token `mac` không nhận job LLM của họ (xem [hạn mức](#hạn-mức-mỗi-người-user_daily_usd)). Breaker bật → bỏ qua loại job cần LLM |
 | `POST /jobs/:id/heartbeat` | `lease_token, attempt, progress, stage, usage` | gia hạn lease 120s; `stop: "cancel"` khi người dùng huỷ, `stop: "paused_budget"` khi vượt ngân sách (job tốn tiền, không tính attempt) |
 | `POST /jobs/:id/presign-outputs` | `names: ["clean"\|"mask"\|"page:<ord>"]` | URL PUT mới, cùng rev, TTL ≤ lease còn lại |
 | `POST /jobs/:id/complete` | `result, usage, pipeline_version` | lặp với cùng lease → no-op |
 | `POST /jobs/:id/fail` | `error_class, retry_after_s, message, usage, partial` | xem phân loại lỗi |
-| `POST /sessions/end` | `dispatch_id, lifetime_s, busy_s` | chỉ token nền tảng (Modal, mode drain) → ledger `gpu_idle_seconds`; gửi lại = no-op |
+| `POST /sessions/end` | `dispatch_id, lifetime_s, busy_s` | chỉ token `kind=modal` (mode drain; token khác 403) → ledger `gpu_idle_seconds`; gửi lại = no-op |
 
 Fencing: `lease_owner` = id token (không từ body); `{lease_token, attempt}` phải khớp và lease còn hạn, không thì 409
 và không ghi gì — worker bỏ job ngay. `attempt` = `attempts + provider_retries` (thứ tự claim, tăng đơn điệu). Output
@@ -150,13 +154,13 @@ font, và worker cũ cũng không biết fallback font tuỳ chỉnh. API `PIPEL
 ## Font tuỳ chỉnh (pipeline 0.5.1)
 
 `inputs.fonts: [{id, url, sha256}]` (optional) có ở `chapter.translate` và `chapter.export`; liệt kê font `custom-*`
-của **workspace job** mà job dùng, dựng lúc claim (`fontInputs` ở `jobs/claim-inputs.ts`, URL presigned GET: translate
+của **người dùng sở hữu job** mà job dùng, dựng lúc claim (`fontInputs` ở `jobs/claim-inputs.ts`, URL presigned GET: translate
 10', export 15'):
 
 - translate: `settings.font` + `settings.narration_font` của payload (snapshot lúc enqueue);
 - export: `font_family` của mọi box ở trang được vẽ chữ + font mặc định hiện tại của series.
 
-Id gói sẵn, của workspace khác hoặc đã xoá (box cũ còn tham chiếu — xoá font chỉ bị chặn khi là mặc định series) bị
+Id gói sẵn, của người dùng khác hoặc đã xoá (box cũ còn tham chiếu — xoá font chỉ bị chặn khi là mặc định series) bị
 bỏ khỏi danh sách. Worker (`mtl_worker/job_fonts.py`) tải mỗi font vào cache `~/.cache/mtl-worker/fonts/<sha256>`
 (`MTL_FONT_CACHE_DIR` để đổi), kiểm sha256 và đọc thử bằng fontTools, rồi đăng ký `id → file` trong suốt job
 (`use_fonts` ở `mtl_pipeline/fonts.py`; file không đuôi, Pillow/fontTools đọc theo nội dung). `font_path` /
@@ -166,8 +170,8 @@ Worker chỉ tải URL có trong inputs.
 
 ## Cài đặt pipeline (pipeline 0.6.0)
 
-Cài đặt nhóm → Pipeline (`PUT /api/w/:ws/settings/pipeline`, owner/admin; `GET /api/w/:ws` trả `settings.pipeline`)
-lưu ở `workspace_settings.pipeline` (jsonb, `{}` = mặc định). Hợp đồng: `packages/shared/src/pipeline-settings.ts`
+Cài đặt chung → Pipeline (`PUT /api/settings/pipeline`; `GET /api/me` trả `settings.pipeline`) lưu theo từng người
+dùng (jsonb, `{}` = mặc định). Hợp đồng: `packages/shared/src/pipeline-settings.ts`
 (`PipelineSettings`, `resolvePipelineSettings` đọc từng key hợp lệ, key lỗi → mặc định). Worker không đọc DB — API
 chụp vào payload lúc enqueue:
 
@@ -198,7 +202,7 @@ chụp vào payload lúc enqueue:
 
 ## AI hiệu đính (`chapter.proofread`)
 
-`POST /api/w/:ws/chapters/:id/proofread` (chương `review` / `done` / `partial_failed`, khác → 409
+`POST /api/chapters/:id/proofread` (chương `review` / `done` / `partial_failed`, khác → 409
 `chapter_not_translated`) → job cho mọi trang hiện, `ready`; payload chụp `TranslateSettings` của series + `model_tier`.
 Idempotency theo version page_state + glossary/settings rev + tier. Job chỉ đọc: không đổi trạng thái chương/trang, không
 khoá chương. Inputs lúc claim (`ProofreadInputs`): bản dịch hiện tại (gồm sửa tay) của vùng chữ có bản dịch, bỏ vùng
@@ -216,13 +220,36 @@ vùng) rồi **thay toàn bộ** gợi ý cũ của chương trong `proofread_su
 đọc nên không tính là chương "đang bận" khi ingest lại / áp ngược chữ bỏ qua (`notReadOnlyJob`). Dispatcher Modal: khi
 breaker LLM bật vẫn gọi container cho job không gọi LLM (cùng `llmJobSql` với claim); vượt ngân sách thì vẫn dừng mọi
 dispatch (GPU Modal là chi phí thật).
-`GET …/chapters/:id/proofread` = job gần nhất + gợi ý chưa bỏ; `PATCH /api/w/:ws/proofread-suggestions/:id
+`GET …/chapters/:id/proofread` = job gần nhất + gợi ý chưa bỏ; `PATCH /api/proofread-suggestions/:id
 {dismissed}` = Bỏ / hoàn tác. Editor: xem [editor.md](./editor.md#ai-hiệu-đính).
 
 ## Xuất chương
 
 `chapter.export` (`worker/mtl_worker/export.py`) không cần model ONNX hay LLM (chạy được với `--no-llm`). Output
 `export` mang `headers` đã ký (content-type + tag lifecycle) — xem [export-and-batch-edit.md](./export-and-batch-edit.md).
+
+## Hạn mức mỗi người (`USER_DAILY_USD`)
+
+Tách khỏi kill-switch toàn cục (`GLOBAL_DAILY_USD`, `paused_budget`, `pnpm budget-resume` — không đổi): một tài khoản
+dùng quá tay không làm cạn ngân sách chung. Code: `apps/api/src/billing/user-quota.ts`.
+
+- Cửa sổ = ngày **UTC** (cùng `billing/budget.ts`), tính **mọi** chi phí của người dùng trong `usage_ledger` (token LLM
+  + GPU). `0` = chặn mọi job LLM; không đặt = không giới hạn. `SIGNUP_ENABLED=true` bắt buộc phải đặt biến này.
+- Endpoint tạo job LLM → 402 `{error:"quota_exceeded", spent_usd, limit_usd, resets_at}`: commit (khi OCR là LLM),
+  dịch, `translate-prepared`, chạy lại trang lỗi, `ocr-region`, hiệu đính. Job không-LLM (xoá chữ lại, xuất…) vẫn tạo được.
+- Job LLM đang `queued` của người vượt → `failed` (`error_class=internal`, thông báo bắt đầu bằng `quota_exceeded`) ngay
+  lúc claim và ở tick runner `mtl-jobs` — không dùng `paused_budget` nên chương không kẹt `processing`. Job LLM đang
+  chạy: heartbeat trả `stop: "cancel"` rồi job `failed` như trên.
+- Token `modal` không bao giờ claim job nào của người vượt (kể cả không-LLM): job không-LLM của họ chỉ chạy trên worker
+  Mac ($0) hoặc chờ sang ngày mới. Dispatcher bỏ qua các job đó khi quyết định bật Modal.
+- `GET /api/me` trả `quota {spent_usd, limit_usd|null, resets_at}`; web hiện "Hạn mức AI hôm nay" ở Cài đặt chung.
+- Người dùng khác không bị ảnh hưởng.
+
+## Mac ưu tiên, Modal bù (grace)
+
+Dispatcher Modal (5s) tính job chờ cho cả hệ thống. Khi có token Mac thấy trong 60s qua (`last_seen`), chỉ job đã chờ
+quá `MAC_GRACE_S` (60s) mới được tính để bật Modal — tránh bật GPU rồi để rỗi khi máy Mac sắp nhận. Không có Mac sống →
+tính mọi job đủ điều kiện ngay.
 
 ## Production (Phase 7)
 
