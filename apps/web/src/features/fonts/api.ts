@@ -1,6 +1,7 @@
 /** Font riêng của người dùng (khớp apps/api/src/routes/fonts.ts) + danh sách font gói sẵn từ /fonts/manifest.json. */
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../../lib/api.ts";
+import { bundledFontIds, type FontManifest } from "../editor/fonts.ts";
 
 export const MAX_FONT_BYTES = 10 * 1024 * 1024;
 export const MAX_USER_FONTS = 20;
@@ -71,16 +72,16 @@ export function useUserFonts() {
   });
 }
 
-/** Id font gói sẵn (manifest do sync-fonts chép từ worker/fonts). */
-export function useBundledFontIds() {
+/** Font gói sẵn trong manifest (sync-fonts chép từ worker/fonts); `ids(lang)` = những font vẽ đủ chữ ngôn ngữ đích `lang` (đã sắp). */
+export function useBundledFonts() {
   return useQuery({
     queryKey: fontKeys.bundled,
     queryFn: async () => {
       const res = await fetch("/fonts/manifest.json");
       if (!res.ok) throw new Error(`không tải được manifest font (${res.status})`);
-      const m = (await res.json()) as { fonts: Record<string, unknown> };
-      return Object.keys(m.fonts).sort();
+      return ((await res.json()) as FontManifest).fonts;
     },
+    select: (fonts) => ({ has: (id: string) => id in fonts, ids: (lang?: string) => bundledFontIds(fonts, lang) }),
     staleTime: Number.POSITIVE_INFINITY,
   });
 }

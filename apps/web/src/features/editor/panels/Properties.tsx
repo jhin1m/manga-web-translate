@@ -35,12 +35,16 @@ function useBoxStyle() {
 export function BasicStyle({
   fonts,
   customFonts = [],
+  knows = () => false,
 }: {
   fonts: string[];
   customFonts?: { id: string; name: string }[];
+  /** Font có thật nhưng không nằm trong `fonts` (đã lọc theo ngôn ngữ đích) → ghi "không hợp ngôn ngữ", không phải "thiếu". */
+  knows?: (id: string) => boolean;
 }) {
   const { box, readOnly, style } = useBoxStyle();
   if (!box) return null;
+  const listed = fonts.includes(box.font_family) || customFonts.some((f) => f.id === box.font_family);
   return (
     <fieldset className="ed-props" disabled={readOnly}>
       <div className="ed-row">
@@ -51,8 +55,10 @@ export function BasicStyle({
             value={box.font_family}
             onChange={(e) => style("font_family", { font_family: e.target.value })}
           >
-            {!fonts.includes(box.font_family) && !customFonts.some((f) => f.id === box.font_family) && (
-              <option value={box.font_family}>{box.font_family} (thiếu)</option>
+            {!listed && (
+              <option value={box.font_family}>
+                {box.font_family} ({knows(box.font_family) ? "thiếu chữ ngôn ngữ này" : "thiếu"})
+              </option>
             )}
             {fonts.map((f) => (
               <option key={f} value={f}>

@@ -105,6 +105,15 @@ người gõ = xuống dòng. Box có `text` mà `lines` rỗng (find/replace, �
 `layoutBox` lúc hiển thị, không ghi state; export phía server làm y hệt (`render.ensure_lines`). Font: `apps/web/public/fonts/` là bản sao `worker/fonts/` —
 `pnpm --filter @mtl/web fonts:sync` sau khi đổi font; `pnpm test` của web fail nếu lệch.
 
+**Font gói sẵn theo ngôn ngữ**: manifest ghi `langs` mỗi font = ngôn ngữ đích vẽ đủ chữ (`font_langs` ở
+`worker/mtl_pipeline/fonts.py`, bảng chữ `target_lang_chars`). Mọi font gói sẵn có `vi/en/id`; font mặc định có đủ 6
+ngôn ngữ (`worker/tests/test_font_coverage.py`). Dropdown font của panel Chọn (`kit.idsFor(target_lang)`) và Font mặc
+định ở cài đặt series (`useBundledFonts().ids(target_lang)`) chỉ liệt kê font hợp ngôn ngữ đích; font đang dùng mà
+không hợp vẫn hiện, ghi `(thiếu chữ …)`. Không chặn ở API/worker — chỉ là gợi ý. Bộ font scanlation Việt hoá
+(WildWords, Augie, Mighty Zeo, Felt… từ bộ TeddyBear/iCiel và MTO) thiếu chữ es/pt/fr nên chỉ hiện cho series vi/en/id;
+một số file đã được sửa metric dọc lúc thêm vào (bảng `typo` Việt hoá hỏng → bỏ cờ `USE_TYPO_METRICS` hoặc sửa dấu
+`sTypoDescender`), nên khi thay file phải kiểm lại khoảng cách dòng.
+
 **Font của bạn** (Cài đặt chung → tab Font, `/settings`, upload TTF/OTF ≤ 10MB, ≤ 20 font): `loadFonts(fetchCustom)` ở
 `fonts.ts` nạp thêm từng font bằng `FontFace(font_id, url(presigned))` (`font_id` = `custom-<8 hex>`), metric
 (`units_per_em/ascent/descent`) lấy từ API — API đọc bằng fontkit theo đúng quy tắc `read_metrics` của worker (test parity

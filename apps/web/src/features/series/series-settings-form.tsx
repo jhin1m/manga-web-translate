@@ -14,7 +14,7 @@ import {
   fontKeys,
   type UserFont,
   uploadCheckedFont,
-  useBundledFontIds,
+  useBundledFonts,
   useUserFonts,
 } from "../fonts/api.ts";
 import { fetchGlossary, glossaryKey } from "../glossary/api.ts";
@@ -34,6 +34,7 @@ import {
   HONORIFIC_EXAMPLES,
   LANG_NAMES,
   langChangeWarning,
+  langShort,
   PAGE_FORMAT_LABELS,
   PAGE_FORMATS,
   SOURCE_LANGS,
@@ -70,7 +71,7 @@ const toForm = (s: Series): Form => ({
 export function SeriesSettingsForm({ series }: { series: Series }) {
   const qc = useQueryClient();
   const [f, setF] = useState<Form>(() => toForm(series));
-  const bundled = useBundledFontIds();
+  const bundled = useBundledFonts();
   const custom = useUserFonts();
   // Nạp font gói sẵn + font của bạn vào trình duyệt để dropdown xem trước được (lỗi → chỉ mất preview).
   const customFonts = custom.data;
@@ -275,7 +276,14 @@ export function SeriesSettingsForm({ series }: { series: Series }) {
                 }}
               >
                 <option value="">{empty}</option>
-                {(bundled.data ?? []).map((id) => (
+                {/* Font đã chọn nhưng thiếu chữ ngôn ngữ đích (vừa đổi ngôn ngữ) → vẫn hiện để không mất giá trị. */}
+                {bundled.data?.has(f.default_fonts[slot] ?? "") &&
+                  !bundled.data.ids(f.target_lang).includes(f.default_fonts[slot] ?? "") && (
+                    <option value={f.default_fonts[slot]}>
+                      {f.default_fonts[slot]} (thiếu chữ tiếng {langShort(f.target_lang)})
+                    </option>
+                  )}
+                {(bundled.data?.ids(f.target_lang) ?? []).map((id) => (
                   <option key={id} value={id} style={fontPreview(id)}>
                     {id}
                   </option>

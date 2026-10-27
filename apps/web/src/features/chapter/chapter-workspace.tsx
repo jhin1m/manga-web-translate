@@ -808,6 +808,7 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
                 blockTotal={activeBlocks}
                 overflowCount={activeOverflow}
                 kit={kit}
+                targetLang={series.data?.target_lang}
                 busy={{
                   retranslate: action.isPending,
                   ocr: ocr.pending.length > 0,

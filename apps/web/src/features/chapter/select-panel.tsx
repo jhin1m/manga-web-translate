@@ -33,6 +33,8 @@ export type SelectPanelProps = {
   /** Số khối tràn khung trên page active. */
   overflowCount: number;
   kit: FontKit | null;
+  /** Ngôn ngữ đích của series — dropdown font chỉ gợi ý font vẽ đủ chữ ngôn ngữ này. */
+  targetLang?: string;
   busy: { retranslate: boolean; ocr: boolean; applyKind: boolean };
   onRetranslatePage(): void;
   /** "Dịch lại khối": nhận dạng + dịch lại vùng OCR của khối. */
@@ -136,7 +138,11 @@ function BlockView(props: SelectPanelProps & { page: ProgressPage; row: Row }) {
       )}
       {box ? (
         <>
-          <BasicStyle fonts={props.kit?.ids ?? []} customFonts={props.kit?.custom ?? []} />
+          <BasicStyle
+            fonts={props.kit?.idsFor(props.targetLang) ?? []}
+            customFonts={props.kit?.custom ?? []}
+            knows={props.kit?.knows}
+          />
           <details className="cw-adv">
             <summary>Kiểu chữ nâng cao</summary>
             <AdvancedStyle>

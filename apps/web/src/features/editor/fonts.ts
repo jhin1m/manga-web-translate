@@ -7,8 +7,19 @@
 import type { Layout } from "./actions.ts";
 import { type FontMetrics, layoutBox, type MeasureFn } from "./measure.ts";
 
-export type FontEntry = FontMetrics & { file: string; viComplete: boolean };
+/** `langs`: ngôn ngữ đích font vẽ đủ chữ (worker `font_langs`); mọi font gói sẵn có vi/en/id, font mặc định có tất cả. */
+export type FontEntry = FontMetrics & { file: string; viComplete: boolean; langs?: string[] };
 export type FontManifest = { version: number; defaults: string[]; fonts: Record<string, FontEntry> };
+
+/** Font gói sẵn hợp ngôn ngữ đích (chưa biết ngôn ngữ / manifest cũ không có `langs` → coi là hợp). */
+export const fontSupports = (entry: Pick<FontEntry, "langs"> | undefined, lang: string | undefined) =>
+  !lang || !entry?.langs || entry.langs.includes(lang);
+
+/** Id font gói sẵn (đã sắp) hợp ngôn ngữ đích — gợi ý trong dropdown font. */
+export const bundledFontIds = (fonts: FontManifest["fonts"], lang?: string) =>
+  Object.keys(fonts)
+    .filter((id) => fontSupports(fonts[id], lang))
+    .sort();
 
 /** Font tuỳ chỉnh của bạn (một phần của `UserFont` ở features/fonts/api.ts). */
 export type CustomFont = {
@@ -24,6 +35,8 @@ export type FontKit = {
   manifest: FontManifest;
   /** Id font gói sẵn. */
   ids: string[];
+  /** Id font gói sẵn vẽ đủ chữ ngôn ngữ đích `lang`. */
+  idsFor(lang: string | undefined): string[];
   /** Font tuỳ chỉnh đã nạp được (chọn được trong panel; nhóm "Font của bạn"). */
   custom: { id: string; name: string }[];
   /** Id có font thật (gói sẵn hoặc tuỳ chỉnh đã nạp) — không thì metric/nét vẽ rơi về font mặc định. */
@@ -150,7 +163,8 @@ export async function loadFonts(fetchCustom?: () => Promise<CustomFont[]>): Prom
   const metrics = (id: string) => metricsOf(manifest, custom, id);
   return {
     manifest,
-    ids: Object.keys(manifest.fonts).sort(),
+    ids: bundledFontIds(manifest.fonts),
+    idsFor: (lang) => bundledFontIds(manifest.fonts, lang),
     custom: [...loadedCustom.values()].map((f) => ({ id: f.id, name: f.name })),
     knows: (id) => id in manifest.fonts || custom.has(id),
     metrics,

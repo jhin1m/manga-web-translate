@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { fontLabel, type UserFont } from "../../fonts/api.ts";
-import { canvasFont, dialogueFont, type FontManifest } from "../fonts.ts";
+import { bundledFontIds, canvasFont, dialogueFont, type FontManifest } from "../fonts.ts";
 
 const entry = { file: "x.ttf", viComplete: true, unitsPerEm: 1000, ascent: 900, descent: 200 };
 const manifest: FontManifest = {
@@ -17,6 +17,23 @@ describe("dialogueFont", () => {
   it("falls back to the manifest default when unset or no longer shipped", () => {
     expect(dialogueFont(manifest, undefined)).toBe("Bangers-Regular");
     expect(dialogueFont(manifest, "Removed-Font")).toBe("Bangers-Regular");
+  });
+});
+
+describe("bundledFontIds", () => {
+  const fonts: FontManifest["fonts"] = {
+    "WildWords-Roman": { ...entry, langs: ["vi", "en", "id"] },
+    "Bangers-Regular": { ...entry, langs: ["vi", "en", "id", "es", "pt", "fr"] },
+    "Old-Font": entry,
+  };
+
+  it("lists only fonts that cover the target language, sorted", () => {
+    expect(bundledFontIds(fonts, "es")).toEqual(["Bangers-Regular", "Old-Font"]);
+    expect(bundledFontIds(fonts, "id")).toEqual(["Bangers-Regular", "Old-Font", "WildWords-Roman"]);
+  });
+
+  it("lists every font when the language is unknown", () => {
+    expect(bundledFontIds(fonts, undefined)).toEqual(["Bangers-Regular", "Old-Font", "WildWords-Roman"]);
   });
 });
 
