@@ -1,7 +1,7 @@
 ---
 title: "Progress từng trang, dịch theo chuỗi lô, UX Xuất"
 description: "Xuất 1 nút tự tải; tiến độ tiếng Việt cập nhật ≤5s; dịch theo chuỗi job lô ≤4 trang để sửa trang đầu khi lô sau còn chạy; 1 nút Dịch chương + chọn trang."
-status: pending
+status: completed
 priority: P1
 effort: 34h
 branch: feat/pipeline-progress-export-ux
@@ -25,11 +25,11 @@ Chế độ `--tdd`: mỗi phase viết test ở mục "Test viết trước", c
 
 | # | Phase | Phạm vi | Effort | Chặn bởi | Trạng thái |
 |---|---|---|---|---|---|
-| 1 | [UX Xuất](./phase-01-export-ux.md) | web | 4h | — | Pending |
-| 2 | [Tiến độ + nhãn tiếng Việt](./phase-02-progress-labels.md) | worker + api + web, migration 0019 | 6h | — | Pending |
-| 3 | [Chuỗi job dịch theo lô](./phase-03-batched-translate-chain.md) | api + worker tối thiểu, migration 0020, pipeline 0.7.0 | 10h | P2 (migration 0019 trước, `queue.ts`) | Pending |
-| 4 | [Khoá + AI ghi khi đang dịch](./phase-04-lock-while-translating.md) | api + web editor | 6h | P3 (`pages.translate_queued`) | Pending |
-| 5 | [1 nút Dịch chương + chọn trang](./phase-05-one-button-page-select.md) | web | 8h | P1, P2, P3, P4 | Pending |
+| 1 | [UX Xuất](./phase-01-export-ux.md) | web | 4h | — | Completed |
+| 2 | [Tiến độ + nhãn tiếng Việt](./phase-02-progress-labels.md) | worker + api + web, migration 0019 | 6h | — | Completed |
+| 3 | [Chuỗi job dịch theo lô](./phase-03-batched-translate-chain.md) | api + worker tối thiểu, migration 0020, pipeline 0.7.0 | 10h | P2 (migration 0019 trước, `queue.ts`) | Completed |
+| 4 | [Khoá + AI ghi khi đang dịch](./phase-04-lock-while-translating.md) | api + web editor | 6h | P3 (`pages.translate_queued`) | Completed |
+| 5 | [1 nút Dịch chương + chọn trang](./phase-05-one-button-page-select.md) | web | 8h | P1, P2, P3, P4 | Completed |
 
 Thứ tự chạy: **P1 ‖ P2** song song → P3 → P4 → P5.
 P1 và P2 không chung file nào (đã kiểm cả CSS, test, shared — xem mục "File sở hữu" từng phase). Hợp đồng duy nhất
