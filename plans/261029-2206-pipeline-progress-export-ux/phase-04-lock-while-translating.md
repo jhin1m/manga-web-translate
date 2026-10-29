@@ -1,6 +1,6 @@
 ---
 title: "Phase 4: Giữ khoá + AI ghi khi chương đang dịch"
-status: todo
+status: completed
 effort: 6h
 ---
 
@@ -129,11 +129,11 @@ Lệnh hẹp: `pnpm --filter @mtl/api test -- ai-write-rules` ·
 
 ## Success Criteria
 
-- [ ] Test API + web mới/đảo xanh; toàn bộ `pnpm test` xanh.
-- [ ] `grep -rn "chapterLocked" apps/api/src` rỗng.
-- [ ] Kiểm tay: chương 9+ trang đang chạy chuỗi — sửa chữ trang 1 (đã xong) lưu được ("Đã lưu"), trang đang chờ lượt
+- [x] Test API + web mới/đảo xanh; toàn bộ `pnpm test` xanh.
+- [x] `grep -rn "chapterLocked" apps/api/src` rỗng. (Khớp nguyên từ `grep -rnw`; `chapterLockedError` là helper 423 có sẵn, không liên quan.)
+- [ ] Kiểm tay (chưa làm — chỉ có bản tự động tương đương: `ai-write-rules.test.ts` "PUT on a finished page succeeds while the next batch is still queued"): chương 9+ trang đang chạy chuỗi — sửa chữ trang 1 (đã xong) lưu được ("Đã lưu"), trang đang chờ lượt
       hiện "Chỉ xem · Trang này đang dịch"; khi lô của nó xong, trang tự hiện bản AI (nếu chưa sửa) và sửa được.
-- [ ] Sửa tay trang X rồi "Dịch lại trang X" → bản AI vào "AI có bản mới", không đè bản tay.
+- [x] Sửa tay trang X rồi "Dịch lại trang X" → bản AI vào "AI có bản mới", không đè bản tay. (Tự động: `ai-write-rules.test.ts` "still never overwrites a hand-edited page while locked" + chuỗi lô; chưa kiểm tay UI.)
 
 ## Risk + rollback
 

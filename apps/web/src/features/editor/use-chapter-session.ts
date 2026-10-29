@@ -3,16 +3,16 @@
  * 1 page cũ), các page khác chỉ đọc từ `chapterStore.cache`. Ghép: font, Saver (IndexedDB → PUT If-Match), khoá
  * chương theo trạng thái, khôi phục thay đổi chưa lưu nhiều page, đổi page active và chạy thao tác AI.
  *
- * Chính sách khoá: chỉ giữ khoá khi chương ổn định (review/partial_failed/done) và có page. Đang dịch/xử lý →
- * editor read-only "processing" và KHÔNG giữ khoá: AI chỉ ghi `state` khi chương không bị khoá
- * (apps/api/src/jobs/page-state-writer.ts) — giữ khoá thì lần dịch đầu chỉ hiện cờ "AI có bản mới".
+ * Chính sách khoá: giữ khoá khi chương có page và không còn đang cắt trang (`lockable`) — cả lúc đang dịch. AI vẫn
+ * ghi `state` của trang chưa sửa tay dù chương đang khoá (apps/api/src/jobs/page-state-writer.ts); trang đang dịch /
+ * chờ lượt là trang bận → read-only "page_busy" (server cũng trả 409 `page_busy`), trang đã xong sửa bình thường.
  */
 import { emptyPageState, type PageState } from "@mtl/shared";
 import { useQueryClient } from "@tanstack/react-query";
 import { type Draft, produce } from "immer";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { errorMessage } from "../../lib/api.ts";
-import { lockChapter, unlockChapter } from "../chapter/api.ts";
+import { lockChapter } from "../chapter/api.ts";
 import { serial, useChapterLock } from "../chapter/use-chapter-lock.ts";
 import { fetchFonts, fontKeys } from "../fonts/api.ts";
 import { fetchPageDetail, type PageDetail, putPageState } from "./api.ts";
@@ -20,8 +20,8 @@ import { type ChapterStore, chapterStore } from "./chapter-store.ts";
 import { type FontKit, loadFonts } from "./fonts.ts";
 import type { History } from "./history.ts";
 import { PendingQueue, type PendingRecord } from "./pending-queue.ts";
-import { rebase, same } from "./rebase.ts";
-import { finalSave, Saver } from "./save.ts";
+import { diffStates, rebase, same } from "./rebase.ts";
+import { finalSave, isPageBusyError, Saver } from "./save.ts";
 import { type AiInfo, type EditorStore, editorStore } from "./store.ts";
 
 export type LoadedPage = { state: PageState; version: number; ai: AiInfo };
@@ -33,14 +33,14 @@ export type SessionDeps = {
   /** GET /pages/:id (state + version + ai_state). */
   fetchPage(pageId: string): Promise<LoadedPage>;
   putState(pageId: string, state: PageState, version: number): Promise<{ version: number }>;
-  unlock(): Promise<unknown>;
   queue: Pick<PendingQueue, "delete">;
-  onPause(paused: boolean): void;
   onError(e: unknown): void;
 };
 
 const statusOf = (e: unknown) =>
   e && typeof e === "object" && "status" in e && typeof e.status === "number" ? e.status : 0;
+
+const PAGE_BUSY_TEXT = "trang đang dịch — sửa được khi xong";
 
 /** Page đang sửa còn thay đổi chưa lưu được → không đổi page (sửa vẫn nằm trong editor + IndexedDB). */
 export class UnsavedPageError extends Error {
@@ -59,6 +59,8 @@ export class ChapterSession {
   private deferred = new Map<string, PendingRecord>();
   private chain: Promise<void> = Promise.resolve();
   private target: string | null = null;
+  /** Page đang dịch / chờ lượt dịch (theo progress) → page active trong đó chỉ xem. */
+  private busy: ReadonlySet<string> = new Set();
 
   constructor(private readonly deps: SessionDeps) {}
 
@@ -104,13 +106,26 @@ export class ChapterSession {
     }
     if (this.target !== pageId) return;
     const prev = editor.getState();
+    const keptEdits = !!prev.pageId && prev.doc !== prev.base;
     if (prev.pageId && prev.doc !== prev.base) {
-      // Không lưu được (mất khoá, lỗi mạng): ở lại page này — đổi page sẽ bỏ sửa khỏi editor.
       await saver.persist();
-      throw new UnsavedPageError(chapter.getState().pages.find((p) => p.id === prev.pageId)?.ord);
+      // Page đang dịch: chưa lưu được tới khi lô của nó xong → cất phần sửa, mở lại page thì rebase + lưu tiếp.
+      if (prev.readOnly === "page_busy" && prev.base && prev.doc) {
+        this.deferred.set(prev.pageId, {
+          pageId: prev.pageId,
+          baseVersion: prev.baseVersion,
+          ops: diffStates(prev.base, prev.doc),
+          updatedAt: Date.now(),
+        });
+      } else {
+        // Không lưu được (mất khoá, lỗi mạng): ở lại page này — đổi page sẽ bỏ sửa khỏi editor.
+        throw new UnsavedPageError(chapter.getState().pages.find((p) => p.id === prev.pageId)?.ord);
+      }
     }
     if (prev.pageId && prev.base) {
-      this.stash.set(prev.pageId, { version: prev.baseVersion, history: prev.history });
+      // Phần sửa cất riêng (page bận) sẽ rebase lại khi mở → lịch sử undo cũ không còn khớp, bỏ.
+      if (keptEdits) this.stash.delete(prev.pageId);
+      else this.stash.set(prev.pageId, { version: prev.baseVersion, history: prev.history });
       chapter.getState().setCached(prev.pageId, {
         state: prev.base,
         version: prev.baseVersion,
@@ -130,6 +145,7 @@ export class ChapterSession {
       history: st && st.version === loaded.version ? st.history : undefined,
     });
     chapter.getState().setActive(pageId);
+    this.applyBusy();
     this.applyDeferred(pageId);
     // ai_state không có trong cache (GET /states không trả) → lấy nền cho "Bỏ chỉnh sửa tay"/bảng AI có bản mới.
     if (!fresh) void this.refreshAi(pageId);
@@ -161,27 +177,45 @@ export class ChapterSession {
   }
 
   /**
-   * Thao tác cho AI chạy (Dịch chương, Dịch lại, Chạy lại trang lỗi): lưu xong → tạm dừng giữ khoá → nhả khoá
-   * (cùng chuỗi lock/unlock của tab) → gọi API. Khoá giữ lại khi chương ổn định trở lại (caller theo dõi).
+   * Cập nhật tập page bận và read-only của page active: vào bận → "page_busy" (chỉ khi đang sửa được — không che lý
+   * do khoá/khôi phục/đang tải); hết bận → mở sửa, nạp bản AI nếu chưa sửa gì và lưu phần còn chờ (409 → rebase).
    */
-  async runAi<T>(fn: () => Promise<T>): Promise<T> {
-    await this.deps.saver.flush();
-    this.deps.onPause(true);
-    try {
-      await serial(() => this.deps.unlock()).catch(() => undefined);
-      return await fn();
-    } catch (e) {
-      this.deps.onPause(false);
-      throw e;
+  setBusy(ids: ReadonlySet<string>) {
+    this.busy = ids;
+    this.applyBusy();
+  }
+
+  private applyBusy() {
+    const s = this.deps.editor.getState();
+    const busy = s.pageId !== null && this.busy.has(s.pageId);
+    if (busy && s.readOnly === null) s.setReadOnly("page_busy");
+    else if (!busy && s.readOnly === "page_busy") {
+      s.setReadOnly(null);
+      this.syncActive();
+      void this.deps.saver.flush();
     }
   }
 
   /**
-   * Khôi phục bản ghi IndexedDB của page KHÔNG active: rebase op lên state server rồi PUT thẳng. Có xung đột →
-   * hoãn tới khi mở page đó (danh sách xung đột hiện trong panel Chọn).
+   * Thao tác cho AI chạy (Dịch chương, Dịch lại, Chạy lại trang lỗi): lưu xong rồi gọi API. Giữ nguyên khoá — trang
+   * vào lượt dịch thành trang bận (read-only) theo progress.
+   */
+  async runAi<T>(fn: () => Promise<T>): Promise<T> {
+    await this.deps.saver.flush();
+    return fn();
+  }
+
+  /**
+   * Khôi phục bản ghi IndexedDB của page KHÔNG active: rebase op lên state server rồi PUT thẳng. Có xung đột, hoặc
+   * page đang dịch (server trả 409 `page_busy`) → hoãn tới khi mở page đó (xung đột hiện trong panel Chọn; page bận
+   * lưu khi lô của nó xong).
    */
   async restoreOther(rec: PendingRecord): Promise<"saved" | "deferred" | "noop"> {
     const { chapter, queue } = this.deps;
+    if (this.busy.has(rec.pageId)) {
+      this.deferred.set(rec.pageId, rec);
+      return "deferred";
+    }
     const c = chapter.getState().cache[rec.pageId];
     let server = c?.state ? { state: c.state, version: c.version } : await this.deps.fetchPage(rec.pageId);
     for (let round = 0; ; round++) {
@@ -200,6 +234,10 @@ export class ChapterSession {
         await queue.delete(rec.pageId);
         return "saved";
       } catch (e) {
+        if (isPageBusyError(e)) {
+          this.deferred.set(rec.pageId, rec);
+          return "deferred";
+        }
         if (statusOf(e) !== 409 || round > 0) throw e;
         server = await this.deps.fetchPage(rec.pageId);
       }
@@ -214,6 +252,7 @@ export class ChapterSession {
   async updateOther(pageId: string, recipe: (draft: Draft<PageState>) => void): Promise<boolean> {
     const { chapter, editor } = this.deps;
     if (editor.getState().pageId === pageId) throw new Error("page đang sửa — dùng editor.apply");
+    if (this.busy.has(pageId)) throw new Error(PAGE_BUSY_TEXT);
     const c = chapter.getState().cache[pageId];
     let server = c?.state ? { state: c.state, version: c.version } : await this.deps.fetchPage(pageId);
     for (let round = 0; ; round++) {
@@ -224,6 +263,7 @@ export class ChapterSession {
         chapter.getState().setCached(pageId, { state: next, version });
         return true;
       } catch (e) {
+        if (isPageBusyError(e)) throw new Error(PAGE_BUSY_TEXT);
         if (statusOf(e) !== 409 || round > 0) throw e;
         server = await this.deps.fetchPage(pageId);
       }
@@ -304,20 +344,21 @@ export function resetChapterSession(chapterId: string) {
 }
 
 /**
- * Hook React quanh `ChapterSession`. `settled` = chương ổn định (không còn job), `pageIds` theo ord,
- * `refetchProgress` trả trạng thái chương mới. Store phải được `resetChapterSession` trước lần render đầu.
+ * Hook React quanh `ChapterSession`. `lockable` = chương đã có page và không còn cắt trang (giữ khoá cả lúc đang dịch),
+ * `pageIds` theo ord, `busyPageIds` = page đang xử lý / chờ lượt dịch (chỉ xem), `refetchProgress` làm mới tiến độ
+ * ngay sau khi gọi AI. Store phải được `resetChapterSession` trước lần render đầu.
  */
 export function useChapterSession(opts: {
   chapterId: string;
-  settled: boolean;
+  lockable: boolean;
   pageIds: string[];
+  busyPageIds: ReadonlySet<string>;
   refetchProgress(): Promise<boolean | undefined>;
 }) {
-  const { chapterId, settled, pageIds } = opts;
+  const { chapterId, lockable, pageIds, busyPageIds } = opts;
   const { kit, error: fontError } = useFontKit();
   const queue = pendingQueue();
   const [error, setError] = useState<string | null>(null);
-  const [paused, setPaused] = useState(false);
 
   const saver = useMemo(
     () =>
@@ -339,12 +380,10 @@ export function useChapterSession(opts: {
         saver,
         fetchPage: async (id) => loadedOf(await fetchPageDetail(id)),
         putState: (id, state, version) => putPageState(id, state, version),
-        unlock: () => unlockChapter(chapterId),
         queue,
-        onPause: setPaused,
         onError: (e) => setError(errorMessage(e)),
       }),
-    [chapterId, saver, queue],
+    [saver, queue],
   );
 
   // Mọi thay đổi doc → lưu nháp IndexedDB + autosave. Phải khai báo TRƯỚC useChapterLock (thứ tự cleanup).
@@ -379,14 +418,16 @@ export function useChapterSession(opts: {
     };
   }, [saver, chapterId]);
 
-  const lockEnabled = settled && pageIds.length > 0 && !paused;
+  const lockEnabled = lockable && pageIds.length > 0;
   const lock = useChapterLock(chapterId, lockEnabled);
+  const busyRef = useRef(busyPageIds);
+  busyRef.current = busyPageIds;
   const [recovery, setRecovery] = useState<RecoveryItem[] | null>(null);
   /** Đã quét IndexedDB xong — trước đó chưa cho sửa (sửa sẽ ghi đè bản ghi đang chờ khôi phục). */
   const [scanDone, setScanDone] = useState(false);
   /**
-   * `lock.state` lúc khoá bị tắt (đang dịch / tạm dừng cho AI): bật lại thì object cũ vẫn báo "held" cho tới khi
-   * hook khoá chạy lại → không coi là đang giữ khoá (lưu lúc đó sẽ 423).
+   * `lock.state` lúc khoá bị tắt (chương chưa có page / đang cắt trang): bật lại thì object cũ vẫn báo "held" cho tới
+   * khi hook khoá chạy lại → không coi là đang giữ khoá (lưu lúc đó sẽ 423).
    */
   const lockAtDisable = useRef<unknown>(null);
 
@@ -406,12 +447,17 @@ export function useChapterSession(opts: {
         if (s.readOnly === null || s.readOnly === "processing") s.setReadOnly("loading");
       } else if (stale.some((r) => r === s.readOnly)) {
         s.setReadOnly(recovery ? "recovery" : null);
+        // Vừa mở lại quyền sửa: page active còn bận thì vẫn chỉ xem (trước khi lưu phần đang chờ).
+        session.setBusy(busyRef.current);
         void saver.flush();
       }
     } else if (st === "acquiring") {
       if (s.readOnly === null || s.readOnly === "processing") s.setReadOnly("loading");
     } else s.setReadOnly("lock_denied");
-  }, [lock.state, lockEnabled, recovery, saver, scanDone]);
+  }, [lock.state, lockEnabled, recovery, saver, scanDone, session]);
+
+  // Page vào/ra lượt dịch (theo progress) → read-only "page_busy" của page active.
+  useEffect(() => session.setBusy(busyPageIds), [session, busyPageIds]);
 
   // PUT trả 423 → thử lấy lại khoá ngay (thành công thì effect trên mở lại quyền sửa).
   const retryLock = lock.retry;
@@ -460,23 +506,12 @@ export function useChapterSession(opts: {
     [recovery, session, queue],
   );
 
-  // Tạm dừng khoá cho AI: mở lại khi chương rời trạng thái ổn định rồi quay về (hoặc không có gì chạy).
-  const left = useRef(false);
-  useEffect(() => {
-    if (!paused) return;
-    if (!settled) left.current = true;
-    else if (left.current) {
-      left.current = false;
-      setPaused(false);
-    }
-  }, [paused, settled]);
   const { refetchProgress } = opts;
   const runAi = useCallback(
     async <T>(fn: () => Promise<T>): Promise<T> => {
-      left.current = false;
       const out = await session.runAi(fn);
-      const nowSettled = await refetchProgress().catch(() => true);
-      if (nowSettled && !left.current) setPaused(false);
+      // Trang vừa vào lượt dịch thành trang bận ngay, không đợi lần poll kế.
+      await refetchProgress().catch(() => undefined);
       return out;
     },
     [session, refetchProgress],
@@ -491,7 +526,6 @@ export function useChapterSession(opts: {
     session,
     lock,
     lockEnabled,
-    paused,
     recovery,
     restore,
     runAi,

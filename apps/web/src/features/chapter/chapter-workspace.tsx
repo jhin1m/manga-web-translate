@@ -63,7 +63,7 @@ import { FindReplacePanel } from "./FindReplace.tsx";
 import { providerWait, providerWaitText } from "./job-error.ts";
 import { readPanel, writePanel } from "./layout-prefs.ts";
 import { PageRail } from "./page-rail.tsx";
-import { needsReview, pageLevel } from "./page-status.ts";
+import { needsReview, pageLevel, pageLevelOf } from "./page-status.ts";
 import { type ChapterCommand, primaryAction } from "./primary-action.ts";
 import { ProofreadPanel } from "./proofread-panel.tsx";
 import { SelectPanel } from "./select-panel.tsx";
@@ -112,6 +112,9 @@ const rejectedNotice = (accepted: number, rejected: Rejected[]): Notice => ({
     .join(", ")}.`,
 });
 
+/** Progress trả kèm `translate_queued` (trang còn chờ lượt trong chuỗi dịch). */
+type QueuedPage = ProgressPage & { translate_queued?: boolean };
+
 /**
  * Store editor/chương dùng chung cả tab: phiên mới bắt đầu sạch. Reset ở layout effect (sau khi cây của chương cũ đã
  * gỡ, trước khi vẽ) rồi mới render màn chương — reset trong lúc render thì component còn subscribe store của chương
@@ -133,10 +136,19 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
   const settled = isChapterSettled(status);
   const pages = data.progress?.pages ?? NO_PAGES;
   const pageIds = useMemo(() => pages.map((p) => p.id), [pages]);
+  // Giữ khoá cả lúc đang dịch; chỉ chưa có trang / đang cắt trang thì chưa có gì để sửa.
+  const lockable = !!status && status !== "draft" && status !== "ingesting";
+  // Trang đang xử lý hoặc còn chờ lượt trong chuỗi dịch (`translate_queued`, có từ progress) → chỉ xem.
+  const busyKey = pages
+    .filter((p) => pageLevelOf(p) === "busy" || (p as QueuedPage).translate_queued)
+    .map((p) => p.id)
+    .join(",");
+  const busyPageIds = useMemo(() => new Set(busyKey ? busyKey.split(",") : []), [busyKey]);
   const session = useChapterSession({
     chapterId,
-    settled,
+    lockable,
     pageIds,
+    busyPageIds,
     refetchProgress: data.refetchProgress,
   });
   const { kit } = session;
@@ -586,7 +598,8 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
     [sources, sourceReorder.mutate, notify],
   );
   // ---- Xoá (ẩn) / khôi phục trang sau Bước 1 ----
-  const pagesEditable = session.lockEnabled && session.lock.state.status === "held";
+  // Ẩn/khôi phục trang chỉ khi chương ổn định (server trả 409 `chapter_busy` lúc đang chạy).
+  const pagesEditable = settled && session.lockEnabled && session.lock.state.status === "held";
   const pageSkip = useMutation({
     mutationFn: ({ page, skipped }: { page: ProgressPage; skipped: boolean }) => setPageSkip(page.id, skipped),
     onSuccess: (_r, { page, skipped }) => {

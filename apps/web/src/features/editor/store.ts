@@ -15,10 +15,11 @@ export type Tool = "select" | "text" | "brush" | "eraser" | "ocr";
 export type SaveStatus = "saved" | "dirty" | "saving" | "error";
 /**
  * lock_denied: tab khác giữ khoá; lock_lost: server trả 423 khi lưu; recovery: đang chờ người dùng quyết
- * khôi phục thay đổi chưa lưu của phiên trước (sửa lúc này sẽ ghi đè bản ghi đó); processing: chương đang
- * dịch/xử lý — không giữ khoá để AI ghi được bản dịch, sửa được khi xong.
+ * khôi phục thay đổi chưa lưu của phiên trước (sửa lúc này sẽ ghi đè bản ghi đó); processing: chương chưa có
+ * trang / đang cắt trang — chưa giữ khoá; page_busy: page đang sửa đang dịch hoặc chờ lượt dịch (AI sắp ghi), sửa
+ * được khi lô của nó xong.
  */
-export type ReadOnlyReason = "lock_denied" | "lock_lost" | "loading" | "recovery" | "processing" | null;
+export type ReadOnlyReason = "lock_denied" | "lock_lost" | "loading" | "recovery" | "processing" | "page_busy" | null;
 
 export type AiInfo = { state: PageState | null; rev: number; available: boolean };
 /** Khung nhìn: toạ độ màn hình = (x, y) + toạ độ page · scale. */

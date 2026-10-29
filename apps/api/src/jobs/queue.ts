@@ -26,7 +26,6 @@ import { recordServerUsage, recordUsage } from "../billing/ledger.ts";
 import { claimableSql, lockQueuedOverQuotaLlmJobs, quotaFailMessage, userQuotaStatus } from "../billing/user-quota.ts";
 import { db } from "../db.ts";
 import { env } from "../env.ts";
-import { isChapterLocked } from "../lib/chapter-lock.ts";
 import type { WorkerIdentity } from "../lib/worker-token.ts";
 import { head } from "../storage.ts";
 import { isLlmPaused, recordProviderError } from "./breaker.ts";
@@ -338,7 +337,7 @@ async function applyResult(t: DbLike, job: Job, attempt: number, result: JobResu
       if ([...got].some((id) => !want.has(id)) || got.size !== result.pages.length) {
         throw new JobHttpError(400, "unexpected_page", "result có page ngoài page_ids hoặc trùng");
       }
-      const ch = await lockChapter(t, owner, p.chapter_id);
+      await lockChapter(t, owner, p.chapter_id);
       const rows = await t.select().from(pages).where(inArray(pages.id, p.page_ids));
       const dims = new Map(rows.map((r) => [r.id, r]));
       for (const r of result.pages) {
@@ -347,15 +346,8 @@ async function applyResult(t: DbLike, job: Job, attempt: number, result: JobResu
           throw new JobHttpError(400, "state_size_mismatch", `ai_state.size ≠ kích thước page ${r.page_id}`);
         }
       }
-      const locked = isChapterLocked(ch);
       for (const r of result.pages) {
-        await writeAiState(t, {
-          userId: owner,
-          pageId: r.page_id,
-          aiState: r.ai_state,
-          actor: `job:${job.id}`,
-          chapterLocked: locked,
-        });
+        await writeAiState(t, { userId: owner, pageId: r.page_id, aiState: r.ai_state, actor: `job:${job.id}` });
       }
       if (got.size)
         await t

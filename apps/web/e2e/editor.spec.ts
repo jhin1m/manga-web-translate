@@ -281,7 +281,9 @@ test("3 pages shown one at a time: pager and thumbnails stay in sync with ?page=
   expect(pageErrors).toEqual([]);
 });
 
-test("opening a chapter while it translates does not hold the lock; the AI translation shows up", async ({ page }) => {
+test("opening a chapter while it translates holds the lock; the busy page is read-only until its AI translation shows up", async ({
+  page,
+}) => {
   await login(page);
   const chapterId = await committedChapter(page);
   // Chỉ bước 1 (ingest + prepare) rồi bấm bước 2: chương "processing" với job dịch chờ trong hàng.
@@ -292,12 +294,15 @@ test("opening a chapter while it translates does not hold the lock; the AI trans
 
   await page.goto(chapterUrl(chapterId));
   await openTable(page);
-  await expect(page.getByRole("status", { name: "Khoá chương" })).toContainText("Đang dịch — sửa được khi xong");
+  const access = page.getByRole("status", { name: "Khoá chương" });
+  await expect(access).toContainText("Chỉ xem");
+  await expect(access).toContainText("Trang này đang dịch — sửa được khi xong");
   await expect(page.locator(".ed-canvas canvas").first()).toBeVisible();
-  await page.waitForTimeout(1500);
   const detail = async () =>
     (await (await page.request.get(`/api/chapters/${chapterId}`)).json()) as { lock: unknown; status: string };
-  expect(await detail()).toMatchObject({ status: "processing", lock: null });
+  // Tab giữ khoá cả lúc chương đang dịch.
+  await expect.poll(async () => (await detail()).lock).not.toBeNull();
+  expect((await detail()).status).toBe("processing");
 
   // Drawer Hoạt động liệt kê job dịch chương đang chờ.
   await page.getByRole("button", { name: /^Hoạt động/ }).click();
@@ -308,14 +313,20 @@ test("opening a chapter while it translates does not hold the lock; the AI trans
   await page.keyboard.press("Escape");
   await expect(activity).toBeHidden();
 
+  // AI ghi bản dịch dù chương đang khoá (trang chưa sửa tay) → trang hết bận, hiện bản AI, sửa được.
   const pages = await runUntil(page, chapterId, allReady);
+  const pageId = pages[0]?.id ?? "";
   await expect(cell(page)).toHaveValue("Xin chào", { timeout: 15_000 });
-  await expect(page.getByRole("status", { name: "Khoá chương" })).toContainText("Bạn đang giữ khoá chương");
-  const st = (await (await page.request.get(`/api/pages/${pages[0]?.id}`)).json()) as {
+  await expect(access).toContainText("Bạn đang giữ khoá chương");
+  const st = (await (await page.request.get(`/api/pages/${pageId}`)).json()) as {
     state_origin: string;
     ai_update_available: boolean;
   };
   expect(st).toMatchObject({ state_origin: "ai", ai_update_available: false });
+
+  await cell(page).fill("Sửa sau khi dịch");
+  await expect(page.locator(".status", { hasText: "Đã lưu" })).toBeVisible({ timeout: 10_000 });
+  await expect.poll(() => translationOf(page, pageId)).toBe("Sửa sau khi dịch");
 });
 
 test("two tabs on one chapter: the second only reads; closing another tab keeps the lock; the lock moves once freed", async ({

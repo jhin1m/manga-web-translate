@@ -8,6 +8,7 @@
 import { Link } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 import type { LockState } from "../chapter/use-chapter-lock.ts";
+import { PAGE_BUSY_SAVE_TEXT } from "../editor/save.ts";
 import { editorStore, type ReadOnlyReason, type SaveStatus, useEditor } from "../editor/store.ts";
 import type { RecoveryItem } from "../editor/use-chapter-session.ts";
 import { FilePickButton } from "../upload/drop-zone.tsx";
@@ -178,7 +179,7 @@ function EditState(props: EditAccess) {
   const save = useEditor((s) => s.save);
   if (!props.hasPages) return null;
   let view: { short: ReactNode; long: string; tone: Tone };
-  if (!props.lockEnabled) view = { short: "Chỉ xem", long: "Đang dịch — sửa được khi xong", tone: "idle" };
+  if (!props.lockEnabled) view = { short: "Chỉ xem", long: "Đang cắt trang — sửa được khi xong", tone: "idle" };
   else if (props.lock.status === "acquiring")
     view = { short: "Đang lấy khoá…", long: "Đang lấy khoá chương…", tone: "busy" };
   else if (props.lock.status === "denied")
@@ -189,6 +190,11 @@ function EditState(props: EditAccess) {
     view = { short: "Mất khoá", long: "Mất khoá chương — đang chỉ xem", tone: "danger" };
   else if (readOnly === "recovery")
     view = { short: "Chờ khôi phục", long: "Có thay đổi chưa lưu từ phiên trước", tone: "warn" };
+  else if (readOnly === "page_busy")
+    view =
+      save.status === "saved"
+        ? { short: "Chỉ xem", long: "Trang này đang dịch — sửa được khi xong", tone: "idle" }
+        : { short: "Chờ lưu", long: PAGE_BUSY_SAVE_TEXT, tone: "warn" };
   else
     view = {
       short: (
@@ -206,7 +212,7 @@ function EditState(props: EditAccess) {
       data-tone={view.tone}
       role="status"
       aria-label="Khoá chương"
-      title={save.error ? `${view.long} · ${save.error}` : view.long}
+      title={save.error && save.error !== view.long ? `${view.long} · ${save.error}` : view.long}
     >
       <span className="sr-only">{view.long} · </span>
       {view.short}
@@ -262,6 +268,8 @@ export function LockBand(props: {
     });
   } else if (hasPages && readOnly === "lock_lost") {
     items.push({ key: "lock", tone: "danger", body: READ_ONLY_TEXT.lock_lost });
+  } else if (hasPages && readOnly === "page_busy" && save.status !== "saved") {
+    items.push({ key: "lock", tone: "warn", body: PAGE_BUSY_SAVE_TEXT });
   }
   const rec = props.recovery;
   if (rec && rec.length > 0) {

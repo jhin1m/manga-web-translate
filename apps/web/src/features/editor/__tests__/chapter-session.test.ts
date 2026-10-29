@@ -52,11 +52,7 @@ function setup() {
       return api.get(id);
     },
     putState: (id, state, version) => api.put(id, state, version),
-    unlock: async () => {
-      log.push("unlock");
-    },
     queue,
-    onPause: (p) => log.push(`pause:${p}`),
     onError: (e) => {
       errors.push(e);
     },
@@ -114,7 +110,7 @@ describe("ChapterSession", () => {
     expect(log.filter((l) => l.startsWith("load:"))).toEqual([]);
   });
 
-  it("runAi flushes, pauses the lock, unlocks, then calls the API — in order", async () => {
+  it("runAi flushes then calls the API and keeps the lock", async () => {
     const { log, editor, session } = setup();
     await session.activate("A");
     editor.getState().apply(moveBox("t0", 3, 3));
@@ -124,7 +120,56 @@ describe("ChapterSession", () => {
       return 42;
     });
     expect(out).toBe(42);
-    expect(log).toEqual(["put:A", "pause:true", "unlock", "api"]);
+    expect(log).toEqual(["put:A", "api"]);
+  });
+
+  it("the active page becomes read-only while busy and editable again when done", async () => {
+    const { editor, chapter, session } = setup();
+    await session.activate("A");
+    session.setBusy(new Set(["A"]));
+    expect(editor.getState().readOnly).toBe("page_busy");
+    // Lô của trang xong: bản AI mới vào cache → hết bận thì nạp bản đó và mở sửa.
+    chapter.getState().setStates([{ page_id: "A", state: doc(4), version: 2, ai_rev: 1, ai_update_available: false }]);
+    session.setBusy(new Set());
+    expect(editor.getState().readOnly).toBeNull();
+    expect(editor.getState()).toMatchObject({ baseVersion: 2 });
+    expect(editor.getState().doc?.regions).toHaveLength(4);
+  });
+
+  it("leaving a busy page with unsaved edits is allowed; the edits come back and save when it is reopened", async () => {
+    const { errors, srv, editor, chapter, queue, saver, session } = setup();
+    await session.activate("A");
+    editor.getState().apply(moveBox("t0", 4, 4));
+    session.setBusy(new Set(["A"]));
+    await session.activate("B");
+    expect(errors).toEqual([]);
+    expect(editor.getState().pageId).toBe("B");
+    expect((await queue.get("A"))?.ops.length).toBeGreaterThan(0);
+    // AI dịch xong trang A (version 2), trang hết bận.
+    srv.A = { state: doc(2), version: 2 };
+    session.setBusy(new Set());
+    await session.activate("A");
+    expect(editor.getState().doc?.text_boxes[0]).toMatchObject({ x: 4 });
+    await saver.flush();
+    expect(srv.A?.version).toBe(3);
+    expect(srv.A?.state.text_boxes[0]).toMatchObject({ x: 4 });
+    expect(chapter.getState().activePageId).toBe("A");
+  });
+
+  it("busy follows the active page and never hides a lock problem", async () => {
+    const { editor, session } = setup();
+    await session.activate("A");
+    session.setBusy(new Set(["B"]));
+    expect(editor.getState().readOnly).toBeNull();
+    await session.activate("B");
+    expect(editor.getState().readOnly).toBe("page_busy");
+    await session.activate("A");
+    expect(editor.getState().readOnly).toBeNull();
+    editor.getState().setReadOnly("lock_denied");
+    session.setBusy(new Set(["A"]));
+    expect(editor.getState().readOnly).toBe("lock_denied");
+    session.setBusy(new Set());
+    expect(editor.getState().readOnly).toBe("lock_denied");
   });
 
   it("syncActive reloads a clean active page when the server version moved on (AI translated)", async () => {
@@ -134,6 +179,27 @@ describe("ChapterSession", () => {
     session.syncActive();
     expect(editor.getState()).toMatchObject({ baseVersion: 4 });
     expect(editor.getState().doc?.regions).toHaveLength(5);
+  });
+
+  it("writes to a busy non-active page wait: restore is deferred, update is refused without a PUT", async () => {
+    const { log, srv, queue, session } = setup();
+    await session.activate("A");
+    session.setBusy(new Set(["B"]));
+    const local = doc(3);
+    const first = local.text_boxes[0];
+    if (first) first.x = 77;
+    const rec = { pageId: "B", baseVersion: 1, ops: diffStates(doc(3), local), updatedAt: 1 };
+    await queue.put(rec);
+    log.length = 0;
+    expect(await session.restoreOther(rec)).toBe("deferred");
+    await expect(
+      session.updateOther("B", (d) => {
+        for (const b of d.text_boxes) b.align = "left";
+      }),
+    ).rejects.toThrow("đang dịch");
+    expect(log.filter((l) => l.startsWith("put:"))).toEqual([]);
+    expect(srv.B?.version).toBe(1);
+    expect(await queue.get("B")).toBeDefined();
   });
 
   it("restoreOther rebases a pending record onto the cached state and PUTs it", async () => {
