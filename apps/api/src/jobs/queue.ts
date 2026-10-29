@@ -32,16 +32,11 @@ import { head } from "../storage.ts";
 import { isLlmPaused, recordProviderError } from "./breaker.ts";
 import { buildInputs, claimOutputNames, outputKey, type PresignedOutput, presignOutputs } from "./claim-inputs.ts";
 import { markDispatchClaimed } from "./dispatcher.ts";
-import {
-  autoTranslatePages,
-  chapterHasUserEdits,
-  createIngestedPages,
-  lockChapter,
-  refreshChapter,
-} from "./enqueue.ts";
+import { chapterHasUserEdits, createIngestedPages, lockChapter, refreshChapter } from "./enqueue.ts";
 import { decideFailure, JobHttpError, leaseLost } from "./errors.ts";
 import { llmJobSql } from "./llm-job-filter.ts";
 import { writeAiState } from "./page-state-writer.ts";
+import { advanceTranslateChain, stopTranslateChain } from "./translate-chain.ts";
 
 type Job = typeof jobs.$inferSelect;
 
@@ -124,6 +119,9 @@ export async function claim(w: WorkerIdentity, req: z.infer<typeof ClaimRequest>
     for (const { id } of picked) {
       const [cur] = await t.select().from(jobs).where(eq(jobs.id, id));
       if (!cur) continue;
+      // Khoá chương trước khi đụng page (cấp rev, markClaimed): job dựng input lỗi gọi terminal() → cần khoá chương;
+      // giữ đúng thứ tự job → chapter → pages như complete/fail/advance, không đảo thành pages → chapter (deadlock).
+      if (cur.chapterId) await lockChapter(t, cur.userId, cur.chapterId);
       let outputRev: number | null = null;
       if (claimOutputNames(cur.payload).length && cur.pageId) {
         const [r] = await t
@@ -311,6 +309,9 @@ async function applyResult(t: DbLike, job: Job, attempt: number, result: JobResu
         storageKeys.clean(owner, job.pageId, result.clean_rev),
         storageKeys.mask(owner, job.pageId, result.mask_rev),
       ]);
+      // Khoá chương trước khi ghi page (thứ tự chapter → pages như chuỗi dịch) — không deadlock với advance. Sau khi
+      // HEAD storage xong: không giữ khoá chương qua lời gọi mạng.
+      if (job.chapterId) await lockChapter(t, owner, job.chapterId);
       await t
         .update(pages)
         .set({
@@ -325,7 +326,7 @@ async function applyResult(t: DbLike, job: Job, attempt: number, result: JobResu
       await recordServerUsage(t, job, attempt, "pages", 1);
       if (job.chapterId) {
         await refreshChapter(t, owner, job.chapterId);
-        await autoTranslatePages(t, owner, job.chapterId);
+        await advanceTranslateChain(t, owner, job.chapterId);
       }
       return undefined;
     }
@@ -337,8 +338,7 @@ async function applyResult(t: DbLike, job: Job, attempt: number, result: JobResu
       if ([...got].some((id) => !want.has(id)) || got.size !== result.pages.length) {
         throw new JobHttpError(400, "unexpected_page", "result có page ngoài page_ids hoặc trùng");
       }
-      const [ch] = await t.select().from(chapters).where(eq(chapters.id, p.chapter_id));
-      if (!ch) throw new Error("chapter missing");
+      const ch = await lockChapter(t, owner, p.chapter_id);
       const rows = await t.select().from(pages).where(inArray(pages.id, p.page_ids));
       const dims = new Map(rows.map((r) => [r.id, r]));
       for (const r of result.pages) {
@@ -372,7 +372,9 @@ async function applyResult(t: DbLike, job: Job, attempt: number, result: JobResu
           .set({ errorClass: "schema", error: `AI trả sai định dạng ở ${missing.length} trang; các trang khác đã lưu` })
           .where(eq(jobs.id, job.id));
       }
+      await t.update(pages).set({ translateQueued: false }).where(inArray(pages.id, p.page_ids));
       await refreshChapter(t, owner, p.chapter_id);
+      await advanceTranslateChain(t, owner, p.chapter_id);
       return undefined;
     }
     case "page.reinpaint": {
@@ -534,23 +536,27 @@ export async function terminal(
   switch (p.type) {
     case "chapter.ingest":
       // Huỷ ingest = chưa commit → về draft (commit lại được); lỗi → partial_failed.
+      // Lượt mở lúc commit đóng theo (commit lại mở lượt mới).
       await t
         .update(chapters)
-        .set({ status: status === "failed" ? "partial_failed" : "draft" })
+        .set({ status: status === "failed" ? "partial_failed" : "draft", runTarget: null })
         .where(
           and(eq(chapters.id, p.chapter_id), eq(chapters.ingestRev, p.ingest_rev), eq(chapters.status, "ingesting")),
         );
       return;
     case "page.prepare":
+      if (job.chapterId) await lockChapter(t, owner, job.chapterId);
       await t.update(pages).set({ status: "failed" }).where(eq(pages.id, p.page_id));
       // Huỷ page cuối của giai đoạn 1: page còn lại đã prepare → chương `prepared` (chờ "Dịch"), không kẹt processing.
       if (job.chapterId) {
         await refreshChapter(t, owner, job.chapterId);
-        // Manga: trang lỗi không chặn phần còn lại tự dịch; người dùng huỷ thì dừng hẳn.
-        if (status === "failed") await autoTranslatePages(t, owner, job.chapterId);
+        // Trang lỗi không chặn phần còn lại của lượt dịch; người dùng huỷ thì dừng cả lượt.
+        if (status === "failed") await advanceTranslateChain(t, owner, job.chapterId);
+        else await stopTranslateChain(t, owner, job.chapterId);
       }
       return;
     case "chapter.translate": {
+      await lockChapter(t, owner, p.chapter_id);
       // Page đang chờ/đang dịch: đã có bản AI trước (dịch lại) → giữ `ready`; chưa có → `failed`.
       const affected = await t
         .select({ id: pages.id, aiRev: pageStates.aiRev })
@@ -561,7 +567,11 @@ export async function terminal(
       const failed = affected.filter((r) => r.aiRev === 0).map((r) => r.id);
       if (ready.length) await t.update(pages).set({ status: "ready" }).where(inArray(pages.id, ready));
       if (failed.length) await t.update(pages).set({ status: "failed" }).where(inArray(pages.id, failed));
+      await t.update(pages).set({ translateQueued: false }).where(inArray(pages.id, p.page_ids));
       await refreshChapter(t, owner, p.chapter_id);
+      // Lô lỗi hẳn không chặn chuỗi: lô kế chạy tiếp; huỷ thì dừng cả lượt.
+      if (status === "failed") await advanceTranslateChain(t, owner, p.chapter_id);
+      else await stopTranslateChain(t, owner, p.chapter_id);
       return;
     }
     default:

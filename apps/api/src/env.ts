@@ -35,11 +35,12 @@ const Env = z.object({
    * Worker có pipeline_version thấp hơn → claim trả 426. 0.4.1: worker hiểu settings.narration_font.
    * 0.4.2: export pages[].skipped. 0.5.1: translate/export inputs.fonts (font tuỳ chỉnh của người dùng).
    * 0.6.0: payload có cài đặt pipeline (page.prepare.pipeline, page.reinpaint.inpaint, page.ocr_region.ocr_engine).
+   * 0.7.0: chapter.translate theo lô — payload/result `carry` (ngữ cảnh chuyền giữa các job lô).
    */
   MIN_PIPELINE_VERSION: z
     .string()
     .regex(/^\d+\.\d+\.\d+$/)
-    .default("0.6.0"),
+    .default("0.7.0"),
   /**
    * Kill-switch ngân sách toàn cục (USD, cộng usage_ledger.cost_usd mọi người dùng + chi phí nền tảng, ngày/tháng
    * theo UTC). Bắt buộc ở production; 0 = chặn mọi job tốn tiền. Không đặt (dev/test) = không giới hạn.

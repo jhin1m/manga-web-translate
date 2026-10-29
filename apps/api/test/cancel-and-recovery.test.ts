@@ -2,8 +2,9 @@
 import { chapters, jobs, pages } from "@mtl/db";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { enqueueIngest, enqueueReinpaint, inJobTx, retranslate } from "../src/jobs/enqueue.ts";
+import { enqueueIngest, enqueueReinpaint, inJobTx } from "../src/jobs/enqueue.ts";
 import { cancelJob } from "../src/jobs/queue.ts";
+import { retranslate } from "../src/jobs/translate-chain.ts";
 import { db, seedUser } from "./helpers.ts";
 import {
   addSources,

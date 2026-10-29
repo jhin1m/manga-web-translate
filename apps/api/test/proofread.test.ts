@@ -2,7 +2,7 @@
 import { randomUUID } from "node:crypto";
 import { chapters, jobs, pageStates, pages, scoped } from "@mtl/db";
 import type { JobResult } from "@mtl/shared";
-import { eq } from "drizzle-orm";
+import { and, eq, type SQL } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { call, db, seedUser } from "./helpers.ts";
 import { aiState, type Claimed, claimJobs, complete, usage, workerToken } from "./worker-helpers.ts";
@@ -98,7 +98,10 @@ describe("chapter.proofread", () => {
 
   it("lượt cũ xong sau lượt mới hơn không đè gợi ý mới", async () => {
     const sdb = scoped(db, A.userId);
-    const [first] = await sdb.select(pages, eq(pages.chapterId, A.chapterId));
+    // Trang hiện đầu tiên theo ord: trang ẩn không vào lượt hiệu đính, sửa nó không tạo lượt mới.
+    const [first] = (
+      await sdb.select(pages, and(eq(pages.chapterId, A.chapterId), eq(pages.skipped, false)) as SQL)
+    ).sort((a, b) => a.ord - b.ord);
     const pageIdOf = first?.id ?? "";
     const runOnce = async () => {
       const res = await api(`/chapters/${A.chapterId}/proofread`, { method: "POST" });

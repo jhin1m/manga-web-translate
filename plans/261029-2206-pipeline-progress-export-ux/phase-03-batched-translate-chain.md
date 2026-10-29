@@ -1,6 +1,6 @@
 ---
 title: "Phase 3: Chuỗi job dịch theo lô"
-status: todo
+status: completed
 effort: 10h
 ---
 
@@ -235,11 +235,12 @@ Lệnh hẹp: `pnpm --filter @mtl/api test -- translate-chain` · `pnpm --filter
 
 ## Success Criteria
 
-- [ ] `translate-chain.test.ts` 15 ca xanh; `test_translate_carry.py` xanh; toàn bộ test api/web/worker xanh.
-- [ ] `grep -rn autoTranslatePages apps/` rỗng.
-- [ ] Payload lô trong DB có `priority=50`, `carry` từ lô trước; worker 0.6.0 nhận 426.
+- [x] `translate-chain.test.ts` 15 ca xanh (+3 ca bổ sung: commit manga hết hạn mức có/không `target`, dịch lại trang đầu giữ ngữ cảnh trang sau); `test_translate_carry.py` xanh; toàn bộ test api/web/worker xanh.
+- [x] `grep -rn autoTranslatePages apps/` rỗng.
+- [x] Payload lô trong DB có `priority=50`, `carry` từ lô trước; worker 0.6.0 nhận 426.
 - [ ] Kiểm tay (worker thật, `--no-llm` không đủ — cần key): chương 9 trang strip, gọi `POST /translate-prepared` →
-      trang 1 `ready` trong khi lô 2 đang chạy (xem `/progress`).
+      trang 1 `ready` trong khi lô 2 đang chạy (xem `/progress`). — Chưa làm (không có key LLM trong phiên thực thi);
+      hành vi tương đương đã có test "chain advances batch by batch in page order" (lô 1 `ready` khi lô 2 `queued`).
 
 ## Risk + rollback
 

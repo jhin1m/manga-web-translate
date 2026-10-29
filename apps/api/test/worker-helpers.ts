@@ -3,7 +3,8 @@ import { chapters, jobs, pages, scoped, sourceFiles } from "@mtl/db";
 import { emptyPageState, type JobResult, type PageState, storageKeys, type WorkerUsage } from "@mtl/shared";
 import { eq, sql } from "drizzle-orm";
 import { v7 as uuidv7 } from "uuid";
-import { inJobTx, translatePrepared } from "../src/jobs/enqueue.ts";
+import { inJobTx } from "../src/jobs/enqueue.ts";
+import { translatePrepared } from "../src/jobs/translate-chain.ts";
 import { createWorkerToken } from "../src/lib/worker-token.ts";
 import { app, db } from "./helpers.ts";
 
@@ -13,7 +14,7 @@ export const PNG_1PX = Buffer.from(
   "base64",
 );
 export const SHA = "ab".repeat(32);
-export const VERSION = "0.6.0";
+export const VERSION = "0.7.0";
 
 export type Claimed = {
   id: string;

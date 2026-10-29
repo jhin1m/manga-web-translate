@@ -117,6 +117,16 @@ export const TranslateSettings = z.object({
 });
 export type TranslateSettings = z.infer<typeof TranslateSettings>;
 
+/**
+ * Ngữ cảnh dịch chuyền giữa các job lô liên tiếp của một lượt (0.7.0): ghi chú của AI + tên nhân vật gặp gần nhất.
+ * Result lô trước → payload lô sau; thiếu = bắt đầu ngữ cảnh rỗng như cũ.
+ */
+export const TranslateCarry = z.object({
+  notes: z.string().max(2000),
+  characters: z.array(z.string().min(1).max(64)).max(30),
+});
+export type TranslateCarry = z.infer<typeof TranslateCarry>;
+
 export const JobPayload = z.discriminatedUnion("type", [
   z.object({ type: z.literal("chapter.ingest"), chapter_id: Uuid, ingest_rev: Rev, mode: IngestMode }),
   z.object({
@@ -136,6 +146,7 @@ export const JobPayload = z.discriminatedUnion("type", [
     glossary_rev: Rev,
     settings_rev: Rev,
     settings: TranslateSettings,
+    carry: TranslateCarry.optional(),
   }),
   z.object({
     type: z.literal("page.reinpaint"),
@@ -222,6 +233,7 @@ export const JobResult = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("chapter.translate"),
     pages: z.array(z.object({ page_id: Uuid, ai_state: PageState })),
+    carry: TranslateCarry.optional(),
   }),
   z.object({ type: z.literal("page.reinpaint"), clean_rev: Rev }),
   z.object({ type: z.literal("page.ocr_region"), region: Region }),
