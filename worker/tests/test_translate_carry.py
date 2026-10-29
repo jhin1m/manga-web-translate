@@ -3,6 +3,7 @@ lô → result `carry` cho lô sau."""
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 from mtl_pipeline.schema import TokenUsage, TranslateItem, TranslateResult, validate_contract
@@ -56,10 +57,23 @@ def _job(carry: dict[str, Any] | None) -> dict[str, Any]:
         payload["carry"] = carry
     ocr = {
         "regions": [
-            {"id": "t0", "kind": "text_free", "bbox": [2, 2, 40, 20], "polarity": "dark_on_light", "bubble_id": None}
+            {
+                "id": "t0",
+                "kind": "text_free",
+                "bbox": [2, 2, 40, 20],
+                "polarity": "dark_on_light",
+                "bubble_id": None,
+            }
         ],
         "items": [
-            {"id": "t0", "source": "안녕", "is_sfx": False, "empty": False, "confidence": 0.9, "low_conf": False}
+            {
+                "id": "t0",
+                "source": "안녕",
+                "is_sfx": False,
+                "empty": False,
+                "confidence": 0.9,
+                "low_conf": False,
+            }
         ],
     }
     return {
@@ -90,7 +104,9 @@ def test_translate_chapter_returns_final_context():
 
 def test_handler_seeds_context_from_payload_carry():
     prov = ScriptedProvider(tr=[_tr("")])
-    result = handle_translate(JobContext(FakeClient(), _job({"notes": "Minjun", "characters": ["Minjun"]})), _Deps(prov))
+    result = handle_translate(
+        JobContext(FakeClient(), _job({"notes": "Minjun", "characters": ["Minjun"]})), _Deps(prov)
+    )
     first = prov.tr_reqs[0].context
     assert first is not None and first.notes == "Minjun" and "Minjun" in first.characters
     # Lô không có notes mới → notes cũ đi tiếp sang lô sau.
@@ -125,3 +141,12 @@ def test_carry_limits_count_utf16_units_like_the_api():
     carry = result["carry"]
     assert len(carry["notes"].encode("utf-16-le")) // 2 == 2000
     assert all(len(c.encode("utf-16-le")) // 2 <= 64 for c in carry["characters"])
+
+
+def test_carry_drops_lone_surrogates_instead_of_failing_the_batch():
+    # LLM trả JSON có escape surrogate lẻ (output bị cắt giữa emoji): bản dịch đã xong, carry không được làm hỏng lô.
+    lone = json.loads('"abc\\ud83d"')
+    prov = ScriptedProvider(tr=[_tr(lone, speaker=json.loads('"Min\\udc00jun"'))])
+    result = handle_translate(JobContext(FakeClient(), _job(None)), _Deps(prov))
+    assert result["carry"] == {"notes": "abc", "characters": ["Minjun"]}
+    validate_contract("job-result", result)

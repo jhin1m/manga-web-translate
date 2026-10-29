@@ -549,16 +549,21 @@ export async function terminal(
       return;
     case "chapter.translate": {
       await lockChapter(t, owner, p.chapter_id);
-      // Page đang chờ/đang dịch: đã có bản AI trước (dịch lại) → giữ `ready`; chưa có → `failed`.
+      // Page đang chờ/đang dịch: đã có bản AI trước (dịch lại) → giữ `ready`; chưa có → `failed` chỉ khi lô đã
+      // chạy mà lỗi hẳn. Lô bị huỷ hoặc chưa từng được claim (VD bỏ vì vượt hạn mức) → trang về `prepared`, dịch lại
+      // bằng "Dịch" như trang chưa dịch.
       const affected = await t
         .select({ id: pages.id, aiRev: pageStates.aiRev })
         .from(pages)
         .innerJoin(pageStates, eq(pageStates.pageId, pages.id))
         .where(and(inArray(pages.id, p.page_ids), inArray(pages.status, ["translating", "prepared"])));
-      const ready = affected.filter((r) => r.aiRev > 0).map((r) => r.id);
-      const failed = affected.filter((r) => r.aiRev === 0).map((r) => r.id);
-      if (ready.length) await t.update(pages).set({ status: "ready" }).where(inArray(pages.id, ready));
-      if (failed.length) await t.update(pages).set({ status: "failed" }).where(inArray(pages.id, failed));
+      const untranslated = status === "failed" && job.claimedAt ? "failed" : "prepared";
+      for (const [to, ids] of [
+        ["ready", affected.filter((r) => r.aiRev > 0).map((r) => r.id)],
+        [untranslated, affected.filter((r) => r.aiRev === 0).map((r) => r.id)],
+      ] as const) {
+        if (ids.length) await t.update(pages).set({ status: to }).where(inArray(pages.id, ids));
+      }
       await t.update(pages).set({ translateQueued: false }).where(inArray(pages.id, p.page_ids));
       await refreshChapter(t, owner, p.chapter_id);
       // Lô lỗi hẳn không chặn chuỗi: lô kế chạy tiếp; huỷ thì dừng cả lượt.

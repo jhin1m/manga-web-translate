@@ -255,7 +255,9 @@ def handle_translate(ctx: JobContext, deps: Deps) -> dict[str, Any]:
     # Lô sau của cùng lượt dịch: notes + tên nhân vật của lô trước (payload `carry`) mở đầu ngữ cảnh.
     carry = p.get("carry") or {}
     initial = (
-        RollingContext(lines=lines, characters=list(carry.get("characters", [])), notes=carry.get("notes", ""))
+        RollingContext(
+            lines=lines, characters=list(carry.get("characters", [])), notes=carry.get("notes", "")
+        )
         if lines or carry
         else None
     )
@@ -305,8 +307,9 @@ def handle_translate(ctx: JobContext, deps: Deps) -> dict[str, Any]:
 
 
 def _cut_utf16(s: str, n: int) -> str:
-    """Cắt theo đơn vị UTF-16 như zod `.max()` phía API (emoji = 2); không cắt đôi cặp surrogate."""
-    return s.encode("utf-16-le")[: 2 * n].decode("utf-16-le", errors="ignore")
+    """Cắt theo đơn vị UTF-16 như zod `.max()` phía API (emoji = 2); không cắt đôi cặp surrogate. Surrogate lẻ (JSON
+    của LLM bị cắt giữa emoji) bị bỏ thay vì ném lỗi làm hỏng cả lô đã dịch xong."""
+    return s.encode("utf-16-le", errors="surrogatepass")[: 2 * n].decode("utf-16-le", errors="ignore")
 
 
 def _carry(c: RollingContext) -> dict[str, Any]:

@@ -176,8 +176,14 @@ async function closeRun(tx: DbLike, userId: string, chapterId: string) {
   await refreshChapter(tx, userId, chapterId);
 }
 
-function assertNoRun(ch: Chapter) {
-  if (ch.runTarget === "translated") throw conflict("translate_running", "chương đang dịch — chờ xong hoặc huỷ");
+/**
+ * Chưa có lượt nào đang chạy. Job dịch không gắn với lượt đã tạo nó: lô của lượt đã đóng (VD huỷ page.prepare) còn
+ * chạy thì khi xong/huỷ sẽ xoá cờ trang / đóng lượt hiện tại → không mở lượt mới tới khi lô đó kết thúc.
+ */
+async function assertNoRun(tx: DbLike, ch: Chapter) {
+  if (ch.runTarget === "translated" || (await activeJobOf(tx, ch.id, "chapter.translate"))) {
+    throw conflict("translate_running", "chương đang dịch — chờ xong hoặc huỷ");
+  }
 }
 
 /**
@@ -234,7 +240,7 @@ export async function stopTranslateChain(tx: DbLike, userId: string, chapterId: 
 
 /**
  * Mở lượt dịch cho `pageIds` (bỏ trống = mọi trang hiện) rồi chạy lô đầu. Trang phải thuộc chương, không ẩn, đã
- * qua Bước 1. Lượt khác đang chạy → 409 `translate_running`.
+ * qua Bước 1. Lượt khác (hoặc lô của lượt trước) đang chạy → 409 `translate_running`.
  */
 export async function startTranslateRun(
   tx: DbLike,
@@ -243,7 +249,7 @@ export async function startTranslateRun(
   pageIds?: string[],
 ): Promise<{ job: Job | null; created: boolean }> {
   const ch = await lockChapter(tx, userId, chapterId);
-  assertNoRun(ch);
+  await assertNoRun(tx, ch);
   // Đang ingest: trang sắp bị thay toàn bộ — không mở lượt dịch lên bộ trang mới mà người dùng chưa chọn.
   if (ch.status === "ingesting") throw conflict("chapter_busy", "chương đang tách trang — chờ xong rồi dịch");
   const rows = await tx
@@ -296,7 +302,7 @@ export function retranslate(tx: DbLike, userId: string, chapterId: string, pageI
  */
 export async function retryFailedPages(tx: DbLike, userId: string, chapterId: string): Promise<Job[]> {
   const ch = await lockChapter(tx, userId, chapterId);
-  assertNoRun(ch);
+  await assertNoRun(tx, ch);
   const s = await seriesOf(tx, ch);
   const visible = await tx
     .select()

@@ -439,6 +439,89 @@ describe("translate chain", () => {
     expect((tj.inputs as { context_lines: unknown[] }).context_lines.length).toBeGreaterThan(0);
   });
 
+  /** Chương manga: lô 1 `[p0]` đang chạy, lượt đã đóng vì người dùng huỷ page.prepare của p1; p2, p3 đã prepare. */
+  async function staleBatch(label: string) {
+    const { S, ids, prep } = await ingested(label, { manga: true });
+    await prepare(prep, [0]);
+    const lot1 = await claimTranslate();
+    expect(lot1.payload.page_ids).toEqual([ids[0]]);
+    const cancel = await call(`/api/jobs/${(prep[1] as Claimed).id}/cancel`, { method: "POST", cookie: S.cookie });
+    expect(cancel.status).toBe(200);
+    expect((await chapterRow(S.chapterId)).runTarget).toBeNull();
+    await prepare(prep, [2, 3]);
+    return { S, lot1, picked: [ids[0], ids[2], ids[3]] as string[] };
+  }
+
+  async function expectTranslateRunning(res: Response) {
+    expect(res.status).toBe(409);
+    expect(((await res.json()) as { error: string }).error).toBe("translate_running");
+  }
+
+  it("a new run waits until the previous run's batch has finished", async () => {
+    const { S, lot1, picked } = await staleBatch("chain-stale-complete");
+    await expectTranslateRunning(await api(S, "/translate", { page_ids: picked }));
+    expect((await doTranslate(token, lot1)).status).toBe(200);
+    // Lô cũ xong rồi mới mở lượt: trang của lô cũ vẫn nằm trong lượt mới và được dịch lại.
+    expect((await api(S, "/translate", { page_ids: picked })).status).toBe(202);
+    const [lot] = await translateJobs(S.chapterId);
+    expect(lot?.p.page_ids).toEqual(picked);
+    expect((await pageRows(S.chapterId)).filter((p) => p.translateQueued).map((p) => p.id)).toEqual(picked);
+  });
+
+  it("no run starts while a batch of the previous run is still active", async () => {
+    const { S, lot1, picked } = await staleBatch("chain-stale-cancel");
+    await expectTranslateRunning(await api(S, "/translate", { page_ids: picked }));
+    await expectTranslateRunning(await api(S, "/translate", {}));
+    await expectTranslateRunning(await api(S, "/retry-failed"));
+    expect(await translateJobs(S.chapterId)).toHaveLength(1);
+    // Huỷ lô cũ xong mới mở lượt mới → lượt mới không bị huỷ lây.
+    const cancel = await call(`/api/jobs/${lot1.id}/cancel`, { method: "POST", cookie: S.cookie });
+    expect(cancel.status).toBe(200);
+    expect((await api(S, "/translate", { page_ids: picked })).status).toBe(202);
+    expect((await chapterRow(S.chapterId)).runTarget).toBe("translated");
+    const [lot] = await translateJobs(S.chapterId);
+    expect(lot?.p.page_ids).toEqual(picked);
+  });
+
+  it("over-quota while the next batch waits keeps its pages prepared", async () => {
+    const { S, ids, prep } = await ingested("chain-quota-queued", { target: "translated" });
+    await prepare(prep, range(0, N));
+    expect((await doTranslate(token, await claimTranslate())).status).toBe(200);
+    const [lot2] = await translateJobs(S.chapterId);
+    expect(lot2?.p.page_ids).toEqual(ids.slice(1, 5));
+    const prev = env.USER_DAILY_USD;
+    try {
+      env.USER_DAILY_USD = 0;
+      // Claim của worker bỏ job LLM đang chờ của người vượt hạn mức.
+      await claimJobs(token, { caps: ["chapter.translate"] });
+      expect((await translateJobs(S.chapterId, false)).find((j) => j.id === lot2?.id)?.status).toBe("failed");
+      const rows = await pageRows(S.chapterId);
+      expect(rows[0]?.status).toBe("ready");
+      expect(rows.slice(1).map((p) => p.status)).toEqual(Array(N - 1).fill("prepared"));
+      expect(rows.every((p) => !p.translateQueued)).toBe(true);
+      const ch = await chapterRow(S.chapterId);
+      expect(ch.status).toBe("prepared");
+      expect(ch.runTarget).toBeNull();
+    } finally {
+      env.USER_DAILY_USD = prev;
+    }
+  });
+
+  it("cancelling a running batch leaves its pages untranslated, not failed", async () => {
+    const { S, ids, prep } = await ingested("chain-cancel-running", { target: "translated" });
+    await prepare(prep, range(0, N));
+    const lot1 = await claimTranslate();
+    expect((await pageRows(S.chapterId))[0]?.status).toBe("translating");
+    const cancel = await call(`/api/jobs/${lot1.id}/cancel`, { method: "POST", cookie: S.cookie });
+    expect(cancel.status).toBe(200);
+    const rows = await pageRows(S.chapterId);
+    expect(rows[0]?.id).toBe(ids[0]);
+    expect(rows.map((p) => p.status)).toEqual(Array(N).fill("prepared"));
+    const ch = await chapterRow(S.chapterId);
+    expect(ch.status).toBe("prepared");
+    expect(ch.runTarget).toBeNull();
+  });
+
   it("over-quota stops the chain", async () => {
     const { S, ids, prep } = await ingested("chain-quota", { target: "translated" });
     await prepare(prep, range(0, N));

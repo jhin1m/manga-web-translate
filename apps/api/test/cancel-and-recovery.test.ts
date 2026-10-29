@@ -67,8 +67,9 @@ describe("cancel paths", () => {
       (j) => j.type === "chapter.translate",
     );
     await cancelJob(S.userId, tr?.id as string);
-    expect(await chapterStatus(S.chapterId)).toBe("partial_failed");
-    expect((await pageRows(S.chapterId))[0]?.status).toBe("failed");
+    // Trang chưa từng được dịch: không phải lỗi, về `prepared` chờ "Dịch" lại.
+    expect(await chapterStatus(S.chapterId)).toBe("prepared");
+    expect((await pageRows(S.chapterId))[0]?.status).toBe("prepared");
   });
 
   it("a failed re-translate keeps previously translated pages ready", async () => {
