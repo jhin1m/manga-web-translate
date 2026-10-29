@@ -34,13 +34,17 @@ const ACTIVE = new Set<string>(ACTIVE_JOB_STATUSES);
 export const inTranslateJob = (p: Pick<ProgressPage, "job">) =>
   p.job?.type === "chapter.translate" && ACTIVE.has(p.job.status);
 
-/** Mức hiển thị của page: như `pageLevel`, nhưng page đang chờ job dịch tính là "Đang xử lý". */
-export const pageLevelOf = (p: Pick<ProgressPage, "status" | "job">): PageLevel =>
-  inTranslateJob(p) && p.status !== "failed" ? "busy" : LEVEL[p.status];
+type LevelPage = Pick<ProgressPage, "status" | "job"> & { translate_queued?: boolean };
+
+/**
+ * Mức hiển thị của page: như `pageLevel`, nhưng page đang chờ job dịch, hoặc còn chờ lượt trong lượt dịch đang mở
+ * (kể cả trang lỗi đem dịch lại), tính là "Đang xử lý".
+ */
+export const pageLevelOf = (p: LevelPage): PageLevel =>
+  (inTranslateJob(p) && p.status !== "failed") || p.translate_queued ? "busy" : LEVEL[p.status];
 
 /** Page AI đang/sắp ghi: đang xử lý, hoặc còn chờ lượt trong lượt dịch đang mở → chỉ xem, không chọn để dịch. */
-export const isPageBusy = (p: Pick<ProgressPage, "status" | "job"> & { translate_queued?: boolean }) =>
-  pageLevelOf(p) === "busy" || !!p.translate_queued;
+export const isPageBusy = (p: LevelPage) => pageLevelOf(p) === "busy";
 
 /**
  * Page cần người xem lại: lỗi, AI có bản mới cho page đã sửa tay, hoặc có box chữ tràn khung (`overflow`, đo ở
@@ -69,12 +73,12 @@ const BUSY_STEP: Partial<Record<PageStatus, string>> = {
 };
 
 /**
- * Ưu tiên: ẩn > lỗi > chờ AI tự thử lại > chờ lượt (lô sau của lượt dịch) > đang xử lý > cần xem (AI có bản mới, tràn
+ * Ưu tiên: ẩn > lỗi (chưa vào lượt dịch lại) > chờ AI tự thử lại > chờ lượt (lô sau của lượt dịch) > đang xử lý > cần xem (AI có bản mới, tràn
  * khung) > bình thường.
  */
 export function thumbMark(p: ThumbPage, overflow: boolean): ThumbMark {
   if (p.skipped) return { tone: "hidden", label: "Đã ẩn" };
-  if (p.status === "failed") return { tone: "danger", label: "Lỗi" };
+  if (p.status === "failed" && !p.translate_queued) return { tone: "danger", label: "Lỗi" };
   if (waitingOnProvider(p.job)) return { tone: "warn", label: "Chờ AI" };
   // Trang còn xoá chữ hiện bước xoá chữ; trang của lô đang chạy hiện bước dịch.
   if (p.translate_queued && !BUSY_STEP[p.status] && !inTranslateJob(p)) {

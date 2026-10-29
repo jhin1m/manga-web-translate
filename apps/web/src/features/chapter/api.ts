@@ -48,6 +48,8 @@ export type ProgressPage = {
   translate_queued: boolean;
   /** Lô dự kiến của trang trong lượt dịch (1-based; null khi không chờ lượt). */
   run_batch: number | null;
+  /** Đã xoá chữ + OCR xong — server chỉ nhận trang có cờ này vào lượt dịch. */
+  ocr_ready: boolean;
   ai_update_available: boolean;
   version: number;
   job: JobView | null;

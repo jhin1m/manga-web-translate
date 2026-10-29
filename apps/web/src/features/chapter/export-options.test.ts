@@ -2,9 +2,12 @@ import { describe, expect, it } from "vitest";
 import type { ExportView } from "./api.ts";
 import {
   CBZ_QUALITY,
+  EXPORT_POLL_MS,
   exportLabel,
   exportPhase,
+  exportPollInterval,
   FORMAT_LABEL,
+  latestActiveExport,
   optionsSummary,
   qualityLabel,
   showLayoutChoice,
@@ -106,5 +109,24 @@ describe("export options", () => {
     expect(exportLabel(view({ format: "cbz", layout: "pages", quality: 90, include_untranslated: true }))).toBe(
       ".cbz · theo trang đã cắt · Cao · gồm trang chưa dịch",
     );
+  });
+
+  it("reopening the drawer picks up the newest export still running", () => {
+    const list = [
+      view({ id: "x3", status: "succeeded" }),
+      view({ id: "x2", status: "running" }),
+      view({ id: "x1", status: "queued" }),
+    ];
+    expect(latestActiveExport(list)?.id).toBe("x2");
+    expect(latestActiveExport([view({ status: "failed" }), view({ status: "cancelled" })])).toBeNull();
+    expect(latestActiveExport(undefined)).toBeNull();
+  });
+
+  it("polling keeps going through a failed request while an export is running", () => {
+    const running = { exports: [view({ status: "running" })] };
+    expect(exportPollInterval({ data: running, status: "success" })).toBe(EXPORT_POLL_MS);
+    expect(exportPollInterval({ data: running, status: "error" })).toBe(EXPORT_POLL_MS);
+    expect(exportPollInterval({ data: { exports: [view({ status: "succeeded" })] }, status: "error" })).toBe(false);
+    expect(exportPollInterval({ data: undefined, status: "error" })).toBe(false);
   });
 });

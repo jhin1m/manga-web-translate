@@ -113,8 +113,12 @@ describe("page level", () => {
     expect(isPageBusy(queued)).toBe(true);
     // Trang chờ lượt mà đã xong lượt trước (dịch lại): vẫn chờ lô của nó.
     expect(thumbMark({ ...queued, status: "ready" }, false)?.label).toBe("Chờ lượt · lô 3");
-    // Lỗi vẫn ưu tiên; trang còn xoá chữ hiện bước xoá chữ chứ không phải chờ lượt.
-    expect(thumbMark({ ...queued, status: "failed" }, false)?.label).toBe("Lỗi");
+    // Trang lỗi đã vào lượt dịch lại: chờ lô của nó, cùng mức "Đang xử lý" như panel Chọn và editor.
+    const queuedFailed = { ...queued, status: "failed" as PageStatus };
+    expect(thumbMark(queuedFailed, false)?.label).toBe("Chờ lượt · lô 3");
+    expect(pageLevelOf(queuedFailed)).toBe("busy");
+    // Trang lỗi chưa vào lượt nào vẫn là "Lỗi"; trang còn xoá chữ hiện bước xoá chữ chứ không phải chờ lượt.
+    expect(thumbMark({ ...queuedFailed, translate_queued: false, run_batch: null }, false)?.label).toBe("Lỗi");
     expect(thumbMark({ ...queued, status: "pending" }, false)?.label).toBe("Chờ xoá chữ");
     expect(isPageBusy({ ...base, status: "prepared", job: null })).toBe(false);
   });

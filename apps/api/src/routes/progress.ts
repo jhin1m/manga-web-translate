@@ -97,6 +97,8 @@ progressRoutes.get("/chapters/:chapterId/progress", async (c) => {
           skipped: p.skipped,
           translate_queued: p.translateQueued,
           run_batch: runBatch.get(p.id) ?? null,
+          // Đã qua xoá chữ + OCR — đúng điều kiện server nhận trang vào lượt dịch (không phụ thuộc job còn trả về).
+          ocr_ready: !!p.ocrResult && !!p.prepareInputRev,
           ai_update_available: st?.aiUpdateAvailable ?? false,
           version: st?.version ?? 0,
           job: j ? jobView({ ...j, result: null }) : null,

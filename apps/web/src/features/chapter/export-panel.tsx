@@ -24,8 +24,11 @@ import {
   DEFAULT_LAYOUT,
   exportLabel,
   exportPhase,
+  exportPollInterval,
   FORMAT_LABEL,
+  isExportActive,
   LAYOUT_CHOICES,
+  latestActiveExport,
   optionsSummary,
   showLayoutChoice,
 } from "./export-options.ts";
@@ -35,8 +38,6 @@ import type { Tone } from "./status.ts";
 import { formatBytes } from "./text-utils.ts";
 import "./export-panel.css";
 
-export const EXPORT_POLL_MS = 1500;
-
 const STATUS: Record<ExportStatus, { label: string; tone: Tone }> = {
   queued: { label: "Đang chờ", tone: "busy" },
   running: { label: "Đang xuất", tone: "busy" },
@@ -45,18 +46,13 @@ const STATUS: Record<ExportStatus, { label: string; tone: Tone }> = {
   cancelled: { label: "Đã huỷ", tone: "idle" },
   paused_budget: { label: "Tạm dừng (hết ngân sách)", tone: "warn" },
 };
-export const isExportActive = (s: ExportStatus) => s === "queued" || s === "running";
-
 /** Export gần đây của chương; poll khi còn lượt đang chạy. Dùng chung cho drawer Xuất, Hoạt động và số việc. */
 export function useExports(chapterId: string) {
   const qc = useQueryClient();
   const q = useQuery({
     queryKey: exportKeys.list(chapterId),
     queryFn: () => fetchExports(chapterId),
-    refetchInterval: (q) =>
-      q.state.status !== "error" && q.state.data?.exports.some((e) => isExportActive(e.status))
-        ? EXPORT_POLL_MS
-        : false,
+    refetchInterval: (q) => exportPollInterval(q.state),
   });
   const refresh = () => void qc.invalidateQueries({ queryKey: exportKeys.list(chapterId) });
   return { q, refresh };
@@ -89,12 +85,23 @@ export function ExportPanel(props: {
   const [chosenLayout, setLayout] = useState<ExportLayout>(DEFAULT_LAYOUT);
   const [quality, setQuality] = useState<CbzQuality>("high");
   const [includeUntranslated, setInclude] = useState(false);
-  /** Lượt xuất vừa gửi từ drawer này: nút chính theo dõi nó và tự tải đúng 1 lần khi xong. */
-  const [pending, setPending] = useState<ExportView | null>(null);
+  const { q: listQ, refresh } = useExports(chapterId);
+  /**
+   * Lượt xuất nút chính theo dõi và tự tải đúng 1 lần khi xong: lượt vừa gửi từ drawer này, hoặc lượt còn chạy lúc
+   * mở lại drawer (đóng drawer giữa chừng không mất việc tự tải).
+   */
+  const [pending, setPending] = useState<ExportView | null>(() => latestActiveExport(listQ.data?.exports));
+  // Danh sách chưa có lúc mở drawer → nhận lượt còn chạy ở lần tải đầu.
+  const adoptedRef = useRef(!!listQ.data);
+  useEffect(() => {
+    if (adoptedRef.current || !listQ.data) return;
+    adoptedRef.current = true;
+    const active = latestActiveExport(listQ.data.exports);
+    if (active) setPending((p) => p ?? active);
+  }, [listQ.data]);
   const downloadedRef = useRef<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [cancelError, setCancelError] = useState<string | null>(null);
-  const { q: listQ, refresh } = useExports(chapterId);
 
   // 1 ảnh tải lên = 1 trang → không hỏi cách chia, xuất như lúc tải lên.
   const layoutChoice = showLayoutChoice(counts);
@@ -146,7 +153,7 @@ export function ExportPanel(props: {
   const lines = warningLines(props.warnings, { includeUntranslated });
   const review = reviewCount(props.warnings);
   const ext = FORMAT_LABEL[format].ext;
-  // Poll lỗi khi đang chạy: không biết tiến độ nữa → mở lại nút thay vì kẹt "Đang xuất".
+  // Poll lỗi khi đang chạy: vẫn poll lại theo nhịp, nhưng tạm chưa biết tiến độ → mở lại nút thay vì kẹt "Đang xuất".
   const lost = listQ.isError && phase.kind === "running";
   const running = phase.kind === "running" && !lost;
   const failure =

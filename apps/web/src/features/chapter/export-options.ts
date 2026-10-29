@@ -4,7 +4,22 @@
  * biết đang chạy / tự tải / lỗi.
  */
 import { EXPORT_FILE } from "@mtl/shared";
-import type { ExportFormat, ExportLayout, ExportView } from "./api.ts";
+import type { ExportFormat, ExportLayout, ExportStatus, ExportView } from "./api.ts";
+
+export const EXPORT_POLL_MS = 1500;
+
+export const isExportActive = (s: ExportStatus) => s === "queued" || s === "running";
+
+/** Lượt xuất mới nhất còn chạy (danh sách mới trước) — drawer mở lại thì theo dõi tiếp lượt này. */
+export const latestActiveExport = (list: ExportView[] | undefined) =>
+  list?.find((e) => isExportActive(e.status)) ?? null;
+
+/**
+ * Chu kỳ poll danh sách xuất: còn lượt chạy (theo dữ liệu đã biết) thì poll tiếp, kể cả khi lần tải vừa rồi lỗi
+ * (mạng chập chờn) — dừng hẳn thì lượt xong không tự tải, không thông báo.
+ */
+export const exportPollInterval = (q: { data: { exports: ExportView[] } | undefined; status: string }) =>
+  latestActiveExport(q.data?.exports) ? EXPORT_POLL_MS : false;
 
 /** CBZ: Gốc = PNG nguyên bản (worker nén JPEG khi < 100). */
 export type CbzQuality = "original" | "high" | "light";

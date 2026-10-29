@@ -20,7 +20,8 @@ import { TextField } from "../editor/panels/TextField.tsx";
 import { editorStore, useEditor } from "../editor/store.ts";
 import type { ProgressPage } from "./api.ts";
 import { describeJobError } from "./job-error.ts";
-import { isPageBusy, PAGE_LEVEL, pageLevelOf, thumbFlags } from "./page-status.ts";
+import { selectablePage } from "./page-selection.ts";
+import { PAGE_LEVEL, pageLevelOf, thumbFlags } from "./page-status.ts";
 import { type SourceItem, sourceLabel } from "./source-rail-model.ts";
 import { KIND_LABEL, type Row } from "./text-table/rows.ts";
 import { setRowTranslation } from "./text-table/text-table.tsx";
@@ -85,10 +86,13 @@ export function SelectPanel(props: SelectPanelProps) {
   );
 }
 
-/** Trang chờ dịch → "Dịch trang này"; trang đã dịch / lỗi → "Dịch lại trang này"; trang bận → không có nút. */
+/**
+ * Trang chờ dịch → "Dịch trang này"; trang đã dịch / lỗi lúc dịch → "Dịch lại trang này"; trang bận hoặc chưa có
+ * OCR → không có nút.
+ */
 function RetranslatePage(props: SelectPanelProps & { page: ProgressPage; link?: boolean }) {
   const readOnly = useEditor((s) => !!s.readOnly);
-  if (isPageBusy(props.page)) return null;
+  if (!selectablePage(props.page)) return null;
   const first = props.page.status === "prepared";
   return (
     <button

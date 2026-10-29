@@ -60,12 +60,13 @@ import { CanvasPager, CanvasZoom } from "./canvas-controls.tsx";
 import { ChapterTopbar, type EditAccess, LockBand } from "./chapter-topbar.tsx";
 import { ContextPanel, type FocusRequest } from "./context-panel.tsx";
 import { ExportDrawer } from "./export-drawer.tsx";
-import { isExportActive, triggerDownload, useExports } from "./export-panel.tsx";
+import { isExportActive } from "./export-options.ts";
+import { triggerDownload, useExports } from "./export-panel.tsx";
 import { FindReplacePanel } from "./FindReplace.tsx";
 import { providerWait, providerWaitText } from "./job-error.ts";
 import { readPanel, writePanel } from "./layout-prefs.ts";
 import { PageRail } from "./page-rail.tsx";
-import { clickSelect, EMPTY_SELECTION, type Selection, selectionIds } from "./page-selection.ts";
+import { clickSelect, EMPTY_SELECTION, pruneSelection, type Selection, selectionIds } from "./page-selection.ts";
 import { isPageBusy, needsReview, pageLevel } from "./page-status.ts";
 import { type ChapterCommand, primaryAction } from "./primary-action.ts";
 import { ProofreadPanel } from "./proofread-panel.tsx";
@@ -384,6 +385,8 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
 
   // ---- Chọn trang để dịch riêng (⌘/Ctrl/Shift-click ở cột trang) ----
   const [pageSel, setPageSel] = useState<Selection>(EMPTY_SELECTION);
+  // Trang đã chọn mà vào lượt dịch (hoặc bị ẩn) rơi hẳn khỏi lựa chọn — hết bận không tự chọn lại.
+  useEffect(() => setPageSel((s) => pruneSelection(s, pages)), [pages]);
   const selectedIds = selectionIds(pageSel, pages);
   const selectedKey = selectedIds.join(",");
   const selectedSet = useMemo(() => new Set(selectedKey ? selectedKey.split(",") : []), [selectedKey]);

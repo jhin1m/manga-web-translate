@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ProgressPage } from "./api.ts";
-import { clickSelect, EMPTY_SELECTION, selectablePage, selectionIds } from "./page-selection.ts";
+import { clickSelect, EMPTY_SELECTION, pruneSelection, selectablePage, selectionIds } from "./page-selection.ts";
 import type { PageStatus } from "./status.ts";
 
 const page = (n: number, over: Partial<ProgressPage> = {}): ProgressPage => ({
@@ -14,6 +14,7 @@ const page = (n: number, over: Partial<ProgressPage> = {}): ProgressPage => ({
   skipped: false,
   translate_queued: false,
   run_batch: null,
+  ocr_ready: true,
   ai_update_available: false,
   version: 1,
   job: null,
@@ -68,10 +69,24 @@ describe("page selection", () => {
     expect(statuses.filter((status) => selectablePage(page(1, { status })))).toEqual(["prepared", "ready", "failed"]);
   });
 
-  it("pages that failed before OCR cannot be translated", () => {
-    const failed = (type: string) =>
-      page(1, { status: "failed", job: { type, status: "failed" } as ProgressPage["job"] });
-    expect(selectablePage(failed("page.prepare"))).toBe(false);
-    expect(selectablePage(failed("chapter.translate"))).toBe(true);
+  it("pages without OCR cannot be translated, however old their last job is", () => {
+    const prepareFailed = { type: "page.prepare", status: "failed" } as ProgressPage["job"];
+    // Lỗi xoá chữ + OCR từ hơn 24h trước: progress không còn trả job nào.
+    expect(selectablePage(page(1, { status: "failed", ocr_ready: false, job: null }))).toBe(false);
+    expect(selectablePage(page(1, { status: "failed", ocr_ready: false, job: prepareFailed }))).toBe(false);
+    // Lỗi lúc dịch: đã có OCR → dịch lại được.
+    expect(selectablePage(page(1, { status: "failed", ocr_ready: true, job: null }))).toBe(true);
+  });
+
+  it("pages that become busy are dropped from the selection for good", () => {
+    let sel = EMPTY_SELECTION;
+    for (const id of ["p1", "p2", "p3"]) sel = clickSelect(sel, chapter(), id, toggle);
+    const translating = chapter({ 2: { translate_queued: true, run_batch: 1 }, 3: { status: "translating" } });
+    const pruned = pruneSelection(sel, translating);
+    expect([...pruned.ids]).toEqual(["p1"]);
+    // Lượt dịch xong: trang 2, 3 không tự quay lại lựa chọn.
+    expect(selectionIds(pruned, chapter())).toEqual(["p1"]);
+    // Không có gì đổi → giữ nguyên object (không render lại).
+    expect(pruneSelection(pruned, chapter())).toBe(pruned);
   });
 });

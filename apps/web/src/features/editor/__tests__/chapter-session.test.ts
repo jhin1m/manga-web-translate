@@ -1,5 +1,5 @@
 import { IDBFactory } from "fake-indexeddb";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { moveBox } from "../actions.ts";
 import { createChapterStore } from "../chapter-store.ts";
 import { PendingQueue } from "../pending-queue.ts";
@@ -154,6 +154,41 @@ describe("ChapterSession", () => {
     expect(srv.A?.version).toBe(3);
     expect(srv.A?.state.text_boxes[0]).toMatchObject({ x: 4 });
     expect(chapter.getState().activePageId).toBe("A");
+  });
+
+  it("edits kept from a busy page save on their own once it stops being busy, without reopening it", async () => {
+    const { log, errors, srv, editor, queue, session } = setup();
+    await session.activate("A");
+    editor.getState().apply(moveBox("t0", 4, 4));
+    session.setBusy(new Set(["A"]));
+    await session.activate("B");
+    // AI dịch xong trang A (version 2) trong lúc người dùng ở trang B.
+    srv.A = { state: doc(2), version: 2 };
+    log.length = 0;
+    session.setBusy(new Set());
+    await session.activate("B");
+    expect(errors).toEqual([]);
+    expect(log).toContain("put:A");
+    expect(srv.A?.version).toBe(3);
+    expect(srv.A?.state.text_boxes[0]).toMatchObject({ x: 4 });
+    expect(await queue.get("A")).toBeUndefined();
+    expect(editor.getState().pageId).toBe("B");
+  });
+
+  it("a save refused as page_busy while progress still shows the page free asks for fresh progress", async () => {
+    const { editor, session } = setup();
+    const recheck = vi.fn();
+    const stop = session.watchSaverBusy(recheck);
+    await session.activate("A");
+    // Saver gặp 409 `page_busy` (lượt dịch mở từ nơi khác) → progress cũ chưa biết.
+    editor.getState().setReadOnly("page_busy");
+    expect(recheck).toHaveBeenCalledTimes(1);
+    editor.getState().setReadOnly(null);
+    // Progress đã biết trang bận → không hỏi lại.
+    session.setBusy(new Set(["A"]));
+    expect(editor.getState().readOnly).toBe("page_busy");
+    expect(recheck).toHaveBeenCalledTimes(1);
+    stop();
   });
 
   it("busy follows the active page and never hides a lock problem", async () => {

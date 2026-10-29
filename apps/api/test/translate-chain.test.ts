@@ -331,6 +331,19 @@ describe("translate chain", () => {
     expect((await pageRows(S.chapterId))[0]?.translateQueued).toBe(false);
   });
 
+  it("progress says which pages have OCR, even when their last job is older than a day", async () => {
+    const { S, prep } = await ingested("chain-ocr-ready", { target: "prepared" });
+    expect((await failJob(token, prep[0] as Claimed, "invalid_input")).status).toBe(200);
+    await prepare(prep, [1]);
+    // Mọi job của chương cũ hơn 24h → progress không còn trả job nào cho trang.
+    await db.update(jobs).set({ updatedAt: sql`now() - interval '2 days'` }).where(eq(jobs.chapterId, S.chapterId));
+    const res = await call(`/api/chapters/${S.chapterId}/progress`, { cookie: S.cookie });
+    const prog = (await res.json()) as { pages: { status: string; ocr_ready: boolean; job: unknown }[] };
+    expect(prog.pages[0]).toMatchObject({ status: "failed", ocr_ready: false, job: null });
+    expect(prog.pages[1]).toMatchObject({ status: "prepared", ocr_ready: true });
+    expect(prog.pages[2]?.ocr_ready).toBe(false);
+  });
+
   it("commit with target prepared stops at prepared", async () => {
     const { S, prep } = await ingested("chain-prepared", { target: "prepared" });
     await prepare(prep, range(0, N));

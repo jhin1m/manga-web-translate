@@ -179,10 +179,43 @@ export class ChapterSession {
   /**
    * Cập nhật tập page bận và read-only của page active: vào bận → "page_busy" (chỉ khi đang sửa được — không che lý
    * do khoá/khôi phục/đang tải); hết bận → mở sửa, nạp bản AI nếu chưa sửa gì và lưu phần còn chờ (409 → rebase).
+   * Page khác vừa hết bận mà còn phần sửa đã cất → lưu luôn, không đợi mở lại page đó.
    */
   setBusy(ids: ReadonlySet<string>) {
+    const was = this.busy;
     this.busy = ids;
     this.applyBusy();
+    const active = this.deps.editor.getState().pageId;
+    for (const [id, rec] of this.deferred) {
+      if (id === active || !was.has(id) || ids.has(id)) continue;
+      this.deferred.delete(id);
+      this.saveDeferred(rec);
+    }
+  }
+
+  /** Lưu phần sửa đã cất của page không active (sau lần đổi page đang chờ, để mở page đó thấy bản đã lưu). */
+  private saveDeferred(rec: PendingRecord) {
+    this.chain = this.chain
+      .then(() => this.restoreOther(rec))
+      .then(
+        () => undefined,
+        (e: unknown) => {
+          // Không lưu được: giữ lại để mở page đó thì áp vào editor (IndexedDB vẫn còn bản ghi).
+          if (!this.deferred.has(rec.pageId)) this.deferred.set(rec.pageId, rec);
+          this.deps.onError(e);
+        },
+      );
+  }
+
+  /**
+   * Saver gặp 409 `page_busy` cho page active mà progress chưa coi là bận (lượt dịch mở từ tab khác, hay lô vừa
+   * chạy giữa 2 lần poll) → gọi `recheck` để lấy progress mới; tập bận mới sẽ gỡ hoặc giữ read-only.
+   */
+  watchSaverBusy(recheck: () => void): () => void {
+    return this.deps.editor.subscribe((s, prev) => {
+      if (s.readOnly !== "page_busy" || prev.readOnly === "page_busy" || !s.pageId) return;
+      if (!this.busy.has(s.pageId)) recheck();
+    });
   }
 
   private applyBusy() {
@@ -456,8 +489,21 @@ export function useChapterSession(opts: {
     } else s.setReadOnly("lock_denied");
   }, [lock.state, lockEnabled, recovery, saver, scanDone, session]);
 
-  // Page vào/ra lượt dịch (theo progress) → read-only "page_busy" của page active.
-  useEffect(() => session.setBusy(busyPageIds), [session, busyPageIds]);
+  // Page vào/ra lượt dịch (theo progress) → read-only "page_busy" của page active. `busyCheck` đổi = vừa hỏi lại
+  // progress vì server báo bận: chạy lại cả khi tập bận không đổi (trang đã hết bận) để gỡ read-only.
+  const [busyCheck, setBusyCheck] = useState(0);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: busyCheck chỉ để chạy lại effect.
+  useEffect(() => session.setBusy(busyPageIds), [session, busyPageIds, busyCheck]);
+  const { refetchProgress } = opts;
+  useEffect(
+    () =>
+      session.watchSaverBusy(() => {
+        void refetchProgress()
+          .catch(() => undefined)
+          .finally(() => setBusyCheck((n) => n + 1));
+      }),
+    [session, refetchProgress],
+  );
 
   // PUT trả 423 → thử lấy lại khoá ngay (thành công thì effect trên mở lại quyền sửa).
   const retryLock = lock.retry;
@@ -506,7 +552,6 @@ export function useChapterSession(opts: {
     [recovery, session, queue],
   );
 
-  const { refetchProgress } = opts;
   const runAi = useCallback(
     async <T>(fn: () => Promise<T>): Promise<T> => {
       const out = await session.runAi(fn);
