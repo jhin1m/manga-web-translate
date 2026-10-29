@@ -68,6 +68,9 @@ pnpm dev     # API :8787, web http://localhost:5180
 pnpm jobs    # process nền: reaper, kill-switch ngân sách
 ```
 
+Hoặc một lệnh: `pnpm dev:all` (infra + migrate + API/web + jobs + worker; worker đọc `MTL_*` và key LLM từ `.env`).
+Ctrl+C dừng tất cả, Docker vẫn chạy (`pnpm infra:down`).
+
 Worker AI + token worker: [docs/job-queue-worker.md](./docs/job-queue-worker.md). Chi tiết setup, dev auto-login, quy
 ước bắt buộc: [docs/development-setup.md](./docs/development-setup.md).
 
@@ -141,14 +144,13 @@ Mọi test tự động hiện dùng worker giả lập; chưa có số đo vớ
 
 ### Chức năng còn thiếu
 
-- [ ] AI phân loại ảnh credit / quảng cáo (hiện chỉ học theo dHash + gợi ý theo khổ ảnh); credit cùng khổ đã bị ghép
-      vào trang lớn sau Bước 1 chỉ ẩn được cả trang; logo watermark dạng hình.
 - [ ] Đích CJK / Thái, chữ dọc khi typeset; dịch SFX + font SFX; phân loại thoại theo nghĩa (suy nghĩ, hét, khung dẫn).
-- [ ] Tự nhận ngôn ngữ nguồn từ ảnh. OCR local chưa nhận SFX (mọi vùng coi là chữ thường → bị xoá + dịch).
+- [ ] OCR local chưa nhận SFX (mọi vùng coi là chữ thường → bị xoá + dịch).
 - [ ] Thumbnail do server sinh (thứ tự ảnh trước Bước 1 đã sắp tay được: kéo-thả / menu / Alt+↑↓).
-- [ ] Xem trước font trong dropdown Font của editor (mới có ở cài đặt series).
 - [ ] Glossary: chuyển / sao chép entry giữa các cặp ngôn ngữ, cột cặp ngôn ngữ trong CSV.
 - [ ] Chống phát lại dispatch Modal triệt để (lưu `dispatch_id` đã nhận).
+- [ ] _(Ưu tiên sau cùng)_ AI phân loại ảnh credit / quảng cáo (hiện chỉ học theo dHash + gợi ý theo khổ ảnh); credit
+      cùng khổ đã bị ghép vào trang lớn sau Bước 1 chỉ ẩn được cả trang; logo watermark dạng hình.
 
 ### Giới hạn đã biết
 
