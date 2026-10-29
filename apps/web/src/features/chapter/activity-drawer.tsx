@@ -15,15 +15,17 @@ import { cancelJob, type JobView, type Progress } from "./api.ts";
 import { ExportRow, useExports } from "./export-panel.tsx";
 import { ERROR_CLASS, failedPageGroups, providerWait, providerWaitText } from "./job-error.ts";
 import { pageLevel } from "./page-status.ts";
+import { stageLabel } from "./stage-labels.ts";
 import { formatBytes } from "./text-utils.ts";
 
 const JOB_LABEL: Record<string, string> = {
   "chapter.ingest": "Cắt trang",
-  "page.prepare": "GĐ1 · xoá chữ + OCR",
+  "page.prepare": "Xoá chữ + OCR",
   "chapter.translate": "Dịch chương",
   "page.reinpaint": "Xoá chữ lại theo mask",
   "page.ocr_region": "OCR vùng",
   "chapter.export": "Xuất",
+  "chapter.proofread": "AI hiệu đính",
 };
 const JOB_STATUS: Record<string, { label: string; tone: string }> = {
   queued: { label: "Đang chờ", tone: "busy" },
@@ -227,6 +229,8 @@ function ChapterSection(props: {
         )}
         {jobs.map((j) => {
           const st = JOB_STATUS[j.status] ?? { label: j.status, tone: "idle" };
+          // Bước cũ của job đã kết thúc không còn ý nghĩa (server xoá stage khi xong; lỗi giữ bước cuối).
+          const step = ACTIVE.has(j.status) ? stageLabel(j) : null;
           return (
             <div key={j.id} className="drawer-item" data-job-type={j.type}>
               <div className="drawer-item-head">
@@ -237,7 +241,7 @@ function ChapterSection(props: {
               </div>
               <span className="muted small">
                 {new Date(j.updated_at).toLocaleString("vi-VN")}
-                {j.stage ? ` · ${j.stage}` : ""}
+                {step ? ` · ${step}` : ""}
                 {ACTIVE.has(j.status) && j.progress > 0 ? ` · ${Math.round(j.progress * 100)}%` : ""}
               </span>
               {j.status === "failed" && (j.error || j.error_class) && (

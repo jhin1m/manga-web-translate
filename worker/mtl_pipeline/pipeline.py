@@ -10,6 +10,7 @@ import json
 import re
 import threading
 import time
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
@@ -124,8 +125,13 @@ class Pipeline:
     # ---- giai đoạn 1 ----
 
     def prepare_image(
-        self, img: np.ndarray, rtl: bool = False, opts: PrepareOptions | None = None
+        self,
+        img: np.ndarray,
+        rtl: bool = False,
+        opts: PrepareOptions | None = None,
+        on_stage: Callable[[str], None] | None = None,
     ) -> tuple[list[Region], np.ndarray, np.ndarray, PrepareTiming]:
+        """`on_stage("inpaint")` báo lúc bắt đầu xoá chữ (detect do người gọi báo trước khi gọi)."""
         opts = opts or PrepareOptions()
         ctd = opts.detector == "comic_text_detector"
         t0 = time.perf_counter()
@@ -138,6 +144,8 @@ class Pipeline:
         t1 = time.perf_counter()
         mask = build_text_mask(img, pred, regions, opts.mask_dilation)
         t2 = time.perf_counter()
+        if on_stage:
+            on_stage("inpaint")
         clean, _ = self.inpainter_for(opts.inpainter, opts.inpaint_size).inpaint(img, mask)
         assign_colors(regions, clean)
         t3 = time.perf_counter()

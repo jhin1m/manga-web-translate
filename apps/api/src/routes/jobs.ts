@@ -12,6 +12,9 @@ export const jobView = (j: Job) => ({
   status: j.status,
   progress: j.progress,
   stage: j.stage,
+  /** Số ảnh/trang/đoạn đã xong / tổng của bước `stage` (null = bước không đếm) — UI hiện " i/n". */
+  progress_done: j.progressDone,
+  progress_total: j.progressTotal,
   attempts: j.attempts,
   provider_retries: j.providerRetries,
   error_class: j.errorClass,

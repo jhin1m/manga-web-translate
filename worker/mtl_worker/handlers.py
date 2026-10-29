@@ -62,6 +62,9 @@ def _ocr_item_to_shared(it: OcrItem) -> dict[str, Any]:
 
 log = logging.getLogger("mtl_worker")
 
+# Tiến độ cố định theo bước của page.prepare (thanh % trên thumbnail).
+PREPARE_PROGRESS = {"detect": 0.05, "inpaint": 0.3, "ocr": 0.6, "upload": 0.9}
+
 # ---- page.prepare (giai đoạn 1) ----
 
 
@@ -94,9 +97,11 @@ def handle_prepare(ctx: JobContext, deps: Deps) -> dict[str, Any]:
         clean = open_rgb(ctx.download(partial["clean"]))
         mask = open_gray(ctx.download(partial["mask"]))
     else:
-        ctx.report("detect", 0.05)
-        regions, mask, clean, _ = deps.pipeline.prepare_image(img, rtl, opts)
-    ctx.report("ocr", 0.6)
+        ctx.report("detect", PREPARE_PROGRESS["detect"])
+        regions, mask, clean, _ = deps.pipeline.prepare_image(
+            img, rtl, opts, on_stage=lambda s: ctx.report(s, PREPARE_PROGRESS.get(s, 0.3))
+        )
+    ctx.report("ocr", PREPARE_PROGRESS["ocr"])
     try:
         # LLM gọi cuối cùng: lỗi provider vẫn giữ được artifact detect/inpaint.
         ocr = run_ocr(deps, local, img, regions, source_lang)
@@ -113,7 +118,7 @@ def handle_prepare(ctx: JobContext, deps: Deps) -> dict[str, Any]:
     ctx.add_usage(ocr.usage)
     if any(r.is_sfx for r in regions):
         clean, mask = restore_sfx(img, clean, mask, regions)
-    ctx.report("upload", 0.9)
+    ctx.report("upload", PREPARE_PROGRESS["upload"])
     ctx.upload("clean", png_bytes(clean)[0])
     ctx.upload("mask", png_bytes(mask)[0])
     return {
@@ -261,7 +266,7 @@ def handle_translate(ctx: JobContext, deps: Deps) -> dict[str, Any]:
             # Không gửi trang AI trả hỏng: server đánh page lỗi (job ghi lỗi schema), không ghi đè bản AI cũ.
             log.warning("dịch bỏ trang ord=%s: AI trả sai định dạng cả khi dịch riêng", pg["ord"])
             continue
-        ctx.report("typeset", 0.5 + 0.5 * i / max(1, len(parsed)))
+        ctx.report("typeset", 0.5 + 0.5 * i / max(1, len(parsed)), done=i + 1, total=len(parsed))
         by_id = {r.id: r for r in regions}
         page_items = tr.items.get(str(pg["ord"]), {})
         translations: dict[str, tuple[str, bool]] = {}

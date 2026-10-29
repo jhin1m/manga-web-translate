@@ -148,6 +148,8 @@ export async function claim(w: WorkerIdentity, req: z.infer<typeof ClaimRequest>
           dispatchId,
           progress: 0,
           stage: null,
+          progressDone: null,
+          progressTotal: null,
         })
         .where(eq(jobs.id, id))
         .returning();
@@ -234,7 +236,13 @@ export async function heartbeat(w: WorkerIdentity, jobId: string, req: z.infer<t
     }
     const [u] = await t
       .update(jobs)
-      .set({ leaseExpiresAt: sql`now() + make_interval(secs => ${LEASE_S})`, progress: req.progress, stage: req.stage })
+      .set({
+        leaseExpiresAt: sql`now() + make_interval(secs => ${LEASE_S})`,
+        progress: req.progress,
+        stage: req.stage,
+        progressDone: req.done ?? null,
+        progressTotal: req.total ?? null,
+      })
       .where(eq(jobs.id, job.id))
       .returning({ until: jobs.leaseExpiresAt });
     if (!u?.until) throw leaseLost();
@@ -271,7 +279,16 @@ export async function complete(w: WorkerIdentity, jobId: string, req: z.infer<ty
     // Đánh dấu succeeded trước: tính lại trạng thái chương bên dưới không còn thấy job này "đang chạy".
     await t
       .update(jobs)
-      .set({ status: "succeeded", result: req.result, progress: 1, stage: null, errorClass: null, error: null })
+      .set({
+        status: "succeeded",
+        result: req.result,
+        progress: 1,
+        stage: null,
+        progressDone: null,
+        progressTotal: null,
+        errorClass: null,
+        error: null,
+      })
       .where(eq(jobs.id, job.id));
     const rejected = await applyResult(t, job, req.attempt, req.result);
     // Server tự kết thúc job (VD chương đã có chỉnh sửa tay, terminal() đã ghi đè status) — commit rồi trả 409.
@@ -510,7 +527,7 @@ export async function terminal(
 ): Promise<void> {
   await t
     .update(jobs)
-    .set({ status, errorClass, error: message.slice(0, 4000), stage: null })
+    .set({ status, errorClass, error: message.slice(0, 4000), stage: null, progressDone: null, progressTotal: null })
     .where(eq(jobs.id, job.id));
   const p = job.payload;
   const owner = job.userId;
@@ -578,6 +595,8 @@ export async function requeue(
       error: opts.message?.slice(0, 4000) ?? null,
       progress: 0,
       stage: null,
+      progressDone: null,
+      progressTotal: null,
     })
     .where(eq(jobs.id, job.id));
 }
@@ -601,6 +620,8 @@ async function pauseForBudget(t: DbLike, job: Job) {
       providerRetries: sql`${jobs.providerRetries} + 1`,
       progress: 0,
       stage: null,
+      progressDone: null,
+      progressTotal: null,
     })
     .where(eq(jobs.id, job.id));
   const p = job.payload;

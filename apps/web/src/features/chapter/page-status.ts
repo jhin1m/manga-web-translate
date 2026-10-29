@@ -5,6 +5,7 @@
 import { ACTIVE_JOB_STATUSES } from "@mtl/shared";
 import type { ProgressPage } from "./api.ts";
 import { describeJobError, waitingOnProvider } from "./job-error.ts";
+import { stageLabel } from "./stage-labels.ts";
 import type { PageStatus, Tone } from "./status.ts";
 
 export type PageLevel = "todo" | "busy" | "done" | "error";
@@ -55,9 +56,10 @@ export type ThumbMark =
   | { tone: "busy"; label: string; progress: number | null }
   | null;
 
+/** Nhãn bước khi job chưa báo bước nào (vừa claim / worker cũ). */
 const BUSY_STEP: Partial<Record<PageStatus, string>> = {
-  pending: "Bước 1",
-  preparing: "Bước 1",
+  pending: "Xoá chữ",
+  preparing: "Xoá chữ",
   translating: "Đang dịch",
 };
 
@@ -66,12 +68,16 @@ export function thumbMark(p: ThumbPage, overflow: boolean): ThumbMark {
   if (p.skipped) return { tone: "hidden", label: "Đã ẩn" };
   if (p.status === "failed") return { tone: "danger", label: "Lỗi" };
   if (waitingOnProvider(p.job)) return { tone: "warn", label: "Chờ AI" };
-  const step = BUSY_STEP[p.status] ?? (inTranslateJob(p) ? "Đang dịch" : undefined);
-  if (step) {
+  const fallback = BUSY_STEP[p.status] ?? (inTranslateJob(p) ? "Đang dịch" : undefined);
+  if (fallback) {
     const running = p.job?.status === "running";
     const progress = running ? Math.min(1, Math.max(0, p.job?.progress ?? 0)) : null;
-    const label = progress === null ? `${step} · chờ` : `${step} · ${Math.round(progress * 100)}%`;
-    return { tone: "busy", label, progress };
+    if (progress === null) {
+      const label = p.status === "pending" || p.status === "preparing" ? "Chờ xoá chữ" : `${fallback} · chờ`;
+      return { tone: "busy", label, progress };
+    }
+    const step = stageLabel(p.job, { short: true }) ?? fallback;
+    return { tone: "busy", label: `${step} · ${Math.round(progress * 100)}%`, progress };
   }
   if (needsReview(p, overflow)) return { tone: "warn", label: "Cần xem" };
   return null;

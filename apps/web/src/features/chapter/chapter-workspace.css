@@ -434,6 +434,9 @@
 .cw-thumb-mark[data-tone="busy"] {
   color: var(--c-info);
 }
+.cw-thumb-mark[data-tone="ok"] {
+  color: var(--c-ok);
+}
 .cw-thumbs-busy {
   color: var(--c-info);
 }

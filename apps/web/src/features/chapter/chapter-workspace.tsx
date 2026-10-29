@@ -69,8 +69,9 @@ import { ProofreadPanel } from "./proofread-panel.tsx";
 import { SelectPanel } from "./select-panel.tsx";
 import { ShortcutHelp } from "./shortcut-help.tsx";
 import { SourceRail } from "./source-rail.tsx";
-import { moveItem, type SourceItem, sourceCounts, stepSource } from "./source-rail-model.ts";
+import { type IngestView, moveItem, type SourceItem, sourceCounts, stepSource } from "./source-rail-model.ts";
 import { SourceViewer } from "./source-viewer.tsx";
+import { stageLabel } from "./stage-labels.ts";
 import { chapterChip, isChapterSettled } from "./status.ts";
 import { filterRows, KIND_LABEL, type Row, rowKeyOfBox, sameKindBoxIds, type TableFilter } from "./text-table/rows.ts";
 import { TableFilters, TextTable, useChapterRows } from "./text-table/text-table.tsx";
@@ -481,10 +482,20 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
   const sourceId = sources.some((it) => it.id === sourcePick) ? sourcePick : (sources[0]?.id ?? null);
   const sourceIdx = sources.findIndex((it) => it.id === sourceId);
   const sourcesEditable = status === "draft" || (status === "partial_failed" && pages.length === 0);
-  // Bước 1 đang cắt trang → cột ảnh gốc hiện tiến độ job ingest (null = còn xếp hàng).
+  // Bước 1 đang cắt trang → cột ảnh gốc hiện bước + đếm của job ingest (progress null = còn xếp hàng).
   const ingestJob = data.progress?.jobs.find((j) => j.type === "chapter.ingest" && j.status === "running");
-  const cutting =
-    status === "ingesting" ? (ingestJob ? Math.min(1, Math.max(0, ingestJob.progress)) : null) : undefined;
+  const ingest: IngestView | undefined =
+    status !== "ingesting"
+      ? undefined
+      : ingestJob
+        ? {
+            stage: ingestJob.stage,
+            progress: Math.min(1, Math.max(0, ingestJob.progress)),
+            done: ingestJob.progress_done,
+            total: ingestJob.progress_total,
+            label: stageLabel(ingestJob) ?? "Đang cắt trang",
+          }
+        : { stage: null, progress: null, done: null, total: null, label: "Chờ cắt trang…" };
   // Chưa có page thì chỉ dùng được công cụ Chọn (panel Chọn = ảnh gốc đang xem).
   useEffect(() => {
     if (sourceMode && editorStore.getState().tool !== "select") editorStore.getState().setTool("select");
@@ -972,7 +983,7 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
           items={sources}
           activeId={sourceId}
           editable={sourcesEditable}
-          cutting={cutting}
+          ingest={ingest}
           onPick={setSourcePick}
           onSkip={skipSource}
           onMove={moveSource}

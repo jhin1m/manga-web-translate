@@ -40,7 +40,13 @@ class WorkerApi(Protocol):
     """Phần client mà runner/handler dùng sau khi claim — WorkerClient là bản HTTP; test dùng bản giả."""
 
     def heartbeat(
-        self, job: dict[str, Any], progress: float, stage: str | None, usage: dict | None
+        self,
+        job: dict[str, Any],
+        progress: float,
+        stage: str | None,
+        usage: dict | None,
+        done: int | None = None,
+        total: int | None = None,
     ) -> dict[str, Any]: ...
 
     def presign_outputs(self, job: dict[str, Any], names: list[str]) -> dict[str, dict[str, Any]]: ...
@@ -138,9 +144,23 @@ class WorkerClient:
         return {"lease_token": job["lease_token"], "attempt": job["attempt"]}
 
     def heartbeat(
-        self, job: dict[str, Any], progress: float, stage: str | None, usage: dict | None
+        self,
+        job: dict[str, Any],
+        progress: float,
+        stage: str | None,
+        usage: dict | None,
+        done: int | None = None,
+        total: int | None = None,
     ) -> dict[str, Any]:
-        body = {**self._fence(job), "progress": progress, "stage": stage, "usage": usage}
+        # done/total: API cũ bỏ qua key lạ (zod strip) → không cần nâng pipeline version.
+        body = {
+            **self._fence(job),
+            "progress": progress,
+            "stage": stage,
+            "usage": usage,
+            "done": done,
+            "total": total,
+        }
         return self._post(f"/jobs/{job['id']}/heartbeat", body)
 
     def presign_outputs(self, job: dict[str, Any], names: list[str]) -> dict[str, dict[str, Any]]:

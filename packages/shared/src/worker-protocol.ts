@@ -38,6 +38,9 @@ export const HeartbeatRequest = z.object({
   progress: z.number().min(0).max(1),
   stage: z.string().max(64).nullable(),
   usage: WorkerUsage.nullable(),
+  /** Số ảnh/trang/đoạn đã xong của bước `stage` (null/thiếu = bước không đếm; worker cũ không gửi). */
+  done: z.number().int().min(0).max(100_000).nullish(),
+  total: z.number().int().min(0).max(100_000).nullish(),
 });
 export const HeartbeatResponse = z.object({
   lease_expires_at: z.string(),

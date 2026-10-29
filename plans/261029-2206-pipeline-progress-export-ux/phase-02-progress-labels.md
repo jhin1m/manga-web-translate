@@ -1,6 +1,6 @@
 ---
 title: "Phase 2: Tiến độ từng ảnh/trang + nhãn tiếng Việt"
-status: todo
+status: completed
 effort: 6h
 ---
 
@@ -184,11 +184,12 @@ Lệnh hẹp:
 
 ## Success Criteria
 
-- [ ] Mọi test mới xanh; `uv run pytest` + `pnpm test` toàn repo xanh; ruff/mypy/biome/typecheck sạch.
-- [ ] `pnpm db:migrate` áp 0019 trên DB dev; down file chạy được.
+- [x] Mọi test mới xanh; `uv run pytest` + `pnpm test` toàn repo xanh; ruff/mypy/biome/typecheck sạch.
+- [ ] `pnpm db:migrate` áp 0019 trên DB dev; down file chạy được. *(Chưa áp DB dev — không được phép chạy migrate DB dùng chung. Đã kiểm: 0019 áp qua reset DB test của api; down file chạy trên DB test → 2 cột mất, journal lùi 1.)*
 - [ ] Kiểm tay (worker thật, chương 10 ảnh): cột ảnh gốc "Đang tải ảnh 3/10" → "Đang cắt trang …" → "Đang lưu trang i/n";
       thumbnail trang "Nhận diện chữ" → "Xoá chữ" → "Đọc chữ (OCR)"; nhãn đổi trong ≤ 5s sau khi worker log đổi bước.
-- [ ] Không còn mã bước tiếng Anh ở thumbnail, cột ảnh gốc, drawer Hoạt động.
+      *(Chưa kiểm tay — cần worker thật. Đã có test: heartbeat gửi ngay khi đổi bước, throttle theo gap, poll 2,5s.)*
+- [x] Không còn mã bước tiếng Anh ở thumbnail, cột ảnh gốc, drawer Hoạt động.
 
 ## Risk + rollback
 

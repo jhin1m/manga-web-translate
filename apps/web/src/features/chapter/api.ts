@@ -11,6 +11,9 @@ export type JobView = {
   status: string;
   progress: number;
   stage: string | null;
+  /** Số ảnh/trang/đoạn đã xong / tổng của bước `stage` (null = bước không đếm) — xem `stage-labels.ts`. */
+  progress_done: number | null;
+  progress_total: number | null;
   attempts: number;
   provider_retries: number;
   error_class: string | null;

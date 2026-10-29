@@ -124,7 +124,7 @@ def handle_export(ctx: JobContext, deps: Deps) -> dict[str, Any]:
         # URL nền ký trần 15' (không xin lại được) → tải hết ra đĩa trước khi render (render chương dài có thể lâu hơn).
         backgrounds: dict[int, str] = {}
         for i, pg in enumerate(work):
-            ctx.report("download", DOWNLOAD_SHARE * i / len(work))
+            ctx.report("download", DOWNLOAD_SHARE * i / len(work), done=i, total=len(work))
             backgrounds[pg["ord"]] = os.path.join(tmp, f"bg-{pg['ord']}")
             Path(backgrounds[pg["ord"]]).write_bytes(ctx.download(pg["background"]))
         path = os.path.join(tmp, "export.zip")
@@ -139,7 +139,12 @@ def handle_export(ctx: JobContext, deps: Deps) -> dict[str, Any]:
                 written += 1
 
             for i, pg in enumerate(work):
-                ctx.report("render", DOWNLOAD_SHARE + (RENDER_SHARE - DOWNLOAD_SHARE) * i / len(work))
+                ctx.report(
+                    "render",
+                    DOWNLOAD_SHARE + (RENDER_SHARE - DOWNLOAD_SHARE) * i / len(work),
+                    done=i,
+                    total=len(work),
+                )
                 img = _render(pg, backgrounds[pg["ord"]])
                 if assembler is None:
                     emit(rank[pg["ord"]], img)

@@ -4,12 +4,19 @@
  * (Đã xoá / Credit · tự bỏ / Đang tải / Tải lỗi / Chưa tải / Có thể là credit). Xoá / Khôi phục ảnh bằng nút góc
  * thumbnail (hiện khi rê chuột / focus) hoặc menu chuột phải (Shift+F10 / phím Menu) khi còn sửa được bộ ảnh (trước
  * Bước 1); ảnh bỏ qua mờ đi, Bước 1 không ghép chúng. Cũng khi còn sửa được: kéo-thả thumbnail (vạch báo chỗ thả), menu
- * "Đưa lên đầu / Lên 1 / Xuống 1 / Đưa xuống cuối" hoặc Alt+↑/↓ trên thumbnail đang focus để đổi thứ tự ghép. Đang cắt trang (Bước 1) → đầu cột hiện tiến độ, ảnh được ghép
- * có viền "đang xử lý".
+ * "Đưa lên đầu / Lên 1 / Xuống 1 / Đưa xuống cuối" hoặc Alt+↑/↓ trên thumbnail đang focus để đổi thứ tự ghép. Đang cắt trang (Bước 1) → đầu cột hiện bước + đếm
+ * ("Đang tải ảnh 3/10"), ảnh được ghép có viền "đang xử lý" và nhãn Đã tải / Đang tải / Chờ / Đang xử lý.
  */
 import { memo, useEffect, useRef, useState } from "react";
 import { ContextMenu, isMenuKey, type MenuAt, type MenuItem, menuAtElement } from "./context-menu.tsx";
-import { moveItem, type SourceItem, sourceCounts, sourceLabel } from "./source-rail-model.ts";
+import {
+  type IngestView,
+  ingestTag,
+  moveItem,
+  type SourceItem,
+  sourceCounts,
+  sourceLabel,
+} from "./source-rail-model.ts";
 import { TrashIcon, UndoIcon } from "./tool-icons.tsx";
 
 export const SourceRail = memo(function SourceRail(props: {
@@ -17,14 +24,17 @@ export const SourceRail = memo(function SourceRail(props: {
   activeId: string | null;
   /** Còn đổi được bộ ảnh (chưa bấm Bước 1, hoặc cắt trang lỗi). */
   editable: boolean;
-  /** Bước 1 đang cắt trang: tiến độ job 0..1, null khi job còn xếp hàng; undefined = không chạy. */
-  cutting?: number | null;
+  /** Bước 1 đang cắt trang (bước + đếm + tiến độ job); undefined = không chạy. */
+  ingest?: IngestView;
   onPick(id: string): void;
   onSkip(it: SourceItem, skip: "user" | null): void;
   /** Đưa ảnh `id` tới vị trí `to` (0-based). */
   onMove(id: string, to: number): void;
 }) {
   const { total, skipped } = sourceCounts(props.items);
+  const ingest = props.ingest;
+  // Vị trí trong các ảnh không bỏ qua = thứ tự worker tải khi cắt trang.
+  const activeIndex = new Map(props.items.filter((it) => !it.skip).map((it, i) => [it.id, i]));
   const listRef = useRef<HTMLDivElement>(null);
   const [menu, setMenu] = useState<{ item: SourceItem; at: MenuAt; anchor: HTMLElement } | null>(null);
 
@@ -76,13 +86,13 @@ export const SourceRail = memo(function SourceRail(props: {
         <span>
           {total} ảnh{skipped > 0 ? ` · đã bỏ ${skipped}` : ""}
         </span>
-        {props.cutting !== undefined && (
+        {ingest && (
           <>
             <span className="cw-thumbs-busy" role="status">
-              Đang cắt trang{props.cutting === null ? "…" : ` ${Math.round(props.cutting * 100)}%`}
+              {ingest.label}
             </span>
-            <span className="cw-thumb-bar" data-wait={props.cutting === null || undefined} aria-hidden="true">
-              <span className="cw-thumb-bar-fill" style={{ width: `${Math.round((props.cutting ?? 1) * 100)}%` }} />
+            <span className="cw-thumb-bar" data-wait={ingest.progress === null || undefined} aria-hidden="true">
+              <span className="cw-thumb-bar-fill" style={{ width: `${Math.round((ingest.progress ?? 1) * 100)}%` }} />
             </span>
           </>
         )}
@@ -90,7 +100,8 @@ export const SourceRail = memo(function SourceRail(props: {
       <div className="cw-thumbs-list" ref={listRef}>
         {props.items.map((it) => {
           const on = it.id === props.activeId;
-          const tag = sourceLabel(it);
+          const at = activeIndex.get(it.id);
+          const tag = ingest && at !== undefined ? ingestTag(at, ingest) : sourceLabel(it);
           const openMenu = (at: MenuAt, anchor: HTMLElement) => {
             if (props.editable) setMenu({ item: it, at, anchor });
           };
@@ -132,7 +143,7 @@ export const SourceRail = memo(function SourceRail(props: {
               <button
                 type="button"
                 className="cw-thumb"
-                data-tone={it.skip ? "hidden" : props.cutting !== undefined ? "busy" : tag?.tone}
+                data-tone={it.skip ? "hidden" : ingest ? "busy" : tag?.tone}
                 aria-current={on ? "page" : undefined}
                 aria-label={`Ảnh ${it.n}${tag ? ` · ${tag.label}` : ""}`}
                 title={

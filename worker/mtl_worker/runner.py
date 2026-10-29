@@ -1,5 +1,5 @@
-"""Chạy 1 job đã claim: heartbeat thread riêng (stage + usage delta mỗi 20s), handler theo JobType, upload output
-qua presigned PUT, complete/fail. 409 ở bất kỳ bước nào → bỏ job ngay, không retry (fencing, red team #2)."""
+"""Chạy 1 job đã claim: heartbeat thread riêng (stage + đếm + usage delta mỗi 20s, gửi sớm khi đổi bước/đếm),
+handler theo JobType, upload output qua presigned PUT, complete/fail. 409 ở bất kỳ bước nào → bỏ job ngay, không retry (fencing, red team #2)."""
 
 from __future__ import annotations
 
@@ -26,6 +26,8 @@ from .job_fonts import job_fonts
 log = logging.getLogger("mtl_worker")
 
 HEARTBEAT_S = 20.0
+# Khoảng cách tối thiểu giữa 2 heartbeat khi gửi sớm vì đổi bước/đếm (gộp nhiều lần đổi dồn dập).
+MIN_HEARTBEAT_GAP_S = 2.0
 
 # Loại job chưa có handler ở worker (phase sau) — không khai trong capabilities.
 DEFERRED_TYPES: dict[str, str] = {}
@@ -86,6 +88,10 @@ class JobContext:
         self._lock = threading.Lock()
         self._progress = 0.0
         self._stage: str | None = None
+        self._done: int | None = None
+        self._total: int | None = None
+        #: Đổi bước hoặc số đếm → đánh thức thread heartbeat gửi sớm (không chờ nhịp 20s).
+        self.wake = threading.Event()
         self._seq = 0
         self._pending: dict[str, Any] = {"model": None, "llm_in": 0, "llm_out": 0, "calls": 0}
         self._gpu_started = time.monotonic()
@@ -97,9 +103,14 @@ class JobContext:
 
     # ---- tiến độ / huỷ ----
 
-    def report(self, stage: str, progress: float) -> None:
+    def report(self, stage: str, progress: float, done: int | None = None, total: int | None = None) -> None:
+        """Ghi tiến độ; `done/total` = số ảnh/trang/đoạn đã xong của bước. Chỉ đổi progress → chờ nhịp thường."""
         with self._lock:
+            changed = stage != self._stage or done != self._done
             self._stage, self._progress = stage, max(0.0, min(1.0, progress))
+            self._done, self._total = done, total
+        if changed:
+            self.wake.set()
         self.check()
 
     def check(self) -> None:
@@ -145,12 +156,13 @@ class JobContext:
 
     # ---- heartbeat ----
 
-    def heartbeat_once(self) -> None:
+    def heartbeat_once(self, with_usage: bool = True) -> None:
+        """`with_usage=False`: heartbeat sớm vì đổi bước — chỉ tiến độ, usage để nhịp thường / complete gửi."""
         with self._lock:
-            progress, stage = self._progress, self._stage
-        usage = self.take_usage()
+            progress, stage, done, total = self._progress, self._stage, self._done, self._total
+        usage = self.take_usage() if with_usage else None
         try:
-            res = self.client.heartbeat(self.job, progress, stage, usage)
+            res = self.client.heartbeat(self.job, progress, stage, usage, done, total)
         except LeaseLost:
             self.lost.set()
             return
@@ -179,14 +191,36 @@ class JobContext:
 
 
 class Heartbeat:
-    def __init__(self, ctx: JobContext, interval: float = HEARTBEAT_S):
-        self.ctx, self.interval = ctx, interval
+    """Nhịp `interval` gia hạn lease + gửi usage; `ctx.wake` (đổi bước/đếm) → gửi tiến độ ngay nếu lần trước đã cách
+    ≥ `min_gap`, không thì gửi lúc tròn `min_gap` (gộp mọi lần đổi trong khoảng đó). Chỉ thread này gọi
+    `heartbeat_once`."""
+
+    def __init__(self, ctx: JobContext, interval: float = HEARTBEAT_S, min_gap: float = MIN_HEARTBEAT_GAP_S):
+        self.ctx, self.interval, self.min_gap = ctx, interval, min_gap
         self._stop = threading.Event()
         self._t = threading.Thread(target=self._run, name=f"hb-{ctx.job['id'][:8]}", daemon=True)
 
     def _run(self) -> None:
-        while not self._stop.wait(self.interval):
-            self.ctx.heartbeat_once()
+        last_sent: float | None = None
+        last_beat = time.monotonic()
+        while True:
+            woke = self.ctx.wake.wait(max(0.0, self.interval - (time.monotonic() - last_beat)))
+            if self._stop.is_set():
+                return
+            if woke and last_sent is not None:
+                gap = last_sent + self.min_gap - time.monotonic()
+                if gap > 0 and self._stop.wait(gap):
+                    return
+            full = time.monotonic() - last_beat >= self.interval
+            # Xoá cờ trước khi gửi: lần đổi xảy ra lúc đang gửi sẽ đánh thức vòng sau. `__exit__` set stop trước wake →
+            # kiểm stop sau khi xoá để không nuốt mất lần đánh thức báo dừng.
+            self.ctx.wake.clear()
+            if self._stop.is_set():
+                return
+            self.ctx.heartbeat_once(with_usage=full)
+            last_sent = time.monotonic()
+            if full:
+                last_beat = last_sent
             if self.ctx.lost.is_set():
                 return
 
@@ -196,6 +230,7 @@ class Heartbeat:
 
     def __exit__(self, *exc: object) -> None:
         self._stop.set()
+        self.ctx.wake.set()
         self._t.join(timeout=5)
 
 
@@ -255,11 +290,12 @@ def run_job(
     deps: Deps,
     deadline: Callable[[], bool] | None = None,
     heartbeat_s: float = HEARTBEAT_S,
+    heartbeat_gap_s: float = MIN_HEARTBEAT_GAP_S,
 ) -> str:
     """→ "succeeded" | "failed" | "aborted". Không ném lỗi ra ngoài (vòng lặp worker đi tiếp job sau)."""
     ctx = JobContext(client, job, deadline)
     try:
-        with Heartbeat(ctx, heartbeat_s):
+        with Heartbeat(ctx, heartbeat_s, heartbeat_gap_s):
             try:
                 validate_contract("job-payload", job["payload"])
                 validate_contract(f"inputs-{job['type'].replace('.', '-')}", job["inputs"])

@@ -40,10 +40,10 @@ describe("page level", () => {
       thumbMark({ ...base, status, job: j }, true);
     expect(busy("preparing", job({ status: "running", error_class: null, progress: 0.6 } as never))).toEqual({
       tone: "busy",
-      label: "Bước 1 · 60%",
+      label: "Xoá chữ · 60%",
       progress: 0.6,
     });
-    expect(busy("pending", null)).toEqual({ tone: "busy", label: "Bước 1 · chờ", progress: null });
+    expect(busy("pending", null)).toEqual({ tone: "busy", label: "Chờ xoá chữ", progress: null });
     expect(busy("translating", job({ status: "running", error_class: null, progress: 2 } as never))?.label).toBe(
       "Đang dịch · 100%",
     );
@@ -68,6 +68,38 @@ describe("page level", () => {
     // Job dịch đã xong / huỷ không còn tính là đang dịch.
     expect(thumbMark({ ...base, status: "prepared", job: tj({ status: "succeeded" }) }, false)).toBeNull();
     expect(pageLevelOf({ status: "failed", job: tj({}) })).toBe("error");
+  });
+
+  it("running prepare job shows its step and percent", () => {
+    const j = job({
+      type: "page.prepare",
+      status: "running",
+      error_class: null,
+      stage: "inpaint",
+      progress: 0.4,
+    } as never);
+    expect(thumbMark({ ...base, status: "preparing", job: j }, false)).toEqual({
+      tone: "busy",
+      label: "Xoá chữ · 40%",
+      progress: 0.4,
+    });
+    // Bước dịch: nhãn ngắn không kèm " i/n" (thumbnail hẹp).
+    const t = job({
+      type: "chapter.translate",
+      status: "running",
+      error_class: null,
+      stage: "typeset",
+      progress: 0.75,
+      progress_done: 2,
+      progress_total: 4,
+    } as never);
+    expect(thumbMark({ ...base, status: "translating", job: t }, false)?.label).toBe("Đang đặt chữ · 75%");
+  });
+
+  it("pending page without a job waits for text removal", () => {
+    const mark = thumbMark({ ...base, status: "pending", job: null }, false);
+    expect(mark?.label).toBe("Chờ xoá chữ");
+    expect(thumbAria({ ...base, status: "pending", job: null }, false)).not.toContain("Bước 1");
   });
 
   it("thumbnail accessible name always carries the state", () => {

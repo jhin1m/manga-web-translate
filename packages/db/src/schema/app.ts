@@ -351,6 +351,9 @@ export const jobs = pgTable(
     outputRev: integer("output_rev"),
     progress: real("progress").notNull().default(0),
     stage: text("stage"),
+    /** Số ảnh/trang/đoạn đã xong / tổng của bước `stage` (heartbeat gần nhất; null = bước không đếm). */
+    progressDone: integer("progress_done"),
+    progressTotal: integer("progress_total"),
     errorClass: text("error_class").$type<(typeof ERROR_CLASSES)[number]>(),
     error: text("error"),
     pipelineVersion: text("pipeline_version"),
