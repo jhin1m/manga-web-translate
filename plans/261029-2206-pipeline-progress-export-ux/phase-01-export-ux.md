@@ -1,6 +1,6 @@
 ---
 title: "Phase 1: UX Xuất"
-status: todo
+status: completed
 effort: 4h
 ---
 
@@ -127,11 +127,12 @@ Lệnh hẹp: `pnpm --filter @mtl/web exec vitest run src/features/chapter/expor
 
 ## Success Criteria
 
-- [ ] 2 file test xanh; toàn bộ test web xanh; typecheck + biome sạch.
-- [ ] `grep -nE "slice|ZIP PNG|type=\"number\"|Phạm vi|PNG luôn" apps/web/src/features/chapter/export-panel.tsx` rỗng.
+- [x] 2 file test xanh; toàn bộ test web xanh; typecheck + biome sạch.
+- [x] `grep -nE "slice|ZIP PNG|type=\"number\"|Phạm vi|PNG luôn" apps/web/src/features/chapter/export-panel.tsx` rỗng.
 - [ ] Kiểm tay: 1 lần bấm "Tải chương" → file tự tải; trình duyệt chặn → link "Tải xuống" tại chỗ dùng được.
-- [ ] Bật "Đưa cả trang chưa dịch vào" → cảnh báo "không có trong file" biến mất.
-- [ ] Drawer Hoạt động (P2 đang sửa song song) vẫn render ExportRow không lỗi type.
+  _(Chưa kiểm tay/chưa chạy e2e — cần server thật; e2e `chapter-tools.spec.ts` đã thêm assert sự kiện `download`.)_
+- [x] Bật "Đưa cả trang chưa dịch vào" → cảnh báo "không có trong file" biến mất.
+- [x] Drawer Hoạt động (P2 đang sửa song song) vẫn render ExportRow không lỗi type.
 
 ## Risk + rollback
 

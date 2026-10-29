@@ -87,12 +87,12 @@ test("drop a strip on home → translate → edit → export", async ({ page }) 
     })
     .toBe("Chào cậu");
 
-  // Xuất: drawer không cảnh báo → job qua worker giả → "Tải xuống" 302.
+  // Xuất: drawer không cảnh báo → 1 nút "Tải chương" → job qua worker giả → link "Tải xuống" tại chỗ 302.
   await primary.click();
   const dlg = page.getByRole("dialog", { name: "Xuất chương" });
   await expect(dlg).toBeVisible();
   await expect(dlg.getByRole("region", { name: "Trước khi xuất" })).toHaveCount(0);
-  await dlg.getByRole("button", { name: "Xuất ZIP PNG", exact: true }).click();
+  await dlg.getByRole("button", { name: "Tải chương (.zip)", exact: true }).click();
   const link = dlg.getByRole("link", { name: "Tải xuống" });
   await expect(link).toBeVisible({ timeout: 60_000 });
   ready = true;
