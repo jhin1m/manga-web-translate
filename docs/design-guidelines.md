@@ -84,19 +84,20 @@ Toàn màn hình (ngoài app shell), `chapter-workspace.css`. Nguyên tắc (own
   ("Dịch lại trang này", "Chạy lại trang lỗi"); lỗi thô của provider (JSON dài) chỉ nằm trong "Chi tiết kỹ thuật" thu
   gọn ở panel Chọn.
 - **Thông báo kết quả** (dịch lại, áp kiểu, lỗi thao tác): nổi trên canvas, không đẩy bố cục; info tự ẩn sau 6s.
-  Bước 1 / Bước 2 thành công không báo thêm (chip đã đổi); Bước 1 có ảnh bị loại → giữ thông báo tới khi chương xử
-  lý xong.
+  "Dịch chương" / "Chỉ xoá chữ + OCR" thành công không báo thêm (chip đã đổi); có ảnh bị loại → giữ thông báo tới khi
+  chương xử lý xong.
 - **Menu nổi** (`context-menu.tsx`, dùng chung cho chuột phải thumbnail và "⋯"): `role="menu"`, ↑/↓, Esc trả focus về
   nút mở; mục bật/tắt là `menuitemcheckbox`.
 
-- **Nút chính** (1 nút, theo trạng thái chương, `primary-action.ts`): Tải ảnh → **Bước 1 · Xoá chữ + OCR** (= commit:
-  ghép + cắt trang, xoá chữ, OCR; khoá tới khi upload xong, không bao giờ tự chạy) → chương "Chờ dịch" (soát ảnh
-  sạch, sửa mask) → **Bước 2 · Dịch** (dịch + chèn chữ) → "Xuất" khoá trong lúc chạy (tiến độ ở chip: "Bước 1 · OCR
-  x/N", "Đang dịch x/N") → Xuất. Chương có trang lỗi: "Chạy lại trang lỗi";
+- **Nút chính** (1 nút, theo trạng thái chương, `primary-action.ts`): Tải ảnh → **Dịch chương** (= commit:
+  ghép + cắt trang, xoá chữ, OCR rồi dịch + chèn chữ theo chuỗi lô, nối một mạch; khoá tới khi upload xong, không bao giờ
+  tự chạy). Menu "⋯" của nút có "Chỉ xoá chữ + OCR (soát trước)": dừng ở "Chờ dịch" (soát ảnh sạch, sửa mask) rồi bấm "Dịch
+  chương" tiếp; lựa chọn này không nhớ theo series. Trong lúc chạy "Xuất" khoá, tiến độ ở chip ("Đang cắt trang", "Xoá chữ +
+  OCR x/N", "Đang dịch · x/y trang · lô k/n") → Xuất. Chương có trang lỗi: "Chạy lại trang lỗi";
   "Dịch lại cả chương" / "Chạy lại trang lỗi" (khi có) nằm trong menu "⋯".
 - **Drawer phải 420px** (`app/drawer.tsx`): Xuất (cảnh báo "Trước khi xuất", định dạng, tải) và Hoạt động (upload +
   job chương + lượt xuất). Không dùng modal cho thao tác chính. Chi tiết: [editor.md](./editor.md).
-- **Home** (`/`): vùng thả file lớn (đoán được series → tạo chương nháp + upload + mở màn chương, chờ bấm Bước 1; không
+- **Home** (`/`): vùng thả file lớn (đoán được series → tạo chương nháp + upload + mở màn chương, chờ bấm "Dịch chương"; không
   đoán được / file lỗi → dòng xác nhận "Sau khi thả file"; chọn "+ Series mới…" thì có thêm select ngôn ngữ gốc) →
   hàng series (tên dài cắt "…" + `title`, không đè cột trạng thái; bấm hàng để mở, icon Sửa → tab Cài đặt,
   icon Xoá xác nhận tại chỗ rồi xoá cả series). **Series**: đầu trang +

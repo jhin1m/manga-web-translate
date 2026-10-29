@@ -91,7 +91,7 @@ sudo systemctl enable --now mtl-api mtl-jobs mtl-backup.timer mtl-alert.timer
   này là an toàn.
 - **Không rollback worker xuống < 0.5.0 một chiều**: trang đã prepare bằng worker ≥ 0.5.0 lưu `text_color`/`outline_color`
   trong region; schema input của worker cũ có `additionalProperties: false` nên chúng từ chối cả dịch lẫn thử lại prepare
-  (partial) của các trang đó, kể cả khi hạ `MIN_PIPELINE_VERSION`. Muốn quay lại phải chạy lại Bước 1 trên worker mới
+  (partial) của các trang đó, kể cả khi hạ `MIN_PIPELINE_VERSION`. Muốn quay lại phải chạy lại xoá chữ + OCR trên worker mới
   hoặc xoá kết quả prepare của các trang.
 - Mỗi lần dừng vì ngân sách tăng `provider_retries` (để số attempt trên dây không trùng ledger) → job bị dừng/mở lại
   > 20 lần sẽ `failed` ở lỗi provider kế tiếp.
@@ -127,9 +127,9 @@ sudo systemctl enable --now mtl-api mtl-jobs mtl-backup.timer mtl-alert.timer
 4. `infra/deploy.sh <ref>`: `pnpm db:migrate` chạy 0013 (cột `pipeline` của bảng cài đặt, mặc định `{}` = hành vi cũ)
    + 0014 (bảng `proofread_suggestions`, nới `jobs_type_chk` thêm `chapter.proofread`). Down tay: `0013_*.down.sql`,
    `0014_*.down.sql` (0014 xoá job `chapter.proofread` trước khi khôi phục check cũ).
-5. Smoke tay: Cài đặt chung → Pipeline lưu được; chương tiếng Nhật với OCR = MangaOCR chạy Bước 1 không
+5. Smoke tay: Cài đặt chung → Pipeline lưu được; chương tiếng Nhật với OCR = MangaOCR chạy xoá chữ + OCR không
    tốn token (Hoạt động/ledger không có `llm_tokens_*` của `page.prepare`); "Hiệu đính" trên rail chạy và Nhận được 1
-   gợi ý; người dùng chưa cấu hình → Bước 1 cho kết quả như trước.
+   gợi ý; người dùng chưa cấu hình → xoá chữ + OCR cho kết quả như trước.
 6. Token worker tạo với danh sách capability tường minh (không có `chapter.proofread`): worker 0.6.0 mặc định khai mọi
    loại job → claim 400 `capability_not_allowed`. Chạy worker với `--capabilities` khớp token, hoặc cấp lại token.
 7. Rollback: API/web quay về được (migration additive) **miễn worker giữ 0.6.0** (worker mới đọc được payload cũ);
@@ -159,6 +159,31 @@ dữ liệu gắn `user_id`. Release này không có đường lên mượt từ
    `/accept-invite`; không redirect) → dịch 1 chương, xuất; (d) `GET /api/me` có `quota` đúng `USER_DAILY_USD`.
    `infra/smoke.sh` (gọi bởi `deploy.sh`) tự kiểm (a) + (b) — production lỡ bật `SIGNUP_ENABLED` thì deploy tự rollback.
 6. Rollback: **không** lùi bằng down DB. Lùi = reset DB + MinIO và checkout bản cũ (cũng mất dữ liệu).
+
+**Checklist nâng cấp lên pipeline 0.7.0 (dịch theo chuỗi lô)** (migration 0019 `jobs_progress_counts` + 0020 `translate_chain`):
+dịch chương theo chuỗi job lô, tiến độ từng trang, drawer Xuất một nút.
+
+1. **Worker lên 0.7.0 TRƯỚC API**: cập nhật worker Mac (`PIPELINE_VERSION` 0.7.0; thử `uv run mtl-worker --once`) rồi
+   `modal deploy modal_app.py`. Worker 0.7.0 vẫn đọc payload cũ (không có `carry`) nên lên trước không hại gì. Đảo thứ tự
+   → API mới (`MIN_PIPELINE_VERSION` mặc định 0.7.0 trong `env.ts`) từ chối worker 0.6.x bằng 426 và hàng đợi dừng; job dịch
+   mới có `payload.carry` mà schema worker cũ (`additionalProperties: false`) không đọc được. `.env` không ghi đè
+   `MIN_PIPELINE_VERSION` thấp hơn 0.7.0; `PIPELINE_VERSION` của API (muối input_rev) giữ 0.4.0.
+2. **API trước hoặc cùng lúc với web**: web mới đọc `pages[].ocr_ready` (cùng `chapter.run`, `translate_queued`, `run_batch`) từ
+   `GET /chapters/:id/progress` của API mới; web lên trước thì thiếu `ocr_ready` nên không chọn được trang nào để dịch riêng.
+   `infra/deploy.sh <ref>` đưa cả hai lên cùng release.
+3. `infra/deploy.sh <ref>`: `pnpm db:migrate` chạy 0019 (`jobs.progress_done/progress_total`) + 0020 (`chapters.run_target`,
+   `run_started_at`, `run_total`; `pages.translate_queued`) — chỉ thêm cột, mặc định = hành vi cũ. Down tay:
+   `0019_*.down.sql`, `0020_*.down.sql`.
+4. Chương đang chạy lúc deploy: chương manga (`ingest_mode=pages`) đang cắt trang / xoá chữ + OCR không có lượt dịch (cột
+   mới null) nên xoá chữ + OCR xong sẽ dừng ở "Chờ dịch" — bấm "Dịch chương" để tiếp. Job dịch cả chương đã xếp từ bản cũ vẫn
+   chạy xong bình thường.
+5. Smoke tay: "Dịch chương" một chương ≥ 9 trang → trang đầu "Xong" và sửa được trong khi các lô sau còn "Chờ lượt · lô k" /
+   "Đang dịch"; thanh trên "Đang dịch · x/y trang · lô k/n"; xuất ra file tự tải.
+6. Rollback về 0.6.0 (API/web + worker cùng lúc; migration additive nên không cần down): **trước** khi hạ, huỷ mọi job
+   `chapter.translate` còn `queued` / `paused_budget` có `payload.carry` (worker 0.6.0 không đọc được → fail hợp đồng), và đợi
+   job đang chạy xong hoặc huỷ. Chương kẹt `processing` giữa chuỗi:
+   `UPDATE chapters c SET status='prepared', run_target=NULL WHERE status='processing' AND NOT EXISTS (SELECT 1 FROM jobs j WHERE j.chapter_id=c.id AND j.status IN ('queued','running','paused_budget'));`
+   rồi người dùng bấm dịch lại (trang `ready` giữ nguyên).
 
 Log: `journalctl -u mtl-api -o cat` (JSON mỗi request: method, path, status, ms — không query/header/body),
 `journalctl -u mtl-jobs`.

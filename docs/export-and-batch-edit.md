@@ -1,11 +1,10 @@
 # Xuất chương + sửa hàng loạt (find/replace, áp glossary)
 
 Trên UI (màn chương, xem [editor.md](./editor.md)): **Xuất** là drawer phải (`features/chapter/export-drawer.tsx`; mở
-bằng nút chính "Xuất", nút "Xuất" phụ hoặc `?drawer=export`; cảnh báo "Trước khi xuất" — "Xem các khối này" mở panel
-Bản dịch lọc khối cần xem —, chọn định dạng, tải qua 302 bên dưới). **Tìm / Thay** và **Áp glossary** là 2 đoạn của
+bằng nút chính "Xuất", nút "Xuất" phụ hoặc `?drawer=export`; chi tiết ở [Drawer Xuất chương](#drawer-xuất-chương); tải qua 302 bên dưới). **Tìm / Thay** và **Áp glossary** là 2 đoạn của
 panel **Tìm** trên rail công cụ (segmented "Tìm / Thay" | "Glossary", panel rộng 560px; Ctrl/Cmd+F mở thẳng "Tìm /
-Thay"), không có hộp thoại modal; chỉ dùng được khi chương đã dịch xong. Trước khi gọi `apply` UI lưu hết sửa chưa lưu (`beforeWrite`). API bên dưới
-không đổi.
+Thay"), không có hộp thoại modal; chỉ dùng được khi chương đã dịch xong. Trước khi gọi `apply` UI lưu hết sửa chưa lưu (`beforeWrite`). Apply / hoàn tác
+chỉ chạy khi chương không đang cắt trang / xử lý (409 `chapter_busy`).
 
 ## Xuất chương (`chapter.export`)
 
@@ -40,6 +39,30 @@ Render phía server bằng chính `worker/mtl_pipeline/render.py` (một rendere
 - **Xoá sau 7 ngày**: lifecycle MinIO lọc theo tag (`minio-init` trong `infra/docker-compose.dev.yml`,
   `mc ilm import`); production phải cấu hình rule tương đương trên bucket.
 
+## Drawer Xuất chương
+
+Một nút, ít lựa chọn (`export-panel.tsx`, nhãn/trạng thái thuần ở `export-options.ts`, cảnh báo ở `export-warnings.ts`):
+
+- **Cảnh báo "Trước khi xuất"** — mỗi câu nói hậu quả trong file; có cảnh báo vẫn xuất được:
+  - "N trang chưa dịch → không có trong file" (trang không `ready`: lỗi, đang chạy, chờ dịch; **ẩn** khi bật "Đưa cả
+    trang chưa dịch vào");
+  - "N khối chưa dịch → để trống chữ" (bản dịch trống, bỏ SFX);
+  - "N trang AI có bản mới → xuất bản đang hiện";
+  - "N khối tràn khung → chữ có thể bị cắt".
+  Trang đã ẩn không tính. "Xem N chỗ này" (khối tràn / chưa dịch / AI có bản mới) mở panel Bản dịch lọc "Chỉ khối cần xem".
+- **"Tuỳ chọn"** (thu gọn, kèm dòng tóm tắt, VD "Ảnh .zip · 96 ảnh như lúc tải lên", ".cbz · 30 trang đã cắt · Cao · gồm
+  trang chưa dịch"):
+  - Định dạng: "Ảnh trong .zip — để đăng web" (`png_zip`) / ".cbz — đọc bằng app đọc truyện" (`cbz`).
+  - Chất lượng ảnh (chỉ CBZ): Gốc / Cao / Nhẹ = quality 100 (PNG) / 90 / 75; mặc định Cao.
+  - Cách chia ảnh (chỉ hỏi khi số ảnh tải lên ≠ số trang đã cắt; manga 1 ảnh = 1 trang thì hai cách cho cùng kết quả nên
+    ẩn): "Giống lúc tải lên (N ảnh)" (`original_slices`, mặc định) / "Theo trang đã cắt (M ảnh)" (`pages`; M không tính trang ẩn).
+  - "Đưa cả trang chưa dịch vào (ảnh gốc, chưa có bản dịch)" (`include_untranslated`).
+- **Nút "Tải chương (.zip|.cbz)"**: lưu sửa chưa lưu → `POST …/export` → tiến độ ngay tại nút ("Đang xuất 40%…") → xong tự tải đúng
+  1 lần qua link có xác thực, kèm link "Tải xuống" tại chỗ phòng trình duyệt chặn tự tải. Bấm lại sau khi xong = xuất mới.
+  Mở lại drawer khi còn lượt đang chạy → theo dõi tiếp lượt đó (và tự tải khi xong). Drawer đóng lúc xong → thông báo "Đã
+  xuất xong." + "Tải xuống". Hết ngân sách → nút "Tạm dừng — hết ngân sách", tự xuất tiếp khi có lại.
+- **"Lượt xuất trước (n)"** (thu gọn): các lượt gần đây (nhãn như ".zip · như lúc tải lên · Cao"), tải lại, huỷ lượt đang chạy.
+
 ## Find/replace và áp glossary (panel Tìm: "Tìm / Thay", "Glossary")
 
 Chữ thường (không regex), phạm vi trong 1 chương, thay trong `region.translation` và `text_box.text`; box bị đổi có
@@ -48,10 +71,10 @@ Chữ thường (không regex), phạm vi trong 1 chương, thay trong `region.t
 | API (`/api/chapters/:id/…`) | Ghi chú |
 |---|---|
 | `find-replace/preview` `{find, replace, case_sensitive}` | không cần khoá; → `{matches, total, truncated, versions}` |
-| `find-replace/apply` `{…, versions}` | cần khoá chương (423); page đổi sau preview → 409 `preview_stale` |
-| `find-replace/undo` `{batch_id}` | cần khoá; page đã bị sửa tiếp (hoặc đã hoàn tác) → 409 `undo_conflict` |
+| `find-replace/apply` `{…, versions}` | cần khoá chương (423); chương đang cắt trang / xử lý → 409 `chapter_busy`; page đổi sau preview → 409 `preview_stale` |
+| `find-replace/undo` `{batch_id}` | cần khoá, chương không bận (409 `chapter_busy`); page đã bị sửa tiếp (hoặc đã hoàn tác) → 409 `undo_conflict` |
 | `glossary-apply/preview` `{rules: [{source_term, from}]}` | target lấy từ glossary đã gộp (entry series đè entry chung **cùng cặp** nguồn→đích của series; term chỉ có ở cặp khác → 400 `unknown_terms`); chỉ thay trong vùng có `source_text` chứa term nguồn và box gắn vùng đó |
-| `glossary-apply/apply` `{rules, versions}` | như find-replace; hoàn tác qua `find-replace/undo` |
+| `glossary-apply/apply` `{rules, versions}` | như find-replace (cũng 409 `chapter_busy` khi chương đang chạy); hoàn tác qua `find-replace/undo` |
 
 Apply = 1 transaction: mỗi page ghi bản cũ vào `page_state_history` với chung `batch_id`, version +1,
 `state_origin = user` (job AI sau đó không ghi đè, xem luật AI-không-ghi-đè). Undo khôi phục khi version hiện tại =
