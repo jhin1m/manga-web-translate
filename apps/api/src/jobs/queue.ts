@@ -337,7 +337,15 @@ async function applyResult(t: DbLike, job: Job, attempt: number, result: JobResu
           .set({ status: "ready" })
           .where(inArray(pages.id, [...got]));
       const missing = p.page_ids.filter((id) => !got.has(id));
-      if (missing.length) await t.update(pages).set({ status: "failed" }).where(inArray(pages.id, missing));
+      if (missing.length) {
+        await t.update(pages).set({ status: "failed" }).where(inArray(pages.id, missing));
+        // Worker chỉ bỏ page khi AI trả sai định dạng cả lúc dịch riêng page đó (các page khác vẫn lưu) → ghi lỗi
+        // lên job để UI gom page lỗi đúng nguyên nhân.
+        await t
+          .update(jobs)
+          .set({ errorClass: "schema", error: `AI trả sai định dạng ở ${missing.length} trang; các trang khác đã lưu` })
+          .where(eq(jobs.id, job.id));
+      }
       await refreshChapter(t, owner, p.chapter_id);
       return undefined;
     }

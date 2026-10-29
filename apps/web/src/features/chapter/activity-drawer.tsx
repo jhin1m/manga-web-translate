@@ -13,7 +13,7 @@ import { fetchRecentChapters, seriesKeys } from "../series/api.ts";
 import { uploadManager, useUploads } from "../upload/upload-manager.ts";
 import { cancelJob, type JobView, type Progress } from "./api.ts";
 import { ExportRow, useExports } from "./export-panel.tsx";
-import { ERROR_CLASS, providerWait, providerWaitText } from "./job-error.ts";
+import { ERROR_CLASS, failedPageGroups, providerWait, providerWaitText } from "./job-error.ts";
 import { pageLevel } from "./page-status.ts";
 import { formatBytes } from "./text-utils.ts";
 
@@ -190,12 +190,8 @@ function ChapterSection(props: {
   if (!p) return null;
   const busy = p.pages.filter((x) => pageLevel(x.status) === "busy").length;
   const failed = p.pages.filter((x) => x.status === "failed");
-  // Lỗi theo loại (error_class của job trang) → "2 trang: nhà cung cấp AI lỗi".
-  const byClass = new Map<string, number[]>();
-  for (const f of failed) {
-    const k = f.job?.error_class ?? "internal";
-    byClass.set(k, [...(byClass.get(k) ?? []), f.ord + 1]);
-  }
+  // Lỗi theo nguyên nhân (error_class của job trang) → "23 trang lỗi · AI từ chối khoá API: trang 2–4, 6".
+  const groups = failedPageGroups(failed);
   const jobs = chapterJobs(p.jobs);
   const wait = providerWait(p.pages);
   return (
@@ -216,13 +212,14 @@ function ChapterSection(props: {
               )}
             </div>
             <span className="small">
-              {p.pages.length - busy - failed.length}/{p.pages.length} trang xong
-              {busy ? ` · ${busy} trang đang xử lý` : ""}
-              {failed.length ? ` · ${failed.length} trang lỗi` : ""}
+              {p.pages.length} trang: {p.pages.length - busy - failed.length} xong
+              {busy ? ` · ${busy} đang xử lý` : ""}
+              {failed.length ? ` · ${failed.length} lỗi` : ""}
             </span>
-            {[...byClass].map(([k, ords]) => (
-              <span key={k} className="small error">
-                Trang {ords.join(", ")}: {ERROR_CLASS[k] ?? k}
+            {groups.map((g) => (
+              <span key={g.cls} className="small error" title={g.raw ?? undefined}>
+                {g.count} trang lỗi · {g.label}: trang {g.pages}
+                {g.hint ? `. ${g.hint}` : ""}
               </span>
             ))}
             {wait && <span className="small warn-text">{providerWaitText(wait)}</span>}

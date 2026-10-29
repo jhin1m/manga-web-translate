@@ -389,7 +389,8 @@ def test_permanent_4xx_not_retryable_and_transient_is():
     assert classify_status(429) == ("rate_limit", True)
     assert classify_status(503) == ("provider", True)
     assert classify_status(408) == ("provider", True)
-    assert classify_status(401) == ("provider", False)
+    assert classify_status(401) == ("auth", False)
+    assert classify_status(403) == ("auth", False)
     assert classify_status(400) == ("provider", False)
     resp = httpx2.Response(404, request=httpx2.Request("POST", "https://x"))
     fake = FakeAnthropic([anthropic.NotFoundError("no model", response=resp, body=None)])
@@ -422,6 +423,35 @@ def test_ocr_second_attempt_schema_error_falls_back_to_first_result_low_conf():
     missing = next(i for i in res.items if i.source == "")
     assert not missing.empty  # id thiếu không bị coi là crop rỗng
     assert sum(u.input_tokens for u in res.usage) == 7
+
+
+def test_translate_schema_error_splits_batch_then_degrades_page_to_low_conf():
+    from mtl_pipeline.providers.base import OutputTokensExceeded
+
+    def over(req):
+        raise OutputTokensExceeded(
+            "schema",
+            "over guard",
+            usage=[TokenUsage(provider="f", model="m", input_tokens=3, output_tokens=4097)],
+        )
+
+    def bad():
+        return ProviderError(
+            "schema", "bad json", usage=[TokenUsage(provider="f", model="m", input_tokens=2)]
+        )
+
+    # Lô [0..3] vượt guard → tách: trang 0 ok, trang 1 hỏng JSON 2 lần → low_conf, trang 2, 3 ok; lô [4] ok.
+    prov = ScriptedProvider(tr=[over, _tr_all, bad(), bad(), _tr_all, _tr_all, _tr_all])
+    out = translate_chapter(prov, _pages(5, 2), SeriesSettings(), "rolling")
+    assert [[p.ord for p in r.pages] for r in prov.tr_reqs] == [[0, 1, 2, 3], [0], [1], [1], [2], [3], [4]]
+    assert out.items["0"][qualified_id(0, "r0")].translation == "vi:src0-0"
+    assert out.failed == [1]
+    assert all(i.low_conf and i.translation == "" for i in out.items["1"].values())
+    assert out.items["4"][qualified_id(4, "r1")].translation == "vi:src4-1"
+    assert sum(u.input_tokens for u in out.usage) == 3 + 2 + 2 + 10 * 4  # token lô hỏng vẫn vào ledger
+    # Ngữ cảnh cuộn đi tiếp qua trang hỏng: trang 2 thấy bản dịch trang 0.
+    assert prov.tr_reqs[4].context is not None
+    assert prov.tr_reqs[4].context.lines[-1].translation == "vi:src0-1"
 
 
 def test_translate_error_mid_chapter_keeps_usage_of_done_batches():

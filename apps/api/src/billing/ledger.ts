@@ -18,13 +18,14 @@ export const SERVER_SEQ = 0;
 /** Bù trễ đồng hồ/mạng khi so gpu_s với thời gian từ claim. */
 const GPU_SLACK_S = 5;
 
-/** Số call LLM tối đa một attempt có thể dùng (mỗi call được retry 1 lần khi JSON sai). */
+/** Số call LLM tối đa một attempt có thể dùng (mỗi call được retry 1 lần khi JSON sai). Dịch: lô nhiều trang hỏng
+ * JSON/vượt guard token thì worker tách dịch lại từng trang → ≤ n/2 lô nhiều trang × 2 + n trang × 2 = 3n. */
 export function maxLlmCalls(payload: JobPayload): number {
   switch (payload.type) {
     case "page.prepare":
       return 2;
     case "chapter.translate":
-      return 2 * payload.page_ids.length + 2;
+      return 3 * payload.page_ids.length + 2;
     case "page.ocr_region":
       return 4;
     case "chapter.proofread":

@@ -1,0 +1,2 @@
+ALTER TABLE "jobs" DROP CONSTRAINT "jobs_error_class_chk";--> statement-breakpoint
+ALTER TABLE "jobs" ADD CONSTRAINT "jobs_error_class_chk" CHECK ("jobs"."error_class" is null or "jobs"."error_class" in ('provider', 'rate_limited', 'schema', 'invalid_input', 'auth', 'internal'));

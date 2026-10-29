@@ -44,8 +44,11 @@ export type JobStatus = z.infer<typeof JobStatus>;
 /** Trạng thái "đang hoạt động" — idempotency_key chỉ unique trong tập này (partial unique index). */
 export const ACTIVE_JOB_STATUSES = ["queued", "running", "paused_budget"] as const satisfies readonly JobStatus[];
 
-/** provider = 5xx/timeout LLM; rate_limited = 429; schema = JSON LLM sai sau retry; invalid_input = ảnh hỏng/vượt trần. */
-export const ERROR_CLASSES = ["provider", "rate_limited", "schema", "invalid_input", "internal"] as const;
+/**
+ * provider = 5xx/timeout LLM; rate_limited = 429; schema = JSON LLM sai sau retry; invalid_input = ảnh hỏng/vượt trần;
+ * auth = nhà cung cấp AI từ chối khoá API của worker (401/403) — sửa cấu hình rồi chạy lại.
+ */
+export const ERROR_CLASSES = ["provider", "rate_limited", "schema", "invalid_input", "auth", "internal"] as const;
 export const ErrorClass = z.enum(ERROR_CLASSES);
 /**
  * Người dùng vượt hạn mức chi phí ngày: mã lỗi 402 của API và tiền tố `jobs.error` của job LLM bị dừng

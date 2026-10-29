@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { clock, describeJobError, nextQuotaReset, providerWait, providerWaitText } from "./job-error.ts";
+import {
+  clock,
+  describeJobError,
+  failedPageGroups,
+  nextQuotaReset,
+  pageRanges,
+  providerWait,
+  providerWaitText,
+} from "./job-error.ts";
 
 const RAW =
   "gemini 429: 429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota'}}";
@@ -77,5 +85,40 @@ describe("provider wait band", () => {
   it("is null when no page is waiting on the provider", () => {
     expect(providerWait([{ ord: 0, job: job({ error_class: "internal" }) }])).toBeNull();
     expect(providerWait([])).toBeNull();
+  });
+});
+
+describe("failed pages summary", () => {
+  it("collapses consecutive pages into ranges", () => {
+    expect(pageRanges([2, 3, 4, 6, 9, 13, 14, 15, 17, 18])).toBe("2–4, 6, 9, 13–15, 17, 18");
+    expect(pageRanges([5, 1, 1])).toBe("1, 5");
+    expect(pageRanges([])).toBe("");
+  });
+
+  it("groups failed pages by cause, biggest first, and tells what to fix for a rejected API key", () => {
+    const f = (ord: number, error_class: string | null, error: string | null = null) => ({
+      ord,
+      job: { error_class, error },
+    });
+    const g = failedPageGroups([
+      f(1, "auth", "anthropic 401: invalid x-api-key"),
+      f(2, "auth"),
+      f(4, "schema"),
+      f(7, null),
+    ]);
+    expect(g.map((x) => [x.cls, x.count, x.pages])).toEqual([
+      ["auth", 2, "2, 3"],
+      ["schema", 1, "5"],
+      ["internal", 1, "8"],
+    ]);
+    expect(g[0]?.label).toBe("AI từ chối khoá API");
+    expect(g[0]?.hint).toContain("ANTHROPIC_API_KEY");
+    expect(g[0]?.raw).toContain("401");
+    expect(g[1]?.hint).toBeNull();
+  });
+
+  it("a failed job whose API key was rejected says to fix the key, not just retry", () => {
+    const d = describeJobError(job({ status: "failed", error_class: "auth", error: "anthropic 401" }));
+    expect(d?.text).toContain("Khoá API AI của worker");
   });
 });

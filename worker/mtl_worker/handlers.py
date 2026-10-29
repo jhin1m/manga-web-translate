@@ -257,6 +257,10 @@ def handle_translate(ctx: JobContext, deps: Deps) -> dict[str, Any]:
     }
     out = []
     for i, (pg, regions, items) in enumerate(parsed):
+        if pg["ord"] in tr.failed:
+            # Không gửi trang AI trả hỏng: server đánh page lỗi (job ghi lỗi schema), không ghi đè bản AI cũ.
+            log.warning("dịch bỏ trang ord=%s: AI trả sai định dạng cả khi dịch riêng", pg["ord"])
+            continue
         ctx.report("typeset", 0.5 + 0.5 * i / max(1, len(parsed)))
         by_id = {r.id: r for r in regions}
         page_items = tr.items.get(str(pg["ord"]), {})

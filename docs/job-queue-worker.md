@@ -41,6 +41,9 @@ Bước 2 "Dịch" = POST /chapters/:id/translate-prepared → translatePrepared
   (cả chương prepared → rolling, có page lỗi bước 1 → neighbors)
 chapter.translate (tuần tự, lô ≤ 4 trang): dịch + typeset → ai_state theo luật AI-không-ghi-đè
   → page ready/failed; chapter → review | partial_failed
+  Lô lỗi `schema` (JSON sai sau retry, vượt guard token) không fail chương: lô nhiều trang tách dịch lại từng trang;
+  1 trang vẫn hỏng → worker bỏ trang khỏi result → server đánh page `failed` (bản AI cũ giữ nguyên), job `succeeded`
+  nhưng ghi `error_class=schema` để UI gom đúng nguyên nhân. 429/provider/auth vẫn fail cả job.
 ```
 
 Gọi từ route (Phase 4–6): `inJobTx(tx => enqueueIngest | translatePrepared | retranslate | retryFailedPages | enqueueReinpaint |
@@ -254,7 +257,7 @@ tính mọi job đủ điều kiện ngay.
 ## Production (Phase 7)
 
 Kill-switch ngân sách ở claim/heartbeat, dispatcher Modal + bảng `dispatches`, `/healthz`, mode `drain`
-(`mtl-worker --mode drain --dispatch-id …`), guardrail token ra ≤ 2000/call: xem
+(`mtl-worker --mode drain --dispatch-id …`), guardrail token ra ≤ 4096/call: xem
 [deployment-guide.md](./deployment-guide.md).
 
 ## Còn hoãn

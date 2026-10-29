@@ -9,7 +9,9 @@ import { enqueueIngest, inJobTx, retranslate } from "../src/jobs/enqueue.ts";
 import { call, db, seedUser } from "./helpers.ts";
 import {
   addSources,
+  aiState,
   claimJobs,
+  complete,
   doIngest,
   doPrepare,
   doTranslate,
@@ -131,6 +133,28 @@ describe("worker protocol end-to-end", () => {
     expect(after?.version).toBe((before?.version ?? 0) + 2);
     const [ch] = await db.select().from(chapters).where(eq(chapters.id, A.chapterId));
     expect(ch?.status).toBe("review");
+  });
+
+  it("a translate result missing a page fails only that page and tags the job with schema", async () => {
+    const [, second, third] = await pageRows(A.chapterId);
+    if (!second || !third) throw new Error("no pages");
+    await inJobTx((tx) => retranslate(tx, A.userId, A.chapterId, [second.id, third.id]));
+    const [tj] = await claimJobs(token, { caps: ["chapter.translate"] });
+    if (!tj) throw new Error("no translate job");
+    // Worker bỏ page AI trả sai định dạng cả khi dịch riêng; page còn lại vẫn lưu.
+    const res = await complete(token, tj, {
+      type: "chapter.translate",
+      pages: [{ page_id: second.id, ai_state: aiState(second.width, second.height, "Đã dịch") }],
+    });
+    expect(res.status).toBe(200);
+    const after = await pageRows(A.chapterId);
+    expect(after.find((r) => r.id === second.id)?.status).toBe("ready");
+    expect(after.find((r) => r.id === third.id)?.status).toBe("failed");
+    const [job] = await db.select().from(jobs).where(eq(jobs.id, tj.id));
+    expect(job?.status).toBe("succeeded");
+    expect(job?.errorClass).toBe("schema");
+    const [kept] = await db.select().from(pageStates).where(eq(pageStates.pageId, third.id));
+    expect(kept?.aiState?.regions[0]?.translation).not.toBe("Đã dịch"); // bản AI cũ không bị ghi đè
   });
 
   it("blocks re-ingest once a page has user edits → 409", async () => {

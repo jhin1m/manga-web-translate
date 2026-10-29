@@ -204,12 +204,11 @@ modal deploy modal_app.py                                 # URL app `mtl-drain` 
 - Mở lại: hết vượt (sang ngày/tháng mới hoặc nâng ngưỡng + restart) → `mtl-jobs` tự `paused_budget → queued`;
   hoặc `pnpm budget-resume` (in trạng thái; `--force` mở lại kể cả khi còn vượt).
 - Cảnh báo 50/80/100% mỗi mốc 1 lần/kỳ (ngày, tháng) qua ntfy.
-> **⚠️ Bắt buộc sau khi đo có key LLM:** trần guardrail mặc định **2000 token ra/call** (đúng spec) thấp hơn
-> `max_output_tokens` của lô dịch (tới **4096**, `TRANSLATE_MAX_OUTPUT_TOKENS`) → lô dịch 4 trang dài có thể bị
-> loại (`schema`) dù hợp lệ. Chạy golden set/`mtl bench`, xem phân bố `output_tokens` mỗi call dịch rồi đặt
-> `MTL_MAX_OUTPUT_TOKENS_PER_CALL` (env worker Mac + Modal secret) cho phù hợp, tối đa 4096.
+> Trần guardrail mặc định **4096 token ra/call** (= `TRANSLATE_MAX_OUTPUT_TOKENS`, = clamp server). Mặc định cũ
+> 2000 loại cả lô dịch 4 trang hợp lệ (đo thật: 2022 token) → cả chương `chapter.translate` fail. Muốn chặt hơn thì
+> đặt `MTL_MAX_OUTPUT_TOKENS_PER_CALL` (env worker Mac + Modal secret), nhưng đừng thấp hơn token ra thật của lô dịch.
 
-- Worker: thinking tắt, `max_output_tokens` theo loại call, **assert token ra ≤ 2000/call**
+- Worker: thinking tắt, `max_output_tokens` theo loại call, **assert token ra ≤ 4096/call**
   (`MTL_MAX_OUTPUT_TOKENS_PER_CALL`) → vượt = lỗi `schema`, không gọi lại trong job (hàng đợi tính attempt). Server
   vẫn clamp riêng (`apps/api/src/billing/prices.ts`).
 

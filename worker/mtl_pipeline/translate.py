@@ -36,6 +36,8 @@ class ChapterTranslation:
     items: dict[str, dict[str, TranslateItem]]  # page_ord(str) → region_id → item
     usage: list[TokenUsage]
     context_used: ContextMode
+    # ord trang AI trả hỏng cả khi dịch riêng (items rỗng + low_conf).
+    failed: list[int] = field(default_factory=list)
 
 
 def qualified_id(page_ord: int, region_id: str) -> str:
@@ -145,15 +147,28 @@ def translate_chapter(
     ctx = initial_context.model_copy(deep=True) if initial_context else RollingContext()
     out: dict[str, dict[str, TranslateItem]] = {}
     usage: list[TokenUsage] = []
-    for batch in batches:
+    failed: list[int] = []
+    while batches:
+        batch = batches.pop(0)
         try:
             items, notes, u = _translate_once(provider, batch, settings, ctx if mode == "rolling" else None)
         except ProviderError as e:
-            e.usage = usage + e.usage  # giữ token của các lô đã xong
-            raise
+            if e.error_class != "schema":
+                e.usage = usage + e.usage  # giữ token của các lô đã xong
+                raise  # 429 / provider / auth: để hàng đợi backoff hoặc fail
+            # JSON sai hoặc vượt guard token: lỗi của riêng lô này, không fail cả chương (job chạy lại = trả tiền
+            # dịch lại mọi lô đã xong, mà lô hỏng thường hỏng tiếp).
+            usage.extend(e.usage)
+            if len(batch) > 1:
+                batches[:0] = [[p] for p in batch]  # tách từng trang: đầu ra mỗi call nhỏ hơn
+                continue
+            # 1 trang vẫn hỏng → ghi vào `failed` (handler bỏ trang khỏi kết quả → page lỗi riêng, bản AI cũ giữ
+            # nguyên); items rỗng + low_conf để ngữ cảnh cuộn đi tiếp.
+            failed.append(batch[0].ord)
+            items, notes, u = {r.id: TranslateItem(id=r.id, low_conf=True) for r in batch[0].regions}, "", []
         usage.extend(u)
         for p in batch:
             out[str(p.ord)] = {r.id: items[r.id] for r in p.regions}
         if mode == "rolling":
             ctx = update_context(ctx, batch, items, notes)
-    return ChapterTranslation(items=out, usage=usage, context_used=mode)
+    return ChapterTranslation(items=out, usage=usage, context_used=mode, failed=failed)

@@ -183,6 +183,16 @@ describe("schema / internal / invalid_input", () => {
     const [ch] = await db.select().from(chapters).where(eq(chapters.id, S.chapterId));
     expect(ch?.status).toBe("partial_failed");
   });
+
+  it("auth (rejected API key) fails immediately without consuming more attempts or tripping the breaker", async () => {
+    const { token } = await chapterWithPages("eauth", 1);
+    const j = await claimOne(token);
+    expect((await failJob(token, j, "auth")).status).toBe(200);
+    const row = await jobRow(j.id);
+    expect(row.status).toBe("failed");
+    expect(row.errorClass).toBe("auth");
+    expect(row.attempts).toBe(1);
+  });
 });
 
 describe("usage clamp", () => {

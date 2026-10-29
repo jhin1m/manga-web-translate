@@ -3,7 +3,7 @@
  * - provider / rate_limited: KHÔNG tính attempt (hoàn lại lượt đã cộng lúc claim), đếm provider_retries ≤ 20,
  *   run_after = max(Retry-After, 30s·2^min(n,5)).
  * - schema / internal: tính attempt, tối đa max_attempts, backoff 30s·2^n.
- * - invalid_input: failed ngay.
+ * - invalid_input / auth: failed ngay (ảnh hỏng, khoá API bị từ chối — thử lại vô ích).
  */
 import type { ErrorClass } from "@mtl/shared";
 
@@ -33,6 +33,7 @@ export function decideFailure(
       if (job.attempts >= job.maxAttempts) return { kind: "failed" };
       return { kind: "requeue", delayS: backoffSeconds(job.attempts), refundAttempt: false, providerRetry: false };
     case "invalid_input":
+    case "auth":
       return { kind: "failed" };
   }
 }

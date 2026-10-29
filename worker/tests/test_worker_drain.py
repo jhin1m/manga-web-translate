@@ -15,7 +15,7 @@ import pytest
 from mtl_pipeline.models import ort_providers
 from mtl_pipeline.ocr import ocr_page
 from mtl_pipeline.providers.anthropic import AnthropicProvider
-from mtl_pipeline.providers.base import OutputTokensExceeded, guard_output_tokens
+from mtl_pipeline.providers.base import OUTPUT_TOKENS_GUARD, OutputTokensExceeded, guard_output_tokens
 from mtl_pipeline.schema import BBox, OcrCrop, OcrRequest, Region, TokenUsage
 from mtl_worker import dispatch_auth
 from mtl_worker.client import WorkerClient
@@ -170,11 +170,12 @@ def _usage(out: int) -> TokenUsage:
 
 
 def test_guard_output_tokens_limit():
-    guard_output_tokens(_usage(2000))
+    assert OUTPUT_TOKENS_GUARD == 4096  # lô dịch hợp lệ (~2000+ token tiếng Việt) không bị loại
+    guard_output_tokens(_usage(OUTPUT_TOKENS_GUARD))
     with pytest.raises(OutputTokensExceeded) as ei:
-        guard_output_tokens(_usage(2001))
+        guard_output_tokens(_usage(OUTPUT_TOKENS_GUARD + 1))
     assert ei.value.error_class == "schema" and not ei.value.retry_in_job
-    assert ei.value.usage[0].output_tokens == 2001  # token đã trả tiền vẫn vào ledger
+    assert ei.value.usage[0].output_tokens == OUTPUT_TOKENS_GUARD + 1  # token đã trả tiền vẫn vào ledger
 
 
 def test_provider_over_guard_raises_and_ocr_does_not_retry():
@@ -187,7 +188,7 @@ def test_provider_over_guard_raises_and_ocr_does_not_retry():
             self.calls += 1
             return SimpleNamespace(
                 content=[SimpleNamespace(type="text", text='{"items": []}')],
-                usage=SimpleNamespace(input_tokens=500, output_tokens=3000),
+                usage=SimpleNamespace(input_tokens=500, output_tokens=5000),
                 stop_reason="end_turn",
             )
 
@@ -203,7 +204,7 @@ def test_provider_over_guard_raises_and_ocr_does_not_retry():
     with pytest.raises(OutputTokensExceeded) as ei:
         ocr_page(provider, img, regions, 0)
     assert fake.calls == 1
-    assert sum(u.output_tokens for u in ei.value.usage) == 3000
+    assert sum(u.output_tokens for u in ei.value.usage) == 5000
 
 
 # ---------- token + onnxruntime providers ----------

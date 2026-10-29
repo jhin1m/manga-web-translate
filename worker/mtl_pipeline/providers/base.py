@@ -37,7 +37,8 @@ PROOFREAD_MAX_OUTPUT_TOKENS = 3072
 PROOFREAD_OUTPUT_TOKENS_GUARD = PROOFREAD_MAX_OUTPUT_TOKENS + 256
 # Guardrail chi phí (red team #14): token ra thật của 1 call vượt ngưỡng (thinking lọt, model lặp) → lỗi schema
 # không thử lại trong job; hàng đợi tính attempt. Server vẫn clamp riêng (apps/api/src/billing/prices.ts).
-OUTPUT_TOKENS_GUARD = int(os.environ.get("MTL_MAX_OUTPUT_TOKENS_PER_CALL", "2000"))
+# Mặc định = trần lô dịch: lô 4 trang/40 khối tiếng Việt hợp lệ đã vượt 2000 → cả chương fail.
+OUTPUT_TOKENS_GUARD = int(os.environ.get("MTL_MAX_OUTPUT_TOKENS_PER_CALL", str(TRANSLATE_MAX_OUTPUT_TOKENS)))
 
 OCR_SCHEMA: dict[str, Any] = {
     "type": "object",
@@ -234,6 +235,8 @@ def classify_status(status: int | None) -> tuple[ErrorClass, bool]:
     """HTTP status → (lớp lỗi, có nên thử lại)."""
     if status == 429:
         return "rate_limit", True
+    if status in (401, 403):
+        return "auth", False
     if status is None or status in (408, 409) or status >= 500:
         return "provider", True
     return "provider", False

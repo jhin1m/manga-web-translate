@@ -39,7 +39,7 @@ class JobAborted(RuntimeError):
 class JobFailure(Exception):
     """Lỗi đã phân loại gửi lên `fail`."""
 
-    error_class: str  # provider | rate_limited | schema | invalid_input | internal
+    error_class: str  # provider | rate_limited | schema | invalid_input | auth | internal
     message: str
     retry_after_s: float | None = None
     partial: dict[str, Any] | None = None
@@ -50,9 +50,11 @@ class JobFailure(Exception):
 
 
 def classify_provider_error(e: ProviderError) -> JobFailure:
-    """Map lớp lỗi pipeline → ErrorClass dùng chung. Lỗi 4xx vĩnh viễn (sai key, model không có) → internal:
-    tính attempt và dừng sau max_attempts thay vì thử lại 20 lần như lỗi tạm thời."""
-    if not e.retryable:
+    """Map lớp lỗi pipeline → ErrorClass dùng chung. Key bị từ chối → auth (server dừng job ngay). Lỗi 4xx vĩnh viễn
+    khác (model không có, request sai) → internal: tính attempt và dừng sau max_attempts thay vì thử lại 20 lần."""
+    if e.error_class == "auth":
+        cls = "auth"
+    elif not e.retryable:
         cls = "internal"
     else:
         cls = {"rate_limit": "rate_limited", "provider": "provider", "schema": "schema"}[e.error_class]

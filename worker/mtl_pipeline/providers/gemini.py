@@ -75,6 +75,8 @@ class GeminiProvider:
         except errors.APIError as e:
             headers = getattr(getattr(e, "response", None), "headers", None) or {}
             error_class, retryable = classify_status(e.code)
+            if "API_KEY_INVALID" in str(e):  # Gemini báo key sai bằng 400, không phải 401
+                error_class = "auth"
             raise ProviderError(
                 error_class,
                 f"gemini {e.code}: {e}",

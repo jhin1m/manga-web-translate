@@ -207,8 +207,14 @@ def test_rate_limit_is_reported_as_rate_limited_with_partial_and_usage():
 
 def test_permanent_provider_error_counts_as_internal():
     c = FakeClient()
-    run_job(c, prepare_job(), HANDLERS, Deps(FakeProvider(ProviderError("provider", "401", retryable=False))))
+    run_job(c, prepare_job(), HANDLERS, Deps(FakeProvider(ProviderError("provider", "404", retryable=False))))
     assert c.calls[-1][1]["error_class"] == "internal"
+
+
+def test_rejected_api_key_is_auth():
+    c = FakeClient()
+    run_job(c, prepare_job(), HANDLERS, Deps(FakeProvider(ProviderError("auth", "401", retryable=False))))
+    assert c.calls[-1][1]["error_class"] == "auth"
 
 
 def test_invalid_image_is_invalid_input():

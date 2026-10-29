@@ -48,7 +48,8 @@ RegionKind = Literal["bubble", "text_bubble", "text_free"]
 Polarity = Literal["dark_on_light", "light_on_dark"]
 MaskSource = Literal["model", "polarity_fallback", "none"]
 ContextMode = Literal["rolling", "neighbors", "none"]
-ErrorClass = Literal["provider", "rate_limit", "schema"]
+# auth = nhà cung cấp từ chối khoá API (401/403, key sai) — vĩnh viễn, thử lại vô ích.
+ErrorClass = Literal["provider", "rate_limit", "schema", "auth"]
 
 
 class BBox(BaseModel):

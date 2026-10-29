@@ -7,6 +7,7 @@
     "rate_limited",
     "schema",
     "invalid_input",
+    "auth",
     "internal"
   ]
 }
