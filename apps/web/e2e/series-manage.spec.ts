@@ -87,14 +87,16 @@ test("series tabs keep the series header and mark the current tab", async ({ pag
   await expect(page.getByRole("form", { name: "Thêm từ vào glossary" })).toBeVisible();
 });
 
-test("new series picks source language; settings edit target language, page format and ignored text", async ({
+test("new series picks the comic kind (source language); settings edit target language, page format and ignored text", async ({
   page,
 }) => {
   await login(page);
   await page.goto("/");
   await page.getByRole("button", { name: "+ Series mới" }).click();
-  await page.getByLabel("Tên series mới").fill("Manga Nhật e2e");
-  await page.getByLabel("Ngôn ngữ gốc").selectOption("ja");
+  const form = page.getByRole("form", { name: "Tạo series mới" });
+  await form.getByLabel("Tên series").fill("Manga Nhật e2e");
+  await form.getByText("Nhật · từng trang, dịch thẳng").click();
+  await expect(form.getByRole("radio", { name: /^Manga Nhật/ })).toBeChecked();
   await page.getByRole("button", { name: "Tạo series" }).click();
   await expect(page.getByRole("heading", { level: 1, name: "Manga Nhật e2e" })).toBeVisible();
   await expect(page.getByText(/Nhật → Việt/)).toBeVisible();
