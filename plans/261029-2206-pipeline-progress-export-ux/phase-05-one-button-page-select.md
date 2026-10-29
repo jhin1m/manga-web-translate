@@ -1,6 +1,6 @@
 ---
 title: "Phase 5: 1 nút Dịch chương + chọn trang + nhãn theo lô"
-status: todo
+status: completed
 effort: 8h
 ---
 
@@ -140,11 +140,18 @@ Lệnh hẹp: `pnpm --filter @mtl/web exec vitest run src/features/chapter/prima
 
 ## Success Criteria
 
-- [ ] Test unit xanh; e2e xanh; `grep -n "Bước 1\|Bước 2"` trên các file P5 sở hữu (bảng trên) rỗng — gồm cả comment; file ngoài bảng (VD `source-rail-model.ts`) chỉ còn comment, không chuỗi hiển thị.
-- [ ] Kiểm tay: chương mới bấm "Dịch chương" 1 lần → tự chạy tới "Chờ duyệt"; thumbnail "Chờ lượt · lô 3" → "Đang dịch"
+- [x] Test unit xanh; e2e xanh; `grep -n "Bước 1\|Bước 2"` trên các file P5 sở hữu (bảng trên) rỗng — gồm cả comment; file ngoài bảng (VD `source-rail-model.ts`) chỉ còn comment, không chuỗi hiển thị.
+      — Unit toàn repo xanh; e2e 36/36 (2 lần liền). Chuỗi hiển thị cuối ở `source-viewer.tsx`, `source-rail.tsx` đã đổi
+      ("bỏ qua ảnh này khi cắt trang"). e2e từng chập chờn do rate limit better-auth `/get-session` (đo trace: HEAD và bản
+      mới cùng 124 lần gọi, từng test giống hệt; bộ đếm 100 chỉ reset sau ≥ 10s lặng) → `apps/api/src/auth.ts` bỏ giới hạn
+      `/get-session` (test `signup.test.ts` "never rate limits session reads").
+- [x] Kiểm tay: chương mới bấm "Dịch chương" 1 lần → tự chạy tới "Chờ duyệt"; thumbnail "Chờ lượt · lô 3" → "Đang dịch"
       → yên; chip "Đang dịch · x/y trang · lô k/n".
-- [ ] Menu ⋯ "Chỉ xoá chữ + OCR" dừng ở "Chờ dịch"; chọn 3 trang → "Dịch 3 trang" → chỉ 3 trang đổi trạng thái.
-- [ ] Đóng drawer Xuất khi đang xuất → xong có toast "Tải xuống".
+      — e2e `full-flow` (1 click → 3 trang Xong, Chờ duyệt); nhãn thumbnail/chip phủ bằng unit `page-status.test.ts`, `status.test.ts`. Chưa kiểm tay trên trình duyệt với chương 33 trang.
+- [x] Menu ⋯ "Chỉ xoá chữ + OCR" dừng ở "Chờ dịch"; chọn 3 trang → "Dịch 3 trang" → chỉ 3 trang đổi trạng thái.
+      — e2e `upload-chapter` (Ctrl-click + Shift-click → 3 trang Xong, 6 trang vẫn Chờ dịch).
+- [x] Đóng drawer Xuất khi đang xuất → xong có toast "Tải xuống".
+      — e2e `full-flow` (lượt xuất chờ trong hàng, Esc đóng drawer, worker xuất → thông báo "Đã xuất xong" + nút "Tải xuống").
 
 ## Risk + rollback
 

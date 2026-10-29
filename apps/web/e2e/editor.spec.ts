@@ -307,7 +307,7 @@ test("opening a chapter while it translates holds the lock; the busy page is rea
   // Drawer Hoạt động liệt kê job dịch chương đang chờ.
   await page.getByRole("button", { name: /^Hoạt động/ }).click();
   const activity = page.getByRole("dialog", { name: "Hoạt động" });
-  await expect(activity.locator('[data-job-type="chapter.translate"]')).toContainText("Dịch chương", {
+  await expect(activity.locator('[data-job-type="chapter.translate"]')).toContainText("Dịch lô trang", {
     timeout: 15_000,
   });
   await page.keyboard.press("Escape");

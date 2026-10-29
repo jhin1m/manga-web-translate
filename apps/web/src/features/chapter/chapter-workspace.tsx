@@ -2,11 +2,13 @@
  * Màn chương = editor gộp (`/s/:s/c/:c?page=`): thanh trên (+ băng cảnh báo khi có) | rail công cụ · panel ngữ
  * cảnh (mỗi lúc 1 panel: công cụ đang chọn / Bản dịch cả chương / Tìm–Thay · Glossary; bấm lại icon đang mở thì thu) ·
  * canvas từng trang · cột trang. Chương chưa có page (nháp, đang cắt trang, cắt lỗi): cột trang là từng ảnh gốc (xoá /
- * khôi phục trước Bước 1), canvas là ảnh đang chọn + tiến độ upload + vùng thả để tải tiếp. Upload xong không tự chạy: "Bước 1" = cắt trang + xoá chữ + OCR, xong dừng ở "Chờ dịch" (xem ảnh
- * sạch, sửa mask) tới khi bấm "Bước 2 · Dịch".
+ * khôi phục trước khi cắt trang), canvas là ảnh đang chọn + tiến độ upload + vùng thả để tải tiếp. Upload xong không
+ * tự chạy: "Dịch chương" = cắt trang → xoá chữ + OCR → dịch theo lô, nối một mạch; menu ⋯ "Chỉ xoá chữ + OCR" dừng ở
+ * "Chờ dịch" (xem ảnh sạch, sửa mask) tới khi bấm "Dịch chương". ⌘/Ctrl/Shift-click thumbnail chọn trang → "Dịch N trang".
  *
  * Trạng thái chương chỉ ở chip thanh trên (+ rail theo trang). Kết quả thao tác (dịch lại, áp kiểu…) là thông báo nổi
- * trên canvas, tự ẩn; Bước 1 / Bước 2 thành công không báo gì thêm (chip đã đổi), Bước 1 chỉ báo khi có ảnh bị loại.
+ * trên canvas, tự ẩn; "Dịch chương" thành công không báo gì thêm (chip đã đổi), chỉ báo khi có ảnh bị loại. Lượt xuất
+ * xong lúc drawer Xuất đã đóng → thông báo kèm nút "Tải xuống".
  *
  * Drawer phải: Xuất (nút "Xuất" hoặc `?drawer=export` từ "Xuất lại" ở home), Hoạt động, Phím tắt (`?`). Chế độ xem
  * (chapterStore.viewMode): nút "Xem gốc" + giữ `O`, Chia đôi trong menu ⋯. Thanh nổi cạnh khối đang chọn (Sửa chữ ·
@@ -58,12 +60,13 @@ import { CanvasPager, CanvasZoom } from "./canvas-controls.tsx";
 import { ChapterTopbar, type EditAccess, LockBand } from "./chapter-topbar.tsx";
 import { ContextPanel, type FocusRequest } from "./context-panel.tsx";
 import { ExportDrawer } from "./export-drawer.tsx";
-import { isExportActive, useExports } from "./export-panel.tsx";
+import { isExportActive, triggerDownload, useExports } from "./export-panel.tsx";
 import { FindReplacePanel } from "./FindReplace.tsx";
 import { providerWait, providerWaitText } from "./job-error.ts";
 import { readPanel, writePanel } from "./layout-prefs.ts";
 import { PageRail } from "./page-rail.tsx";
-import { needsReview, pageLevel, pageLevelOf } from "./page-status.ts";
+import { clickSelect, EMPTY_SELECTION, type Selection, selectionIds } from "./page-selection.ts";
+import { isPageBusy, needsReview, pageLevel } from "./page-status.ts";
 import { type ChapterCommand, primaryAction } from "./primary-action.ts";
 import { ProofreadPanel } from "./proofread-panel.tsx";
 import { SelectPanel } from "./select-panel.tsx";
@@ -91,13 +94,15 @@ type Props = { seriesId: string; chapterId: string; page?: string; drawer?: "exp
 /** Mảng rỗng cố định (series chưa tải) — không đổi tham chiếu mỗi lần render. */
 const NO_IGNORE: readonly string[] = [];
 /**
- * `untilStable`: giữ tới khi chương chạy xong lượt xử lý vừa bắt đầu (ảnh bị loại khi Dịch chương). `actions`: nút
- * kèm thông báo (vd. "Hoàn tác", "Luôn bỏ ở series này" sau khi xoá ảnh).
+ * `untilStable`: giữ tới khi chương chạy xong lượt xử lý vừa bắt đầu (ảnh bị loại khi Dịch chương). `sticky`: info
+ * không tự ẩn (VD "Đã xuất xong" + nút tải). `actions`: nút kèm thông báo (vd. "Hoàn tác", "Luôn bỏ ở series này" sau
+ * khi xoá ảnh).
  */
 type Notice = {
   tone: "info" | "warn" | "danger";
   text: string;
   untilStable?: boolean;
+  sticky?: boolean;
   actions?: { label: string; run(): void }[];
   /** Nhóm thông báo — "skip": khôi phục ảnh/trang chỉ đóng thông báo "Đã xoá / Đã ẩn…", không đụng lỗi khác. */
   key?: "skip" | "reorder";
@@ -111,9 +116,6 @@ const rejectedNotice = (accepted: number, rejected: Rejected[]): Notice => ({
     .map((x) => `#${x.ord + 1} ${REJECT_REASON[x.reason]}`)
     .join(", ")}.`,
 });
-
-/** Progress trả kèm `translate_queued` (trang còn chờ lượt trong chuỗi dịch). */
-type QueuedPage = ProgressPage & { translate_queued?: boolean };
 
 /**
  * Store editor/chương dùng chung cả tab: phiên mới bắt đầu sạch. Reset ở layout effect (sau khi cây của chương cũ đã
@@ -138,9 +140,9 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
   const pageIds = useMemo(() => pages.map((p) => p.id), [pages]);
   // Giữ khoá cả lúc đang dịch; chỉ chưa có trang / đang cắt trang thì chưa có gì để sửa.
   const lockable = !!status && status !== "draft" && status !== "ingesting";
-  // Trang đang xử lý hoặc còn chờ lượt trong chuỗi dịch (`translate_queued`, có từ progress) → chỉ xem.
+  // Trang đang xử lý hoặc còn chờ lượt trong chuỗi dịch (`translate_queued`) → chỉ xem.
   const busyKey = pages
-    .filter((p) => pageLevelOf(p) === "busy" || (p as QueuedPage).translate_queued)
+    .filter(isPageBusy)
     .map((p) => p.id)
     .join(",");
   const busyPageIds = useMemo(() => new Set(busyKey ? busyKey.split(",") : []), [busyKey]);
@@ -353,6 +355,7 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
         review,
         preparing: (counts.pending ?? 0) + (counts.preparing ?? 0),
         upload,
+        run: data.progress?.chapter.run,
       })
     : null;
   const access: EditAccess = {
@@ -374,15 +377,42 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
       else if (busySeen.current) setNotice(null);
       return;
     }
-    if (notice.tone !== "info") return;
+    if (notice.tone !== "info" || notice.sticky) return;
     const t = setTimeout(() => setNotice(null), NOTICE_MS);
     return () => clearTimeout(t);
   }, [notice, settled]);
 
+  // ---- Chọn trang để dịch riêng (⌘/Ctrl/Shift-click ở cột trang) ----
+  const [pageSel, setPageSel] = useState<Selection>(EMPTY_SELECTION);
+  const selectedIds = selectionIds(pageSel, pages);
+  const selectedKey = selectedIds.join(",");
+  const selectedSet = useMemo(() => new Set(selectedKey ? selectedKey.split(",") : []), [selectedKey]);
+  const onSelectPage = useCallback(
+    (id: string, mod: { shift: boolean; toggle: boolean }) => setPageSel((s) => clickSelect(s, pages, id, mod)),
+    [pages],
+  );
+  const clearSelection = useCallback(() => setPageSel(EMPTY_SELECTION), []);
+  // Bấm thường 1 thumbnail = mở trang đó và bỏ chọn.
+  const pickPage = useCallback(
+    (id: string) => {
+      setPageSel(EMPTY_SELECTION);
+      go(id);
+    },
+    [go],
+  );
+
   const { runAi } = session;
   const action = useMutation({
     mutationFn: async (
-      kind: "retry" | "retranslate" | "retranslate-page" | "cancel" | "commit" | "translate",
+      kind:
+        | "retry"
+        | "retranslate"
+        | "retranslate-page"
+        | "translate-pages"
+        | "cancel"
+        | "commit"
+        | "prepare_only"
+        | "translate",
     ): Promise<Notice | null> => {
       const info = (text: string): Notice => ({ tone: "info", text });
       if (kind === "cancel") return info(`Đã huỷ ${(await cancelChapter(chapterId)).cancelled} job.`);
@@ -392,13 +422,26 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
       }
       if (kind === "retranslate-page") {
         const id = editorStore.getState().pageId;
-        const ord = pages.find((p) => p.id === id)?.ord ?? 0;
+        const page = pages.find((p) => p.id === id);
         if (!id) return info("Chưa chọn trang.");
         await runAi(() => retranslate(chapterId, [id]));
-        return info(`Đã xếp dịch lại trang ${ord + 1} (chỉnh sửa tay được giữ nguyên).`);
+        const n = (page?.ord ?? 0) + 1;
+        return info(
+          page?.status === "prepared"
+            ? `Đã xếp dịch trang ${n}.`
+            : `Đã xếp dịch lại trang ${n} (chỉnh sửa tay được giữ nguyên).`,
+        );
+      }
+      if (kind === "translate-pages") {
+        if (!selectedIds.length) return info("Chưa chọn trang.");
+        const sent = pageSel;
+        await runAi(() => retranslate(chapterId, selectedIds));
+        // Chọn lại trong lúc chờ server → giữ lựa chọn mới.
+        setPageSel((s) => (s === sent ? EMPTY_SELECTION : s));
+        return info(`Đã xếp dịch ${selectedIds.length} trang (chỉnh sửa tay được giữ nguyên).`);
       }
       if (kind === "translate") {
-        // Bước 2: chip đã đổi sang "Đang dịch" — không báo thêm.
+        // Chip đã đổi sang "Đang dịch" — không báo thêm.
         await runAi(() => translatePrepared(chapterId));
         return null;
       }
@@ -406,13 +449,22 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
         await runAi(() => retranslate(chapterId));
         return info("Đã xếp dịch lại cả chương (chỉnh sửa tay được giữ nguyên).");
       }
-      // Bước 1 thành công: chip đã nói "Bước 1 · …" — chỉ báo khi có ảnh bị loại.
-      const r = await commitChapter(chapterId);
+      // Thành công: chip đã đổi ("Đang cắt trang", …) — chỉ báo khi có ảnh bị loại.
+      const r = await commitChapter(chapterId, kind === "prepare_only" ? "prepared" : "translated");
       return r.rejected.length ? rejectedNotice(r.accepted, r.rejected) : null;
     },
     onMutate: () => notify(null),
     onSuccess: notify,
-    onError: (e) => notify({ tone: "danger", text: errorMessage(e) }),
+    onError: (e) =>
+      notify({
+        tone: "danger",
+        text:
+          e instanceof ApiError && e.body.error === "translate_running"
+            ? "Đang có lượt dịch — chờ lượt này xong hoặc huỷ rồi thử lại."
+            : e instanceof ApiError && e.body.error === "page_not_prepared"
+              ? "Có trang chưa xoá chữ + OCR xong — chạy lại trang lỗi trước rồi dịch."
+              : errorMessage(e),
+      }),
     onSettled: data.refresh,
   });
   // "Áp kiểu này cho khối cùng loại trong chương" (panel Chọn hỏi xác nhận trước): page active = 1 bước undo; page
@@ -469,6 +521,9 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
     onError: (e) => notify({ tone: "danger", text: errorMessage(e) }),
   });
 
+  const { mutate: runAction } = action;
+  const translateSelected = useCallback(() => runAction("translate-pages"), [runAction]);
+
   const onCommand = (cmd: ChapterCommand) => {
     if (cmd === "export") return setDrawer("export");
     if (cmd === "upload") return;
@@ -494,7 +549,7 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
   const sourceId = sources.some((it) => it.id === sourcePick) ? sourcePick : (sources[0]?.id ?? null);
   const sourceIdx = sources.findIndex((it) => it.id === sourceId);
   const sourcesEditable = status === "draft" || (status === "partial_failed" && pages.length === 0);
-  // Bước 1 đang cắt trang → cột ảnh gốc hiện bước + đếm của job ingest (progress null = còn xếp hàng).
+  // Đang cắt trang → cột ảnh gốc hiện bước + đếm của job ingest (progress null = còn xếp hàng).
   const ingestJob = data.progress?.jobs.find((j) => j.type === "chapter.ingest" && j.status === "running");
   const ingest: IngestView | undefined =
     status !== "ingesting"
@@ -597,7 +652,7 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
     },
     [sources, sourceReorder.mutate, notify],
   );
-  // ---- Xoá (ẩn) / khôi phục trang sau Bước 1 ----
+  // ---- Xoá (ẩn) / khôi phục trang đã cắt ----
   // Ẩn/khôi phục trang chỉ khi chương ổn định (server trả 409 `chapter_busy` lúc đang chạy).
   const pagesEditable = settled && session.lockEnabled && session.lock.state.status === "held";
   const pageSkip = useMutation({
@@ -690,11 +745,11 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
   const conflictCount = useEditor((s) => s.conflicts.length);
   const railDisabled: Partial<Record<RailTarget, string>> = {};
   for (const t of ["text", "brush", "eraser", "ocr"] as const) {
-    if (sourceMode) railDisabled[t] = "Dùng được khi chương đã cắt trang (sau Bước 1)";
+    if (sourceMode) railDisabled[t] = "Dùng được khi chương đã cắt trang";
     else if (readOnly) railDisabled[t] = "Đang chỉ xem";
   }
   if (!canTools) railDisabled.find = "Dùng được khi chương dịch xong";
-  if (!canTools) railDisabled.proofread = "Dùng được khi chương đã dịch (sau Bước 2)";
+  if (!canTools) railDisabled.proofread = "Dùng được khi chương đã dịch";
   // Panel Tìm / Hiệu đính nhớ từ lần trước nhưng chương chưa dịch xong → hiện panel công cụ (không đổi lựa chọn đã nhớ).
   const view = (panel === "find" || panel === "proofread") && !canTools ? "tool" : panel;
   const onRail = (t: RailTarget) => {
@@ -755,6 +810,8 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
         if (s.selection) s.apply(deleteBox(s.selection));
         return;
       case "escape":
+        // Esc bỏ cả chọn trang (cột trang) lẫn chọn khối.
+        setPageSel(EMPTY_SELECTION);
         return void s.select(null);
       case "help":
         setDrawer((d) => (d === "help" ? null : "help"));
@@ -769,7 +826,28 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
 
   // ---- Drawer ----
   const uploadCount = useUploadCount();
-  const exportsActive = (useExports(chapterId).q.data?.exports ?? []).filter((x) => isExportActive(x.status)).length;
+  const exportList = useExports(chapterId).q.data?.exports;
+  const exportsActive = (exportList ?? []).filter((x) => isExportActive(x.status)).length;
+  // Lượt xuất xong lúc drawer Xuất đóng (panel Xuất không còn tự tải) → thông báo kèm nút tải. Lượt đã xong lúc mở
+  // màn chương (lần tải danh sách đầu) không báo lại.
+  const exportsDone = useRef<Set<string> | null>(null);
+  useEffect(() => {
+    if (!exportList) return;
+    const done = exportList.filter((x) => x.status === "succeeded");
+    const seen = exportsDone.current;
+    exportsDone.current = new Set(done.map((x) => x.id));
+    if (!seen || drawerRef.current === "export") return;
+    const fresh = done.find((x) => !seen.has(x.id) && x.download_url);
+    const url = fresh?.download_url;
+    if (url) {
+      notify({
+        tone: "info",
+        sticky: true,
+        text: "Đã xuất xong.",
+        actions: [{ label: "Tải xuống", run: () => triggerDownload(url) }],
+      });
+    }
+  }, [exportList, notify]);
   const activityCount = uploadCount + chapterActivityCount(data.progress, exportsActive);
   const closeDrawer = useCallback(() => setDrawer(null), []);
 
@@ -950,7 +1028,7 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
                   {status === "ingesting"
                     ? "Đang ghép và cắt trang theo bóng thoại…"
                     : status === "partial_failed"
-                      ? `Cắt trang lỗi${ingestError ? `: ${ingestError}` : ""} — bấm "Chạy lại bước 1" để cắt lại từ ảnh đã tải.`
+                      ? `Cắt trang lỗi${ingestError ? `: ${ingestError}` : ""} — bấm "Cắt lại trang" để cắt lại từ ảnh đã tải.`
                       : "Chưa có trang."}
                 </p>
               )}
@@ -1009,8 +1087,13 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
           activeId={activeId}
           overflow={overflowPages}
           editable={pagesEditable && !pageSkip.isPending}
-          onPick={go}
+          onPick={pickPage}
           onSkip={skipPage}
+          selected={selectedSet}
+          translating={action.isPending}
+          onSelect={onSelectPage}
+          onTranslateSelected={translateSelected}
+          onClearSelection={clearSelection}
         />
       )}
       {drawer === "export" && (

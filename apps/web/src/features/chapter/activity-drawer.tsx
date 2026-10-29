@@ -21,7 +21,7 @@ import { formatBytes } from "./text-utils.ts";
 const JOB_LABEL: Record<string, string> = {
   "chapter.ingest": "Cắt trang",
   "page.prepare": "Xoá chữ + OCR",
-  "chapter.translate": "Dịch chương",
+  "chapter.translate": "Dịch lô trang",
   "page.reinpaint": "Xoá chữ lại theo mask",
   "page.ocr_region": "OCR vùng",
   "chapter.export": "Xuất",

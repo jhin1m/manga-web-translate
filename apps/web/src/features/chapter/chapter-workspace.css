@@ -309,6 +309,22 @@
   background: var(--c-accent-weak);
   color: var(--c-accent-hover);
 }
+/* Thanh "Dịch N trang · Bỏ chọn" khi có trang chọn (⌘/Ctrl/Shift-click thumbnail). */
+.cw-thumbs-sel {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--sp-1);
+  padding: var(--sp-2) var(--sp-1);
+  border-bottom: 1px solid var(--c-surface-2);
+  background: var(--c-accent-weak);
+}
+.cw-thumbs-sel button {
+  min-height: 32px;
+  padding: 0 var(--sp-1);
+  font-size: var(--fs-xs);
+}
 .cw-thumbs-list {
   flex: 1;
   min-height: 0;
@@ -380,6 +396,22 @@
 }
 .cw-thumb[data-tone="busy"] {
   border: 2px solid var(--c-info);
+}
+/* Trang chọn để dịch riêng: phủ màu nhấn + dấu ✓ góc trên (không đè viền trạng thái). */
+.cw-thumb[data-selected]::after {
+  content: "✓";
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-start;
+  padding: 2px 4px;
+  background: color-mix(in srgb, var(--c-accent) 22%, transparent);
+  color: #fff;
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  text-shadow: 0 0 2px var(--c-accent-hover);
+  pointer-events: none;
 }
 /* Trang ẩn: chỉ ảnh mờ (số trang giữ tương phản), viền đứt. */
 .cw-thumb[data-tone="hidden"] {

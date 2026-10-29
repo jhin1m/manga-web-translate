@@ -16,7 +16,7 @@ describe("primary action", () => {
     );
   });
 
-  it("upload failed / unfinished but every missing image was deleted → Bước 1", () => {
+  it("upload failed / unfinished but every missing image was deleted → Dịch chương", () => {
     for (const phase of ["failed", "incomplete"] as const) {
       const upload = { phase, done: 2, total: 3 };
       expect(
@@ -25,7 +25,7 @@ describe("primary action", () => {
     }
   });
 
-  it("every image skipped → Bước 1 disabled until one is restored (not a new upload)", () => {
+  it("every image skipped → Dịch chương disabled until one is restored (not a new upload)", () => {
     for (const status of ["draft", "partial_failed"] as const) {
       expect(primaryAction({ ...base, status, sourceFiles: 0, skippedFiles: 2, pages: 0 })).toMatchObject({
         command: "commit",
@@ -35,31 +35,32 @@ describe("primary action", () => {
     }
   });
 
-  it("draft while uploading → Bước 1 disabled until every file is up", () => {
+  it("draft while uploading → Dịch chương disabled until every file is up, no prepare-only shortcut", () => {
     const uploading = { phase: "uploading" as const, done: 1, total: 3 };
     expect(primaryAction({ ...base, status: "draft", upload: uploading, pages: 0 })).toMatchObject({
       command: "commit",
       disabled: true,
       title: "Chờ tải xong ảnh (1/3)",
+      menu: [],
     });
   });
 
-  it("draft with every file → Bước 1 (cut + clean + OCR), never automatic", () => {
+  it("draft chapter offers one Dịch chương button with a prepare-only menu", () => {
     const uploaded = { phase: "uploaded" as const, done: 3, total: 3 };
     for (const upload of [uploaded, null]) {
       expect(primaryAction({ ...base, status: "draft", upload, pages: 0 })).toMatchObject({
         command: "commit",
-        label: "Bước 1 · Xoá chữ + OCR",
+        label: "Dịch chương",
         disabled: false,
-        menu: [],
+        menu: [{ command: "prepare_only", label: "Chỉ xoá chữ + OCR (soát trước)" }],
       });
     }
   });
 
-  it("prepared → Bước 2 · Dịch; failed pages can be re-run from the menu", () => {
+  it("prepared chapter translates with the same label; failed pages can be re-run from the menu", () => {
     expect(primaryAction({ ...base, status: "prepared", ready: 0 })).toMatchObject({
       command: "translate",
-      label: "Bước 2 · Dịch",
+      label: "Dịch chương",
       disabled: false,
       menu: [],
     });
@@ -84,9 +85,9 @@ describe("primary action", () => {
     expect(p.menu.map((m) => m.command)).toEqual(["export", "retranslate"]);
   });
 
-  it("partial_failed without pages (ingest failed) → Chạy lại bước 1 (commit lại), not the no-op retry", () => {
+  it("partial_failed without pages (ingest failed) → Cắt lại trang (commit lại), not the no-op retry", () => {
     const p = primaryAction({ ...base, status: "partial_failed", pages: 0, ready: 0, sourceFiles: 3 });
-    expect(p).toMatchObject({ command: "commit", label: "Chạy lại bước 1", disabled: false, menu: [] });
+    expect(p).toMatchObject({ command: "commit", label: "Cắt lại trang", disabled: false, menu: [] });
     const none = primaryAction({ ...base, status: "partial_failed", pages: 0, ready: 0, sourceFiles: 0 });
     expect(none).toMatchObject({ command: "upload", label: "Tải ảnh" });
   });
@@ -97,5 +98,26 @@ describe("primary action", () => {
       expect(p).toMatchObject({ command: "export", label: "Xuất", disabled: false });
       expect(p.menu.map((m) => m.command)).toEqual(["retranslate"]);
     }
+  });
+
+  it("no step labels remain", () => {
+    const uploads = [
+      null,
+      { phase: "uploading" as const, done: 1, total: 3 },
+      { phase: "failed" as const, done: 1, total: 3 },
+    ];
+    const statuses = ["draft", "ingesting", "processing", "prepared", "partial_failed", "review", "done"] as const;
+    for (const status of statuses)
+      for (const upload of uploads)
+        for (const pages of [0, 10])
+          for (const [sourceFiles, skippedFiles] of [
+            [3, 0],
+            [0, 2],
+            [0, 0],
+          ] as const) {
+            const p = primaryAction({ ...base, status, upload, pages, sourceFiles, skippedFiles, failed: 1 });
+            for (const text of [p.label, p.title ?? "", ...p.menu.map((m) => m.label)])
+              expect(text).not.toMatch(/[Bb]ước/);
+          }
   });
 });

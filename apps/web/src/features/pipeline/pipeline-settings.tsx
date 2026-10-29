@@ -1,7 +1,7 @@
 /**
  * Cài đặt chung → tab Pipeline: detector, OCR engine theo ngôn ngữ nguồn, inpainter, model hiệu đính; ngưỡng / nới
  * mask / cỡ vùng xoá chữ gom ở "Nâng cao". Mỗi option: nhãn tiếng Việt + thuật ngữ gốc + tooltip (dấu ?).
- * Có hiệu lực từ lần chạy sau (Bước 1, xoá chữ lại, OCR vùng, AI hiệu đính); job đang chờ giữ cài đặt cũ.
+ * Có hiệu lực từ lần chạy sau (Xoá chữ + OCR, xoá chữ lại, OCR vùng, AI hiệu đính); job đang chờ giữ cài đặt cũ.
  */
 import {
   DEFAULT_PIPELINE_SETTINGS,
@@ -100,8 +100,8 @@ export function PipelineSettingsForm(props: { value: PipelineSettings }) {
       }}
     >
       <p className="muted small">
-        Áp dụng cho mọi series của bạn từ lần chạy sau (Bước 1, xoá chữ lại, OCR vùng tự vẽ, AI hiệu đính). Chương đã xử
-        lý không tự chạy lại.
+        Áp dụng cho mọi series của bạn từ lần chạy sau (Xoá chữ + OCR, xoá chữ lại, OCR vùng tự vẽ, AI hiệu đính).
+        Chương đã xử lý không tự chạy lại.
       </p>
       <fieldset disabled={save.isPending} className="pipe-fields">
         <Group legend="Phát hiện chữ">

@@ -31,7 +31,9 @@ export function SourceViewer(props: {
         ) : (
           <figure data-skipped={item.skip ? "" : undefined}>
             <img src={item.url} alt={`Ảnh gốc ${item.n}`} onError={() => setMissing(true)} />
-            {item.skip && <figcaption className="small">{SKIP_LABEL[item.skip]} — Bước 1 bỏ qua ảnh này</figcaption>}
+            {item.skip && (
+              <figcaption className="small">{SKIP_LABEL[item.skip]} — bỏ qua ảnh này khi cắt trang</figcaption>
+            )}
           </figure>
         )}
       </div>

@@ -1,11 +1,21 @@
 import { describe, expect, it } from "vitest";
-import { needsReview, pageLevel, pageLevelOf, thumbAria, thumbMark } from "./page-status.ts";
+import {
+  isMacPlatform,
+  isPageBusy,
+  needsReview,
+  pageLevel,
+  pageLevelOf,
+  selectHint,
+  thumbAria,
+  thumbMark,
+  thumbTitle,
+} from "./page-status.ts";
 import type { PageStatus } from "./status.ts";
 
 describe("page level", () => {
   it("maps the 6 page statuses to 4 levels", () => {
     const all: PageStatus[] = ["pending", "preparing", "prepared", "translating", "ready", "failed"];
-    // pending = đã xếp hàng bước 1 (đang chạy); prepared = xong bước 1, chờ người dùng bấm Dịch.
+    // pending = đã xếp hàng xoá chữ + OCR (đang chạy); prepared = đã OCR, chờ người dùng bấm Dịch.
     expect(all.map(pageLevel)).toEqual(["busy", "busy", "todo", "busy", "done", "error"]);
   });
 
@@ -96,10 +106,65 @@ describe("page level", () => {
     expect(thumbMark({ ...base, status: "translating", job: t }, false)?.label).toBe("Đang đặt chữ · 75%");
   });
 
+  it("queued page waits for its batch", () => {
+    const queued = { ...base, status: "prepared" as PageStatus, translate_queued: true, run_batch: 3, job: null };
+    expect(thumbMark(queued, false)).toEqual({ tone: "busy", label: "Chờ lượt · lô 3", progress: null });
+    expect(thumbAria(queued, false)).toBe("Trang 3 · Chờ lượt · lô 3");
+    expect(isPageBusy(queued)).toBe(true);
+    // Trang chờ lượt mà đã xong lượt trước (dịch lại): vẫn chờ lô của nó.
+    expect(thumbMark({ ...queued, status: "ready" }, false)?.label).toBe("Chờ lượt · lô 3");
+    // Lỗi vẫn ưu tiên; trang còn xoá chữ hiện bước xoá chữ chứ không phải chờ lượt.
+    expect(thumbMark({ ...queued, status: "failed" }, false)?.label).toBe("Lỗi");
+    expect(thumbMark({ ...queued, status: "pending" }, false)?.label).toBe("Chờ xoá chữ");
+    expect(isPageBusy({ ...base, status: "prepared", job: null })).toBe(false);
+  });
+
+  it("typesetting stage reads Đang đặt chữ, translate stage reads Đang dịch", () => {
+    const t = (stage: string) =>
+      job({
+        type: "chapter.translate",
+        status: "running",
+        error_class: null,
+        stage,
+        progress: 0.5,
+        progress_done: 1,
+        progress_total: 4,
+      } as never);
+    // Trang của lô đang chạy: vẫn `translate_queued` tới khi lô xong.
+    const inBatch = { ...base, status: "translating" as PageStatus, translate_queued: true, run_batch: 2 };
+    expect(thumbMark({ ...inBatch, job: t("typeset") }, false)?.label.startsWith("Đang đặt chữ")).toBe(true);
+    expect(thumbMark({ ...inBatch, job: t("translate") }, false)?.label.startsWith("Đang dịch")).toBe(true);
+  });
+
   it("pending page without a job waits for text removal", () => {
     const mark = thumbMark({ ...base, status: "pending", job: null }, false);
     expect(mark?.label).toBe("Chờ xoá chữ");
-    expect(thumbAria({ ...base, status: "pending", job: null }, false)).not.toContain("Bước 1");
+    expect(thumbAria({ ...base, status: "pending", job: null }, false)).not.toMatch(/[Bb]ước/);
+  });
+
+  it("the selection hint names the key that works on the platform", () => {
+    // macOS: Ctrl-click là chuột phải (mở menu Ẩn trang) → chỉ ⌘ chọn được.
+    expect(selectHint(true)).toBe("⌘-click hoặc Shift-click: chọn để dịch riêng");
+    expect(selectHint(false)).toBe("Ctrl-click hoặc Shift-click: chọn để dịch riêng");
+    expect(["macOS", "MacIntel", "iPad", "Windows", "Win32", "Linux x86_64", ""].map(isMacPlatform)).toEqual([
+      true,
+      true,
+      true,
+      false,
+      false,
+      false,
+      false,
+    ]);
+  });
+
+  it("thumbnail title hints page selection with the platform's key; hidden pages only offer restore", () => {
+    const visible = { ...base, job: null };
+    expect(thumbTitle(visible, false, true)).toBe(
+      "Chuột phải: xoá (ẩn) trang · ⌘-click hoặc Shift-click: chọn để dịch riêng",
+    );
+    expect(thumbTitle(visible, false, false)).toContain("Ctrl-click hoặc Shift-click");
+    expect(thumbTitle(visible, false, false)).not.toContain("⌘");
+    expect(thumbTitle({ ...visible, skipped: true }, false, true)).toBe("Bấm hoặc chuột phải: khôi phục trang");
   });
 
   it("thumbnail accessible name always carries the state", () => {

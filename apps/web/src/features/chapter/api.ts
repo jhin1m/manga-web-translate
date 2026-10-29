@@ -44,13 +44,29 @@ export type ProgressPage = {
   cut_flag: boolean;
   /** Người dùng đã xoá (ẩn) trang — không dịch, không xuất, khôi phục được. */
   skipped: boolean;
+  /** Trang còn chờ trong lượt dịch đang mở (cả lô đang chạy) — AI sắp ghi, chỉ xem. */
+  translate_queued: boolean;
+  /** Lô dự kiến của trang trong lượt dịch (1-based; null khi không chờ lượt). */
+  run_batch: number | null;
   ai_update_available: boolean;
   version: number;
   job: JobView | null;
 };
 
+/**
+ * Lượt dịch đang mở của chương: `target` = dừng sau xoá chữ + OCR hay dịch luôn; `remaining` = trang còn chờ (cả lô
+ * đang chạy); `batch` = số lô dịch đã tạo; `batches` = `batch` + số lô dự kiến còn lại.
+ */
+export type ChapterRun = {
+  target: "prepared" | "translated";
+  total: number;
+  remaining: number;
+  batch: number;
+  batches: number;
+};
+
 export type Progress = {
-  chapter: { id: string; status: ChapterStatus; ingest_rev: number };
+  chapter: { id: string; status: ChapterStatus; ingest_rev: number; run: ChapterRun | null };
   counts: Partial<Record<PageStatus, number>>;
   pages: ProgressPage[];
   jobs: JobView[];
@@ -100,16 +116,16 @@ export type SourceFileImage = {
 };
 export const fetchSourceFiles = (ch: string) =>
   api<{ expires_at: string; files: SourceFileImage[] }>(base(ch, "/source-files"));
-/** Xoá (ẩn) / khôi phục 1 trang sau Bước 1 (cần giữ khoá; 409 khi chương đang chạy hoặc là trang cuối còn hiện). */
+/** Xoá (ẩn) / khôi phục 1 trang đã cắt (cần giữ khoá; 409 khi chương đang chạy hoặc là trang cuối còn hiện). */
 export const setPageSkip = (pageId: string, skipped: boolean) =>
   api<{ id: string; skipped: boolean }>(`/api/pages/${pageId}`, { method: "PATCH", body: { skipped } });
-/** Bỏ qua / dùng lại 1 ảnh gốc trước Bước 1 (chương chưa có page; 409 khi đã có page). */
+/** Bỏ qua / dùng lại 1 ảnh gốc trước khi cắt trang (chương chưa có page; 409 khi đã có page). */
 export const setSourceSkip = (ch: string, fileId: string, skip: "user" | null) =>
   api<ChapterDetail["source_files"][number]>(base(ch, `/source-files/${fileId}`), {
     method: "PATCH",
     body: { skip },
   });
-/** Đổi thứ tự ảnh gốc trước Bước 1: `ids` = cả bộ ảnh theo thứ tự mới (400 `source_set_mismatch` khi lệch bộ). */
+/** Đổi thứ tự ảnh gốc trước khi cắt trang: `ids` = cả bộ ảnh theo thứ tự mới (400 `source_set_mismatch` khi lệch bộ). */
 export const setSourceOrder = (ch: string, ids: string[]) =>
   api<{ source_files: ChapterDetail["source_files"] }>(base(ch, "/source-files/order"), {
     method: "PUT",
@@ -121,14 +137,28 @@ export type Rejected = { id: string; ord: number; reason: "missing" | "too_large
 /** Đổi số chương / chuyển series (409 `chapter_number_taken` khi series đích đã có số đó). */
 export const patchChapter = (ch: string, body: { number?: string; series_id?: string }) =>
   api<ChapterSummary>(base(ch), { method: "PATCH", body });
-export const commitChapter = (ch: string) =>
-  api<{ job: JobView; accepted: number; rejected: Rejected[] }>(base(ch, "/commit"), { method: "POST", body: {} });
-/** Bước 2 "Dịch": chương xong bước 1 → dịch + chèn chữ các page đã OCR. */
+/**
+ * Cắt trang → xoá chữ + OCR, rồi `target: "translated"` dịch tiếp theo chuỗi lô; `"prepared"` dừng ở "Chờ dịch" để
+ * soát trước.
+ */
+export const commitChapter = (ch: string, target: "prepared" | "translated") =>
+  api<{ job: JobView; accepted: number; rejected: Rejected[] }>(base(ch, "/commit"), {
+    method: "POST",
+    body: { target },
+  });
+/**
+ * "Dịch chương" khi chương đang chờ dịch → lượt dịch + chèn chữ các page đã OCR. `job` = lô đầu (null khi lượt dừng
+ * ngay, VD hết hạn mức).
+ */
 export const translatePrepared = (ch: string) =>
-  api<{ job: JobView }>(base(ch, "/translate-prepared"), { method: "POST" });
+  api<{ job: JobView | null }>(base(ch, "/translate-prepared"), { method: "POST" });
 export const retryFailed = (ch: string) => api<{ jobs: JobView[] }>(base(ch, "/retry-failed"), { method: "POST" });
+/** Dịch (lại) cả chương hoặc tập trang chọn; lượt khác đang chạy → 409 `translate_running`. */
 export const retranslate = (ch: string, pageIds?: string[]) =>
-  api<{ job: JobView }>(base(ch, "/translate"), { method: "POST", body: pageIds ? { page_ids: pageIds } : {} });
+  api<{ job: JobView | null }>(base(ch, "/translate"), {
+    method: "POST",
+    body: pageIds ? { page_ids: pageIds } : {},
+  });
 export type ProofreadView = { job: JobView | null; suggestions: Suggestion[] };
 export const proofreadKey = (ch: string) => ["chapter", ch, "proofread"] as const;
 export const fetchProofread = (ch: string) => api<ProofreadView>(base(ch, "/proofread"));

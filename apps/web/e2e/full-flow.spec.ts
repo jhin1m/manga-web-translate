@@ -1,8 +1,9 @@
 /**
  * Luồng chính trọn vẹn: thả 1 strip ở home → màn chương mở ngay (trước khi upload xong, không qua dòng xác nhận)
- * → upload xong không tự chạy → "Bước 1" (worker giả cắt 3 trang + xoá chữ + OCR) → dừng ở "chờ dịch" → "Bước 2 ·
- * Dịch" → sửa bản dịch trang 2 trong bảng → lưu lên server → nút chính "Xuất" → drawer Xuất không cảnh báo → tải
- * xuống 302. Không lỗi JS nào trong cả luồng.
+ * → upload xong không tự chạy → 1 click "Dịch chương" (worker giả cắt 3 trang → xoá chữ + OCR → dịch, nối một mạch)
+ * → 3 trang "Xong" → sửa bản dịch trang 2 trong bảng → lưu lên server → nút chính "Xuất" → drawer Xuất không cảnh báo
+ * → bấm "Tải chương" rồi đóng drawer khi lượt xuất còn chờ → xong có thông báo "Tải xuống" → link tải 302. Không lỗi
+ * JS nào trong cả luồng.
  */
 import { expect, type Route, test } from "@playwright/test";
 import { WEB_URL } from "./env.ts";
@@ -10,6 +11,7 @@ import { PNG_1PX, runFakeWorker } from "./fake-worker.ts";
 import { login, openPanel, pageThumbs, state } from "./helpers.ts";
 
 type ProgressBody = { pages: { id: string; ord: number; status: string }[] };
+type ExportsBody = { exports: { status: string; download_url: string | null }[] };
 
 test("drop a strip on home → translate → edit → export", async ({ page }) => {
   test.setTimeout(120_000);
@@ -39,28 +41,29 @@ test("drop a strip on home → translate → edit → export", async ({ page }) 
   const chapterId = page.url().split("/").pop() ?? "";
   await expect(page.getByRole("heading", { name: /^Chương 7001/ })).toBeVisible();
   await expect.poll(() => held.length).toBeGreaterThan(0);
-  const step1 = page.getByRole("button", { name: "Bước 1 · Xoá chữ + OCR" });
-  await expect(step1).toBeDisabled();
-  await expect(step1).toHaveAttribute("title", /^Chờ tải xong ảnh/);
+  const translate = page.getByRole("button", { name: "Dịch chương", exact: true });
+  await expect(translate).toBeDisabled();
+  await expect(translate).toHaveAttribute("title", /^Chờ tải xong ảnh/);
   hold = false;
   for (const r of held.splice(0)) await r.continue();
 
-  // Upload xong không tự chạy: chương vẫn nháp tới khi bấm Bước 1. Thành công không thêm banner.
+  // Upload xong không tự chạy: chương vẫn nháp tới khi bấm "Dịch chương". Thành công không thêm banner.
   const chip = page.getByRole("status", { name: "Trạng thái chương" });
-  await expect(step1).toBeEnabled({ timeout: 30_000 });
+  await expect(translate).toBeEnabled({ timeout: 30_000 });
   await expect(chip).toHaveText("Nháp");
-  await step1.click();
-  await expect(chip).toHaveText(/^Bước 1/, { timeout: 30_000 });
+  await translate.click();
+  await expect(chip).toHaveText("Đang cắt trang", { timeout: 30_000 });
   await expect(page.getByRole("button", { name: "Xuất", exact: true })).toBeDisabled();
   await expect(page.getByText(/Bắt đầu dịch|Đang dịch \d+ ảnh/)).toHaveCount(0);
 
   let ready = false;
-  const worker = runFakeWorker(state.token, () => ready, 60_000, { pagesPerSource: 3 });
+  // Không xuất ở worker này: lượt xuất chờ trong hàng tới khi drawer Xuất đã đóng.
+  const worker = runFakeWorker(state.token, () => ready, 60_000, {
+    pagesPerSource: 3,
+    capabilities: ["chapter.ingest", "page.prepare", "chapter.translate"],
+  });
   const rail = pageThumbs(page);
-  // Xong bước 1 dừng lại: 3 trang "Chờ dịch" (tên truy cập thumbnail), chưa có job dịch → bấm Bước 2.
-  await expect(chip).toHaveText("Xong bước 1 · chờ dịch", { timeout: 30_000 });
-  await expect(rail.getByRole("button", { name: /· Chờ dịch$/ })).toHaveCount(3);
-  await page.getByRole("button", { name: "Bước 2 · Dịch" }).click();
+  // 1 click chạy tới hết: không dừng ở "Chờ dịch", không cần bấm thêm.
   await expect(rail.getByRole("button", { name: /· Xong$/ })).toHaveCount(3, { timeout: 30_000 });
   const primary = page.getByRole("button", { name: "Xuất", exact: true });
   await expect(primary).toBeEnabled({ timeout: 15_000 });
@@ -87,17 +90,27 @@ test("drop a strip on home → translate → edit → export", async ({ page }) 
     })
     .toBe("Chào cậu");
 
-  // Xuất: drawer không cảnh báo → 1 nút "Tải chương" → job qua worker giả → link "Tải xuống" tại chỗ 302.
+  // Xuất: drawer không cảnh báo → 1 nút "Tải chương" → đóng drawer khi lượt còn chờ → worker giả xuất → thông báo
+  // "Đã xuất xong" kèm nút "Tải xuống"; link tải 302.
+  ready = true;
+  await worker;
   await primary.click();
   const dlg = page.getByRole("dialog", { name: "Xuất chương" });
   await expect(dlg).toBeVisible();
   await expect(dlg.getByRole("region", { name: "Trước khi xuất" })).toHaveCount(0);
   await dlg.getByRole("button", { name: "Tải chương (.zip)", exact: true }).click();
-  const link = dlg.getByRole("link", { name: "Tải xuống" });
-  await expect(link).toBeVisible({ timeout: 60_000 });
-  ready = true;
-  await worker;
-  const r = await page.request.get((await link.getAttribute("href")) as string, { maxRedirects: 0 });
+  await expect(dlg.getByText(/Đang chờ|Đang xuất/).first()).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(dlg).toHaveCount(0);
+  let exported = false;
+  const exporter = runFakeWorker(state.token, () => exported, 60_000, { capabilities: ["chapter.export"] });
+  const toast = page.getByRole("status").filter({ hasText: "Đã xuất xong" });
+  await expect(toast.getByRole("button", { name: "Tải xuống" })).toBeVisible({ timeout: 60_000 });
+  exported = true;
+  await exporter;
+  const list = (await (await page.request.get(`/api/chapters/${chapterId}/exports`)).json()) as ExportsBody;
+  const url = list.exports.find((x) => x.status === "succeeded")?.download_url ?? "";
+  const r = await page.request.get(url, { maxRedirects: 0 });
   expect(r.status()).toBe(302);
 
   expect(pageErrors).toEqual([]);

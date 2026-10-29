@@ -3,8 +3,9 @@
  * upload + số, hiện ngay khi thả file (Blob local). Bấm = xem ảnh đó ở canvas. Nhãn dưới thumbnail chỉ khi có
  * (Đã xoá / Credit · tự bỏ / Đang tải / Tải lỗi / Chưa tải / Có thể là credit). Xoá / Khôi phục ảnh bằng nút góc
  * thumbnail (hiện khi rê chuột / focus) hoặc menu chuột phải (Shift+F10 / phím Menu) khi còn sửa được bộ ảnh (trước
- * Bước 1); ảnh bỏ qua mờ đi, Bước 1 không ghép chúng. Cũng khi còn sửa được: kéo-thả thumbnail (vạch báo chỗ thả), menu
- * "Đưa lên đầu / Lên 1 / Xuống 1 / Đưa xuống cuối" hoặc Alt+↑/↓ trên thumbnail đang focus để đổi thứ tự ghép. Đang cắt trang (Bước 1) → đầu cột hiện bước + đếm
+ * khi cắt trang); ảnh bỏ qua mờ đi, lúc cắt trang không ghép chúng. Cũng khi còn sửa được: kéo-thả thumbnail (vạch báo
+ * chỗ thả), menu "Đưa lên đầu / Lên 1 / Xuống 1 / Đưa xuống cuối" hoặc Alt+↑/↓ trên thumbnail đang focus để đổi thứ tự
+ * ghép. Đang cắt trang → đầu cột hiện bước + đếm
  * ("Đang tải ảnh 3/10"), ảnh được ghép có viền "đang xử lý" và nhãn Đã tải / Đang tải / Chờ / Đang xử lý.
  */
 import { memo, useEffect, useRef, useState } from "react";
@@ -22,9 +23,9 @@ import { TrashIcon, UndoIcon } from "./tool-icons.tsx";
 export const SourceRail = memo(function SourceRail(props: {
   items: SourceItem[];
   activeId: string | null;
-  /** Còn đổi được bộ ảnh (chưa bấm Bước 1, hoặc cắt trang lỗi). */
+  /** Còn đổi được bộ ảnh (chưa bấm "Dịch chương", hoặc cắt trang lỗi). */
   editable: boolean;
-  /** Bước 1 đang cắt trang (bước + đếm + tiến độ job); undefined = không chạy. */
+  /** Đang cắt trang (bước + đếm + tiến độ job); undefined = không chạy. */
   ingest?: IngestView;
   onPick(id: string): void;
   onSkip(it: SourceItem, skip: "user" | null): void;
@@ -178,7 +179,7 @@ export const SourceRail = memo(function SourceRail(props: {
                   className="cw-thumb-act"
                   data-danger={!it.skip || undefined}
                   aria-label={it.skip ? `Khôi phục ảnh ${it.n}` : `Xoá ảnh ${it.n}`}
-                  title={it.skip ? "Khôi phục ảnh" : "Xoá ảnh — Bước 1 bỏ qua ảnh này"}
+                  title={it.skip ? "Khôi phục ảnh" : "Xoá ảnh — bỏ qua ảnh này khi cắt trang"}
                   onClick={() => props.onSkip(it, it.skip ? null : "user")}
                 >
                   {it.skip ? <UndoIcon size={14} /> : <TrashIcon size={14} />}
@@ -205,7 +206,7 @@ export const SourceRail = memo(function SourceRail(props: {
               : {
                   label: `Xoá ảnh ${menu.item.n}`,
                   danger: true,
-                  title: "Bước 1 bỏ qua ảnh này",
+                  title: "Bỏ qua ảnh này khi cắt trang",
                   run: () => props.onSkip(menu.item, "user"),
                 },
           ]}

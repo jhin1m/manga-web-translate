@@ -30,6 +30,7 @@ import {
   showLayoutChoice,
 } from "./export-options.ts";
 import { type ExportWarnings, reviewCount, warningLines } from "./export-warnings.ts";
+import { stageLabel } from "./stage-labels.ts";
 import type { Tone } from "./status.ts";
 import { formatBytes } from "./text-utils.ts";
 import "./export-panel.css";
@@ -62,7 +63,7 @@ export function useExports(chapterId: string) {
 }
 
 /** Tải file qua anchor `download` (API trả 302 kèm Content-Disposition attachment). */
-function triggerDownload(url: string) {
+export function triggerDownload(url: string) {
   const a = document.createElement("a");
   a.href = url;
   a.download = "";
@@ -298,6 +299,7 @@ export function ExportRow({ x, cancelling, onCancel }: { x: ExportView; cancelli
   const st = STATUS[x.status];
   const pct = Math.round(Math.min(1, Math.max(0, x.progress)) * 100);
   const expired = x.expires_at !== null && new Date(x.expires_at).getTime() < Date.now();
+  const step = stageLabel({ type: "chapter.export", stage: x.stage, progress_done: null, progress_total: null });
   return (
     <div className="drawer-item" title={`Link tải hiệu lực 5 phút, file giữ ${EXPORT_RETENTION_DAYS} ngày`}>
       <div className="drawer-item-head">
@@ -328,7 +330,10 @@ export function ExportRow({ x, cancelling, onCancel }: { x: ExportView; cancelli
           <div className="bar" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}>
             <span style={{ width: `${pct}%` }} />
           </div>
-          <div className="muted small">{pct}%</div>
+          <div className="muted small">
+            {step ? `${step} · ` : ""}
+            {pct}%
+          </div>
         </>
       )}
       {x.status === "failed" && x.error && <div className="small error">{x.error}</div>}

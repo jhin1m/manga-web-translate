@@ -3,9 +3,10 @@
  * - Có khối (chọn trên canvas hoặc bảng): Gốc (OCR, chỉ đọc), Bản dịch (cùng nguồn với bảng), cảnh báo tràn khung,
  *   font / cỡ / tự khớp, "Kiểu chữ nâng cao" (thu gọn: giãn dòng, lề, căn lề, màu, viền, ẩn khi xuất, áp kiểu cho khối
  *   cùng loại), Dịch lại khối (nhận dạng + dịch lại vùng OCR), Xoá khối, Dịch lại trang này.
- * - Chưa có khối: trang đang xem (trạng thái, cờ, lỗi job) + Dịch lại trang này · Ẩn trang này + "Bỏ chỉnh sửa tay"
- *   khi trang khác bản AI.
- * - Chương chưa có page: ảnh gốc đang xem + Xoá / Khôi phục ảnh (trước Bước 1).
+ * - Chưa có khối: trang đang xem (trạng thái, cờ, lỗi job) + Dịch trang này (trang chờ dịch) / Dịch lại trang này ·
+ *   Ẩn trang này + "Bỏ chỉnh sửa tay" khi trang khác bản AI. Trang đang bận (đang xử lý / chờ lượt dịch) không có nút
+ *   dịch.
+ * - Chương chưa có page: ảnh gốc đang xem + Xoá / Khôi phục ảnh (trước khi cắt trang).
  * AI có bản mới luôn ở đầu panel (khi có); xung đột khi lưu nằm trên mọi panel (chapter-workspace.tsx).
  */
 import type { TextBox } from "@mtl/shared";
@@ -19,7 +20,7 @@ import { TextField } from "../editor/panels/TextField.tsx";
 import { editorStore, useEditor } from "../editor/store.ts";
 import type { ProgressPage } from "./api.ts";
 import { describeJobError } from "./job-error.ts";
-import { PAGE_LEVEL, pageLevelOf, thumbFlags } from "./page-status.ts";
+import { isPageBusy, PAGE_LEVEL, pageLevelOf, thumbFlags } from "./page-status.ts";
 import { type SourceItem, sourceLabel } from "./source-rail-model.ts";
 import { KIND_LABEL, type Row } from "./text-table/rows.ts";
 import { setRowTranslation } from "./text-table/text-table.tsx";
@@ -44,7 +45,7 @@ export type SelectPanelProps = {
   onHidePage(): void;
   /** Lý do không ẩn được (không giữ khoá, trang cuối…); undefined = ẩn được. */
   hideDisabled?: string;
-  /** Chương chưa có page: ảnh gốc đang xem + xoá / khôi phục trước Bước 1. */
+  /** Chương chưa có page: ảnh gốc đang xem + xoá / khôi phục trước khi cắt trang. */
   source?: SourceView;
 };
 
@@ -84,17 +85,24 @@ export function SelectPanel(props: SelectPanelProps) {
   );
 }
 
-function RetranslatePage(props: SelectPanelProps & { link?: boolean }) {
+/** Trang chờ dịch → "Dịch trang này"; trang đã dịch / lỗi → "Dịch lại trang này"; trang bận → không có nút. */
+function RetranslatePage(props: SelectPanelProps & { page: ProgressPage; link?: boolean }) {
   const readOnly = useEditor((s) => !!s.readOnly);
+  if (isPageBusy(props.page)) return null;
+  const first = props.page.status === "prepared";
   return (
     <button
       type="button"
       className={props.link ? "btn-link" : undefined}
       disabled={readOnly || props.busy.retranslate}
-      title="Dịch lại riêng trang này bằng AI (chỉnh sửa tay được giữ, bản AI mới hiện để chọn áp)"
+      title={
+        first
+          ? "Dịch + chèn chữ riêng trang này bằng AI"
+          : "Dịch lại riêng trang này bằng AI (chỉnh sửa tay được giữ, bản AI mới hiện để chọn áp)"
+      }
       onClick={props.onRetranslatePage}
     >
-      Dịch lại trang này
+      {first ? "Dịch trang này" : "Dịch lại trang này"}
     </button>
   );
 }
@@ -337,7 +345,7 @@ function SourcePanel({ item, total, skipped, editable, onSkip }: SourceView) {
             <button
               type="button"
               className="btn-danger"
-              title="Bước 1 bỏ qua ảnh này"
+              title="Bỏ qua ảnh này khi cắt trang"
               onClick={() => onSkip(item, "user")}
             >
               Xoá ảnh này

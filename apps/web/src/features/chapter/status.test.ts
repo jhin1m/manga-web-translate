@@ -16,22 +16,43 @@ describe("chapter status chip", () => {
   });
 
   it("processing shows which step runs and its page progress", () => {
-    expect(chapterChip({ ...base, status: "ingesting", pages: 0 }).label).toBe("Bước 1 · đang cắt trang");
+    expect(chapterChip({ ...base, status: "ingesting", pages: 0 }).label).toBe("Đang cắt trang");
     expect(chapterChip({ ...base, status: "processing", ready: 0, preparing: 2 })).toEqual({
-      label: "Bước 1 · OCR 3/5",
+      label: "Xoá chữ + OCR 3/5",
       tone: "busy",
     });
     expect(chapterChip({ ...base, status: "processing" })).toEqual({ label: "Đang dịch 3/5", tone: "busy" });
     expect(chapterChip({ ...base, status: "processing", pages: 0 }).label).toBe("Đang dịch");
   });
 
-  it("prepared: step 1 done, waiting for Dịch (warns about failed pages)", () => {
-    expect(chapterChip({ ...base, status: "prepared", ready: 0 })).toEqual({
-      label: "Xong bước 1 · chờ dịch",
-      tone: "idle",
+  it("running translate shows pages done and batch", () => {
+    const run = { target: "translated" as const, total: 33, remaining: 29, batch: 2, batches: 9 };
+    expect(chapterChip({ ...base, status: "processing", pages: 33, run })).toEqual({
+      label: "Đang dịch · 4/33 trang · lô 2/9",
+      tone: "busy",
     });
+    expect(
+      chapterChip({ ...base, status: "processing", run: { ...run, total: 3, remaining: 1, batches: 1 } }).label,
+    ).toBe("Đang dịch · 2/3 trang");
+    // Lô dịch đầu đã chạy khi trang sau còn xoá chữ: chip nói về lượt dịch.
+    expect(chapterChip({ ...base, status: "processing", pages: 33, preparing: 20, run }).label).toBe(
+      "Đang dịch · 4/33 trang · lô 2/9",
+    );
+    // Lượt "Chỉ xoá chữ + OCR" không bao giờ nói đang dịch.
+    const prepareOnly = { target: "prepared" as const, total: 5, remaining: 0, batch: 0, batches: 0 };
+    expect(chapterChip({ ...base, status: "processing", run: prepareOnly }).label).toBe("Xoá chữ + OCR 5/5");
+    expect(chapterChip({ ...base, status: "processing", preparing: 2, run: prepareOnly }).label).toBe(
+      "Xoá chữ + OCR 3/5",
+    );
+    // Lượt chưa có lô dịch nào (trang đầu còn xoá chữ): vẫn báo xoá chữ.
+    const waiting = { ...run, remaining: 33, batch: 0, batches: 9 };
+    expect(chapterChip({ ...base, status: "processing", preparing: 2, run: waiting }).label).toBe("Xoá chữ + OCR 3/5");
+  });
+
+  it("prepared: text removed, waiting for Dịch chương (warns about failed pages)", () => {
+    expect(chapterChip({ ...base, status: "prepared", ready: 0 })).toEqual({ label: "Chờ dịch", tone: "idle" });
     expect(chapterChip({ ...base, status: "prepared", ready: 0, failed: 1 })).toEqual({
-      label: "Xong bước 1 · chờ dịch · lỗi 1 trang",
+      label: "Chờ dịch · lỗi 1 trang",
       tone: "warn",
     });
   });
