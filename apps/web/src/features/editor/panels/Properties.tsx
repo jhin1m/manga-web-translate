@@ -7,6 +7,7 @@
 import type { TextBox } from "@mtl/shared";
 import type { ReactNode } from "react";
 import { type BoxStyle, setStyle } from "../actions.ts";
+import { fontPreview } from "../fonts.ts";
 import { editorStore, useEditor } from "../store.ts";
 
 const ALIGN: { id: TextBox["align"]; label: string }[] = [
@@ -31,7 +32,7 @@ function useBoxStyle() {
   return { box, readOnly, style };
 }
 
-/** `fonts`: font gói sẵn; `customFonts`: font của bạn (nhóm riêng trong select). */
+/** `fonts`: font gói sẵn; `customFonts`: font của bạn (nhóm riêng trong select). Mỗi option vẽ bằng chính font đó. */
 export function BasicStyle({
   fonts,
   customFonts = [],
@@ -52,6 +53,8 @@ export function BasicStyle({
           <label htmlFor="ed-font">Font</label>
           <select
             id="ed-font"
+            className="font-select"
+            style={fontPreview(box.font_family)}
             value={box.font_family}
             onChange={(e) => style("font_family", { font_family: e.target.value })}
           >
@@ -61,14 +64,14 @@ export function BasicStyle({
               </option>
             )}
             {fonts.map((f) => (
-              <option key={f} value={f}>
+              <option key={f} value={f} style={fontPreview(f)}>
                 {f}
               </option>
             ))}
             {customFonts.length > 0 && (
               <optgroup label="Font của bạn">
                 {customFonts.map((f) => (
-                  <option key={f.id} value={f.id}>
+                  <option key={f.id} value={f.id} style={fontPreview(f.id)}>
                     {f.name}
                   </option>
                 ))}

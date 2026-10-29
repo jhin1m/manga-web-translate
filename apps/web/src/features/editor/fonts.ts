@@ -73,6 +73,9 @@ let fallbackFamily = "Bangers-Regular";
 
 export const canvasFont = (fontId: string, size: number) => `${size}px "${fontId}", "${fallbackFamily}"`;
 
+/** Style vẽ tên font bằng chính font đó trong dropdown (FontFace family = font id); chưa nạp xong → font giao diện. */
+export const fontPreview = (id: string) => ({ fontFamily: `"${id}", var(--font-ui)` });
+
 /** Đo advance bằng canvas 2D (cùng renderer với Konva). Cache theo (font, cỡ, chuỗi). */
 function canvasMeasure(): MeasureFn {
   const ctx = document.createElement("canvas").getContext("2d");

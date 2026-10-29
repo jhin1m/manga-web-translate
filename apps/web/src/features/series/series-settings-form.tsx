@@ -6,9 +6,9 @@
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { type CSSProperties, type FormEvent, useEffect, useRef, useState } from "react";
+import { type FormEvent, useEffect, useRef, useState } from "react";
 import { errorMessage } from "../../lib/api.ts";
-import { loadFonts } from "../editor/fonts.ts";
+import { fontPreview, loadFonts } from "../editor/fonts.ts";
 import {
   FONT_ACCEPT,
   fontKeys,
@@ -49,9 +49,6 @@ const FONT_SLOTS: { slot: FontSlot; label: string; empty: string; hint?: string 
 
 /** Giá trị option "Tải font lên…" — không phải font id (font của bạn là `custom-…`, font gói sẵn là tên file). */
 const UPLOAD_OPTION = "__upload__";
-
-/** Vẽ tên font bằng chính font đó (FontFace family = font id); chưa nạp xong → font giao diện. */
-const fontPreview = (id: string): CSSProperties => ({ fontFamily: `"${id}", var(--font-ui)` });
 
 /** Chữ bỏ qua sửa ở ô riêng (chuỗi nhiều dòng), ghép vào lúc lưu. */
 type Form = Omit<SeriesSettings, "ignore_text"> & { title: string };
