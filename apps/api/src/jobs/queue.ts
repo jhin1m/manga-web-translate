@@ -32,7 +32,13 @@ import { head } from "../storage.ts";
 import { isLlmPaused, recordProviderError } from "./breaker.ts";
 import { buildInputs, claimOutputNames, outputKey, type PresignedOutput, presignOutputs } from "./claim-inputs.ts";
 import { markDispatchClaimed } from "./dispatcher.ts";
-import { chapterHasUserEdits, createIngestedPages, lockChapter, refreshChapter } from "./enqueue.ts";
+import {
+  autoTranslatePages,
+  chapterHasUserEdits,
+  createIngestedPages,
+  lockChapter,
+  refreshChapter,
+} from "./enqueue.ts";
 import { decideFailure, JobHttpError, leaseLost } from "./errors.ts";
 import { llmJobSql } from "./llm-job-filter.ts";
 import { writeAiState } from "./page-state-writer.ts";
@@ -300,7 +306,10 @@ async function applyResult(t: DbLike, job: Job, attempt: number, result: JobResu
         })
         .where(eq(pages.id, job.pageId));
       await recordServerUsage(t, job, attempt, "pages", 1);
-      if (job.chapterId) await refreshChapter(t, owner, job.chapterId);
+      if (job.chapterId) {
+        await refreshChapter(t, owner, job.chapterId);
+        await autoTranslatePages(t, owner, job.chapterId);
+      }
       return undefined;
     }
     case "chapter.translate": {
@@ -518,7 +527,11 @@ export async function terminal(
     case "page.prepare":
       await t.update(pages).set({ status: "failed" }).where(eq(pages.id, p.page_id));
       // Huỷ page cuối của giai đoạn 1: page còn lại đã prepare → chương `prepared` (chờ "Dịch"), không kẹt processing.
-      if (job.chapterId) await refreshChapter(t, owner, job.chapterId);
+      if (job.chapterId) {
+        await refreshChapter(t, owner, job.chapterId);
+        // Manga: trang lỗi không chặn phần còn lại tự dịch; người dùng huỷ thì dừng hẳn.
+        if (status === "failed") await autoTranslatePages(t, owner, job.chapterId);
+      }
       return;
     case "chapter.translate": {
       // Page đang chờ/đang dịch: đã có bản AI trước (dịch lại) → giữ `ready`; chưa có → `failed`.

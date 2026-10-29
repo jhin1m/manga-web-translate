@@ -212,10 +212,43 @@ label.file-pick input {
 .block-head .spacer {
   flex: 1;
 }
-.block-head input[type="search"],
-.block-head input.inline-new {
+.block-head input[type="search"] {
   width: 240px;
   height: 32px;
+}
+/* Form "+ Series mới": khối riêng dưới tiêu đề, các ô xếp ngang, xuống dòng khi hẹp. */
+.new-series {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--sp-3) var(--sp-4);
+  padding: var(--sp-4);
+  border: 1px solid var(--c-line-strong);
+  border-radius: 6px;
+  background: var(--c-surface);
+}
+.new-series-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  margin: 0;
+  font-size: var(--fs-xs);
+  color: var(--c-fg-muted);
+}
+.new-series .new-series-field input {
+  width: 280px;
+  max-width: 100%;
+  height: 36px;
+  font-size: var(--fs-md);
+  color: var(--c-fg);
+}
+.new-series-actions {
+  display: flex;
+  gap: var(--sp-2);
+}
+.new-series-actions button {
+  height: 36px;
+  padding: 0 14px;
 }
 .rows {
   border: 1px solid var(--c-line);
@@ -512,29 +545,6 @@ label.file-pick input {
   margin: 0;
   padding: var(--sp-2) var(--sp-4) var(--sp-4);
   min-width: 0;
-}
-/* Dropdown font: option vẽ bằng chính font của nó. Popup gốc (macOS, Safari, Firefox) bỏ qua font của option →
-   bật `base-select` (Chrome/Edge 135+) để popup tự vẽ; nơi khác chỉ ô chọn hiện font đang chọn. */
-.font-select option,
-.font-select optgroup {
-  font-family: var(--font-ui);
-}
-@supports (appearance: base-select) {
-  .font-select,
-  .font-select::picker(select) {
-    appearance: base-select;
-  }
-  .font-select::picker(select) {
-    max-height: 320px;
-    border: 1px solid var(--c-line-strong);
-    border-radius: var(--radius);
-    background: var(--c-bg);
-    color: var(--c-fg);
-  }
-  .font-select option {
-    padding: 4px 8px;
-    font-size: 1.15em;
-  }
 }
 .settings-group legend {
   padding: 0 var(--sp-1);

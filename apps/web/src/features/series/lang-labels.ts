@@ -1,7 +1,10 @@
 /** Nhãn tiếng Việt cho ngôn ngữ + định dạng truyện của series (danh sách mã từ @mtl/shared). */
-import { LANG_NAMES, type PageFormat, type SourceLang, type TargetLang } from "@mtl/shared/series-lang";
+import { type ComicKind, LANG_NAMES, type PageFormat, type SourceLang, type TargetLang } from "@mtl/shared/series-lang";
 
 export {
+  COMIC_KIND_SETTINGS,
+  COMIC_KINDS,
+  type ComicKind,
   HONORIFIC_EXAMPLES,
   LANG_NAMES,
   PAGE_FORMATS,
@@ -28,6 +31,13 @@ export function langChangeWarning(saved: Pair, form: Pair, ownTerms: number | un
     `Glossary chung sẽ chuyển sang cặp ${pairLabel(form)}.`
   );
 }
+
+/** Nhãn loại truyện ở form tạo series: tên + gợi ý ngôn ngữ / cách xử lý. */
+export const COMIC_KIND_LABELS: Record<ComicKind, { name: string; hint: string }> = {
+  manga: { name: "Manga", hint: "Nhật · từng trang, dịch thẳng" },
+  manhwa: { name: "Manhwa", hint: "Hàn · cuộn dọc" },
+  manhua: { name: "Manhua", hint: "Trung · cuộn dọc" },
+};
 
 export const PAGE_FORMAT_LABELS: Record<PageFormat, string> = {
   strip: "Cuộn dọc (manhwa/manhua)",

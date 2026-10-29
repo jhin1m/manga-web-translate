@@ -9,8 +9,8 @@ import { type FormEvent, useState } from "react";
 import { ApiError, errorMessage } from "../../lib/api.ts";
 import { needsWork, nextAction } from "../chapter/next-action.ts";
 import { createSeries, deleteSeries, fetchSeriesList, type SeriesListItem, seriesKeys } from "../series/api.ts";
-import type { SourceLang } from "../series/lang-labels.ts";
-import { SourceLangSelect } from "../series/source-lang-select.tsx";
+import { ComicKindPicker } from "../series/comic-kind-picker.tsx";
+import { COMIC_KIND_SETTINGS, type ComicKind } from "../series/lang-labels.ts";
 import { DropZone, usePageDrop } from "../upload/drop-zone.tsx";
 import { normalizeName } from "../upload/parse-chapter-filename.ts";
 import { useDropToTranslate } from "./drop-to-translate.ts";
@@ -68,9 +68,9 @@ function SeriesRows(props: { series: SeriesListItem[] | undefined; error: unknow
   const [search, setSearch] = useState("");
   const [adding, setAdding] = useState(false);
   const [title, setTitle] = useState("");
-  const [sourceLang, setSourceLang] = useState<SourceLang>("ko");
+  const [kind, setKind] = useState<ComicKind>("manhwa");
   const create = useMutation({
-    mutationFn: () => createSeries({ title: title.trim(), source_lang: sourceLang }),
+    mutationFn: () => createSeries({ title: title.trim(), ...COMIC_KIND_SETTINGS[kind] }),
     onSuccess: (s) => {
       setTitle("");
       setAdding(false);
@@ -98,32 +98,44 @@ function SeriesRows(props: { series: SeriesListItem[] | undefined; error: unknow
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
-        {adding ? (
-          <form className="row" onSubmit={submit}>
-            <input
-              className="inline-new"
-              aria-label="Tên series mới"
-              placeholder="Tên series mới"
-              // biome-ignore lint/a11y/noAutofocus: vừa bấm "+ Series mới" → gõ tên ngay
-              autoFocus
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              onKeyDown={(e) => e.key === "Escape" && setAdding(false)}
-            />
-            <SourceLangSelect value={sourceLang} onChange={setSourceLang} />
-            <button type="submit" className="btn-primary" disabled={create.isPending || !title.trim()}>
-              Tạo series
-            </button>
-            <button type="button" onClick={() => setAdding(false)}>
-              Huỷ
-            </button>
-          </form>
-        ) : (
+        {!adding && (
           <button type="button" onClick={() => setAdding(true)}>
             + Series mới
           </button>
         )}
       </div>
+      {adding && (
+        // Khối riêng dưới tiêu đề (không chen vào hàng tìm kiếm): tên → loại truyện → Tạo. Esc ở bất kỳ ô nào = Huỷ.
+        <form
+          className="new-series"
+          aria-label="Tạo series mới"
+          onSubmit={submit}
+          onKeyDown={(e) => e.key === "Escape" && setAdding(false)}
+        >
+          <label className="new-series-field">
+            Tên series
+            <input
+              placeholder="VD: Solo Leveling"
+              // biome-ignore lint/a11y/noAutofocus: vừa bấm "+ Series mới" → gõ tên ngay
+              autoFocus
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+            />
+          </label>
+          <div className="new-series-field">
+            Loại truyện
+            <ComicKindPicker value={kind} onChange={setKind} />
+          </div>
+          <div className="new-series-actions">
+            <button type="submit" className="btn-primary" disabled={create.isPending || !title.trim()}>
+              {create.isPending ? "Đang tạo…" : "Tạo series"}
+            </button>
+            <button type="button" onClick={() => setAdding(false)}>
+              Huỷ
+            </button>
+          </div>
+        </form>
+      )}
       {(props.error || create.error) && <p className="notice danger">{errorMessage(props.error ?? create.error)}</p>}
       <div className="rows">
         {props.series && list.length === 0 && (

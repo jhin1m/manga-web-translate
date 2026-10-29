@@ -7,6 +7,7 @@ import { eq, inArray } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { enqueueIngest, inJobTx, retranslate } from "../src/jobs/enqueue.ts";
 import { call, db, seedUser } from "./helpers.ts";
+import { cancelActiveJobs } from "./isolate-queue.ts";
 import {
   addSources,
   aiState,
@@ -15,6 +16,7 @@ import {
   doIngest,
   doPrepare,
   doTranslate,
+  failJob,
   pageRows,
   translateIfPrepared,
   usage,
@@ -108,6 +110,34 @@ describe("worker protocol end-to-end", () => {
     const ledger = await db.select().from(usageLedger).where(eq(usageLedger.userId, A.userId));
     expect(ledger.filter((l) => l.kind === "pages")).toHaveLength(N);
     expect(ledger.filter((l) => l.kind === "llm_tokens_in")).toHaveLength(N);
+  });
+
+  it("manga (ingest từng trang) tự sang dịch khi xong bước 1; trang lỗi không chặn phần còn lại", async () => {
+    for (const [label, failLast] of [
+      ["manga-ok", false],
+      ["manga-fail", true],
+    ] as const) {
+      const M = await seedUser(label);
+      await addSources(M.userId, M.chapterId, 3);
+      await inJobTx((tx) => enqueueIngest(tx, M.userId, M.chapterId, "pages"));
+      const [ij] = await claimJobs(token, { caps: ["chapter.ingest"] });
+      expect((await doIngest(token, ij as NonNullable<typeof ij>)).status).toBe(200);
+      const batch = await claimJobs(token, { caps: ["page.prepare"], max: 3 });
+      expect(batch).toHaveLength(3);
+      for (const [i, j] of batch.entries()) {
+        const r = failLast && i === 2 ? await failJob(token, j, "invalid_input") : await doPrepare(token, j);
+        expect(r.status).toBe(200);
+      }
+      const [ch] = await db.select().from(chapters).where(eq(chapters.id, M.chapterId));
+      expect(ch?.status).toBe("processing");
+      const tj = (await db.select().from(jobs).where(eq(jobs.chapterId, M.chapterId))).filter(
+        (j) => j.type === "chapter.translate",
+      );
+      expect(tj).toHaveLength(1);
+      expect(tj[0]?.payload).toMatchObject({ context: failLast ? "neighbors" : "rolling" });
+      expect((tj[0]?.payload as { page_ids: string[] } | undefined)?.page_ids).toHaveLength(failLast ? 2 : 3);
+    }
+    await cancelActiveJobs(); // worker dùng chung: job dịch manga không được lọt sang ca sau
   });
 
   it("re-running translate on a hand-edited page keeps state and flags ai_update_available", async () => {

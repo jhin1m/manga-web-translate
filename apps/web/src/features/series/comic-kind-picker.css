@@ -1,0 +1,45 @@
+/* Nút chọn loại truyện dạng ô ngang: tên đậm + gợi ý nhỏ; ô đang chọn viền + nền nhấn nhạt. */
+.comic-kind {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+}
+.comic-kind-opt {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 150px;
+  margin: 0;
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid var(--c-line-strong);
+  border-radius: var(--radius);
+  background: var(--c-bg);
+  cursor: pointer;
+  font-weight: 400;
+}
+.comic-kind-opt:hover {
+  border-color: var(--c-fg-subtle);
+}
+.comic-kind-opt[data-checked] {
+  border-color: var(--c-accent);
+  background: var(--c-accent-weak);
+}
+.comic-kind-opt:has(input:focus-visible) {
+  outline: 2px solid var(--c-focus);
+  outline-offset: 1px;
+}
+/* Radio thật vẫn trong DOM cho bàn phím / trình đọc màn hình, chỉ ẩn khỏi mắt. */
+.comic-kind-opt input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+.comic-kind-opt b {
+  font-size: var(--fs-md);
+  font-weight: 600;
+  color: var(--c-fg);
+}
+.comic-kind-opt span {
+  font-size: var(--fs-xs);
+  color: var(--c-fg-muted);
+}

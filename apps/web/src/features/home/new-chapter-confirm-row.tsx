@@ -11,8 +11,8 @@ import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { errorMessage } from "../../lib/api.ts";
 import { fmtBytes } from "../../lib/format.ts";
 import { createSeries, type SeriesListItem } from "../series/api.ts";
-import type { SourceLang } from "../series/lang-labels.ts";
-import { SourceLangSelect } from "../series/source-lang-select.tsx";
+import { ComicKindPicker } from "../series/comic-kind-picker.tsx";
+import { COMIC_KIND_SETTINGS, type ComicKind } from "../series/lang-labels.ts";
 import { isZip, listProblems, type PageFile } from "../upload/files.ts";
 import { naturalSortBy } from "../upload/natural-sort.ts";
 import { parseChapterFilename } from "../upload/parse-chapter-filename.ts";
@@ -82,7 +82,7 @@ export function NewChapterConfirmRow(props: {
     () => props.fixedSeriesId ?? guess.series?.id ?? props.series[0]?.id ?? NEW_SERIES,
   );
   const [newTitle, setNewTitle] = useState("");
-  const [newSourceLang, setNewSourceLang] = useState<SourceLang>("ko");
+  const [newKind, setNewKind] = useState<ComicKind>("manhwa");
   const [number, setNumber] = useState<string | null>(null);
   const [each, setEach] = useState(false);
 
@@ -114,7 +114,7 @@ export function NewChapterConfirmRow(props: {
     mutationFn: async () => {
       let sid = seriesId === NEW_SERIES ? made.current.seriesId : seriesId;
       if (!sid) {
-        sid = (await createSeries({ title: newTitle.trim(), source_lang: newSourceLang })).id;
+        sid = (await createSeries({ title: newTitle.trim(), ...COMIC_KIND_SETTINGS[newKind] })).id;
         made.current.seriesId = sid;
       }
       const base = Number(chapterNumber);
@@ -199,10 +199,10 @@ export function NewChapterConfirmRow(props: {
           </label>
         )}
         {seriesId === NEW_SERIES && (
-          // Select tự mang aria-label "Ngôn ngữ gốc"; div thay label vì control nằm trong component con.
+          // Nhóm radio tự mang aria-label "Loại truyện"; div thay label vì control nằm trong component con.
           <div className="field">
-            Ngôn ngữ gốc
-            <SourceLangSelect value={newSourceLang} onChange={setNewSourceLang} />
+            Loại truyện
+            <ComicKindPicker value={newKind} onChange={setNewKind} />
           </div>
         )}
         <label className="field">

@@ -1,4 +1,4 @@
-/** Select ngôn ngữ gốc khi tạo series — server suy ra định dạng truyện (ja → từng trang, còn lại → cuộn dọc). */
+/** Select ngôn ngữ gốc (glossary chọn cặp ngôn ngữ). Tạo series dùng ComicKindPicker thay vì chọn ngôn ngữ. */
 import { LANG_NAMES, SOURCE_LANGS, type SourceLang } from "./lang-labels.ts";
 
 export function SourceLangSelect(props: { value: SourceLang; onChange: (v: SourceLang) => void }) {

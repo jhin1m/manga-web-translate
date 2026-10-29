@@ -38,6 +38,7 @@ import {
 } from "@mtl/shared";
 import { and, asc, eq, inArray, isNull, ne, sql } from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
+import { userQuotaStatus } from "../billing/user-quota.ts";
 import { db } from "../db.ts";
 import { mergeBySourceTerm, seriesGlossaryWhere } from "../lib/glossary-scope.ts";
 import { exportKey, ingestKey, type JobKey, pageOpKey, prepareKey, proofreadKey, translateKey } from "./idempotency.ts";
@@ -524,11 +525,22 @@ export async function translatePrepared(tx: DbLike, userId: string, chapterId: s
   return enqueueTranslate(tx, userId, ch.id, prepared, prepared.length === rows.length ? "rolling" : "neighbors");
 }
 
+/**
+ * Manga (chương ingest từng trang): không có cắt strip để duyệt → hết việc giai đoạn 1 thì tự sang "Dịch" thay vì
+ * dừng ở `prepared`. Gọi sau khi page.prepare xong/lỗi (không gọi khi người dùng huỷ). Hết hạn mức → để `prepared`.
+ */
+export async function autoTranslatePages(tx: DbLike, userId: string, chapterId: string) {
+  const ch = await lockChapter(tx, userId, chapterId);
+  if (ch.status !== "prepared" || ch.ingestMode !== "pages") return null;
+  if ((await userQuotaStatus(tx, userId)).exceeded) return null;
+  return translatePrepared(tx, userId, chapterId);
+}
+
 const BUSY = new Set(["pending", "preparing", "translating"]);
 
 /**
  * Tính lại trạng thái chương sau mỗi sự kiện job (khoá dòng chapter → các complete song song tuần tự hoá, không bỏ
- * lỡ "page cuối cùng xong"). Không tự sang bước 2: hết việc mà còn page `prepared` → chương `prepared` (chờ "Dịch").
+ * lỡ "page cuối cùng xong"). Không tự sang bước 2: hết việc mà còn page `prepared` → chương `prepared` (chờ "Dịch"; manga → autoTranslatePages).
  */
 export async function refreshChapter(tx: DbLike, userId: string, chapterId: string): Promise<void> {
   const ch = await lockChapter(tx, userId, chapterId);
