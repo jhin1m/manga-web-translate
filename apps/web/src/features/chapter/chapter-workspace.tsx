@@ -110,18 +110,34 @@ type Notice = {
   key?: "skip" | "reorder";
 };
 
-/** Thông báo sau hoàn tác áp kiểu: nêu số trang đã khôi phục + trang bị bỏ qua (đã sửa sau đó). */
-const undoStyleText = (restored: number, skipped: string[], list: { id: string; ord: number }[]) => {
+/**
+ * Thông báo sau hoàn tác áp kiểu: nêu số trang đã khôi phục + trang bị bỏ qua (đã sửa sau đó). Trang đang mở bị bỏ
+ * qua thì nói rõ nó giữ nguyên — không thì người dùng thấy canvas không đổi và tưởng nút hỏng.
+ */
+export const undoStyleText = (
+  restored: number,
+  skipped: string[],
+  list: { id: string; ord: number }[],
+  activeId: string | null = null,
+) => {
   if (!skipped.length) return `Đã hoàn tác áp kiểu trên ${restored} trang.`;
-  const ords = skipped
-    .map((id) => list.find((p) => p.id === id)?.ord)
-    .filter((o): o is number => o !== undefined)
-    .sort((a, b) => a - b)
-    .map((o) => o + 1)
-    .join(", ");
-  return restored
-    ? `Đã hoàn tác áp kiểu trên ${restored} trang · bỏ qua trang ${ords} vì đã sửa sau đó.`
-    : `Không hoàn tác được: trang ${ords} đã sửa sau khi áp kiểu.`;
+  const ordOf = (id: string) => list.find((p) => p.id === id)?.ord;
+  const fmt = (ids: string[]) =>
+    ids
+      .map(ordOf)
+      .filter((o): o is number => o !== undefined)
+      .sort((a, b) => a - b)
+      .map((o) => o + 1)
+      .join(", ");
+  const openOrd = activeId && skipped.includes(activeId) ? ordOf(activeId) : undefined;
+  const others = fmt(skipped.filter((id) => id !== activeId || openOrd === undefined));
+  const open = openOrd === undefined ? "" : `trang đang mở (trang ${openOrd + 1}) giữ nguyên`;
+  if (!restored) {
+    const all = fmt(skipped);
+    return `Không hoàn tác được: trang ${all} đã sửa sau khi áp kiểu.${open ? ` Trang đang mở giữ nguyên.` : ""}`;
+  }
+  const parts = [others && `bỏ qua trang ${others}`, open].filter(Boolean).join(", ");
+  return `Đã hoàn tác áp kiểu trên ${restored} trang · ${parts} vì đã sửa sau đó.`;
 };
 
 /** Dịch chương mà có ảnh bị loại: giữ tới khi chương chạy xong lượt xử lý vừa bắt đầu. */
@@ -504,7 +520,7 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
     },
     onSuccess: (r) =>
       // Không hoàn tác được trang nào → không tự ẩn (toast Hoàn tác đã mất, dễ bỏ lỡ).
-      notify({ tone: r.pages ? "info" : "warn", text: undoStyleText(r.pages, r.skipped, pages) }),
+      notify({ tone: r.pages ? "info" : "warn", text: undoStyleText(r.pages, r.skipped, pages, activeId) }),
     onError: (e, _batchId, prev) => {
       if (!(e instanceof ApiError) && prev) setStyleUndo(prev);
       notify({

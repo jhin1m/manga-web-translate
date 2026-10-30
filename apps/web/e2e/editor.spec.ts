@@ -833,7 +833,7 @@ test("apply style then edit one page: Hoàn tác restores the other pages and na
   await toast.getByRole("button", { name: "Hoàn tác" }).click();
   await expect(
     page.locator(".cw-toasts .notice", {
-      hasText: "Đã hoàn tác áp kiểu trên 1 trang · bỏ qua trang 1 vì đã sửa sau đó",
+      hasText: "Đã hoàn tác áp kiểu trên 1 trang · trang đang mở (trang 1) giữ nguyên vì đã sửa sau đó",
     }),
   ).toBeVisible();
   expect(await aligns()).toEqual(["src:left:20", "same-page:left:18", "src:center:22"]);
