@@ -125,6 +125,7 @@ export function rebase(server: PageState, ops: readonly Op[]): { state: PageStat
     const serverEnt = structuredClone(cur);
     const clashed: string[] = [];
     for (const [k, f] of Object.entries(op.fields)) {
+      if (op.coll === "text_boxes" && k === "lines") continue; // dẫn xuất — syncLines quyết, không thành xung đột riêng
       if (same(cur[k], f.from) || same(cur[k], f.to)) cur[k] = structuredClone(f.to);
       else clashed.push(k);
     }

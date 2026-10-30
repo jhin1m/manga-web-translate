@@ -36,7 +36,7 @@ describe("rebase pending ops onto a newer server state", () => {
     expect(b).toMatchObject({ x: 1, y: 2, fill: "#ff0000", text: "của server" });
     const c = r.conflicts.find((x) => x.key === "text_boxes:t1");
     expect(c?.reason).toBe("changed_on_server");
-    expect(c?.fields).toEqual(expect.arrayContaining(["text", "lines"]));
+    expect(c?.fields).toEqual(["text"]);
     // Khôi phục: chỉ field xung đột lấy bản của tôi, fill của server giữ nguyên.
     const restored = run(r.state, restoreConflict(c as NonNullable<typeof c>) as never);
     expect(restored.text_boxes.find((x) => x.id === "t1")).toMatchObject({ text: "của tôi", fill: "#ff0000", x: 1 });
@@ -86,6 +86,14 @@ describe("rebase pending ops onto a newer server state", () => {
     const r = rebase(serverReplace(fresh, "t1", "của server"), diffStates(fresh, local));
     expect(r.conflicts).toEqual([]);
     expect(r.state.text_boxes[1]).toMatchObject({ text: "của server", font_size: 40, lines: [] });
+  });
+
+  it("does not list lines as a conflict of their own when my style meets the server's text on a laid-out box", () => {
+    const local = run(base, setStyle("t1", { font_size: 90 }, layout));
+    expect(local.text_boxes[1]?.lines).not.toEqual(base.text_boxes[1]?.lines);
+    const r = rebase(serverReplace(base, "t1", "của server"), diffStates(base, local));
+    expect(r.conflicts).toEqual([]);
+    expect(r.state.text_boxes[1]).toMatchObject({ text: "của server", font_size: 90, lines: [] });
   });
 
   it("keeps the server's lines when I only moved the box", () => {
