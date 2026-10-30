@@ -65,11 +65,17 @@ export const fetchJob = (jobId: string) => api<JobWithResult>(`/api/jobs/${jobId
 const DONE = new Set(["succeeded", "failed", "cancelled"]);
 
 /** Poll job tới khi kết thúc (hoặc `signal` huỷ). */
-export async function waitJob(jobId: string, signal?: AbortSignal, everyMs = 1500): Promise<JobWithResult> {
+export async function waitJob(
+  jobId: string,
+  signal?: AbortSignal,
+  everyMs = 1500,
+  onPoll?: (j: JobWithResult) => void,
+): Promise<JobWithResult> {
   for (;;) {
     signal?.throwIfAborted();
     const j = await fetchJob(jobId);
     if (DONE.has(j.status)) return j;
+    onPoll?.(j);
     await new Promise<void>((resolve, reject) => {
       const onAbort = () => {
         clearTimeout(t);

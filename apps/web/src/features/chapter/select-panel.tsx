@@ -25,6 +25,7 @@ import { PAGE_LEVEL, pageLevelOf, thumbFlags } from "./page-status.ts";
 import { type SourceItem, sourceLabel } from "./source-rail-model.ts";
 import { KIND_LABEL, type Row } from "./text-table/rows.ts";
 import { setRowTranslation } from "./text-table/text-table.tsx";
+import { OcrWait } from "./tool-panels.tsx";
 
 export type SelectPanelProps = {
   page: ProgressPage | undefined;
@@ -38,6 +39,9 @@ export type SelectPanelProps = {
   /** Ngôn ngữ đích của series — dropdown font chỉ gợi ý font vẽ đủ chữ ngôn ngữ này. */
   targetLang?: string;
   busy: { retranslate: boolean; ocr: boolean; applyKind: boolean };
+  /** Lần OCR lỗi gần nhất đang chờ thử lại + huỷ chờ. */
+  ocrRetry: string | null;
+  onCancelOcr(): void;
   onRetranslatePage(): void;
   /** "Dịch lại khối": nhận dạng + dịch lại vùng OCR của khối. */
   onReocr(row: Row): void;
@@ -180,6 +184,7 @@ function BlockView(props: SelectPanelProps & { page: ProgressPage; row: Row }) {
         >
           {props.busy.ocr ? "Đang OCR…" : "Dịch lại khối"}
         </button>
+        {props.busy.ocr && <OcrWait retry={props.ocrRetry} onCancel={props.onCancelOcr} />}
         {box && (
           <button
             type="button"

@@ -984,6 +984,8 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
                   applyKind: applyKind.isPending,
                 }}
                 onRetranslatePage={() => action.mutate("retranslate-page")}
+                ocrRetry={ocr.retry}
+                onCancelOcr={ocr.cancel}
                 onReocr={reocrRow}
                 onApplyKind={(row) => applyKind.mutate(row)}
                 onHidePage={() => activeMeta && skipPage(activeMeta, true)}
@@ -1008,7 +1010,12 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
             ) : tool === "text" ? (
               <TextToolView font={defaultFont} />
             ) : tool === "ocr" ? (
-              <OcrToolView lang={series.data?.source_lang} pending={ocr.pending.length} />
+              <OcrToolView
+                lang={series.data?.source_lang}
+                pending={ocr.pending.length}
+                retry={ocr.retry}
+                onCancel={ocr.cancel}
+              />
             ) : activeMeta ? (
               <MaskPanel
                 pageId={activeMeta.id}

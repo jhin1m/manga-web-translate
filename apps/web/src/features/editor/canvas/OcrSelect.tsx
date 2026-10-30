@@ -7,8 +7,10 @@ import type { Region } from "@mtl/shared";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Group, Layer, Rect } from "react-konva";
 import { errorMessage } from "../../../lib/api.ts";
+import { cancelJob } from "../../chapter/api.ts";
 import { insertOcrRegion, refreshRegionFromOcr } from "../actions.ts";
 import { type OcrRegionResult, startOcrRegion, waitJob } from "../api.ts";
+import { ocrRetryNote } from "../ocr-wait.ts";
 import { editorStore } from "../store.ts";
 import { SELECT_FILL, SELECT_STROKE } from "./colors.ts";
 
@@ -18,7 +20,10 @@ type Pending = PageRect & { id: string };
 export function useOcrRegion(pageId: string, defaultFont: string, page: { w: number; h: number }) {
   const [pending, setPending] = useState<Pending[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [retry, setRetry] = useState<string | null>(null);
   const abort = useRef(new AbortController());
+  /** Mỗi lần OCR đang chờ: huỷ riêng (người dùng bấm Huỷ) + job id để báo server dừng. */
+  const waits = useRef(new Map<string, { ctl: AbortController; jobId: string | null }>());
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: đổi page → huỷ OCR đang chờ của page cũ.
   useEffect(() => {
@@ -26,6 +31,8 @@ export function useOcrRegion(pageId: string, defaultFont: string, page: { w: num
     abort.current = ctl;
     setPending([]);
     setError(null);
+    setRetry(null);
+    waits.current.clear();
     return () => ctl.abort();
   }, [pageId]);
 
@@ -33,7 +40,11 @@ export function useOcrRegion(pageId: string, defaultFont: string, page: { w: num
     /** `regionId`: OCR lại vùng đó thay vì chèn vùng mới. */
     async (r: PageRect, regionId?: string) => {
       const id = crypto.randomUUID();
-      const signal = abort.current.signal;
+      const pageSignal = abort.current.signal;
+      const own = new AbortController();
+      const signal = AbortSignal.any([pageSignal, own.signal]);
+      const wait: { ctl: AbortController; jobId: string | null } = { ctl: own, jobId: null };
+      waits.current.set(id, wait);
       setPending((p) => [...p, { ...r, id }]);
       setError(null);
       try {
@@ -44,7 +55,10 @@ export function useOcrRegion(pageId: string, defaultFont: string, page: { w: num
         const y1 = Math.min(page.h, Math.ceil(r.y + r.h));
         const bbox: [number, number, number, number] = [x0, y0, x1 - x0, y1 - y0];
         const { job } = await startOcrRegion(pageId, bbox);
-        const done = await waitJob(job.id, signal);
+        wait.jobId = job.id;
+        const done = await waitJob(job.id, signal, undefined, (j) => {
+          if (!signal.aborted) setRetry(ocrRetryNote(j));
+        });
         if (done.status !== "succeeded") throw new Error(done.error ?? "OCR vùng thất bại");
         const region = (done.result as OcrRegionResult | null)?.region as Region | undefined;
         if (!region) throw new Error("OCR không trả về vùng");
@@ -60,13 +74,25 @@ export function useOcrRegion(pageId: string, defaultFont: string, page: { w: num
       } catch (e) {
         if (!signal.aborted) setError(errorMessage(e));
       } finally {
-        if (!signal.aborted) setPending((p) => p.filter((x) => x.id !== id));
+        waits.current.delete(id);
+        if (!pageSignal.aborted) {
+          setPending((p) => p.filter((x) => x.id !== id));
+          if (!waits.current.size) setRetry(null);
+        }
       }
     },
     [pageId, defaultFont, page.w, page.h],
   );
 
-  return { pending, error, start };
+  /** Thôi chờ mọi OCR đang chạy ở page này (không áp kết quả) và báo server huỷ job (best-effort). */
+  const cancel = useCallback(() => {
+    for (const w of waits.current.values()) {
+      w.ctl.abort();
+      if (w.jobId) void cancelJob(w.jobId).catch(() => undefined);
+    }
+  }, []);
+
+  return { pending, error, retry, start, cancel };
 }
 
 /** Khung đang kéo + khung đang chờ OCR (toạ độ page đang sửa, đặt tại `offset` trên strip chương). */

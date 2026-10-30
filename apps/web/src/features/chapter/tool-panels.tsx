@@ -17,7 +17,29 @@ export function TextToolView({ font }: { font: string }) {
   );
 }
 
-export function OcrToolView({ lang, pending }: { lang: string | undefined; pending: number }) {
+/** Dòng trạng thái OCR đang chờ: báo lần lỗi gần nhất (đang thử lại) + nút Huỷ để khỏi chờ vô hạn. */
+export function OcrWait({ retry, onCancel }: { retry: string | null; onCancel(): void }) {
+  return (
+    <div role="status">
+      {retry && <p className="muted small">{retry}</p>}
+      <button type="button" onClick={onCancel}>
+        Huỷ OCR
+      </button>
+    </div>
+  );
+}
+
+export function OcrToolView({
+  lang,
+  pending,
+  retry,
+  onCancel,
+}: {
+  lang: string | undefined;
+  pending: number;
+  retry: string | null;
+  onCancel(): void;
+}) {
   return (
     <section className="cw-block">
       <p className="muted small">Kéo khung quanh chữ AI bỏ sót. Chữ đọc được thành khối mới và được dịch luôn.</p>
@@ -33,6 +55,7 @@ export function OcrToolView({ lang, pending }: { lang: string | undefined; pendi
           </span>
         </p>
       )}
+      {pending > 0 && <OcrWait retry={retry} onCancel={onCancel} />}
     </section>
   );
 }
