@@ -161,6 +161,8 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
   const queryClient = useQueryClient();
   const activeId = useEditor((s) => s.pageId);
   const [notice, setNotice] = useState<Notice | null>(null);
+  // Toast "Hoàn tác" của lượt áp kiểu: cách duy nhất hoàn tác lượt này nên tách khỏi `notice` (thông báo khác không đè mất).
+  const [styleUndo, setStyleUndo] = useState<Notice | null>(null);
   const [imageError, setImageError] = useState<string | null>(null);
   // Mở từ "Xuất lại" (`?drawer=export`): drawer Xuất mở ngay; URL bỏ tham số ở lần đồng bộ `?page=` kế tiếp.
   const [drawer, setDrawer] = useState<DrawerKind | null>(searchDrawer ?? null);
@@ -478,7 +480,10 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
       await session.saver.flush();
       return undoBatch(chapterId, batchId);
     },
-    onSuccess: (r) => notify({ tone: "info", text: `Đã hoàn tác áp kiểu trên ${r.pages} trang.` }),
+    onSuccess: (r) => {
+      setStyleUndo(null);
+      notify({ tone: "info", text: `Đã hoàn tác áp kiểu trên ${r.pages} trang.` });
+    },
     onError: (e) =>
       notify({
         tone: "danger",
@@ -520,12 +525,14 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
       return {
         tone: "info",
         text: `Đã áp kiểu cho ${boxes} khối ${label} trên ${r.pageIds.length} trang.`,
-        // Toast là chỗ duy nhất hoàn tác được lượt này → không tự ẩn (có "Đóng").
-        sticky: true,
         actions: [{ label: "Hoàn tác", run: () => undoKind.mutate(r.batchId) }],
       };
     },
-    onSuccess: notify,
+    onSuccess: (n) => {
+      // Lượt mới thay toast hoàn tác cũ; kết quả không có lượt (đã cùng kiểu) thì giữ nguyên toast cũ.
+      if (n.actions) setStyleUndo(n);
+      notify(n.actions ? null : n);
+    },
     onError: (e) =>
       notify({
         tone: "danger",
@@ -1027,7 +1034,13 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
         )}
       </ContextPanel>
       <main className="cw-main">
-        <Notices errors={errors} notice={notice} onDismiss={() => notify(null)} />
+        <Notices
+          errors={errors}
+          notice={notice}
+          onDismiss={() => notify(null)}
+          styleUndo={styleUndo}
+          onDismissStyleUndo={() => setStyleUndo(null)}
+        />
         {sourceMode ? (
           <div className="cw-source">
             <div className="cw-source-band">
@@ -1154,28 +1167,40 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
 }
 
 /** Lỗi + kết quả thao tác: nổi trên canvas (CSS `.cw-toasts`), không đẩy bố cục. */
-function Notices(props: { errors: (string | null | undefined)[]; notice: Notice | null; onDismiss(): void }) {
+function Notices(props: {
+  errors: (string | null | undefined)[];
+  notice: Notice | null;
+  onDismiss(): void;
+  styleUndo: Notice | null;
+  onDismissStyleUndo(): void;
+}) {
   const errors = [...new Set(props.errors.filter((e): e is string => !!e))];
   return (
     <div className="ed-notices cw-toasts" aria-live="polite">
-      {props.notice && (
-        <div className={`notice ${props.notice.tone}`} role={props.notice.tone === "danger" ? "alert" : "status"}>
-          {props.notice.text}{" "}
-          {props.notice.actions?.map((a) => (
-            <button key={a.label} type="button" className="btn-ghost" onClick={a.run}>
-              {a.label}
-            </button>
-          ))}
-          <button type="button" className="btn-ghost" onClick={props.onDismiss}>
-            Đóng
-          </button>
-        </div>
-      )}
+      {props.styleUndo && <NoticeRow notice={props.styleUndo} onDismiss={props.onDismissStyleUndo} />}
+      {props.notice && <NoticeRow notice={props.notice} onDismiss={props.onDismiss} />}
       {errors.map((e) => (
         <div key={e} className="notice danger" role="alert">
           {e}
         </div>
       ))}
+    </div>
+  );
+}
+
+function NoticeRow(props: { notice: Notice; onDismiss(): void }) {
+  const { notice } = props;
+  return (
+    <div className={`notice ${notice.tone}`} role={notice.tone === "danger" ? "alert" : "status"}>
+      {notice.text}{" "}
+      {notice.actions?.map((a) => (
+        <button key={a.label} type="button" className="btn-ghost" onClick={a.run}>
+          {a.label}
+        </button>
+      ))}
+      <button type="button" className="btn-ghost" onClick={props.onDismiss}>
+        Đóng
+      </button>
     </div>
   );
 }

@@ -786,6 +786,12 @@ test("apply style to same-kind blocks writes every page in one batch; the toast'
   await expect(panel.getByRole("button", { name: /Áp kiểu này cho khối/ })).toBeVisible();
   expect(await aligns()).toEqual(["src:left:18", "same-page:left:18", "src:left:18"]);
 
+  // Thông báo khác xuất hiện sau đó (ẩn trang) không được đè mất toast hoàn tác của lượt trước.
+  await pageThumb(page, 2).click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Ẩn trang 2" }).click();
+  await expect(page.locator(".cw-toasts .notice", { hasText: "Đã ẩn trang 2" })).toBeVisible();
+  await expect(toast).toBeVisible();
+
   // 1 lượt cả chương → 1 lần hoàn tác khôi phục mọi trang (kể cả trang đang mở).
   await toast.getByRole("button", { name: "Hoàn tác" }).click();
   await expect(page.locator(".cw-toasts .notice", { hasText: "Đã hoàn tác áp kiểu trên 2 trang" })).toBeVisible();
