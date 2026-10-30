@@ -134,6 +134,20 @@
       "when": 1793278092749,
       "tag": "0018_auth_error_class",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1793287892481,
+      "tag": "0019_jobs_progress_counts",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1793288964720,
+      "tag": "0020_translate_chain",
+      "breakpoints": true
     }
   ]
 }

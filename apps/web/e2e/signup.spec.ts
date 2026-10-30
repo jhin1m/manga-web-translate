@@ -24,7 +24,7 @@ test("sign up → empty home → create a series", async ({ browser }) => {
   await expect(page.getByText("Series e2e")).toHaveCount(0);
 
   await page.getByRole("button", { name: "+ Series mới" }).click();
-  await page.getByLabel("Tên series mới").fill("Series của người mới");
+  await page.getByRole("form", { name: "Tạo series mới" }).getByLabel("Tên series").fill("Series của người mới");
   await page.getByRole("button", { name: "Tạo series" }).click();
   await expect(page.getByRole("heading", { level: 1, name: "Series của người mới" })).toBeVisible();
 

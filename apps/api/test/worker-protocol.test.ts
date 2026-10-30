@@ -5,7 +5,8 @@
 import { chapters, jobs, pageStates, usageLedger } from "@mtl/db";
 import { eq, inArray } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { enqueueIngest, inJobTx, retranslate } from "../src/jobs/enqueue.ts";
+import { enqueueIngest, inJobTx } from "../src/jobs/enqueue.ts";
+import { retranslate } from "../src/jobs/translate-chain.ts";
 import { call, db, seedUser } from "./helpers.ts";
 import { cancelActiveJobs } from "./isolate-queue.ts";
 import {
@@ -78,7 +79,7 @@ describe("worker protocol end-to-end", () => {
     }
     expect(done).toBe(N);
 
-    // Xong bước 1: chương dừng chờ "Dịch", chưa có chapter.translate; bấm Dịch → đúng 1 job.
+    // Xong bước 1: chương dừng chờ "Dịch", chưa có chapter.translate; bấm Dịch → chuỗi lô ≤ 4 trang, từng job một.
     p = await progress();
     expect(p.counts.prepared).toBe(N);
     expect(p.chapter.status).toBe("prepared");
@@ -88,11 +89,16 @@ describe("worker protocol end-to-end", () => {
     const translates = await db.select().from(jobs).where(eq(jobs.chapterId, A.chapterId));
     expect(translates.filter((j) => j.type === "chapter.translate")).toHaveLength(1);
 
-    const [tj] = await claimJobs(token, { caps: ["chapter.translate"] });
-    expect(tj?.payload.context).toBe("rolling");
-    expect((tj?.inputs as { pages?: unknown[] } | undefined)?.pages).toHaveLength(N);
-    const tr = await doTranslate(token, tj as NonNullable<typeof tj>);
-    expect(tr.status, await tr.clone().text()).toBe(200);
+    const contexts: unknown[] = [];
+    for (;;) {
+      const [tj] = await claimJobs(token, { caps: ["chapter.translate"] });
+      if (!tj) break;
+      contexts.push(tj.payload.context);
+      expect((tj.inputs as { pages?: unknown[] }).pages).toHaveLength(4);
+      const tr = await doTranslate(token, tj);
+      expect(tr.status, await tr.clone().text()).toBe(200);
+    }
+    expect(contexts).toEqual(["rolling", ...Array(N / 4 - 1).fill("neighbors")]);
 
     p = await progress();
     expect(p.chapter.status).toBe("review");
@@ -112,7 +118,7 @@ describe("worker protocol end-to-end", () => {
     expect(ledger.filter((l) => l.kind === "llm_tokens_in")).toHaveLength(N);
   });
 
-  it("manga (ingest từng trang) tự sang dịch khi xong bước 1; trang lỗi không chặn phần còn lại", async () => {
+  it("manga (ingest từng trang) tự sang dịch theo lô khi trang xong bước 1; trang lỗi không chặn phần còn lại", async () => {
     for (const [label, failLast] of [
       ["manga-ok", false],
       ["manga-fail", true],
@@ -122,22 +128,35 @@ describe("worker protocol end-to-end", () => {
       await inJobTx((tx) => enqueueIngest(tx, M.userId, M.chapterId, "pages"));
       const [ij] = await claimJobs(token, { caps: ["chapter.ingest"] });
       expect((await doIngest(token, ij as NonNullable<typeof ij>)).status).toBe(200);
+      const ids = (await pageRows(M.chapterId)).map((r) => r.id);
       const batch = await claimJobs(token, { caps: ["page.prepare"], max: 3 });
       expect(batch).toHaveLength(3);
-      for (const [i, j] of batch.entries()) {
-        const r = failLast && i === 2 ? await failJob(token, j, "invalid_input") : await doPrepare(token, j);
-        expect(r.status).toBe(200);
-      }
+      const prep = ids.map((id) => batch.find((j) => j.payload.page_id === id) as NonNullable<(typeof batch)[0]>);
+      const translates = async () =>
+        (await db.select().from(jobs).where(eq(jobs.chapterId, M.chapterId))).filter(
+          (j) => j.type === "chapter.translate" && j.status === "queued",
+        );
+      // Trang đầu xong bước 1 → lô đầu chạy ngay.
+      expect((await doPrepare(token, prep[0] as NonNullable<(typeof prep)[0]>)).status).toBe(200);
+      const [lot1] = await translates();
+      expect((lot1?.payload as { page_ids: string[] } | undefined)?.page_ids).toEqual([ids[0]]);
+      expect((await doPrepare(token, prep[1] as NonNullable<(typeof prep)[0]>)).status).toBe(200);
+      const last = prep[2] as NonNullable<(typeof prep)[0]>;
+      expect((failLast ? await failJob(token, last, "invalid_input") : await doPrepare(token, last)).status).toBe(200);
       const [ch] = await db.select().from(chapters).where(eq(chapters.id, M.chapterId));
       expect(ch?.status).toBe("processing");
-      const tj = (await db.select().from(jobs).where(eq(jobs.chapterId, M.chapterId))).filter(
-        (j) => j.type === "chapter.translate",
+
+      const [tj] = await claimJobs(token, { caps: ["chapter.translate"] });
+      expect(tj?.id).toBe(lot1?.id);
+      expect((await doTranslate(token, tj as NonNullable<typeof tj>)).status).toBe(200);
+      const [lot2, ...more] = await translates();
+      expect(more).toHaveLength(0);
+      expect(lot2?.payload).toMatchObject({ context: "neighbors" });
+      expect((lot2?.payload as { page_ids: string[] } | undefined)?.page_ids).toEqual(
+        failLast ? [ids[1]] : [ids[1], ids[2]],
       );
-      expect(tj).toHaveLength(1);
-      expect(tj[0]?.payload).toMatchObject({ context: failLast ? "neighbors" : "rolling" });
-      expect((tj[0]?.payload as { page_ids: string[] } | undefined)?.page_ids).toHaveLength(failLast ? 2 : 3);
+      await cancelActiveJobs(); // worker dùng chung: lô dịch còn chờ không được lọt sang vòng/ca sau
     }
-    await cancelActiveJobs(); // worker dùng chung: job dịch manga không được lọt sang ca sau
   });
 
   it("re-running translate on a hand-edited page keeps state and flags ai_update_available", async () => {

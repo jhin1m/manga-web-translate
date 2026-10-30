@@ -67,7 +67,7 @@ class ExportClient:
         self.completed: dict[str, Any] | None = None
         self.failed: tuple[str, str] | None = None
 
-    def heartbeat(self, job, progress, stage, usage):
+    def heartbeat(self, job, progress, stage, usage, done=None, total=None):
         return {"lease_expires_at": "x", "stop": None}
 
     def presign_outputs(self, job, names):

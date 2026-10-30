@@ -5,6 +5,7 @@
 import { ACTIVE_JOB_STATUSES } from "@mtl/shared";
 import type { ProgressPage } from "./api.ts";
 import { describeJobError, waitingOnProvider } from "./job-error.ts";
+import { stageLabel } from "./stage-labels.ts";
 import type { PageStatus, Tone } from "./status.ts";
 
 export type PageLevel = "todo" | "busy" | "done" | "error";
@@ -33,9 +34,17 @@ const ACTIVE = new Set<string>(ACTIVE_JOB_STATUSES);
 export const inTranslateJob = (p: Pick<ProgressPage, "job">) =>
   p.job?.type === "chapter.translate" && ACTIVE.has(p.job.status);
 
-/** Mức hiển thị của page: như `pageLevel`, nhưng page đang chờ job dịch tính là "Đang xử lý". */
-export const pageLevelOf = (p: Pick<ProgressPage, "status" | "job">): PageLevel =>
-  inTranslateJob(p) && p.status !== "failed" ? "busy" : LEVEL[p.status];
+type LevelPage = Pick<ProgressPage, "status" | "job"> & { translate_queued?: boolean };
+
+/**
+ * Mức hiển thị của page: như `pageLevel`, nhưng page đang chờ job dịch, hoặc còn chờ lượt trong lượt dịch đang mở
+ * (kể cả trang lỗi đem dịch lại), tính là "Đang xử lý".
+ */
+export const pageLevelOf = (p: LevelPage): PageLevel =>
+  (inTranslateJob(p) && p.status !== "failed") || p.translate_queued ? "busy" : LEVEL[p.status];
+
+/** Page AI đang/sắp ghi: đang xử lý, hoặc còn chờ lượt trong lượt dịch đang mở → chỉ xem, không chọn để dịch. */
+export const isPageBusy = (p: LevelPage) => pageLevelOf(p) === "busy";
 
 /**
  * Page cần người xem lại: lỗi, AI có bản mới cho page đã sửa tay, hoặc có box chữ tràn khung (`overflow`, đo ở
@@ -44,7 +53,8 @@ export const pageLevelOf = (p: Pick<ProgressPage, "status" | "job">): PageLevel 
 export const needsReview = (p: { status: PageStatus; ai_update_available: boolean }, overflow = false) =>
   p.status === "failed" || p.ai_update_available || overflow;
 
-type ThumbPage = Pick<ProgressPage, "ord" | "status" | "skipped" | "ai_update_available" | "cut_flag" | "job">;
+type ThumbPage = Pick<ProgressPage, "ord" | "status" | "skipped" | "ai_update_available" | "cut_flag" | "job"> &
+  Partial<Pick<ProgressPage, "translate_queued" | "run_batch">>;
 
 /**
  * Nhãn + viền thumbnail cột trang; trang yên (Chờ dịch / Xong) không có nhãn. Trang đang chạy AI có nhãn bước + `progress`
@@ -55,23 +65,35 @@ export type ThumbMark =
   | { tone: "busy"; label: string; progress: number | null }
   | null;
 
+/** Nhãn bước khi job chưa báo bước nào (vừa claim / worker cũ). */
 const BUSY_STEP: Partial<Record<PageStatus, string>> = {
-  pending: "Bước 1",
-  preparing: "Bước 1",
+  pending: "Xoá chữ",
+  preparing: "Xoá chữ",
   translating: "Đang dịch",
 };
 
-/** Ưu tiên: ẩn > lỗi > chờ AI tự thử lại > đang xử lý > cần xem (AI có bản mới, tràn khung) > bình thường. */
+/**
+ * Ưu tiên: ẩn > lỗi (chưa vào lượt dịch lại) > chờ AI tự thử lại > chờ lượt (lô sau của lượt dịch) > đang xử lý > cần xem (AI có bản mới, tràn
+ * khung) > bình thường.
+ */
 export function thumbMark(p: ThumbPage, overflow: boolean): ThumbMark {
   if (p.skipped) return { tone: "hidden", label: "Đã ẩn" };
-  if (p.status === "failed") return { tone: "danger", label: "Lỗi" };
+  if (p.status === "failed" && !p.translate_queued) return { tone: "danger", label: "Lỗi" };
   if (waitingOnProvider(p.job)) return { tone: "warn", label: "Chờ AI" };
-  const step = BUSY_STEP[p.status] ?? (inTranslateJob(p) ? "Đang dịch" : undefined);
-  if (step) {
+  // Trang còn xoá chữ hiện bước xoá chữ; trang của lô đang chạy hiện bước dịch.
+  if (p.translate_queued && !BUSY_STEP[p.status] && !inTranslateJob(p)) {
+    return { tone: "busy", label: p.run_batch ? `Chờ lượt · lô ${p.run_batch}` : "Chờ lượt", progress: null };
+  }
+  const fallback = BUSY_STEP[p.status] ?? (inTranslateJob(p) ? "Đang dịch" : undefined);
+  if (fallback) {
     const running = p.job?.status === "running";
     const progress = running ? Math.min(1, Math.max(0, p.job?.progress ?? 0)) : null;
-    const label = progress === null ? `${step} · chờ` : `${step} · ${Math.round(progress * 100)}%`;
-    return { tone: "busy", label, progress };
+    if (progress === null) {
+      const label = p.status === "pending" || p.status === "preparing" ? "Chờ xoá chữ" : `${fallback} · chờ`;
+      return { tone: "busy", label, progress };
+    }
+    const step = stageLabel(p.job, { short: true }) ?? fallback;
+    return { tone: "busy", label: `${step} · ${Math.round(progress * 100)}%`, progress };
   }
   if (needsReview(p, overflow)) return { tone: "warn", label: "Cần xem" };
   return null;
@@ -96,9 +118,23 @@ export function thumbAria(p: ThumbPage, overflow: boolean): string {
   return flags.length ? `${head}: ${flags.join(", ")}` : head;
 }
 
-/** Title thumbnail: câu lỗi job (nếu có) hoặc cờ chi tiết; trang hiện thêm gợi ý menu chuột phải. */
-export function thumbTitle(p: ThumbPage, overflow: boolean): string {
+export const isMacPlatform = (platform: string) => /mac|iphone|ipad|ipod/i.test(platform);
+
+/** Nền tảng của trình duyệt đang chạy (false ngoài trình duyệt, VD test). */
+const IS_MAC =
+  typeof navigator !== "undefined" &&
+  isMacPlatform(
+    (navigator as Navigator & { userAgentData?: { platform?: string } }).userAgentData?.platform ??
+      navigator.platform ??
+      "",
+  );
+
+/** Gợi ý chọn trang ở cột trang: macOS Ctrl-click là chuột phải (mở menu Ẩn trang) → chỉ ⌘ chọn được. */
+export const selectHint = (mac = IS_MAC) => `${mac ? "⌘" : "Ctrl"}-click hoặc Shift-click: chọn để dịch riêng`;
+
+/** Title thumbnail: câu lỗi job (nếu có) hoặc cờ chi tiết; trang hiện thêm gợi ý menu chuột phải + chọn trang. */
+export function thumbTitle(p: ThumbPage, overflow: boolean, mac = IS_MAC): string {
   const detail = describeJobError(p.job)?.text ?? thumbFlags(p, overflow).join(" · ");
-  const hint = p.skipped ? "Bấm hoặc chuột phải: khôi phục trang" : "Chuột phải: xoá (ẩn) trang";
+  const hint = p.skipped ? "Bấm hoặc chuột phải: khôi phục trang" : `Chuột phải: xoá (ẩn) trang · ${selectHint(mac)}`;
   return detail ? `${detail}\n${hint}` : hint;
 }

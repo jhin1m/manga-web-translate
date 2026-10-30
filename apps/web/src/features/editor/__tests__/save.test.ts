@@ -5,29 +5,34 @@ import { serial } from "../../chapter/use-chapter-lock.ts";
 import { editText, moveBox } from "../actions.ts";
 import { change } from "../history.ts";
 import { PendingQueue } from "../pending-queue.ts";
-import { finalSave, type SaveApi, Saver } from "../save.ts";
+import { finalSave, PAGE_BUSY_SAVE_TEXT, type SaveApi, Saver } from "../save.ts";
 import { createEditorStore } from "../store.ts";
 import { doc, layout } from "./fixtures.ts";
 
 class HttpError extends Error {
-  constructor(readonly status: number) {
+  constructor(
+    readonly status: number,
+    readonly body: Record<string, unknown> = {},
+  ) {
     super(`HTTP ${status}`);
   }
 }
 
 /** Server giả: version + state, có thể đổi state "từ người khác" giữa chừng. */
 function fakeServer(initial: PageState) {
-  const srv = { state: initial, version: 1, locked: true, puts: 0 };
+  const srv = { state: initial, version: 1, locked: true, busy: false, puts: 0, gets: 0 };
   const api: SaveApi = {
     async put(_id, state, version) {
       srv.puts++;
       if (!srv.locked) throw new HttpError(423);
+      if (srv.busy) throw new HttpError(409, { error: "page_busy" });
       if (version !== srv.version) throw new HttpError(409);
       srv.state = structuredClone(state);
       srv.version++;
       return { version: srv.version };
     },
     async get() {
+      srv.gets++;
       return { state: structuredClone(srv.state), version: srv.version };
     },
   };
@@ -91,6 +96,40 @@ describe("Saver", () => {
     expect((await queue.get("p1"))?.ops.length).toBeGreaterThan(0);
     store.getState().apply(moveBox("t0", 8, 8));
     expect(store.getState().doc?.text_boxes[0]?.x).toBe(7);
+  });
+
+  it("409 page_busy: keeps the draft and goes read-only with a friendly note — no rebase, no error", async () => {
+    const { store, srv, queue, saver } = setup();
+    srv.busy = true;
+    store.getState().apply(moveBox("t0", 6, 6));
+    await saver.flush();
+    expect(srv.puts).toBe(1);
+    expect(srv.gets).toBe(0);
+    expect(store.getState().readOnly).toBe("page_busy");
+    expect(store.getState().save).toEqual({ status: "dirty", error: PAGE_BUSY_SAVE_TEXT });
+    expect(store.getState().doc?.text_boxes[0]).toMatchObject({ x: 6 });
+    expect((await queue.get("p1"))?.ops.length).toBeGreaterThan(0);
+    // Không tự thử lại trong lúc trang còn bận.
+    await saver.flush();
+    expect(srv.puts).toBe(1);
+  });
+
+  it("once the page is free again the kept edits save on top of the AI version", async () => {
+    const { store, srv, queue, saver } = setup();
+    srv.busy = true;
+    store.getState().apply(moveBox("t0", 6, 6));
+    await saver.flush();
+    // Lô của trang xong: AI ghi bản mới (version +1), trang hết bận.
+    srv.busy = false;
+    srv.state = change(srv.state, editText("t1", "bản AI", layout)).state;
+    srv.version = 2;
+    store.getState().setReadOnly(null);
+    await saver.flush();
+    expect(srv.version).toBe(3);
+    expect(srv.state.text_boxes[0]).toMatchObject({ x: 6 });
+    expect(srv.state.text_boxes.find((b) => b.id === "t1")?.text).toBe("bản AI");
+    expect(store.getState().save).toEqual({ status: "saved", error: null });
+    expect(await queue.get("p1")).toBeUndefined();
   });
 
   it("409 then failing reload → error status (not stuck in saving), retries later", async () => {

@@ -208,6 +208,29 @@
             "font"
           ],
           "additionalProperties": false
+        },
+        "carry": {
+          "type": "object",
+          "properties": {
+            "notes": {
+              "type": "string",
+              "maxLength": 2000
+            },
+            "characters": {
+              "maxItems": 30,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64
+              }
+            }
+          },
+          "required": [
+            "notes",
+            "characters"
+          ],
+          "additionalProperties": false
         }
       },
       "required": [

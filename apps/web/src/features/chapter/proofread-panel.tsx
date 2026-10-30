@@ -25,7 +25,7 @@ import {
 import type { Row } from "./text-table/rows.ts";
 
 const ACTIVE = new Set(["queued", "running", "paused_budget"]);
-/** Chương đã qua Bước 2 (khớp API enqueueProofread). */
+/** Chương đã dịch (khớp API enqueueProofread). */
 const TRANSLATED = new Set(["review", "done", "partial_failed"]);
 
 type Item = Suggestion & { row: Row | undefined; state: SuggestionState; pageNo: number | null };
@@ -131,7 +131,7 @@ export function ProofreadPanel(props: {
           type="button"
           className={items.length ? undefined : "btn-primary"}
           disabled={!canRun || run.isPending}
-          title={TRANSLATED.has(props.status ?? "") ? undefined : "Dùng được khi chương đã dịch (sau Bước 2)"}
+          title={TRANSLATED.has(props.status ?? "") ? undefined : "Dùng được khi chương đã dịch"}
           onClick={() => run.mutate()}
         >
           {running ? "Đang hiệu đính…" : items.length || job ? "Hiệu đính lại cả chương" : "Chạy AI hiệu đính"}

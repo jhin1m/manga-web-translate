@@ -1,6 +1,6 @@
 /**
  * Ngân sách click từ home tới editor chương (≤ 3): hàng series → hàng chương = 2 click. Chỉ đếm click có điều hướng. Chương mới: thả ảnh ở home
- * (không dòng xác nhận) → màn chương, upload xong đúng 1 click "Bước 1" là chương bắt đầu xử lý (không tự chạy).
+ * (không dòng xác nhận) → màn chương, upload xong đúng 1 click "Dịch chương" là chương bắt đầu xử lý (không tự chạy).
  */
 import { expect, type Locator, type Page, test } from "@playwright/test";
 import { WEB_URL } from "./env.ts";
@@ -40,7 +40,9 @@ test("home → chapter editor within the click budget", async ({ page }) => {
   expect(viaSeries.n).toBe(2);
 });
 
-test("drop 5 images on home → chapter screen; one click on Bước 1 starts it, nothing runs before", async ({ page }) => {
+test("drop 5 images on home → chapter screen; one click on Dịch chương starts it, nothing runs before", async ({
+  page,
+}) => {
   await login(page);
   const clicks = { n: 0 };
   // Đếm mọi click trong trang (SPA: cùng document suốt luồng).
@@ -62,13 +64,13 @@ test("drop 5 images on home → chapter screen; one click on Bước 1 starts it
     );
   await expect(page).toHaveURL(/\/s\/.+\/c\/[0-9a-f-]{36}$/, { timeout: 30_000 });
   const chip = page.getByRole("status", { name: "Trạng thái chương" });
-  const step1 = page.getByRole("button", { name: "Bước 1 · Xoá chữ + OCR" });
-  await expect(step1).toBeEnabled({ timeout: 30_000 });
+  const translate = page.getByRole("button", { name: "Dịch chương", exact: true });
+  await expect(translate).toBeEnabled({ timeout: 30_000 });
   // Upload xong mà chưa bấm → chương vẫn nháp, không job nào chạy.
   await expect(chip).toHaveText("Nháp");
   expect(clicks.n).toBe(0);
-  await step1.click();
-  await expect(chip).toHaveText(/^Bước 1/, { timeout: 30_000 });
+  await translate.click();
+  await expect(chip).toHaveText("Đang cắt trang", { timeout: 30_000 });
   expect(clicks.n).toBe(1);
 
   // Dọn: không để job ingest treo cho spec sau (worker giả claim mọi job).

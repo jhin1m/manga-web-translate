@@ -16,7 +16,7 @@ import { z } from "zod";
 import { assertQuota } from "../billing/user-quota.ts";
 import { enqueueOcrRegion, enqueueReinpaint, inJobTx } from "../jobs/enqueue.ts";
 import { HISTORY_KEEP } from "../jobs/page-state-writer.ts";
-import { assertChapterLock } from "../lib/chapter-lock.ts";
+import { assertChapterLock, isPageBusy, pageBusyError } from "../lib/chapter-lock.ts";
 import { parseJson } from "../lib/validate.ts";
 import type { AppEnv } from "../middleware/user.ts";
 import { head, MAX_GET_TTL_S, presignGet, presignPost, readPrefix } from "../storage.ts";
@@ -140,16 +140,27 @@ pageStateRoutes.get("/chapters/:chapterId/states", async (c) => {
 });
 
 /**
+ * Người ghi giữ khoá chương (423) và trang không bận (409 `page_busy`: đang dịch / chờ lượt trong chuỗi dịch — AI sắp
+ * ghi trang này). Đọc lại page sau khi kiểm khoá để thấy trạng thái mới nhất.
+ */
+async function editablePage(sdb: Scoped, page: { id: string; chapterId: string }, holder: string) {
+  await assertChapterLock(sdb, page.chapterId, holder);
+  const cur = await sdb.byId(pages, page.id, "page");
+  if (isPageBusy(cur)) throw pageBusyError();
+  return cur;
+}
+
+/**
  * Ghi state của người sửa. Điều kiện version nằm trong WHERE của UPDATE → hai lần ghi đua nhau (hoặc job AI ghi
  * giữa chừng, cũng +1 version) thì đúng một bên thắng, bên kia nhận 409.
  */
 pageStateRoutes.put("/pages/:pageId/state", async (c) => {
   const sdb = c.get("sdb");
   const user = c.get("user");
-  const page = await sdb.byId(pages, c.req.param("pageId"), "page");
+  const found = await sdb.byId(pages, c.req.param("pageId"), "page");
   const expected = ifMatchVersion(c.req.header("if-match"));
   const body = await parseJson(c, PutStateBody);
-  await assertChapterLock(sdb, page.chapterId, c.get("lockHolder"));
+  const page = await editablePage(sdb, found, c.get("lockHolder"));
   if (body.state.size.w !== page.width || body.state.size.h !== page.height) {
     throw httpError(400, { error: "size_mismatch", message: "state.size khác kích thước page" });
   }
@@ -206,8 +217,7 @@ pageStateRoutes.post("/pages/:pageId/reinpaint", async (c) => {
   const body = await parseJson(c, ReinpaintBody);
   const sdb = c.get("sdb");
   const userId = c.get("userId");
-  const page = await sdb.byId(pages, c.req.param("pageId"), "page");
-  await assertChapterLock(sdb, page.chapterId, c.get("lockHolder"));
+  const page = await editablePage(sdb, await sdb.byId(pages, c.req.param("pageId"), "page"), c.get("lockHolder"));
   if (page.cleanRev === null) throw httpError(409, { error: "page_not_prepared" });
   if (page.cleanRev !== body.base_clean_rev) {
     throw httpError(409, { error: "clean_rev_changed", clean_rev: page.cleanRev });

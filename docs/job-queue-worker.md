@@ -30,32 +30,79 @@ MTL_TOKEN_FILE=~/.config/mtl/worker.token uv run mtl-worker --api http://localho
   không đưa cho người dùng thường. Cờ cũ `--workspace` / `--platform` và setting `worker_mode` đã bỏ.
 - Worker chỉ gọi ra ngoài (API + domain file `FILES_DOMAIN`) → chạy sau NAT được.
 
-## Luồng 2 giai đoạn
+## Luồng dịch chương: xoá chữ + OCR rồi chuỗi lô dịch
 
 ```
-Bước 1 "Xoá chữ + OCR" = commit (Phase 4) → enqueueIngest → chapter.ingest
-  complete [tx]: pages (uuid v5) + page_states rỗng + page.prepare × N, chapter → processing
+"Dịch chương" = POST /chapters/:id/commit {target?} → enqueueIngest: chapter → ingesting, mở lượt run_target + run_started_at
+  → chapter.ingest; complete [tx]: pages (uuid v5) + page_states rỗng + page.prepare × N, chapter → processing,
+  run_total = N, pages.translate_queued = (run_target='translated')
 page.prepare (song song): detect → mask → inpaint → OCR LLM (cuối cùng) → clean/{rev}, mask/{rev}, ocr_result
-  complete [tx, khoá dòng chapter]: mọi page hết pending/preparing → chapter → prepared (KHÔNG tự dịch)
-Bước 2 "Dịch" = POST /chapters/:id/translate-prepared → translatePrepared [tx]: chapter.translate cho page `prepared`
-  (cả chương prepared → rolling, có page lỗi bước 1 → neighbors)
-chapter.translate (tuần tự, lô ≤ 4 trang): dịch + typeset → ai_state theo luật AI-không-ghi-đè
-  → page ready/failed; chapter → review | partial_failed
-  Lô lỗi `schema` (JSON sai sau retry, vượt guard token) không fail chương: lô nhiều trang tách dịch lại từng trang;
-  1 trang vẫn hỏng → worker bỏ trang khỏi result → server đánh page `failed` (bản AI cũ giữ nguyên), job `succeeded`
-  nhưng ghi `error_class=schema` để UI gom đúng nguyên nhân. 429/provider/auth vẫn fail cả job.
+  complete/fail [tx, khoá dòng chapter]: ghi page → refreshChapter → advanceTranslateChain
+chapter.translate (tuần tự, mỗi job 1 lô): dịch + typeset → ai_state theo luật AI ghi → page ready/failed
+  complete/fail [tx, khoá dòng chapter]: xoá translate_queued của lô → refreshChapter → advanceTranslateChain
+hết trang translate_queued → run_target = null; chapter → review | partial_failed | prepared
 ```
 
-Gọi từ route (Phase 4–6): `inJobTx(tx => enqueueIngest | translatePrepared | retranslate | retryFailedPages | enqueueReinpaint |
-enqueueOcrRegion(tx, userId, …))` trong `apps/api/src/jobs/enqueue.ts`. Ghi page state từ người dùng: giữ khoá chương qua
-`apps/api/src/lib/chapter-lock.ts` (`assertChapterLock` → 423).
+**Lượt (run)** nằm trên `chapters.run_target` (`prepared` = dừng sau xoá chữ + OCR, `translated` = dịch luôn theo chuỗi
+lô; null = không có lượt), `run_started_at`, `run_total` (số trang của lượt) và `pages.translate_queued` (= trang thuộc
+lượt, chưa xong; giữ `true` cả lúc đang trong lô, xoá khi lô của nó complete/fail) — migration 0020. Commit không gửi
+`target` → manga (`ingest_mode=pages`) tự dịch, strip dừng ở `prepared` (chờ duyệt cắt trang rồi bấm Dịch); manga mà
+hết hạn mức → vẫn xoá chữ + OCR rồi dừng `prepared`. `target: "translated"` gửi tường minh + hết hạn mức → 402. Web gửi
+`prepared` cho "Chỉ xoá chữ + OCR (soát trước)", `translated` cho "Dịch chương".
+
+**`advanceTranslateChain`** (`apps/api/src/jobs/translate-chain.ts`) chạy dưới khoá dòng chapter, idempotent (đã có job
+dịch active → không làm gì; gọi lặp / đồng thời vẫn ra đúng 1 job). Gọi ở complete/fail của `page.prepare` và
+`chapter.translate`:
+
+- Frontier = trang `translate_queued` đầu tiên theo `ord` (bỏ trang ẩn). Trang lỗi xoá chữ + OCR (chưa có OCR) bị
+  bỏ khỏi lượt; frontier còn đang xoá chữ + OCR → chờ.
+- Lô = các trang đã prepared liên tiếp từ frontier, cắt theo `planBatches` (≤ 4 trang có chữ và ≤ 40 khối — cùng
+  `make_batches` của worker; trang 0 khối đi kèm miễn phí, trang đơn lẻ vượt trần vẫn đi riêng).
+- **Lô đầu** chạy ngay khi có ≥ 1 trang liên tiếp đã prepared. **Lô sau** chưa đầy mà còn trang phía sau đang xoá chữ +
+  OCR → chờ cho đủ lô (tránh vụn lô, giữ token ≈ dịch cả chương); hết trang chờ thì chạy lô thiếu. Nhờ vậy trang lô 1 `ready`
+  (sửa được) khi lô sau còn chờ/chạy.
+- Job dịch có `priority = 50` (claim xếp `priority, created_at`; `page.prepare` là 100) — trang đã prepare được dịch
+  ngay, không chờ cả chương xoá chữ + OCR xong.
+- `payload.context`: `rolling` khi lô mở đầu chương và mọi trang hiện xen giữa/ngay sau lô còn trong lượt; còn lại
+  `neighbors` (lúc claim dựng nguồn + bản dịch trang ngay trước, nguồn trang ngay sau — dịch lại trang lẻ vẫn lấy trang
+  trước + sau). `payload.carry` = `result.carry` của lô thành công gần nhất trong lượt (xem dưới).
+- Lô lỗi hẳn (terminal `failed`) không chặn chuỗi: trang của lô chưa có bản AI → `failed`, đã có → giữ `ready`; lô kế
+  chạy tiếp; cuối lượt chương `partial_failed` nếu còn trang lỗi.
+- Hết hạn mức người dùng giữa chuỗi → đóng lượt, trang chưa tới lượt giữ `prepared` / `ready` (chỉ trang của lô đã chạy
+  và lỗi hẳn mới `failed`).
+- **Huỷ** bất kỳ job nào của lượt (kể cả 1 trang / 1 lô) dừng cả lượt (`stopTranslateChain`: `run_target = null`, xoá
+  `translate_queued`); `POST /chapters/:id/cancel` cũng đóng lượt khi không còn job nào bị huỷ (lượt đang chờ trang
+  xoá chữ + OCR). Muốn dịch tiếp: bấm Dịch lại.
+- Dịch (`translate-prepared`), dịch lại (`translate`, cả chương hoặc `page_ids`), "Chạy lại trang lỗi" (`retry-failed`;
+  trang lỗi xoá chữ + OCR chỉ vào lượt khi chương đã có trang `ready`, không thì dừng `prepared`) khi chương còn job dịch
+  đang chạy/chờ → 409 `translate_running` (riêng `translate-prepared` khi chương đang `processing` → 409 `chapter_not_prepared`); trang ẩn → 409 `page_skipped`; trang chưa có OCR → 409 `page_not_prepared`.
+
+Thứ tự khoá cố định job → chapter → pages ở mọi nhánh (claim, `applyResult`, `terminal`, advance) để không deadlock.
+`refreshChapter` coi chương bận khi còn trang `translate_queued` của lượt `translated`; lượt `prepared` hết bận thì đóng.
+
+**`carry`** (pipeline 0.7.0, `TranslateCarry` ở `packages/shared/src/job.ts`): `{notes ≤ 2000, characters ≤ 30 tên × ≤ 64}`
+chuyền ngữ cảnh giữa các lô — worker trả `result.carry` (ngữ cảnh sau lô cuối, cắt theo đơn vị UTF-16 như zod), API nhét
+vào `payload.carry` của lô kế, worker nạp vào `RollingContext` đầu job. Thiếu `carry` = ngữ cảnh rỗng như cũ (payload cũ vẫn chạy).
+
+Lỗi `schema` của lô (JSON sai sau retry, vượt guard token) không fail chương: lô nhiều trang tách dịch lại từng trang;
+1 trang vẫn hỏng → worker bỏ trang khỏi result → server đánh page `failed` (bản AI cũ giữ nguyên), job `succeeded` nhưng
+ghi `error_class=schema` để UI gom đúng nguyên nhân. 429/provider/auth vẫn fail cả job.
+
+**Luật AI ghi** (`jobs/page-state-writer.ts`): `state_origin = 'ai'` → ghi `state` (kể cả khi tab editor đang giữ khoá
+chương — trang đang dịch / chờ lượt chỉ xem, PUT state trả 409 `page_busy`); trang đã sửa tay (`state_origin = 'user'`)
+→ chỉ cập nhật `ai_state` + `ai_update_available = true`.
+
+Gọi từ route: `inJobTx(tx => enqueueIngest | enqueueReinpaint | enqueueOcrRegion(tx, userId, …))` trong
+`apps/api/src/jobs/enqueue.ts`, `translatePrepared | retranslate | retryFailedPages` trong `translate-chain.ts`. Ghi
+page state từ người dùng: giữ khoá chương qua `apps/api/src/lib/chapter-lock.ts` (`assertChapterLock` → 423; trang bận
+`isPageBusy` → 409 `page_busy`; ghi hàng loạt cả chương `assertChapterIdle` → 409 `chapter_busy`).
 
 ## Giao thức worker
 
 | Lệnh | Body chính | Ghi chú |
 |---|---|---|
 | `POST /claim` | `worker_id, capabilities, max ≤ 8, pipeline_version, dispatch_id` | 426 khi `< MIN_PIPELINE_VERSION`; 400 capability lạ/không được cấp. Token `mac` và `modal` cùng thấy job của mọi người dùng; token `modal` không nhận job nào của người đã vượt hạn mức, token `mac` không nhận job LLM của họ (xem [hạn mức](#hạn-mức-mỗi-người-user_daily_usd)). Breaker bật → bỏ qua loại job cần LLM |
-| `POST /jobs/:id/heartbeat` | `lease_token, attempt, progress, stage, usage` | gia hạn lease 120s; `stop: "cancel"` khi người dùng huỷ, `stop: "paused_budget"` khi vượt ngân sách (job tốn tiền, không tính attempt) |
+| `POST /jobs/:id/heartbeat` | `lease_token, attempt, progress, stage, usage, done?, total?` | gia hạn lease 120s; ghi `jobs.progress_done/progress_total` (số ảnh/trang/đoạn đã xong / tổng của bước `stage`; thiếu = bước không đếm, worker cũ không gửi); `stop: "cancel"` khi người dùng huỷ, `stop: "paused_budget"` khi vượt ngân sách (job tốn tiền, không tính attempt) |
 | `POST /jobs/:id/presign-outputs` | `names: ["clean"\|"mask"\|"page:<ord>"]` | URL PUT mới, cùng rev, TTL ≤ lease còn lại |
 | `POST /jobs/:id/complete` | `result, usage, pipeline_version` | lặp với cùng lease → no-op |
 | `POST /jobs/:id/fail` | `error_class, retry_after_s, message, usage, partial` | xem phân loại lỗi |
@@ -69,6 +116,13 @@ Usage: worker gửi số đếm thô (`seq` tăng dần trong attempt, `model, l
 (`llm_out ≤ 4096·calls`, tổng theo attempt ≤ trần số call của job, `gpu_s ≤ thời gian từ claim`), nhân bảng giá
 `apps/api/src/billing/prices.ts` (model lạ → giá cao nhất, không bao giờ $0), ghi `usage_ledger` unique
 `(job_id, attempt, seq, kind)`.
+
+Heartbeat (`mtl_worker/runner.py`): thread riêng, nhịp 20s gia hạn lease + gửi usage; đổi bước (`stage`) hoặc số đếm
+(`done`) thì gửi tiến độ **ngay** (tối thiểu cách lần trước 2s — nhiều lần đổi dồn dập gộp vào một lần; heartbeat sớm không
+mang usage). Nhờ đó trang hiện bước ("Đang tải ảnh 3/10", "Xoá chữ", "Đang đặt chữ"…) trong vài giây; mã bước → nhãn tiếng Việt
+ở `apps/web/src/features/chapter/stage-labels.ts`. `GET /chapters/:id/progress` trả `job.progress_done/progress_total` của
+từng trang, `chapter.run` (`target`, `total`, `remaining`, `batch`, `batches`) và `pages[].translate_queued`,
+`pages[].run_batch` (số thứ tự lô dự kiến) cho thumbnail "Chờ lượt · lô k", `pages[].ocr_ready` (đã có OCR — đúng điều kiện server nhận trang vào lượt dịch). Complete/fail/requeue xoá cặp đếm (migration 0019).
 
 ## Phân loại lỗi
 
@@ -86,13 +140,13 @@ trả `queued` (giữ attempts) hoặc `failed` khi hết lượt.
 
 - `chapter.ingest` chỉ nhận ảnh gốc `source_files.skip IS NULL` (`'user'` = xoá tay, `'credit'` = khớp ảnh credit
   series đã học lúc tạo chương); commit kiểm lại bộ ảnh trong transaction, đổi giữa chừng → 409 `sources_changed`.
-- Trang `pages.skipped`: không vào `chapter.translate` (Bước 2, retry, dịch lại), không làm `context_lines`, không
+- Trang `pages.skipped`: không vào `chapter.translate` (chuỗi lô dịch, retry, dịch lại), không làm `context_lines`, không
   tính trạng thái chương; `chapter.export` nhận `pages[].skipped` (pipeline 0.4.2).
 - **Chữ bỏ qua** (`series.ignore_text`, Cài đặt series → "Chữ bỏ qua (watermark)"; ≤ 50 mục): lúc claim
   `chapter.translate`, item OCR khớp một mục được gửi `empty: true` → worker không dịch, không đặt box (ảnh đã sạch từ
-  Bước 1). `ocr_result` trong DB không đổi → bỏ mục rồi dịch lại là dịch vùng đó bình thường. Dòng khớp cũng bị bỏ khỏi
+  xoá chữ + OCR). `ocr_result` trong DB không đổi → bỏ mục rồi dịch lại là dịch vùng đó bình thường. Dòng khớp cũng bị bỏ khỏi
   `context_lines` (cả `page.ocr_region`; vùng người dùng tự vẽ thì vẫn dịch). Đổi danh sách tăng `glossary_rev` (khoá
-  job dịch), **không** `settings_rev` (nằm trong khoá prepare → thử lại trang lỗi sẽ chạy lại Bước 1). Quy tắc khớp
+  job dịch), **không** `settings_rev` (nằm trong khoá prepare → thử lại trang lỗi sẽ chạy lại xoá chữ + OCR). Quy tắc khớp
   (`compileIgnoreList`, `packages/shared/src/ignore-text.ts`, dùng chung api + bảng văn bản):
   - Mục thường: NFC, không phân biệt hoa/thường, bỏ `http(s)://`, **bỏ mọi khoảng trắng cả hai phía** (`discord . gg`
     khớp mục `discord.gg`); 3–100 ký tự tính trên dạng đã bỏ khoảng trắng.
@@ -149,10 +203,14 @@ xếp hàng trước pipeline 0.4.0 thiếu → worker mặc định `ko` → `v
 (xem `docs/typeset-layout-contract.md`). Schema `regions[]` của `inputs-chapter-translate` và `page.prepare` partial có
 `additionalProperties: false` nên worker < 0.5.0 từ chối region có `text_color`/`outline_color` (lỗi hợp đồng) dù trường
 là optional: trang đã prepare bằng ≥ 0.5.0 không dịch được trên worker cũ, và `MIN_PIPELINE_VERSION` phải ≥ 0.5.0 khi
-API gửi các trường này (hiện 0.5.1). Chiều ngược lại ổn: trang bước 1 cũ không có màu rơi về quy tắc cực tính. 0.5.1 (`inputs.fonts` của translate/export, xem mục Font tuỳ chỉnh)
+API gửi các trường này (hiện 0.5.1). Chiều ngược lại ổn: trang đã prepare từ trước 0.5.0 không có màu rơi về quy tắc cực tính. 0.5.1 (`inputs.fonts` của translate/export, xem mục Font tuỳ chỉnh)
 nâng `MIN_PIPELINE_VERSION = 0.5.1`: schema input có `additionalProperties: false` nên worker cũ không đọc nổi job có
 font, và worker cũ cũng không biết fallback font tuỳ chỉnh. API `PIPELINE_VERSION` (muối input_rev) không đổi. 0.6.0
 (cài đặt pipeline trong payload, job `chapter.proofread`, xem mục dưới) nâng `MIN_PIPELINE_VERSION = 0.6.0` cùng lý do.
+0.7.0 (`carry` ở payload + result `chapter.translate`, xem mục Luồng dịch chương) nâng `MIN_PIPELINE_VERSION = 0.7.0`: schema
+payload có `additionalProperties: false` nên worker 0.6.x từ chối job dịch có `carry` — worker Mac/Modal lên 0.7.0
+**trước** khi deploy API, không thì claim trả 426 và hàng đợi dừng (worker 0.7.0 vẫn đọc payload cũ không có `carry`).
+API `PIPELINE_VERSION` (muối input_rev) vẫn 0.4.0. Heartbeat `done/total` không cần nâng version (API cũ bỏ qua key lạ).
 
 ## Font tuỳ chỉnh (pipeline 0.5.1)
 
@@ -238,8 +296,9 @@ dùng quá tay không làm cạn ngân sách chung. Code: `apps/api/src/billing/
 
 - Cửa sổ = ngày **UTC** (cùng `billing/budget.ts`), tính **mọi** chi phí của người dùng trong `usage_ledger` (token LLM
   + GPU). `0` = chặn mọi job LLM; không đặt = không giới hạn. `SIGNUP_ENABLED=true` bắt buộc phải đặt biến này.
-- Endpoint tạo job LLM → 402 `{error:"quota_exceeded", spent_usd, limit_usd, resets_at}`: commit (khi OCR là LLM),
-  dịch, `translate-prepared`, chạy lại trang lỗi, `ocr-region`, hiệu đính. Job không-LLM (xoá chữ lại, xuất…) vẫn tạo được.
+- Endpoint tạo job LLM → 402 `{error:"quota_exceeded", spent_usd, limit_usd, resets_at}`: commit (khi OCR là LLM hoặc đích
+  `translated` tường minh), dịch, `translate-prepared`, chạy lại trang lỗi, `ocr-region`, hiệu đính. Job không-LLM (xoá chữ
+  lại, xuất…) vẫn tạo được. Hết hạn mức **giữa** chuỗi lô → đóng lượt, trang chưa tới lượt giữ `prepared` / `ready`.
 - Job LLM đang `queued` của người vượt → `failed` (`error_class=internal`, thông báo bắt đầu bằng `quota_exceeded`) ngay
   lúc claim và ở tick runner `mtl-jobs` — không dùng `paused_budget` nên chương không kẹt `processing`. Job LLM đang
   chạy: heartbeat trả `stop: "cancel"` rồi job `failed` như trên.

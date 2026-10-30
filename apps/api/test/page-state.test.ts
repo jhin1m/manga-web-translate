@@ -26,6 +26,8 @@ async function newPage(cleanRev: number | null = 1) {
     originalKey: `u/${A.userId}/ch/${A.chapterId}/ingest/1/${ord}.png`,
     originalSha256: SHA,
     cleanRev,
+    // Có ảnh sạch + bản AI → đã dịch xong (trang chưa qua Bước 1 là trang bận, không sửa được).
+    status: cleanRev === null ? "pending" : "ready",
   });
   await sdb.insert(pageStates, { pageId: id, state: aiState(W, H, "AI"), aiState: aiState(W, H, "AI"), aiRev: 1 });
   return id;

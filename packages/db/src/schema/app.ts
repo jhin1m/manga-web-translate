@@ -107,6 +107,14 @@ export const chapters = pgTable(
     ingestMode: text("ingest_mode").$type<PageFormat>().notNull().default("strip"),
     lockedBy: text("locked_by"),
     lockedAt: timestamp("locked_at", { withTimezone: true }),
+    /**
+     * Lượt dịch đang chạy: `prepared` = dừng sau Bước 1; `translated` = chuỗi job dịch theo lô qua mọi trang
+     * `pages.translate_queued`. null = không có lượt (hành vi cũ, chờ người dùng bấm).
+     */
+    runTarget: text("run_target").$type<"prepared" | "translated">(),
+    runStartedAt: timestamp("run_started_at", { withTimezone: true }),
+    /** Số trang của lượt (để UI hiện "lô x/y", "còn n trang"). */
+    runTotal: integer("run_total").notNull().default(0),
     ...timestamps,
   },
   (t) => [
@@ -115,6 +123,7 @@ export const chapters = pgTable(
     index("chapters_series_idx").on(t.seriesId),
     check("chapters_status_chk", inList(sql`${t.status}`, CHAPTER_STATUSES)),
     check("chapters_ingest_mode_chk", inList(sql`${t.ingestMode}`, PAGE_FORMATS)),
+    check("chapters_run_target_chk", sql`${t.runTarget} IS NULL OR ${t.runTarget} IN ('prepared','translated')`),
   ],
 );
 
@@ -224,6 +233,8 @@ export const pages = pgTable(
     /** Lần cuối `skipped` đổi giá trị (giờ DB) — ẩn/khôi phục sau lần xuất cuối thì chương cần xuất lại. */
     skipChangedAt: timestamp("skip_changed_at", { withTimezone: true }),
     status: text("status").$type<PageStatus>().notNull().default("pending"),
+    /** Trang thuộc lượt dịch hiện tại, chưa xong (giữ cả lúc đang trong lô; xoá khi lô của nó complete/fail). */
+    translateQueued: boolean("translate_queued").notNull().default(false),
     ...timestamps,
   },
   (t) => [
@@ -351,6 +362,9 @@ export const jobs = pgTable(
     outputRev: integer("output_rev"),
     progress: real("progress").notNull().default(0),
     stage: text("stage"),
+    /** Số ảnh/trang/đoạn đã xong / tổng của bước `stage` (heartbeat gần nhất; null = bước không đếm). */
+    progressDone: integer("progress_done"),
+    progressTotal: integer("progress_total"),
     errorClass: text("error_class").$type<(typeof ERROR_CLASSES)[number]>(),
     error: text("error"),
     pipelineVersion: text("pipeline_version"),

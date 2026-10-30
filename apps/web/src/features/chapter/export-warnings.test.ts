@@ -1,17 +1,29 @@
 import { describe, expect, it } from "vitest";
 import { box, doc, region } from "../editor/__tests__/fixtures.ts";
-import { exportWarnings, warningLines } from "./export-warnings.ts";
+import { exportWarnings, reviewCount, warningLines } from "./export-warnings.ts";
 import { pageRows, type Row } from "./text-table/rows.ts";
 
 const row = (kind: Row["kind"], flags: Row["flags"]) => ({ kind, flags });
+const page = (status: Parameters<typeof exportWarnings>[0][number]["status"], ai_update_available = false) => ({
+  status,
+  ai_update_available,
+});
 
 describe("exportWarnings", () => {
-  it("counts failed pages, overflowing boxes and empty translations (empty SFX not counted)", () => {
+  it("untranslated pages are said to be missing from the file", () => {
+    const w = exportWarnings([page("prepared"), page("failed"), page("ready")], []);
+    expect(w.untranslated).toBe(2);
+    expect(warningLines(w, { includeUntranslated: false })[0]).toBe("2 trang chưa dịch → không có trong file");
+  });
+
+  it("the missing-pages warning disappears when untranslated pages are included", () => {
+    const w = exportWarnings([page("prepared"), page("failed"), page("ready")], []);
+    expect(warningLines(w, { includeUntranslated: true }).some((l) => l.includes("không có trong file"))).toBe(false);
+  });
+
+  it("each warning states its consequence", () => {
     const w = exportWarnings(
-      [
-        { status: "failed", ai_update_available: false },
-        { status: "ready", ai_update_available: false },
-      ],
+      [page("ready", true), page("ready")],
       [
         row("dialog", ["overflow"]),
         row("box", ["overflow"]),
@@ -20,20 +32,19 @@ describe("exportWarnings", () => {
         row("free", []),
       ],
     );
-    expect(w).toEqual({ failed: 1, notReady: 0, overflow: 2, empty: 1, aiPending: 0 });
-    expect(warningLines(w)).toEqual(["1 trang lỗi xử lý", "2 khối tràn khung", "1 khối chưa có bản dịch"]);
+    expect(w).toEqual({ untranslated: 0, overflow: 2, empty: 1, aiPending: 1 });
+    expect(warningLines(w, { includeUntranslated: false })).toEqual([
+      "1 khối chưa dịch → để trống chữ",
+      "1 trang AI có bản mới → xuất bản đang hiện",
+      "2 khối tràn khung → chữ có thể bị cắt",
+    ]);
+    expect(reviewCount(w)).toBe(4);
+    expect(warningLines(exportWarnings([page("ready")], []), { includeUntranslated: false })).toEqual([]);
   });
 
-  it("pages still processing and pages with a pending AI update", () => {
-    const w = exportWarnings(
-      [
-        { status: "translating", ai_update_available: false },
-        { status: "ready", ai_update_available: true },
-      ],
-      [],
-    );
-    expect(w).toMatchObject({ failed: 0, notReady: 1, aiPending: 1 });
-    expect(warningLines(exportWarnings([{ status: "ready", ai_update_available: false }], []))).toEqual([]);
+  it("hidden pages are never exported, so they never count", () => {
+    const w = exportWarnings([{ ...page("failed", true), skipped: true }, page("ready")], []);
+    expect(w).toEqual({ untranslated: 0, overflow: 0, empty: 0, aiPending: 0 });
   });
 
   it("counts untranslated text regions only, never speech-bubble outlines", () => {
@@ -47,6 +58,6 @@ describe("exportWarnings", () => {
       text_boxes: [box("tb", "b", "Hai")],
     };
     const rows = pageRows({ id: "p", ord: 0, ai_update_available: false }, state, () => false);
-    expect(exportWarnings([{ status: "ready", ai_update_available: false }], rows)).toMatchObject({ empty: 1 });
+    expect(exportWarnings([page("ready")], rows)).toMatchObject({ empty: 1, untranslated: 0 });
   });
 });

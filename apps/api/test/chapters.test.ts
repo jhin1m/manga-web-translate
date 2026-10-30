@@ -160,9 +160,8 @@ describe("chapter flow", () => {
     expect(created.map((j) => j.type)).toEqual(["page.prepare"]);
     const [pj] = await claimFor(ch, "page.prepare", 5);
     expect((await doPrepare(token, pj as Claimed)).status).toBe(200);
-    // Trang chạy lại xong bước 1 → chờ "Dịch" như chương mới.
-    expect((await progress(ch)).chapter.status).toBe("prepared");
-    await json(await api(`/chapters/${ch}/translate-prepared`, { method: "POST" }), 202);
+    // Chương đã có trang dịch xong → trang chạy lại vào lượt dịch, xong bước 1 là tự dịch tiếp.
+    expect((await progress(ch)).chapter.status).toBe("processing");
     const [tj2] = await claimFor(ch, "chapter.translate", 1);
     expect(tj2?.payload.page_ids).toHaveLength(1);
     expect((await doTranslate(token, tj2 as Claimed)).status).toBe(200);

@@ -23,34 +23,68 @@ nháp, lần mở sau đề nghị khôi phục) — xem `use-chapter-session.ts
 
 Khoá theo **tab trình duyệt**, không theo tài khoản: web gửi header `x-tab-id` (uuid trong `sessionStorage`) ở mọi request, holder = `<userId>:<tabId>` (thiếu header → tab `default`). Cùng tài khoản mở chương ở tab thứ hai → tab đó nhận 423 `{error:"chapter_locked"}` và chỉ xem ("Chương đang mở ở tab khác — chỉ xem ở tab này"); đóng tab chỉ nhả khoá của chính tab đó. Response không còn tên người giữ khoá.
 
-Khoá chỉ giữ khi chương **ổn định** (`prepared` / `review` / `partial_failed` / `done`, đã có page; `isChapterSettled` +
-`pageIds.length > 0`, `lockEnabled` trong `use-chapter-session.ts`). Chương đang cắt/dịch → không giữ khoá, chỉ xem.
-"Bước 2 · Dịch" / "Dịch lại" / "Chạy lại trang lỗi" đi qua `runAi`: lưu hết (`saver.flush`) → tạm dừng giữ khoá →
-nhả khoá (cùng chuỗi `serial` với lock) → gọi API; khoá được lấy lại khi chương ổn định trở lại. Tab khác đang giữ
-khoá → băng cảnh báo + "Thử lại", chỉ báo cạnh chip đổi thành "Chỉ xem", editor chỉ xem. Đang giữ khoá
+Khoá giữ khi chương đã có page và không còn đang cắt trang (`lockable` + `pageIds.length > 0` → `lockEnabled` trong
+`use-chapter-session.ts`) — **cả lúc đang dịch**. Chương chưa có page / đang cắt trang → không giữ khoá, chỉ xem. AI không
+cần khoá: job dịch vẫn ghi `state` của trang chưa sửa tay dù chương đang khoá (xem [job-queue-worker.md](./job-queue-worker.md#luồng-dịch-chương-xoá-chữ--ocr-rồi-chuỗi-lô-dịch)).
+Thay vào đó khoá theo **trang**:
+
+- Trang đang chờ lượt / đang dịch (progress: `translate_queued`, hoặc job dịch còn hoạt động, hoặc đang xoá chữ + OCR) là
+  **trang bận** — chỉ xem (`readOnly = "page_busy"`); server cũng chặn: `PUT /pages/:id/state` và `POST /pages/:id/reinpaint`
+  trả 409 `page_busy`. Trang đã xong (lô của nó đã complete) sửa bình thường dù các lô sau còn chạy.
+- Lưu gặp `page_busy` không phải xung đột phiên bản: bản sửa giữ trong editor + IndexedDB, thanh trên báo "Trang này đang
+  dịch — bản sửa được giữ và lưu khi trang dịch xong", và tự lưu khi trang hết bận (AI vừa ghi → 409 phiên bản thì rebase
+  như thường). Đổi sang trang khác khi còn bản sửa chờ → cất lại, lưu khi trang đó hết bận.
+- `runAi` ("Dịch chương" khi chương đã ở "Chờ dịch", Dịch lại, Dịch N trang, Chạy lại trang lỗi) chỉ lưu hết (`saver.flush`) rồi gọi API,
+  **không nhả khoá**; trang vào lượt dịch thành trang bận ngay (làm mới progress sau khi gọi).
+- Thao tác ghi hàng loạt cả chương (Tìm/Thay, Áp glossary, hoàn tác) và ẩn / khôi phục trang chỉ khi chương dịch xong:
+  chương đang cắt trang / xử lý → 409 `chapter_busy` (UI tắt nút).
+
+Tab khác đang giữ khoá → băng cảnh báo + "Thử lại", chỉ báo cạnh chip đổi thành "Chỉ xem", editor chỉ xem. Đang giữ khoá
 bình thường không có băng (chỉ báo nhỏ icon khoá + "Đã lưu" ở thanh trên).
 
-## Ảnh gốc trước Bước 1, xoá ảnh / trang, ảnh tự bỏ
+## Dịch chương: nút chính, chọn trang, tiến độ
 
-**Trước Bước 1** (chương chưa có page: nháp, đang cắt, cắt lỗi) cột thumbnail là các ảnh gốc "Ảnh n" theo thứ tự
+Nút chính ở thanh trên (`primary-action.ts`) theo trạng thái chương: Tải ảnh → **"Dịch chương"** → "Xuất" (khoá khi đang chạy)
+→ "Xuất". "Dịch chương" ở chương nháp = commit (`target: "translated"`) → cắt trang → xoá chữ + OCR → chuỗi lô dịch, chạy nối
+một mạch, không cần bấm lần hai. Menu ⋯ của nút có **"Chỉ xoá chữ + OCR (soát trước)"** (commit `target: "prepared"`): dừng ở
+"Chờ dịch" để soát mask / OCR rồi bấm "Dịch chương" (chương `prepared`) — lựa chọn này không nhớ theo series. Chương
+`partial_failed` → "Chạy lại trang lỗi" (+ Xuất, Dịch lại cả chương); đã xong → "Xuất" (+ "Dịch lại cả chương");
+đang chạy → menu "Huỷ xử lý". Gọi dịch (dịch lại, dịch N trang, chạy lại trang lỗi) khi chương còn lượt đang chạy → 409 `translate_running` (thông báo "Đang có lượt
+dịch — chờ lượt này xong hoặc huỷ rồi thử lại.").
+
+**Chọn trang để dịch riêng** (`page-selection.ts`, cột thumbnail): ⌘-click (macOS) / Ctrl-click (nơi khác) bật/tắt 1
+trang (và làm neo), Shift-click chọn dải từ neo; Esc bỏ chọn. Chỉ chọn được trang hiện, không bận, đã xoá chữ + OCR (chờ
+dịch / xong / lỗi lúc dịch). Có chọn → đầu cột hiện "Dịch N trang · Bỏ chọn" (gửi `POST …/translate {page_ids}`, bản sửa tay giữ
+nguyên). Trang đã chọn mà vào lượt dịch (bận) tự rơi khỏi lựa chọn. Một trang: panel Chọn có "Dịch trang này" (trang chờ
+dịch) / "Dịch lại trang này" (trang đã dịch hoặc lỗi lúc dịch); trang bận không có nút.
+
+**Tiến độ**: chip trạng thái ở thanh trên — "Đang cắt trang", "Xoá chữ + OCR x/y", "Đang dịch · x/y trang · lô k/n", "Chờ dịch",
+"Chờ duyệt · n cần xem", "Xong" (`status.ts`). Thumbnail trang (`page-status.ts` `thumbMark`): "Chờ xoá chữ" / "Xoá chữ" +
+%, "Chờ lượt · lô k" (trang của lô sau), "Đang dịch" / "Đang đặt chữ" + % (trang của lô đang chạy), "Chờ AI" (provider tự thử
+lại), "Lỗi", "Cần xem", "Đã ẩn". Nhãn bước tiếng Việt cho thumbnail, cột ảnh gốc ("Đã tải" / "Đang tải" / "Chờ" khi cắt trang) và
+drawer Hoạt động lấy từ `stage-labels.ts` (mã lạ → "Đang xử lý", không lộ mã tiếng Anh); progress poll 2,5s.
+
+## Ảnh gốc trước khi cắt trang, xoá ảnh / trang, ảnh tự bỏ
+
+**Trước khi cắt trang** (chương chưa có page: nháp, đang cắt, cắt lỗi) cột thumbnail là các ảnh gốc "Ảnh n" theo thứ tự
 upload (`source-rail.tsx`, `use-source-images.ts`): ảnh thả trong tab hiện ngay từ Blob local khi còn đang tải (nhãn
 "Đang tải" / "Tải lỗi" / "Chưa tải"), còn lại dùng URL ký (`GET …/chapters/:id/source-files`). Bấm = xem lớn ở canvas,
 ←/→ chuyển ảnh; panel Chọn hiện ảnh đang xem. Xoá / Khôi phục ảnh khi còn sửa được bộ ảnh — menu chuột phải thumbnail
 (Shift+F10 / phím Menu khi đang focus) hoặc nút "Xoá ảnh này" / "Khôi phục ảnh này" ở panel Chọn: `PATCH …/chapters/:id/source-files/:fileId {skip}` đặt
 `source_files.skip = 'user'` (giữ hàng để hoàn tác và để tải tiếp khớp bộ file); commit/ingest bỏ ảnh `skip`, nút
-Bước 1 đếm ảnh còn dùng. Chương đang mở ở tab khác → 423; đã có page → 409.
+nút "Dịch chương" đếm ảnh còn dùng. Chương đang mở ở tab khác → 423; đã có page → 409.
 
-Đổi thứ tự ảnh (cùng điều kiện `editable`, thứ tự này là thứ tự Bước 1 ghép/cắt): kéo-thả thumbnail (vạch xanh báo chỗ
+Đổi thứ tự ảnh (cùng điều kiện `editable`, thứ tự này là thứ tự ghép/cắt trang): kéo-thả thumbnail (vạch xanh báo chỗ
 thả), menu chuột phải "Đưa lên đầu / Lên 1 / Xuống 1 / Đưa xuống cuối", hoặc Alt+↑/↓ trên thumbnail đang focus (focus đi
 theo ảnh). Cập nhật lạc quan, lỗi → trả thứ tự cũ + toast; toast "Đã đổi thứ tự" có "Hoàn tác". Ảnh đã xoá vẫn giữ chỗ.
 `PUT …/chapters/:id/source-files/order {ids}`: `ids` phải đúng bộ source file của chương (thiếu / thừa / trùng → 400
 `source_set_mismatch`), ghi `ord = vị trí`; cùng guard với PATCH skip (423 chương đang mở ở tab khác, 409 `chapter_not_draft`).
 Ingest đọc theo `ord` nên worker không đổi. Kéo-thả HTML5 gốc không chạy trên màn cảm ứng — dùng menu.
 
-**Sau Bước 1** "Ẩn trang n" ở menu chuột phải thumbnail hoặc "Ẩn trang này" ở panel Chọn (chưa chọn khối) ẩn trang
+**Sau khi cắt trang** "Ẩn trang n" ở menu chuột phải thumbnail hoặc "Ẩn trang này" ở panel Chọn (chưa chọn khối) ẩn trang
 (`PATCH /pages/:id {skipped}`, cần giữ khoá; chương đang chạy → 409 `chapter_busy`; trang hiện cuối cùng → 409
 `last_page`). Trang ẩn giữ dữ liệu, hiện mờ "Đã ẩn" đúng vị trí trong cột thumbnail; bấm hoặc chuột phải → "Khôi phục
-trang n"; không dịch (Bước 2, dịch lại, chạy lại lỗi; dịch thẳng trang ẩn → 409 `page_skipped`), không làm ngữ cảnh trang
+trang n"; không dịch (dịch chương, dịch lại, chạy lại lỗi; dịch thẳng trang ẩn → 409 `page_skipped`), không làm ngữ cảnh trang
 bên cạnh, không tính trạng thái/đếm của chương, không bị Tìm/Thay / Áp glossary đụng tới, không xuất. Số trang giữ
 số gốc (1, 2, 4…); bộ đếm và "Trang i / n" chỉ đếm trang hiện. Ẩn/khôi phục sau khi đã xuất **không** đánh dấu "cần
 xuất lại".
@@ -67,7 +101,7 @@ từ chối ảnh không có hash (`no_hash`), ảnh gần trơn (≤ 8 hoặc �
 (`ws/{ws}/series/{id}/skip/…`, còn khi xoá chương nguồn) và quản lý ở Cài đặt series → "Ảnh tự bỏ" (xoá khỏi danh
 sách không đổi chương đã tạo); xoá series dọn cả thư mục đó.
 
-Giới hạn: credit cùng width với trang truyện đã bị ghép vào page lớn sau Bước 1 thì không tự bỏ được (chỉ ẩn cả
+Giới hạn: credit cùng width với trang truyện đã bị ghép vào page lớn lúc cắt trang thì không tự bỏ được (chỉ ẩn cả
 trang); credit cùng mẫu nhưng đổi chữ có thể không khớp; chưa có AI phân loại credit.
 
 ## Dữ liệu và lưu
@@ -75,7 +109,7 @@ trang); credit cùng mẫu nhưng đổi chữ có thể không khớp; chưa c�
 - Nguồn sự thật: `page_states.state` (zod `PageState`, `packages/shared/src/page-state.ts`). Store zustand giữ `doc`
   (đang sửa) và `base` + `baseVersion` (bản server đã xác nhận); Konva chỉ render từ store.
 - Ghi: `PUT /api/pages/:id/state` với `If-Match: "<version>"`. Không giữ khoá chương → 423 (editor chuyển chỉ
-  xem); version lệch → 409 kèm version hiện tại. Mỗi lần ghi đẩy bản cũ vào `page_state_history` (≤ 50/page),
+  xem); version lệch → 409 kèm version hiện tại; trang đang dịch / chờ lượt → 409 `page_busy` (bản sửa được giữ, xem "Khoá chương theo trạng thái"). Mỗi lần ghi đẩy bản cũ vào `page_state_history` (≤ 50/page),
   `state_origin = 'user'`, `ai_update_available` giữ nguyên.
 - Autosave (`save.ts`): debounce 2s, lưu ngay khi chuyển page/ẩn tab/rời màn chương. Lượt lưu tuần tự: ghi
   IndexedDB → PUT → 200 xoá bản ghi | 409 tải state server + rebase | 423 chỉ xem (bản ghi giữ lại) và thử lấy lại
@@ -163,8 +197,8 @@ chương chưa dịch xong → Tìm, Hiệu đính tắt.
 - **Chọn** (`select-panel.tsx`): có khối — "Trang n · Khối i / tổng · Loại" (loại chỉ đọc), Gốc (OCR), Bản dịch
   (`#cw-translation`, cùng nguồn với bảng), cảnh báo tràn khung, font / cỡ / tự khớp, "Kiểu chữ nâng cao" (thu gọn:
   giãn dòng, lề, căn lề, màu, viền, ẩn khi xuất, "Áp kiểu này cho khối <loại> trong chương" — hỏi xác nhận), Dịch lại
-  khối, Xoá khối, link Dịch lại trang này. Chưa có khối — trang + trạng thái + cờ (AI có bản mới, tràn khung, cắt ở
-  trần chiều cao, lỗi job + "Chi tiết kỹ thuật"), Dịch lại trang này · Ẩn trang này, "Bỏ chỉnh sửa tay, dùng lại bản
+  khối, Xoá khối, link Dịch trang này / Dịch lại trang này (không có khi trang bận). Chưa có khối — trang + trạng thái + cờ (AI có bản mới, tràn khung, cắt ở
+  trần chiều cao, lỗi job + "Chi tiết kỹ thuật"), Dịch trang này / Dịch lại trang này · Ẩn trang này, "Bỏ chỉnh sửa tay, dùng lại bản
   AI" (khi trang khác bản AI). "AI có bản mới" và xung đột khi lưu luôn ở đầu panel.
 - **Chữ / OCR** (`tool-panels.tsx`): gợi ý cách dùng + font khối mới / ngôn ngữ gốc của series (đổi ở Cài đặt series).
 - **Mask / Tẩy** (`MaskPanel.tsx`): Tô ↔ Tẩy nét, cỡ bút, "Xoá chữ vùng đã tô", "Bỏ nét".
@@ -188,7 +222,7 @@ dòng trong ô, Esc bỏ focus; đồng bộ 2 chiều với canvas và panel Ch
 ## AI hiệu đính
 
 Panel "Hiệu đính" của rail (`proofread-panel.tsx`, trạng thái thuần ở `proofread-model.ts`): "Chạy AI hiệu đính" /
-"Hiệu đính lại cả chương" (lưu hết trước, `POST …/proofread`; tắt khi chương chưa qua Bước 2 hoặc đang chạy; poll 2,5s
+"Hiệu đính lại cả chương" (lưu hết trước, `POST …/proofread`; tắt khi chương chưa dịch xong hoặc đang chạy; poll 2,5s
 khi job chạy) → danh sách gợi ý theo trang rồi thứ tự khối: "Trang n · Khối i" (bấm = mở trang + chọn khối), bản AI
 đã đọc (gạch) → đề xuất, lý do, Nhận · Bỏ. Trạng thái suy từ bản dịch hiện tại của khối (cùng nguồn với bảng văn
 bản): = bản đã đọc → "Chờ duyệt"; = đề xuất → "Đã nhận"; khác cả hai / khối không còn → "Lỗi thời" (chỉ Bỏ).
@@ -220,7 +254,7 @@ người dùng động vào khung nhìn → vừa lại; đã tự zoom (Ctrl/Cm
 zoom. Góc dưới phải canvas: **Vừa khung** (khung nhìn mở trang, bỏ cờ zoom) · **100%** (mức 1, đầu trang sát mép
 trên, giữ khi đổi trang) — cả hai qua `chapterStore.fitView` — + mức zoom hiện tại. Page đang chạy AI (`pageLevel`
 busy): cột Dịch hiện ảnh gốc + lớp mờ + "Đang xử lý…", không vẽ chữ; ảnh sạch vẫn tải ngầm để đổi ngay khi xong.
-Page xong bước 1, chờ dịch (`prepared`, "Chờ dịch"): hiện ảnh sạch như thường để soát, sửa mask trước khi bấm Dịch.
+Page đã xoá chữ + OCR, chờ dịch (`prepared`, "Chờ dịch"): hiện ảnh sạch như thường để soát, sửa mask trước khi bấm Dịch.
 Chế độ Gốc không đổi.
 
 ## Phím tắt
@@ -247,12 +281,13 @@ mở → tắt phím màn chương (Esc đóng drawer).
 Drawer phải 420px (`apps/web/src/app/drawer.tsx`): scrim xám, Esc/scrim/Đóng = đóng, focus vào drawer khi mở, trả về
 nút đã mở khi đóng.
 
-- **Xuất chương** (`features/chapter/export-drawer.tsx` + `export-panel.tsx`): phạm vi cả chương; ZIP PNG / CBZ (chất
-  lượng); "Cắt lại theo slice gốc" (= `layout: original_slices`, bỏ chọn = theo trang); kèm trang chưa dịch; tên file
-  `{series}-ch{số}.{zip|cbz}`. Cảnh báo trước khi xuất (`export-warnings.ts`, từ dữ liệu đã có, không gọi API): trang
-  lỗi, trang chưa xong, khối tràn khung, khối chưa có bản dịch (bỏ SFX), trang có bản AI mới chưa áp → "Xem các khối
-  này" mở panel Bản dịch lọc "Chỉ khối cần xem". Vẫn xuất được khi có cảnh báo. `?drawer=export` (nút "Xuất lại" ở "Việc cần
-  làm") mở chương với drawer Xuất mở sẵn.
+- **Xuất chương** (`features/chapter/export-drawer.tsx` + `export-panel.tsx`): phạm vi cả chương. Từ trên xuống: cảnh báo
+  "Trước khi xuất" (nói hậu quả trong file, xem [export-and-batch-edit.md](./export-and-batch-edit.md#drawer-xuất-chương))
+  → "Tuỳ chọn" (thu gọn, 1 dòng tóm tắt: định dạng, cách chia ảnh, chất lượng, có đưa trang chưa dịch) → nút **"Tải chương
+  (.zip|.cbz)"** (tiến độ ngay tại nút, xong tự tải; link "Tải xuống" tại chỗ phòng trình duyệt chặn) → "Lượt xuất
+  trước" (thu gọn). Đóng drawer giữa chừng không mất việc: xong lúc drawer đóng → thông báo "Đã xuất xong." + "Tải xuống".
+  Cảnh báo tính từ dữ liệu đã có (`export-warnings.ts`, không gọi API); "Xem N chỗ này" mở panel Bản dịch lọc "Chỉ khối cần
+  xem". Vẫn xuất được khi có cảnh báo. `?drawer=export` (nút "Xuất lại" ở home / danh sách chương) mở chương với drawer Xuất mở sẵn.
 - **Hoạt động** (`features/chapter/activity-drawer.tsx`): icon ở thanh trên màn chương, nút ở app shell, kèm số việc
   đang chạy. Upload của tab (mọi chương, thử lại file lỗi); ở màn chương thêm job của chương (trang đang xử lý/lỗi theo
   `error_class`, "Chạy lại trang lỗi", trang chờ AI tự thử lại) và lượt xuất gần đây (tải lại, huỷ).

@@ -3,7 +3,7 @@
  *
  * Luồng chung (lõi ở lib/batch-edit.ts): preview (không cần khoá) → apply gửi lại `versions` (bắt buộc đã xem trước,
  * page đổi sau preview → 409 `preview_stale`) → hoàn tác theo `batch_id` (409 nếu page đã bị sửa tiếp). Apply và hoàn
- * tác cần khoá chương (423).
+ * tác cần khoá chương (423) và chương không đang cắt trang / chạy AI (409 `chapter_busy`).
  *
  * Thay trong `region.translation` và `text_box.text`; box bị đổi có `lines: []` → renderer (editor + export) ngắt
  * lại theo typesetter (docs/typeset-layout-contract.md, trường `lines[]`).
@@ -14,7 +14,7 @@ import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { z } from "zod";
 import { applyBatch, chapterPages, httpError, previewPages, undoBatch } from "../lib/batch-edit.ts";
-import { assertChapterLock } from "../lib/chapter-lock.ts";
+import { assertChapterIdle, assertChapterLock } from "../lib/chapter-lock.ts";
 import { mergeBySourceTerm, seriesGlossaryWhere } from "../lib/glossary-scope.ts";
 import { parseJson } from "../lib/validate.ts";
 import type { AppEnv } from "../middleware/user.ts";
@@ -167,6 +167,7 @@ findReplaceRoutes.post(`${base}/find-replace/apply`, async (c) => {
   const user = c.get("user");
   const ch = await sdb.byId(chapters, c.req.param("chapterId"), "chapter");
   await assertChapterLock(sdb, ch.id, c.get("lockHolder"));
+  assertChapterIdle(ch);
   return c.json(await applyRulesToChapter(sdb, ch.id, user.id, findRule(body), body.versions));
 });
 
@@ -177,6 +178,7 @@ findReplaceRoutes.post(`${base}/find-replace/undo`, async (c) => {
   const user = c.get("user");
   const ch = await sdb.byId(chapters, c.req.param("chapterId"), "chapter");
   await assertChapterLock(sdb, ch.id, c.get("lockHolder"));
+  assertChapterIdle(ch);
   const r = await undoBatch(sdb, ch.id, user.id, body.batch_id, "fail");
   if (!r.found) throw httpError(404, { error: "batch_not_found" });
   return c.json({ pages: r.restored });
@@ -196,6 +198,7 @@ findReplaceRoutes.post(`${base}/glossary-apply/apply`, async (c) => {
   const user = c.get("user");
   const ch = await sdb.byId(chapters, c.req.param("chapterId"), "chapter");
   await assertChapterLock(sdb, ch.id, c.get("lockHolder"));
+  assertChapterIdle(ch);
   const s = await sdb.byId(series, ch.seriesId, "series");
   return c.json(await applyRulesToChapter(sdb, ch.id, user.id, await glossaryRules(sdb, s, body), body.versions));
 });

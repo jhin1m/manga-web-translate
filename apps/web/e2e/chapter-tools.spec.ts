@@ -218,10 +218,10 @@ test.describe("công cụ chương", () => {
     await open.click();
     const dlg = page.getByRole("dialog", { name: "Xuất chương" });
     await expect(dlg.getByText(`Series e2e-ch${number}.zip`)).toBeVisible();
-    await dlg.getByRole("button", { name: "Xuất ZIP PNG", exact: true }).click();
-
-    const row = dlg.locator(".status", { hasText: "Xong" });
-    await expect(row).toBeVisible({ timeout: 60_000 });
+    // 1 lần bấm: xong thì tự tải (đúng tên file server đặt); link "Tải xuống" tại chỗ phòng trình duyệt chặn.
+    const download = page.waitForEvent("download", { timeout: 60_000 });
+    await dlg.getByRole("button", { name: "Tải chương (.zip)", exact: true }).click();
+    expect((await download).suggestedFilename()).toBe(`Series e2e-ch${number}.zip`);
     exportDone = true;
     await worker;
 

@@ -1,8 +1,10 @@
 /**
  * Cột trang bên phải canvas (112px): thumbnail (ảnh sạch/ảnh gốc, tải lười) + số trang. Trạng thái = viền + nhãn ngắn
- * khi đang chạy AI (Bước 1 / Đang dịch + thanh %) hoặc có vấn đề (Đã ẩn / Lỗi / Chờ AI / Cần xem — page-status.ts
- * `thumbMark`); tên truy cập luôn đủ trạng thái. Trang ẩn nằm đúng vị trí theo số trang (mờ). Nút "Cần xem k" lọc trang
- * lỗi / AI có bản mới / tràn khung. Bấm = kích hoạt page và cuộn canvas tới; xoá (ẩn) / khôi phục trang bằng nút góc
+ * khi đang chạy AI (Xoá chữ / Chờ lượt · lô k / Đang dịch / Đang đặt chữ + thanh %) hoặc có vấn đề (Đã ẩn / Lỗi / Chờ
+ * AI / Cần xem — page-status.ts `thumbMark`); tên truy cập luôn đủ trạng thái. Trang ẩn nằm đúng vị trí theo số trang
+ * (mờ). Nút "Cần xem k" lọc trang lỗi / AI có bản mới / tràn khung. Bấm = kích hoạt page và cuộn canvas tới (bỏ chọn);
+ * ⌘-click (macOS) / Ctrl-click / Shift-click = chọn trang để dịch riêng (page-selection.ts), có chọn → thanh "Dịch N trang · Bỏ chọn"
+ * ở đầu cột. Xoá (ẩn) / khôi phục trang bằng nút góc
  * thumbnail (hiện khi rê chuột / focus, khi sửa được) hoặc menu chuột phải (Shift+F10 / phím Menu), bấm trang ẩn cũng mở
  * menu. Số trang giữ số gốc (ord + 1) — trang ẩn để lại lỗ số, khớp bảng văn bản và Tìm/Thay.
  */
@@ -27,6 +29,13 @@ export const PageRail = memo(function PageRail(props: {
   editable: boolean;
   onPick(pageId: string): void;
   onSkip(page: ProgressPage, skipped: boolean): void;
+  /** Trang đang chọn để dịch riêng (đã lọc trang không chọn được). */
+  selected: ReadonlySet<string>;
+  /** Đang gửi lượt dịch các trang chọn. */
+  translating: boolean;
+  onSelect(pageId: string, mod: { shift: boolean; toggle: boolean }): void;
+  onTranslateSelected(): void;
+  onClearSelection(): void;
 }) {
   const [reviewOnly, setReviewOnly] = useState(false);
   const [menu, setMenu] = useState<{ page: ProgressPage; at: MenuAt; anchor: HTMLElement } | null>(null);
@@ -81,12 +90,29 @@ export const PageRail = memo(function PageRail(props: {
           </button>
         )}
       </div>
+      {props.selected.size > 0 && (
+        <div className="cw-thumbs-sel" role="toolbar" aria-label="Trang đã chọn">
+          <button
+            type="button"
+            className="btn-primary"
+            disabled={props.translating}
+            title="Dịch + chèn chữ riêng các trang đã chọn (chỉnh sửa tay được giữ)"
+            onClick={props.onTranslateSelected}
+          >
+            Dịch {props.selected.size} trang
+          </button>
+          <button type="button" className="btn-link" title="Bỏ chọn (Esc)" onClick={props.onClearSelection}>
+            Bỏ chọn
+          </button>
+        </div>
+      )}
       <div className="cw-thumbs-list" ref={listRef}>
         {list.map((p) => {
           const img = props.images.get(p.id);
           const on = p.id === props.activeId;
           const overflow = props.overflow.has(p.id);
           const mark = thumbMark(p, overflow);
+          const picked = props.selected.has(p.id);
           const openMenu = (at: MenuAt, anchor: HTMLElement) => setMenu({ page: p, at, anchor });
           return (
             <div key={p.id} className="cw-thumb-item" data-page={p.id}>
@@ -95,13 +121,21 @@ export const PageRail = memo(function PageRail(props: {
                 className="cw-thumb"
                 data-tone={mark?.tone}
                 aria-current={on ? "page" : undefined}
-                aria-label={thumbAria(p, overflow)}
+                data-selected={picked || undefined}
+                aria-label={`${thumbAria(p, overflow)}${picked ? " · đã chọn" : ""}`}
                 aria-haspopup={p.skipped ? "menu" : undefined}
                 title={thumbTitle(p, overflow)}
                 // Trang ẩn không mở trên canvas (canvas chỉ có trang còn hiện) → bấm mở menu khôi phục.
-                onClick={(e) =>
-                  p.skipped ? openMenu(menuAtElement(e.currentTarget), e.currentTarget) : props.onPick(p.id)
-                }
+                onClick={(e) => {
+                  const toggle = e.ctrlKey || e.metaKey;
+                  if (toggle || e.shiftKey) {
+                    // Không để trình duyệt bôi chọn văn bản / mở tab mới.
+                    e.preventDefault();
+                    return props.onSelect(p.id, { shift: e.shiftKey, toggle });
+                  }
+                  if (p.skipped) return openMenu(menuAtElement(e.currentTarget), e.currentTarget);
+                  props.onPick(p.id);
+                }}
                 onContextMenu={(e) => {
                   e.preventDefault();
                   openMenu({ x: e.clientX, y: e.clientY }, e.currentTarget);

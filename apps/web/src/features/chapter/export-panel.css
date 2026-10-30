@@ -1,0 +1,96 @@
+/* Drawer "Xuất chương": tuỳ chọn + lượt xuất trước thu gọn bằng <details>, nút chính chiếm cả hàng. */
+.exp-warn-list {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 2px;
+}
+.exp-options,
+.exp-history {
+  border: 1px solid var(--c-line);
+  border-radius: var(--radius);
+}
+.exp-options > summary,
+.exp-history > summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
+  cursor: pointer;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  list-style: none;
+}
+.exp-options > summary::-webkit-details-marker,
+.exp-history > summary::-webkit-details-marker {
+  display: none;
+}
+.exp-options > summary::before,
+.exp-history > summary::before {
+  content: "▸";
+  color: var(--c-fg-muted);
+}
+.exp-options[open] > summary::before,
+.exp-history[open] > summary::before {
+  content: "▾";
+}
+.exp-options > summary .muted {
+  font-weight: 400;
+}
+.exp-options-body,
+.exp-history-body {
+  display: grid;
+  gap: var(--sp-3);
+  padding: 0 var(--sp-3) var(--sp-3);
+}
+.exp-field {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+.exp-field > legend {
+  margin-bottom: 6px;
+  padding: 0;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--c-fg-muted);
+}
+.exp-stack {
+  flex-direction: column;
+}
+.exp-hint {
+  margin: 6px 0 0;
+}
+/* Nhóm nút chất lượng: liền nhau, nút đang chọn tô màu nhấn. */
+.exp-seg {
+  display: inline-flex;
+}
+.exp-seg button {
+  border-radius: 0;
+  font-weight: 400;
+}
+.exp-seg button + button {
+  margin-left: -1px;
+}
+.exp-seg button:first-child {
+  border-radius: var(--radius) 0 0 var(--radius);
+}
+.exp-seg button:last-child {
+  border-radius: 0 var(--radius) var(--radius) 0;
+}
+.exp-seg button[aria-pressed="true"] {
+  position: relative;
+  border-color: var(--c-accent);
+  background: var(--c-accent-weak);
+  color: var(--c-accent-hover);
+}
+.exp-main {
+  display: grid;
+  gap: var(--sp-2);
+}
+.exp-main-btn {
+  width: 100%;
+  min-height: 40px;
+}

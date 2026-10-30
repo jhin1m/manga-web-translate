@@ -1,25 +1,42 @@
 /**
- * Xuất chương (PNG zip / CBZ) trong drawer "Xuất chương": chọn tuỳ chọn → cảnh báo (chỉ thông tin) → gửi job →
- * polling tiến độ → tải qua link có xác thực (API trả 302 tới presigned GET 5'). Danh sách export gần đây + huỷ
- * job đang chạy (dùng lại ở drawer Hoạt động).
+ * Xuất chương (.zip ảnh / .cbz) trong drawer "Xuất chương": cảnh báo nói hậu quả → tuỳ chọn thu gọn (1 dòng tóm
+ * tắt) → 1 nút tải: gửi job → tiến độ ngay tại nút → xong tự tải qua link có xác thực (API trả 302 tới presigned
+ * GET 5'); link "Tải xuống" tại chỗ phòng trình duyệt chặn tự tải. Danh sách lượt xuất trước + huỷ job đang chạy
+ * (ExportRow dùng lại ở drawer Hoạt động).
  */
-import { EXPORT_FILE } from "@mtl/shared";
+import { EXPORT_FILE, EXPORT_RETENTION_DAYS } from "@mtl/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { errorMessage } from "../../lib/api.ts";
 import {
   cancelJob,
   createExport,
   type ExportFormat,
+  type ExportLayout,
   type ExportStatus,
   type ExportView,
   exportKeys,
   fetchExports,
 } from "./api.ts";
+import {
+  CBZ_QUALITY,
+  type CbzQuality,
+  DEFAULT_LAYOUT,
+  exportLabel,
+  exportPhase,
+  exportPollInterval,
+  FORMAT_LABEL,
+  isExportActive,
+  LAYOUT_CHOICES,
+  latestActiveExport,
+  optionsSummary,
+  showLayoutChoice,
+} from "./export-options.ts";
+import { type ExportWarnings, reviewCount, warningLines } from "./export-warnings.ts";
+import { stageLabel } from "./stage-labels.ts";
 import type { Tone } from "./status.ts";
 import { formatBytes } from "./text-utils.ts";
-
-export const EXPORT_POLL_MS = 1500;
+import "./export-panel.css";
 
 const STATUS: Record<ExportStatus, { label: string; tone: Tone }> = {
   queued: { label: "Đang chờ", tone: "busy" },
@@ -29,57 +46,83 @@ const STATUS: Record<ExportStatus, { label: string; tone: Tone }> = {
   cancelled: { label: "Đã huỷ", tone: "idle" },
   paused_budget: { label: "Tạm dừng (hết ngân sách)", tone: "warn" },
 };
-const FORMAT: Record<ExportFormat, string> = { png_zip: "ZIP PNG", cbz: "CBZ" };
-export const isExportActive = (s: ExportStatus) => s === "queued" || s === "running";
-
 /** Export gần đây của chương; poll khi còn lượt đang chạy. Dùng chung cho drawer Xuất, Hoạt động và số việc. */
 export function useExports(chapterId: string) {
   const qc = useQueryClient();
   const q = useQuery({
     queryKey: exportKeys.list(chapterId),
     queryFn: () => fetchExports(chapterId),
-    refetchInterval: (q) =>
-      q.state.status !== "error" && q.state.data?.exports.some((e) => isExportActive(e.status))
-        ? EXPORT_POLL_MS
-        : false,
+    refetchInterval: (q) => exportPollInterval(q.state),
   });
   const refresh = () => void qc.invalidateQueries({ queryKey: exportKeys.list(chapterId) });
   return { q, refresh };
+}
+
+/** Tải file qua anchor `download` (API trả 302 kèm Content-Disposition attachment). */
+export function triggerDownload(url: string) {
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "";
+  document.body.append(a);
+  a.click();
+  a.remove();
 }
 
 export function ExportPanel(props: {
   chapterId: string;
   /** Tên file không đuôi, khớp tên server đặt khi tải (`{series}-ch{số}`). */
   fileBase: string;
-  pageCount: number;
-  warnings: string[];
-  /** "Xem các khối này" → bảng văn bản lọc "Cần xem" (drawer đóng). */
+  /** `sources` = ảnh đã tải lên còn dùng; `pages` = trang đã cắt đang hiện. */
+  counts: { sources: number; pages: number };
+  warnings: ExportWarnings;
+  /** "Xem N chỗ này" → bảng văn bản lọc "Cần xem" (drawer đóng). */
   onShowWarnings(): void;
   /** Lưu phần đang sửa trước khi gửi job (server render từ state đã lưu). */
   beforeStart(): Promise<unknown>;
-  onCancel(): void;
 }) {
-  const { chapterId } = props;
+  const { chapterId, counts } = props;
   const [format, setFormat] = useState<ExportFormat>("png_zip");
-  const [slices, setSlices] = useState(true);
-  const [quality, setQuality] = useState(90);
-  const [untranslated, setUntranslated] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [chosenLayout, setLayout] = useState<ExportLayout>(DEFAULT_LAYOUT);
+  const [quality, setQuality] = useState<CbzQuality>("high");
+  const [includeUntranslated, setInclude] = useState(false);
   const { q: listQ, refresh } = useExports(chapterId);
+  /**
+   * Lượt xuất nút chính theo dõi và tự tải đúng 1 lần khi xong: lượt vừa gửi từ drawer này, hoặc lượt còn chạy lúc
+   * mở lại drawer (đóng drawer giữa chừng không mất việc tự tải).
+   */
+  const [pending, setPending] = useState<ExportView | null>(() => latestActiveExport(listQ.data?.exports));
+  // Danh sách chưa có lúc mở drawer → nhận lượt còn chạy ở lần tải đầu.
+  const adoptedRef = useRef(!!listQ.data);
+  useEffect(() => {
+    if (adoptedRef.current || !listQ.data) return;
+    adoptedRef.current = true;
+    const active = latestActiveExport(listQ.data.exports);
+    if (active) setPending((p) => p ?? active);
+  }, [listQ.data]);
+  const downloadedRef = useRef<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [cancelError, setCancelError] = useState<string | null>(null);
+
+  // 1 ảnh tải lên = 1 trang → không hỏi cách chia, xuất như lúc tải lên.
+  const layoutChoice = showLayoutChoice(counts);
+  const layout = layoutChoice ? chosenLayout : DEFAULT_LAYOUT;
+  const qualityValue = CBZ_QUALITY[quality].value;
+  const options = { format, layout, quality: qualityValue, includeUntranslated };
 
   const start = useMutation({
     mutationFn: async () => {
       await props.beforeStart();
       return createExport(chapterId, {
         format,
-        layout: slices ? "original_slices" : "pages",
-        quality: format === "cbz" ? quality : undefined,
-        include_untranslated: untranslated,
+        layout,
+        quality: format === "cbz" ? qualityValue : undefined,
+        include_untranslated: includeUntranslated,
       });
     },
+    onMutate: () => setError(null),
+    // `created:false` = lượt cùng tuỳ chọn đang chạy → theo dõi luôn lượt đó.
     onSuccess: (r) => {
-      setError(null);
-      if (!r.created) setError("Đã có lượt xuất cùng tuỳ chọn đang chạy — theo dõi bên dưới.");
+      setPending(r.job);
       refresh();
     },
     onError: (e) => {
@@ -90,104 +133,171 @@ export function ExportPanel(props: {
   const cancel = useMutation({
     mutationFn: (id: string) => cancelJob(id),
     onSettled: refresh,
-    onError: (e) => setError(errorMessage(e)),
+    onMutate: () => setCancelError(null),
+    onError: (e) => setCancelError(errorMessage(e)),
   });
 
   const exports = listQ.data?.exports ?? [];
+  // Danh sách chưa kịp tải lại sau khi gửi: theo dõi bằng job server vừa trả.
+  const tracked = pending && !exports.some((e) => e.id === pending.id) ? [pending, ...exports] : exports;
+  const phase = exportPhase(tracked, pending?.id ?? null);
+  const readyId = phase.kind === "ready" ? phase.id : null;
+  const readyUrl = phase.kind === "ready" ? phase.url : null;
+
+  useEffect(() => {
+    if (!readyId || !readyUrl || downloadedRef.current === readyId) return;
+    downloadedRef.current = readyId;
+    triggerDownload(readyUrl);
+  }, [readyId, readyUrl]);
+
+  const lines = warningLines(props.warnings, { includeUntranslated });
+  const review = reviewCount(props.warnings);
+  const ext = FORMAT_LABEL[format].ext;
+  // Poll lỗi khi đang chạy: vẫn poll lại theo nhịp, nhưng tạm chưa biết tiến độ → mở lại nút thay vì kẹt "Đang xuất".
+  const lost = listQ.isError && phase.kind === "running";
+  const running = phase.kind === "running" && !lost;
+  const failure =
+    error ??
+    (phase.kind === "failed" ? phase.error : lost ? `Không theo dõi được tiến độ: ${errorMessage(listQ.error)}` : null);
+
   return (
     <>
-      <section className="drawer-section">
-        <h3>Phạm vi</h3>
-        <p className="small" style={{ margin: 0 }}>
-          Cả chương ({props.pageCount} trang)
-        </p>
-      </section>
-      <section className="drawer-section">
-        <h3>Định dạng</h3>
-        <div className="drawer-choice" role="radiogroup" aria-label="Định dạng">
-          {Object.entries(FORMAT).map(([v, l]) => (
-            <label key={v}>
-              <input
-                type="radio"
-                name="exp-format"
-                value={v}
-                checked={format === v}
-                onChange={() => setFormat(v as ExportFormat)}
-              />
-              {l}
-            </label>
-          ))}
-        </div>
-        <label className="drawer-check" style={{ marginTop: 8 }}>
-          <input type="checkbox" checked={slices} onChange={(e) => setSlices(e.target.checked)} />
-          Cắt lại theo slice gốc (khớp ảnh đã tải lên)
-        </label>
-        {!slices && <p className="muted small">Mỗi trang đã cắt thành 1 ảnh.</p>}
-        {format === "cbz" ? (
-          <div style={{ maxWidth: 200, marginTop: 8 }}>
-            <label htmlFor="exp-quality">Chất lượng (1–100)</label>
-            <input
-              id="exp-quality"
-              type="number"
-              min={1}
-              max={100}
-              value={quality}
-              onChange={(e) => setQuality(Math.min(100, Math.max(1, Number(e.target.value) || 90)))}
-            />
-            <p className="muted small" style={{ margin: "4px 0 0" }}>
-              Dưới 100: ảnh nén JPEG (nhẹ hơn, có mất chi tiết). 100: PNG nguyên bản.
-            </p>
-          </div>
-        ) : (
-          <p className="muted small">PNG luôn không mất dữ liệu.</p>
-        )}
-        <label className="drawer-check">
-          <input type="checkbox" checked={untranslated} onChange={(e) => setUntranslated(e.target.checked)} />
-          Gồm cả trang chưa dịch (ảnh đã xoá chữ/ảnh gốc)
-        </label>
-      </section>
-      {props.warnings.length > 0 && (
+      {lines.length > 0 && (
         <section className="drawer-warn" aria-label="Trước khi xuất">
           <strong className="small">Trước khi xuất</strong>
-          <span className="small">{props.warnings.join(" · ")}</span>
-          <span className="small">
-            <button type="button" className="link" onClick={props.onShowWarnings}>
-              Xem các khối này trong bảng văn bản
-            </button>{" "}
-            <span className="muted">— vẫn xuất được.</span>
-          </span>
+          <ul className="exp-warn-list small">
+            {lines.map((l) => (
+              <li key={l}>{l}</li>
+            ))}
+          </ul>
+          {review > 0 && (
+            <span className="small">
+              <button type="button" className="link" onClick={props.onShowWarnings}>
+                Xem {review} chỗ này
+              </button>{" "}
+              <span className="muted">— vẫn xuất được.</span>
+            </span>
+          )}
         </section>
       )}
-      <p className="muted small" style={{ margin: 0 }}>
-        Tên file: <span className="mono">{`${props.fileBase}.${EXPORT_FILE[format].ext}`}</span> · link tải hiệu lực 5
-        phút, file giữ 7 ngày.
-      </p>
-      <div className="row" style={{ justifyContent: "flex-end" }}>
-        <button type="button" onClick={props.onCancel}>
-          Huỷ
+
+      <details className="exp-options">
+        <summary>
+          <span className="exp-options-title">Tuỳ chọn</span>
+          <span className="muted small">{optionsSummary(options, counts)}</span>
+        </summary>
+        <div className="exp-options-body">
+          <fieldset className="exp-field">
+            <legend>Định dạng</legend>
+            <div className="drawer-choice exp-stack">
+              {(Object.keys(FORMAT_LABEL) as ExportFormat[]).map((f) => (
+                <label key={f}>
+                  <input type="radio" name="exp-format" checked={format === f} onChange={() => setFormat(f)} />
+                  {FORMAT_LABEL[f].long}
+                </label>
+              ))}
+            </div>
+          </fieldset>
+          {format === "cbz" && (
+            <fieldset className="exp-field">
+              <legend>Chất lượng ảnh</legend>
+              <div className="exp-seg">
+                {(Object.keys(CBZ_QUALITY) as CbzQuality[]).map((k) => (
+                  <button key={k} type="button" aria-pressed={quality === k} onClick={() => setQuality(k)}>
+                    {CBZ_QUALITY[k].label}
+                  </button>
+                ))}
+              </div>
+              <p className="muted small exp-hint">Gốc: ảnh PNG nguyên bản. Cao/Nhẹ: nén JPEG, file nhỏ hơn.</p>
+            </fieldset>
+          )}
+          {layoutChoice && (
+            <fieldset className="exp-field">
+              <legend>Cách chia ảnh</legend>
+              <div className="drawer-choice exp-stack">
+                {LAYOUT_CHOICES.map((c) => (
+                  <label key={c.value}>
+                    <input
+                      type="radio"
+                      name="exp-layout"
+                      checked={layout === c.value}
+                      onChange={() => setLayout(c.value)}
+                    />
+                    {c.label(counts)}
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+          )}
+          <label className="drawer-check">
+            <input type="checkbox" checked={includeUntranslated} onChange={(e) => setInclude(e.target.checked)} />
+            Đưa cả trang chưa dịch vào (ảnh gốc, chưa có bản dịch)
+          </label>
+        </div>
+      </details>
+
+      <div className="exp-main" aria-live="polite">
+        <button
+          type="button"
+          className="btn-primary exp-main-btn"
+          disabled={start.isPending || running}
+          onClick={() => start.mutate()}
+        >
+          {start.isPending ? (
+            "Đang gửi…"
+          ) : running ? (
+            phase.kind === "running" && phase.paused ? (
+              "Tạm dừng — hết ngân sách"
+            ) : (
+              `Đang xuất ${phase.pct}%…`
+            )
+          ) : (
+            <>
+              <span aria-hidden="true">⬇</span> Tải chương ({ext})
+            </>
+          )}
         </button>
-        <button type="button" className="btn-primary" disabled={start.isPending} onClick={() => start.mutate()}>
-          {start.isPending ? "Đang gửi…" : `Xuất ${FORMAT[format]}`}
-        </button>
+        {phase.kind === "ready" && (
+          <span className="small">
+            Đã xong. Nếu file chưa tự tải:{" "}
+            <a className="btn" href={phase.url} download>
+              Tải xuống
+            </a>
+          </span>
+        )}
+        {phase.kind === "running" && phase.paused && (
+          <span className="muted small">Hết ngân sách AI — tự xuất tiếp khi có lại, không cần bấm lại.</span>
+        )}
+        {phase.kind === "expired" && <span className="muted small">Link đã hết hạn — bấm tải lại để xuất mới.</span>}
+        <span className="muted small">
+          Tên file: <span className="mono">{`${props.fileBase}.${EXPORT_FILE[format].ext}`}</span>
+        </span>
       </div>
-      {error && (
+      {failure && (
         <p className="notice danger" role="alert">
-          {error}
+          {failure} Bấm “Tải chương” để thử lại.
         </p>
       )}
 
-      <section className="drawer-section">
-        <h3>Lượt xuất gần đây</h3>
-        {listQ.isError && <p className="notice danger">{errorMessage(listQ.error)}</p>}
-        {!listQ.isError && exports.length === 0 && (
-          <p className="muted small">{listQ.isLoading ? "Đang tải…" : "Chưa có lượt xuất nào."}</p>
-        )}
-        <div className="drawer-list">
-          {exports.map((x) => (
-            <ExportRow key={x.id} x={x} cancelling={cancel.isPending} onCancel={() => cancel.mutate(x.id)} />
-          ))}
+      <details className="exp-history">
+        <summary>Lượt xuất trước ({exports.length})</summary>
+        <div className="exp-history-body">
+          {listQ.isError && <p className="notice danger">{errorMessage(listQ.error)}</p>}
+          {cancelError && (
+            <p className="notice danger" role="alert">
+              {cancelError}
+            </p>
+          )}
+          {!listQ.isError && exports.length === 0 && (
+            <p className="muted small">{listQ.isLoading ? "Đang tải…" : "Chưa có lượt xuất nào."}</p>
+          )}
+          <div className="drawer-list">
+            {exports.map((x) => (
+              <ExportRow key={x.id} x={x} cancelling={cancel.isPending} onCancel={() => cancel.mutate(x.id)} />
+            ))}
+          </div>
         </div>
-      </section>
+      </details>
     </>
   );
 }
@@ -196,17 +306,14 @@ export function ExportRow({ x, cancelling, onCancel }: { x: ExportView; cancelli
   const st = STATUS[x.status];
   const pct = Math.round(Math.min(1, Math.max(0, x.progress)) * 100);
   const expired = x.expires_at !== null && new Date(x.expires_at).getTime() < Date.now();
+  const step = stageLabel({ type: "chapter.export", stage: x.stage, progress_done: null, progress_total: null });
   return (
-    <div className="drawer-item">
+    <div className="drawer-item" title={`Link tải hiệu lực 5 phút, file giữ ${EXPORT_RETENTION_DAYS} ngày`}>
       <div className="drawer-item-head">
         <span className="status" data-tone={st.tone}>
           {st.label}
         </span>
-        <span className="grow small">
-          {FORMAT[x.format]} · {x.layout === "original_slices" ? "theo slice gốc" : "theo trang"}
-          {x.format === "cbz" ? ` · q${x.quality}` : ""}
-          {x.include_untranslated ? " · gồm trang chưa dịch" : ""}
-        </span>
+        <span className="grow small">{exportLabel(x)}</span>
         {isExportActive(x.status) && (
           <button type="button" className="btn-danger" disabled={cancelling} onClick={onCancel}>
             Huỷ
@@ -231,7 +338,8 @@ export function ExportRow({ x, cancelling, onCancel }: { x: ExportView; cancelli
             <span style={{ width: `${pct}%` }} />
           </div>
           <div className="muted small">
-            {pct}%{x.stage ? ` · ${x.stage}` : ""}
+            {step ? `${step} · ` : ""}
+            {pct}%
           </div>
         </>
       )}

@@ -1,6 +1,15 @@
 import { describe, expect, it } from "vitest";
 import type { SourceFileImage } from "./api.ts";
-import { creditHints, moveItem, sourceCounts, sourceItems, sourceLabel, stepSource } from "./source-rail-model.ts";
+import {
+  creditHints,
+  type IngestView,
+  ingestTag,
+  moveItem,
+  sourceCounts,
+  sourceItems,
+  sourceLabel,
+  stepSource,
+} from "./source-rail-model.ts";
 
 const file = (
   id: string,
@@ -107,5 +116,26 @@ describe("moveItem", () => {
     expect(moveItem(ids, 3, 9)).toBe(ids);
     expect(moveItem(ids, 7, 0)).toBe(ids);
     expect(moveItem([], 0, 0)).toEqual([]);
+  });
+});
+
+describe("ingest tags", () => {
+  const ing = (over: Partial<IngestView>): IngestView => ({
+    stage: "download",
+    progress: 0.2,
+    done: 3,
+    total: 5,
+    label: "Đang tải ảnh 3/5",
+    ...over,
+  });
+
+  it("downloaded images are marked while ingest downloads", () => {
+    expect(ingestTag(1, ing({})).label).toBe("Đã tải");
+    expect(ingestTag(3, ing({})).label).toBe("Đang tải");
+    expect(ingestTag(4, ing({})).label).toBe("Chờ");
+    for (const i of [0, 3, 4]) expect(ingestTag(i, ing({ stage: "cut", done: 1, total: 2 })).label).toBe("Đang xử lý");
+    // Job còn xếp hàng / worker cũ không đếm → không đoán ảnh nào đã tải.
+    expect(ingestTag(0, ing({ stage: null, done: null, total: null })).label).toBe("Đang xử lý");
+    expect(ingestTag(0, ing({ done: null, total: null })).label).toBe("Đang xử lý");
   });
 });

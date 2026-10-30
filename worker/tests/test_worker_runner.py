@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import time
 from typing import Any
 
 import numpy as np
@@ -13,7 +14,7 @@ from mtl_pipeline.providers.base import ProviderError
 from mtl_pipeline.schema import BBox, OcrItem, OcrResult, Region, TokenUsage
 from mtl_worker.client import LeaseLost
 from mtl_worker.handlers import HANDLERS
-from mtl_worker.runner import JobContext, run_job
+from mtl_worker.runner import Heartbeat, JobContext, run_job
 from mtl_worker.token import TokenError, read_token_file
 
 PAGE = "0192a3b4-c5d6-7e8f-9a0b-1c2d3e4f5a6b"
@@ -33,14 +34,23 @@ class FakeClient:
 
     def __init__(self, complete_error: Exception | None = None, stop: str | None = None):
         self.calls: list[tuple[str, Any]] = []
+        #: (stage, done, total) của từng heartbeat theo thứ tự gửi.
+        self.beats: list[tuple[str | None, int | None, int | None]] = []
         self.uploads: dict[str, bytes] = {}
         self.complete_error = complete_error
         self.stop = stop
 
     def heartbeat(
-        self, job: dict[str, Any], progress: float, stage: str | None, usage: dict | None
+        self,
+        job: dict[str, Any],
+        progress: float,
+        stage: str | None,
+        usage: dict | None,
+        done: int | None = None,
+        total: int | None = None,
     ) -> dict[str, Any]:
         self.calls.append(("heartbeat", usage))
+        self.beats.append((stage, done, total))
         return {"lease_expires_at": "x", "stop": self.stop}
 
     def presign_outputs(self, job: dict[str, Any], names: list[str]) -> dict[str, dict[str, Any]]:
@@ -95,9 +105,11 @@ class FakePipeline:
     opts: Any = None
     inpaint_args: tuple[str, int | None] | None = None
 
-    def prepare_image(self, img, rtl=False, opts=None):
+    def prepare_image(self, img, rtl=False, opts=None, on_stage=None):
         self.rtl = rtl
         self.opts = opts
+        if on_stage:
+            on_stage("inpaint")
         regs = [Region(id="t0", kind="text_free", bbox=BBox(x=2, y=2, w=40, h=20), score=0.9)]
         mask = np.zeros(img.shape[:2], np.uint8)
         return regs, mask, img.copy(), None
@@ -348,3 +360,172 @@ def test_invalid_result_fails_with_usage_kept():
     assert run_job(c, prepare_job(), {"page.prepare": bad}, Deps()) == "failed"
     kind, info = c.calls[-1]
     assert kind == "fail" and info["error_class"] == "internal" and info["usage"]["llm_in"] == 7
+
+
+# ---- heartbeat theo bước + đếm ----
+
+
+def _run_handler(handler, heartbeat_s: float = 60, heartbeat_gap_s: float = 0.05) -> FakeClient:
+    c = FakeClient()
+
+    def wrapped(ctx, deps):
+        handler(ctx)
+        return {
+            "type": "page.prepare",
+            "clean_rev": 7,
+            "mask_rev": 7,
+            "ocr_result": {"regions": [], "items": []},
+        }
+
+    run_job(
+        c,
+        prepare_job(),
+        {"page.prepare": wrapped},
+        Deps(),
+        heartbeat_s=heartbeat_s,
+        heartbeat_gap_s=heartbeat_gap_s,
+    )
+    return c
+
+
+def test_stage_change_sends_heartbeat_without_waiting_for_interval():
+    def handler(ctx):
+        ctx.report("detect", 0.05)
+        time.sleep(0.3)
+
+    c = _run_handler(handler)
+    assert any(stage == "detect" for stage, _, _ in c.beats)
+
+
+def test_rapid_stage_changes_are_throttled():
+    def handler(ctx):
+        for i in range(10):
+            ctx.report(f"s{i}", i / 10)
+            time.sleep(0.005)
+        time.sleep(0.25)
+
+    c = _run_handler(handler, heartbeat_gap_s=0.2)
+    assert 1 <= len(c.beats) <= 2
+    assert c.beats[-1][0] == "s9"
+
+
+def test_progress_only_change_waits_for_interval():
+    # Lần report đầu đổi stage (None → ocr) → 1 heartbeat; đổi progress cùng stage không đánh thức nữa.
+    def handler(ctx):
+        ctx.report("ocr", 0.1)
+        time.sleep(0.1)
+        for i in range(5):
+            ctx.report("ocr", 0.2 + i / 10)
+            time.sleep(0.02)
+        time.sleep(0.1)
+
+    c = _run_handler(handler)
+    assert c.beats == [("ocr", None, None)]
+
+
+def test_heartbeat_carries_done_and_total():
+    def handler(ctx):
+        ctx.report("upload", 0.8, done=3, total=12)
+        time.sleep(0.2)
+
+    c = _run_handler(handler)
+    assert ("upload", 3, 12) in c.beats
+
+
+def test_prepare_reports_inpaint_between_detect_and_ocr(monkeypatch):
+    stages: list[str] = []
+    real = JobContext.report
+
+    def spy(self, stage, progress, done=None, total=None):
+        stages.append(stage)
+        real(self, stage, progress, done, total)
+
+    monkeypatch.setattr(JobContext, "report", spy)
+    assert run_job(FakeClient(), prepare_job(), HANDLERS, Deps()) == "succeeded"
+    assert stages == ["detect", "inpaint", "ocr", "upload"]
+
+
+class IngestCtx:
+    """Ctx tối thiểu cho handle_ingest: ghi mọi lệnh report kèm đếm."""
+
+    def __init__(self, n: int):
+        self.inputs = {"sources": [{"source_file_id": f"f{i}", "url": f"http://src/{i}"} for i in range(n)]}
+        self.payload = {"mode": "pages"}
+        self.job = {"id": "j"}
+        self.outputs: dict[str, Any] = {}
+        self.client = FakeClient()
+        self.reports: list[tuple[str, int | None, int | None]] = []
+
+    def report(self, stage, progress, done=None, total=None):
+        self.reports.append((stage, done, total))
+
+    def download(self, url):
+        return PNG
+
+    def upload(self, name, data):
+        pass
+
+
+def test_ingest_counts_images_and_pages():
+    from mtl_worker.ingest import handle_ingest
+
+    ctx = IngestCtx(3)
+
+    class _Det:
+        def detect(self, img):  # pragma: no cover - mode pages không detect
+            return []
+
+    deps = Deps()
+    deps.pipeline.detector = _Det()  # type: ignore[attr-defined]
+    result = handle_ingest(ctx, deps)  # type: ignore[arg-type]
+    n = len(result["pages"])
+    downloads = [(d, t) for s, d, t in ctx.reports if s == "download"]
+    assert {(k, 3) for k in (1, 2, 3)} <= set(downloads)
+    uploads = [(d, t) for s, d, t in ctx.reports if s == "upload"]
+    assert uploads and all(t == n for _, t in uploads)
+    assert {d for d, _ in uploads} >= set(range(n))
+    assert all(t is not None for s, _, t in ctx.reports if s == "cut")
+    assert not any(s == "detect" for s, _, _ in ctx.reports)
+
+
+def test_early_heartbeat_leaves_usage_for_complete():
+    # Heartbeat sớm vì đổi bước chỉ mang tiến độ; usage vẫn đi theo nhịp thường / complete như trước.
+    def handler(ctx):
+        ctx.add_usage([TokenUsage(provider="f", model="m", input_tokens=5, output_tokens=1)])
+        ctx.report("translate", 0.1)
+        time.sleep(0.2)
+
+    c = _run_handler(handler)
+    assert c.beats and all(u is None for name, u in c.calls if name == "heartbeat")
+    _, usage = c.calls[-1][1]
+    assert usage["llm_in"] == 5
+
+
+def test_full_beat_still_carries_usage_under_constant_stage_changes():
+    # Đổi bước liên tục nhanh hơn min_gap: nhịp đầy đủ (gia hạn lease + usage) vẫn phải chạy đúng hạn.
+    def handler(ctx):
+        ctx.add_usage([TokenUsage(provider="f", model="m", input_tokens=5, output_tokens=1)])
+        for i in range(40):
+            ctx.report(f"s{i % 2}", 0.5)
+            time.sleep(0.01)
+
+    c = _run_handler(handler, heartbeat_s=0.15, heartbeat_gap_s=0.02)
+    assert any(u for name, u in c.calls if name == "heartbeat")
+
+
+def test_stop_arriving_just_before_wake_clear_is_not_lost():
+    # __exit__ (set stop rồi wake) chen đúng lúc thread vừa thức dậy và sắp xoá cờ wake → thread vẫn phải thoát.
+    ctx = JobContext(FakeClient(), prepare_job())
+    hb = Heartbeat(ctx, interval=60, min_gap=0)
+    real_clear = ctx.wake.clear
+
+    def racing_clear():
+        hb._stop.set()
+        ctx.wake.set()
+        real_clear()
+
+    ctx.wake.clear = racing_clear  # type: ignore[method-assign]
+    hb._t.start()
+    ctx.report("detect", 0.05)
+    hb._t.join(timeout=1)
+    assert not hb._t.is_alive()

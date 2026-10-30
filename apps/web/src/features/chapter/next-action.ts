@@ -79,7 +79,7 @@ export function nextAction(
     case "draft":
       return a({
         kind: "translate",
-        action: "Bước 1",
+        action: "Dịch chương",
         state: "Chưa xử lý",
         detail: upload?.total ? `Đã tải ${upload.total} ảnh · chưa xử lý` : "Đã tải ảnh · chưa xử lý",
         tone: "idle",
@@ -89,15 +89,15 @@ export function nextAction(
         kind: "progress",
         action: "Xem tiến độ",
         state: "Đang cắt trang",
-        detail: "Bước 1 · đang ghép strip và cắt thành trang",
+        detail: "Đang ghép strip và cắt thành trang",
         tone: "busy",
       });
     case "prepared":
       return a({
         kind: "translate",
-        action: "Bước 2 · Dịch",
+        action: "Dịch chương",
         state: "Chờ dịch",
-        detail: `Xong bước 1 · ${pc.total} trang đã OCR${pc.failed ? ` · ${pc.failed} lỗi` : ""}`,
+        detail: `${pc.total} trang đã xoá chữ + OCR${pc.failed ? ` · ${pc.failed} lỗi` : ""}`,
         tone: "idle",
       });
     case "processing":
@@ -113,7 +113,7 @@ export function nextAction(
       if (pc.total === 0) {
         return a({
           kind: "translate",
-          action: "Chạy lại bước 1",
+          action: "Cắt lại trang",
           state: "Cắt trang lỗi",
           detail: "Chưa cắt được trang · cắt lại từ ảnh đã tải",
           tone: "danger",

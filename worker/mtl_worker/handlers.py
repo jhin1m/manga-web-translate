@@ -62,6 +62,9 @@ def _ocr_item_to_shared(it: OcrItem) -> dict[str, Any]:
 
 log = logging.getLogger("mtl_worker")
 
+# Tiến độ cố định theo bước của page.prepare (thanh % trên thumbnail).
+PREPARE_PROGRESS = {"detect": 0.05, "inpaint": 0.3, "ocr": 0.6, "upload": 0.9}
+
 # ---- page.prepare (giai đoạn 1) ----
 
 
@@ -94,9 +97,11 @@ def handle_prepare(ctx: JobContext, deps: Deps) -> dict[str, Any]:
         clean = open_rgb(ctx.download(partial["clean"]))
         mask = open_gray(ctx.download(partial["mask"]))
     else:
-        ctx.report("detect", 0.05)
-        regions, mask, clean, _ = deps.pipeline.prepare_image(img, rtl, opts)
-    ctx.report("ocr", 0.6)
+        ctx.report("detect", PREPARE_PROGRESS["detect"])
+        regions, mask, clean, _ = deps.pipeline.prepare_image(
+            img, rtl, opts, on_stage=lambda s: ctx.report(s, PREPARE_PROGRESS.get(s, 0.3))
+        )
+    ctx.report("ocr", PREPARE_PROGRESS["ocr"])
     try:
         # LLM gọi cuối cùng: lỗi provider vẫn giữ được artifact detect/inpaint.
         ocr = run_ocr(deps, local, img, regions, source_lang)
@@ -113,7 +118,7 @@ def handle_prepare(ctx: JobContext, deps: Deps) -> dict[str, Any]:
     ctx.add_usage(ocr.usage)
     if any(r.is_sfx for r in regions):
         clean, mask = restore_sfx(img, clean, mask, regions)
-    ctx.report("upload", 0.9)
+    ctx.report("upload", PREPARE_PROGRESS["upload"])
     ctx.upload("clean", png_bytes(clean)[0])
     ctx.upload("mask", png_bytes(mask)[0])
     return {
@@ -215,6 +220,12 @@ def build_page_state(
     }
 
 
+# Trần `TranslateCarry` (packages/shared) — result vượt bị API từ chối.
+CARRY_NOTES_MAX = 2000
+CARRY_MAX_CHARACTERS = 30
+CARRY_NAME_MAX = 64
+
+
 def handle_translate(ctx: JobContext, deps: Deps) -> dict[str, Any]:
     p = ctx.payload
     pages_in = sorted(ctx.inputs["pages"], key=lambda pg: pg["ord"])
@@ -241,7 +252,15 @@ def handle_translate(ctx: JobContext, deps: Deps) -> dict[str, Any]:
         parsed.append((pg, regions, items))
 
     lines = [ContextLine(**ln) for ln in ctx.inputs["context_lines"]]
-    initial = RollingContext(lines=lines) if lines else None
+    # Lô sau của cùng lượt dịch: notes + tên nhân vật của lô trước (payload `carry`) mở đầu ngữ cảnh.
+    carry = p.get("carry") or {}
+    initial = (
+        RollingContext(
+            lines=lines, characters=list(carry.get("characters", [])), notes=carry.get("notes", "")
+        )
+        if lines or carry
+        else None
+    )
     ctx.report("translate", 0.1)
     tr = translate_chapter(deps.provider, page_texts, _settings(p), "rolling", initial_context=initial)
     ctx.add_usage(tr.usage)
@@ -261,7 +280,7 @@ def handle_translate(ctx: JobContext, deps: Deps) -> dict[str, Any]:
             # Không gửi trang AI trả hỏng: server đánh page lỗi (job ghi lỗi schema), không ghi đè bản AI cũ.
             log.warning("dịch bỏ trang ord=%s: AI trả sai định dạng cả khi dịch riêng", pg["ord"])
             continue
-        ctx.report("typeset", 0.5 + 0.5 * i / max(1, len(parsed)))
+        ctx.report("typeset", 0.5 + 0.5 * i / max(1, len(parsed)), done=i + 1, total=len(parsed))
         by_id = {r.id: r for r in regions}
         page_items = tr.items.get(str(pg["ord"]), {})
         translations: dict[str, tuple[str, bool]] = {}
@@ -284,7 +303,20 @@ def handle_translate(ctx: JobContext, deps: Deps) -> dict[str, Any]:
                 boxes.append(typeset_region(clean, r, bubble, it.translation, f, bubble_siblings(r, texted)))
         state = build_page_state(pg["width"], pg["height"], regions, items, translations, boxes, meta)
         out.append({"page_id": pg["page_id"], "ai_state": state})
-    return {"type": "chapter.translate", "pages": out}
+    return {"type": "chapter.translate", "pages": out, "carry": _carry(tr.context)}
+
+
+def _cut_utf16(s: str, n: int) -> str:
+    """Cắt theo đơn vị UTF-16 như zod `.max()` phía API (emoji = 2); không cắt đôi cặp surrogate. Surrogate lẻ (JSON
+    của LLM bị cắt giữa emoji) bị bỏ thay vì ném lỗi làm hỏng cả lô đã dịch xong."""
+    return s.encode("utf-16-le", errors="surrogatepass")[: 2 * n].decode("utf-16-le", errors="ignore")
+
+
+def _carry(c: RollingContext) -> dict[str, Any]:
+    """Ngữ cảnh cuối lô trong giới hạn hợp đồng `TranslateCarry` (notes ≤ 2000, ≤ 30 tên × ≤ 64 ký tự)."""
+    names = [_cut_utf16(n.strip(), CARRY_NAME_MAX) for n in c.characters]
+    characters = list(dict.fromkeys(n for n in names if n))[-CARRY_MAX_CHARACTERS:]
+    return {"notes": _cut_utf16(c.notes, CARRY_NOTES_MAX), "characters": characters}
 
 
 # ---- page.reinpaint ----

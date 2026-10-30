@@ -38,6 +38,8 @@ class ChapterTranslation:
     context_used: ContextMode
     # ord trang AI trả hỏng cả khi dịch riêng (items rỗng + low_conf).
     failed: list[int] = field(default_factory=list)
+    # Ngữ cảnh sau lô cuối (notes + tên nhân vật) — job dịch lô kế của chương nối tiếp từ đây.
+    context: RollingContext = field(default_factory=RollingContext)
 
 
 def qualified_id(page_ord: int, region_id: str) -> str:
@@ -171,4 +173,4 @@ def translate_chapter(
             out[str(p.ord)] = {r.id: items[r.id] for r in p.regions}
         if mode == "rolling":
             ctx = update_context(ctx, batch, items, notes)
-    return ChapterTranslation(items=out, usage=usage, context_used=mode, failed=failed)
+    return ChapterTranslation(items=out, usage=usage, context_used=mode, failed=failed, context=ctx)

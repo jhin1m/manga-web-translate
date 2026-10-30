@@ -5,6 +5,7 @@
 import type { SourceSkipReason } from "@mtl/shared";
 import type { ItemStatus } from "../upload/upload-queue.ts";
 import type { SourceFileImage } from "./api.ts";
+import type { Tone } from "./status.ts";
 
 /** "missing" = chưa lên storage (tab cũ đóng giữa chừng / file lỗi) — cần tải tiếp hoặc xoá trước Bước 1. */
 export type SourceUpload = ItemStatus | "missing";
@@ -80,6 +81,33 @@ export function sourceLabel(it: SourceItem): { label: string; tone: "busy" | "wa
   const upload = it.upload && UPLOAD_LABEL[it.upload];
   if (upload) return upload;
   return it.maybeCredit ? { label: "Có thể là credit", tone: "warn" } : null;
+}
+
+/**
+ * Bước 1 (job cắt trang) đang chạy: bước + đếm của heartbeat gần nhất; `label` = dòng đầu cột ("Đang tải ảnh 3/10").
+ * `progress` null = job còn xếp hàng.
+ */
+export type IngestView = {
+  stage: string | null;
+  progress: number | null;
+  done: number | null;
+  total: number | null;
+  label: string;
+};
+
+/**
+ * Nhãn từng ảnh gốc khi đang cắt trang; `index` = vị trí trong các ảnh không bỏ qua (thứ tự worker tải). Đang tải
+ * có đếm → ảnh trước `done` "Đã tải", ảnh thứ `done` "Đang tải", sau đó "Chờ"; bước khác / không đếm → "Đang xử lý".
+ */
+export function ingestTag(
+  index: number,
+  ing: IngestView,
+): { label: "Đã tải" | "Đang tải" | "Chờ" | "Đang xử lý"; tone: Tone } {
+  // `== null`: API cũ chưa trả progress_done/total (undefined) cũng coi như không đếm.
+  if (ing.stage !== "download" || ing.done == null || ing.total == null) return { label: "Đang xử lý", tone: "busy" };
+  if (index < ing.done) return { label: "Đã tải", tone: "ok" };
+  if (index === ing.done) return { label: "Đang tải", tone: "busy" };
+  return { label: "Chờ", tone: "idle" };
 }
 
 export const sourceCounts = (items: SourceItem[]) => {

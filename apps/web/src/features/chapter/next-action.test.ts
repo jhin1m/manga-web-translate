@@ -21,13 +21,13 @@ describe("nextAction", () => {
       [nextAction(ch("draft"), { phase: "incomplete", done: 3, total: 10 }), "Tải tiếp ảnh"],
       [nextAction(ch("draft"), { phase: "failed", done: 9, total: 10 }), "Tải tiếp ảnh"],
       [nextAction(ch("draft"), { phase: "uploading", done: 2, total: 10 }), "Xem tiến độ"],
-      [nextAction(ch("draft"), { phase: "uploaded", done: 10, total: 10 }), "Bước 1"],
-      [nextAction(ch("draft")), "Bước 1"],
+      [nextAction(ch("draft"), { phase: "uploaded", done: 10, total: 10 }), "Dịch chương"],
+      [nextAction(ch("draft")), "Dịch chương"],
       [nextAction(ch("ingesting")), "Xem tiến độ"],
-      [nextAction(ch("prepared", pc(33))), "Bước 2 · Dịch"],
+      [nextAction(ch("prepared", pc(33))), "Dịch chương"],
       [nextAction(ch("processing", pc(52, 24))), "Xem tiến độ"],
       [nextAction(ch("partial_failed", pc(48, 47, 1))), "Chạy lại trang lỗi"],
-      [nextAction(ch("partial_failed", pc(0))), "Chạy lại bước 1"],
+      [nextAction(ch("partial_failed", pc(0))), "Cắt lại trang"],
       [nextAction(ch("review", pc(54, 54))), "Tiếp tục sửa"],
       [nextAction(ch("review", pc(54, 54), true)), "Mở"],
       [nextAction(ch("done", pc(54, 54))), "Mở"],
@@ -35,6 +35,23 @@ describe("nextAction", () => {
       [nextAction(ch("done", pc(54, 54), false, true)), "Xuất lại"],
     ];
     for (const [got, label] of cases) expect(got.action).toBe(label);
+  });
+
+  it("never talks in numbered steps", () => {
+    const statuses: ChapterStatus[] = [
+      "draft",
+      "ingesting",
+      "prepared",
+      "processing",
+      "partial_failed",
+      "review",
+      "done",
+    ];
+    for (const status of statuses)
+      for (const counts of [pc(0), pc(10, 4, 1)]) {
+        const n = nextAction(ch(status, counts));
+        expect(`${n.action} ${n.state} ${n.detail}`).not.toMatch(/[Bb]ước/);
+      }
   });
 
   it("describes progress in words", () => {

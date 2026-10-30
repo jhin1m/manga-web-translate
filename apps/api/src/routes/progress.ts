@@ -6,6 +6,7 @@ import { chapters, jobs, pageStates, pages } from "@mtl/db";
 import { ACTIVE_JOB_STATUSES } from "@mtl/shared";
 import { and, eq, gt, inArray, or } from "drizzle-orm";
 import { Hono } from "hono";
+import { planBatches, regionCount } from "../jobs/translate-chain.ts";
 import type { AppEnv } from "../middleware/user.ts";
 import { jobView } from "./jobs.ts";
 
@@ -53,8 +54,32 @@ progressRoutes.get("/chapters/:chapterId/progress", async (c) => {
   const counts: Record<string, number> = {};
   // Trang ẩn vẫn trả về (rail lọc "Đã xoá" để khôi phục) nhưng không đếm.
   for (const p of pageRows) if (!p.skipped) counts[p.status] = (counts[p.status] ?? 0) + 1;
+  // Lượt dịch theo lô: lô đang chạy = số job dịch tạo từ đầu lượt; trang chờ ngoài lô đó chia lô dự kiến như server
+  // sẽ cắt (trang chưa có OCR tạm tính 1 khối).
+  const runBatch = new Map<string, number>();
+  let run = null;
+  if (ch.runTarget) {
+    const started = ch.runStartedAt;
+    const runJobs = started
+      ? sorted.filter((j) => j.type === "chapter.translate" && j.createdAt.getTime() >= started.getTime())
+      : [];
+    const batch = runJobs.length;
+    const current = runJobs.find((j) => active(j.status));
+    const inCurrent = new Set(current?.payload.type === "chapter.translate" ? current.payload.page_ids : []);
+    const queued = pageRows.filter((p) => p.translateQueued && !p.skipped).sort((a, b) => a.ord - b.ord);
+    const rest = planBatches(
+      queued
+        .filter((p) => !inCurrent.has(p.id))
+        .map((p) => ({ id: p.id, regions: p.ocrResult ? regionCount(p.ocrResult) : 1 })),
+    );
+    for (const p of queued) if (inCurrent.has(p.id)) runBatch.set(p.id, batch);
+    rest.forEach((b, i) => {
+      for (const p of b) runBatch.set(p.id, batch + 1 + i);
+    });
+    run = { target: ch.runTarget, total: ch.runTotal, remaining: queued.length, batch, batches: batch + rest.length };
+  }
   return c.json({
-    chapter: { id: ch.id, status: ch.status, ingest_rev: ch.ingestRev },
+    chapter: { id: ch.id, status: ch.status, ingest_rev: ch.ingestRev, run },
     counts,
     pages: pageRows
       .sort((a, b) => a.ord - b.ord)
@@ -70,6 +95,10 @@ progressRoutes.get("/chapters/:chapterId/progress", async (c) => {
           clean_rev: p.cleanRev,
           cut_flag: p.cutFlag,
           skipped: p.skipped,
+          translate_queued: p.translateQueued,
+          run_batch: runBatch.get(p.id) ?? null,
+          // Đã qua xoá chữ + OCR — đúng điều kiện server nhận trang vào lượt dịch (không phụ thuộc job còn trả về).
+          ocr_ready: !!p.ocrResult && !!p.prepareInputRev,
           ai_update_available: st?.aiUpdateAvailable ?? false,
           version: st?.version ?? 0,
           job: j ? jobView({ ...j, result: null }) : null,

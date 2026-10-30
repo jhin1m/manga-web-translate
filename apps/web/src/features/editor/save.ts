@@ -4,6 +4,8 @@
  *   2. PUT state với If-Match = baseVersion
  *   3. 200 → base = bản đã gửi; IndexedDB còn đúng phần sửa sau lúc gửi (hoặc xoá)
  *      409 → tải state server, rebase op chưa lưu lên đó (xung đột liệt kê cho người dùng), lưu lại
+ *      409 `page_busy` → trang đang dịch: editor read-only "page_busy", op giữ trong editor + IndexedDB; hết bận
+ *            (ChapterSession) thì lưu lại — gặp 409 phiên bản (AI vừa ghi) → rebase như trên
  *      423 → mất khoá: editor chuyển read-only, op vẫn nằm trong IndexedDB
  *      lỗi mạng → báo lỗi, thử lại sau
  * Ngoài ra op được ghi IndexedDB ngay sau mỗi thay đổi (PERSIST_MS) để kill tab giữa 2 lần lưu không mất gì.
@@ -27,6 +29,19 @@ export type SaveApi = {
 const statusOf = (e: unknown) =>
   e && typeof e === "object" && "status" in e && typeof e.status === "number" ? e.status : 0;
 const messageOf = (e: unknown) => (e instanceof Error ? e.message : String(e));
+
+/** Server từ chối ghi vì page đang dịch / chờ lượt dịch (409 `page_busy`) — không phải xung đột phiên bản. */
+export const isPageBusyError = (e: unknown) =>
+  statusOf(e) === 409 &&
+  typeof e === "object" &&
+  e !== null &&
+  "body" in e &&
+  typeof e.body === "object" &&
+  e.body !== null &&
+  "error" in e.body &&
+  e.body.error === "page_busy";
+
+export const PAGE_BUSY_SAVE_TEXT = "Trang này đang dịch — bản sửa được giữ và lưu khi trang dịch xong";
 
 /**
  * Lượt lưu cuối khi rời editor — chạy trong chuỗi `serial` của khoá chương, xếp TRƯỚC lệnh nhả khoá của
@@ -108,7 +123,7 @@ export class Saver {
         try {
           await this.api.put(snap.pageId, snap.doc, snap.baseVersion);
         } catch (e) {
-          if (statusOf(e) !== 409) throw e;
+          if (statusOf(e) !== 409 || isPageBusyError(e)) throw e;
           const server = await this.api.get(snap.pageId);
           const r = rebase(server.state, diffStates(snap.base, snap.doc));
           if (r.conflicts.length) throw new Error(`${r.conflicts.length} xung đột`);
@@ -163,6 +178,11 @@ export class Saver {
     } catch (e) {
       if (this.store.getState().pageId !== pageId) return;
       const status = statusOf(e);
+      if (isPageBusyError(e)) {
+        this.store.getState().setReadOnly("page_busy");
+        this.store.getState().setSave("dirty", PAGE_BUSY_SAVE_TEXT);
+        return;
+      }
       if (status === 409 && round < MAX_REBASE_ROUNDS) {
         let server: Awaited<ReturnType<SaveApi["get"]>>;
         try {

@@ -6,7 +6,7 @@ import { useMemo } from "react";
 import { Drawer } from "../../app/drawer.tsx";
 import type { ChapterDetail, ProgressPage } from "./api.ts";
 import { ExportPanel } from "./export-panel.tsx";
-import { exportWarnings, warningLines } from "./export-warnings.ts";
+import { exportWarnings } from "./export-warnings.ts";
 import type { Row } from "./text-table/rows.ts";
 
 export function ExportDrawer(props: {
@@ -18,20 +18,23 @@ export function ExportDrawer(props: {
   onShowWarnings(): void;
   onClose(): void;
 }) {
-  const { pages, rows } = props;
-  const warnings = useMemo(() => warningLines(exportWarnings(pages, rows)), [pages, rows]);
+  const { pages, rows, detail } = props;
+  const warnings = useMemo(() => exportWarnings(pages, rows), [pages, rows]);
+  // Ảnh đã tải lên còn dùng (bỏ file người dùng/hệ thống loại) — số ảnh khi xuất "như lúc tải lên".
+  const sources = useMemo(() => detail?.source_files.filter((f) => f.skip === null).length ?? 0, [detail]);
+  // Trang đã ẩn không được xuất → không tính vào số trang đã cắt.
+  const shownPages = useMemo(() => pages.filter((p) => !p.skipped).length, [pages]);
   // Khớp tên server đặt khi tải (apps/api/src/routes/export.ts): `{series}-ch{số}`.
-  const fileBase = props.detail ? `${props.detail.series.title}-ch${props.detail.number}` : "chuong";
+  const fileBase = detail ? `${detail.series.title}-ch${detail.number}` : "chuong";
   return (
     <Drawer title="Xuất chương" onClose={props.onClose}>
       <ExportPanel
         chapterId={props.chapterId}
         fileBase={fileBase}
-        pageCount={pages.length}
+        counts={{ sources, pages: shownPages }}
         warnings={warnings}
         onShowWarnings={props.onShowWarnings}
         beforeStart={props.beforeStart}
-        onCancel={props.onClose}
       />
     </Drawer>
   );

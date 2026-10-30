@@ -1,8 +1,9 @@
 /**
  * Luật AI-không-ghi-đè (red team #1, #6) khi chapter.translate complete cho page p:
  *   history ← (version, state) hiện tại; ai_state ← mới; ai_rev += 1; version += 1
- *   state_origin = 'ai' VÀ chương không bị khoá → state ← ai_state
- *   ngược lại → ai_update_available = true (editor merge theo vùng ở Phase 5)
+ *   state_origin = 'ai' → state ← ai_state (kể cả khi tab editor đang giữ khoá chương: trang đang dịch là trang chỉ
+ *   xem — PUT state trả 409 `page_busy` — nên chưa ai sửa được nó)
+ *   state_origin = 'user' (đã sửa tay) → ai_update_available = true, state giữ nguyên (editor merge theo vùng)
  * version không bao giờ reset; page_state_history giữ 50 bản mới nhất mỗi page.
  */
 import { type DbLike, pageStateHistory, pageStates } from "@mtl/db";
@@ -16,7 +17,7 @@ export type AiWriteOutcome = "applied" | "ai_update_available";
 /** Ghi kết quả AI cho 1 page trong transaction của complete; khoá dòng page_states để không đua với editor. */
 export async function writeAiState(
   tx: DbLike,
-  opts: { userId: string; pageId: string; aiState: PageState; actor: string; chapterLocked: boolean },
+  opts: { userId: string; pageId: string; aiState: PageState; actor: string },
 ): Promise<AiWriteOutcome> {
   const [cur] = await tx
     .select()
@@ -32,7 +33,7 @@ export async function writeAiState(
     state: cur.state,
     actor: opts.actor,
   });
-  const apply = cur.stateOrigin === "ai" && !opts.chapterLocked;
+  const apply = cur.stateOrigin === "ai";
   await tx
     .update(pageStates)
     .set({

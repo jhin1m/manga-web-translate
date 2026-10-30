@@ -11,16 +11,9 @@ import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { v7 as uuidv7 } from "uuid";
 import { z } from "zod";
-import { assertQuota } from "../billing/user-quota.ts";
-import {
-  enqueueIngest,
-  inJobTx,
-  lockChapter,
-  prepareUsesLlm,
-  retranslate,
-  retryFailedPages,
-  translatePrepared,
-} from "../jobs/enqueue.ts";
+import { assertQuota, userQuotaStatus } from "../billing/user-quota.ts";
+import { defaultRunTarget, enqueueIngest, inJobTx, lockChapter, prepareUsesLlm } from "../jobs/enqueue.ts";
+import { retranslate, retryFailedPages, stopTranslateChain, translatePrepared } from "../jobs/translate-chain.ts";
 import {
   acquireChapterLock,
   activeLockHolder,
@@ -93,8 +86,14 @@ const ChapterPatch = z
 const SourceSkipBody = z.object({ skip: z.enum(["user"]).nullable() });
 const SourceOrderBody = z.object({ ids: z.array(z.string().uuid()).min(1).max(MAX_FILES_PER_CHAPTER) });
 const PresignBody = z.object({ file_ids: z.array(z.string().uuid()).min(1).max(MAX_FILES_PER_CHAPTER) });
-/** mode bỏ trống → page_format của series (web không gửi). */
-const CommitBody = z.object({ mode: z.enum(PAGE_FORMATS).optional() });
+/**
+ * mode bỏ trống → page_format của series (web không gửi). target: dừng sau Bước 1 (`prepared`) hay dịch luôn
+ * (`translated`); bỏ trống → manga dịch luôn, strip dừng chờ duyệt cắt trang.
+ */
+const CommitBody = z.object({
+  mode: z.enum(PAGE_FORMATS).optional(),
+  target: z.enum(["prepared", "translated"]).optional(),
+});
 const RecentQuery = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(20),
   open: z.enum(["0", "1"]).default("0"),
@@ -296,9 +295,15 @@ chapterRoutes.post("/chapters/:chapterId/commit", async (c) => {
   }
   const { job, created } = await inJobTx(async (tx) => {
     await lockChapter(tx, userId, ch.id);
-    // Ingest xong tự nối page.prepare — OCR bằng LLM thì tốn tiền → kiểm hạn mức ngay khi bấm.
-    if (await prepareUsesLlm(tx, userId, ch.seriesId)) await assertQuota(tx, userId);
     const t = scoped(tx, userId);
+    // Đích mặc định (manga dịch luôn) mà hết hạn mức → vẫn chạy Bước 1, dừng ở `prepared` (dịch khi còn hạn mức);
+    // người dùng đòi `translated` tường minh thì báo 402 ngay.
+    const formatDefault = defaultRunTarget(body.mode ?? (await t.byId(series, ch.seriesId, "series")).pageFormat);
+    const target =
+      body.target ??
+      (formatDefault === "translated" && (await userQuotaStatus(tx, userId)).exceeded ? "prepared" : formatDefault);
+    // Ingest xong tự nối page.prepare (OCR bằng LLM tốn tiền) và, với đích `translated`, dịch → kiểm hạn mức ngay khi bấm.
+    if (target === "translated" || (await prepareUsesLlm(tx, userId, ch.seriesId))) await assertQuota(tx, userId);
     const now = await t.select(sourceFiles, and(eq(sourceFiles.chapterId, ch.id), isNull(sourceFiles.skip)) as SQL);
     const checkedIds = new Set(files.map((f) => f.id));
     if (now.length !== checkedIds.size || now.some((f) => !checkedIds.has(f.id))) {
@@ -317,7 +322,7 @@ chapterRoutes.post("/chapters/:chapterId/commit", async (c) => {
     for (const r of valid) {
       if (r.bytes !== r.file.bytes) await t.update(sourceFiles, eq(sourceFiles.id, r.file.id), { bytes: r.bytes });
     }
-    return enqueueIngest(tx, userId, ch.id, body.mode);
+    return enqueueIngest(tx, userId, ch.id, body.mode, target);
   });
   return c.json({ job: jobView(job), created, accepted: valid.length, rejected: rejectedView }, 202);
 });
@@ -389,17 +394,20 @@ chapterRoutes.get("/chapters/:chapterId", async (c) => {
   });
 });
 
-/** Bước 2 "Dịch": chương xong bước 1 (`prepared`) → dịch + chèn chữ các page đã OCR. */
+/**
+ * Bước 2 "Dịch": chương xong bước 1 (`prepared`) → lượt dịch theo chuỗi lô các page đã OCR. `job` = lô đầu (null nếu
+ * lượt dừng ngay, VD hết hạn mức).
+ */
 chapterRoutes.post("/chapters/:chapterId/translate-prepared", async (c) => {
   const ch = await c.get("sdb").byId(chapters, c.req.param("chapterId"), "chapter");
   const { job, created } = await inJobTx(async (tx) => {
     await assertQuota(tx, c.get("userId"));
     return translatePrepared(tx, c.get("userId"), ch.id);
   });
-  return c.json({ job: jobView(job), created }, 202);
+  return c.json({ job: job ? jobView(job) : null, created }, 202);
 });
 
-/** Page lỗi giai đoạn 1 → page.prepare; lỗi giai đoạn 2 → chapter.translate cho riêng chúng. */
+/** Page lỗi giai đoạn 1 → page.prepare; lỗi giai đoạn 2 → lượt dịch cho riêng chúng. */
 chapterRoutes.post("/chapters/:chapterId/retry-failed", async (c) => {
   const ch = await c.get("sdb").byId(chapters, c.req.param("chapterId"), "chapter");
   const created = await inJobTx(async (tx) => {
@@ -409,7 +417,7 @@ chapterRoutes.post("/chapters/:chapterId/retry-failed", async (c) => {
   return c.json({ jobs: created.map(jobView) }, 202);
 });
 
-/** Dịch lại cả chương (ngữ cảnh cuộn) hoặc tập page (`page_ids`, dùng ngữ cảnh trang lân cận). */
+/** Dịch lại cả chương hoặc tập page (`page_ids`) theo chuỗi lô; lượt khác đang chạy → 409 `translate_running`. */
 chapterRoutes.post("/chapters/:chapterId/translate", async (c) => {
   const body = await parseJson(c, TranslateBody);
   const sdb = c.get("sdb");
@@ -421,7 +429,7 @@ chapterRoutes.post("/chapters/:chapterId/translate", async (c) => {
     await assertQuota(tx, c.get("userId"));
     return retranslate(tx, c.get("userId"), ch.id, body.page_ids);
   });
-  return c.json({ job: jobView(job), created }, 202);
+  return c.json({ job: job ? jobView(job) : null, created }, 202);
 });
 
 /** Huỷ mọi job đang hoạt động của chương. */
@@ -429,6 +437,8 @@ chapterRoutes.post("/chapters/:chapterId/cancel", async (c) => {
   const sdb = c.get("sdb");
   const ch = await sdb.byId(chapters, c.req.param("chapterId"), "chapter");
   const cancelled = await cancelChapterJobs(sdb, ch.id);
+  // Không còn job nào bị huỷ (lượt đang chờ trang Bước 1) vẫn phải đóng lượt dịch.
+  await inJobTx((tx) => stopTranslateChain(tx, c.get("userId"), ch.id));
   const after = await sdb.byId(chapters, ch.id, "chapter");
   return c.json({ cancelled, chapter: chapterSummary(after) });
 });

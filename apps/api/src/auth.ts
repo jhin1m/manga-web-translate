@@ -27,9 +27,15 @@ export const createAuth = ({ signupEnabled = env.SIGNUP_ENABLED }: { signupEnabl
       autoSignIn: false,
     },
     // Mặc định better-auth chỉ bật rate limit ở production; mở đăng ký thì bật mọi nơi, sign-up 5 lần/giờ/IP.
-    // Lưu bộ nhớ: API chạy 1 process.
+    // Lưu bộ nhớ: API chạy 1 process. `/get-session` không giới hạn: chỉ đọc phiên từ cookie (không đoán được mật
+    // khẩu hay token qua đây — không phải điểm brute-force), mỗi lần mở trang đều gọi; bộ đếm của better-auth chỉ về 0
+    // sau ≥ 10s không gọi nên người dùng thao tác liên tục sẽ chạm 100 lần rồi bị 429 dù không làm gì sai.
     rateLimit: signupEnabled
-      ? { enabled: true, storage: "memory", customRules: { "/sign-up/email": { window: 3600, max: 5 } } }
+      ? {
+          enabled: true,
+          storage: "memory",
+          customRules: { "/sign-up/email": { window: 3600, max: 5 }, "/get-session": false },
+        }
       : undefined,
     // Phiên sống 7 ngày, tự gia hạn khi dùng (mỗi ngày tối đa 1 lần) — đúng mặc định better-auth, ghi tường minh.
     session: { expiresIn: 7 * 24 * 3600, updateAge: 24 * 3600 },

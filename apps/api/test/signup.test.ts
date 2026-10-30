@@ -69,6 +69,20 @@ describe("sign-up enabled", () => {
     // IP khác không bị ảnh hưởng.
     expect((await signUp(on, `${uniq("rl")}@example.com`, "198.51.100.8")).status).toBe(200);
   });
+
+  it("never rate limits session reads, however often a page asks", async () => {
+    const on = createAuth({ signupEnabled: true });
+    const getSession = () =>
+      on.handler(
+        new Request(`${env.BETTER_AUTH_URL}/api/auth/get-session`, {
+          headers: { origin: env.WEB_ORIGIN, "x-real-ip": "198.51.100.9" },
+        }),
+      );
+    // Quá mức mặc định 100 lần / cửa sổ 10s của better-auth.
+    const statuses = new Set<number>();
+    for (let i = 0; i < 150; i++) statuses.add((await getSession()).status);
+    expect([...statuses]).toEqual([200]);
+  });
 });
 
 describe("env", () => {
