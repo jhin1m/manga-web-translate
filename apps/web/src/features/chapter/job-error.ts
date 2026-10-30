@@ -29,7 +29,7 @@ export const clock = (iso: string) => new Date(iso).toLocaleTimeString("vi-VN", 
 export const waitingOnProvider = (j: ErrorJob | null | undefined): boolean =>
   !!j && WAITING.has(j.status) && !!j.error_class && PROVIDER_CLASSES.has(j.error_class);
 
-const providerText = (cls: string) =>
+export const providerText = (cls: string) =>
   cls === "rate_limited" ? "Nhà cung cấp AI báo hết hạn mức / quá nhiều yêu cầu (429)" : "Nhà cung cấp AI lỗi tạm thời";
 
 /** Đầu ngày UTC kế tiếp — lúc hạn mức chi phí ngày đặt lại (server tính theo ngày UTC). */
