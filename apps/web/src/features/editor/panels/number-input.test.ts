@@ -14,6 +14,13 @@ describe("number input of the style panel", () => {
     expect(liveNumber("1.", 0.6, 3)).toBe(1);
   });
 
+  it("typing 0.5 does not apply the intermediate 0 when the minimum means 'remove'", () => {
+    expect(liveNumber("0", 0, 20, true)).toBeNull();
+    expect(liveNumber("0.", 0, 20, true)).toBeNull();
+    expect(liveNumber("0.5", 0, 20, true)).toBe(0.5);
+    expect(liveNumber("0", 0, 20)).toBe(0);
+  });
+
   it("leaving the field clamps, and keeps the old value for empty text", () => {
     expect(committedNumber("2", 6, 200)).toBe(6);
     expect(committedNumber("300", 6, 200)).toBe(200);

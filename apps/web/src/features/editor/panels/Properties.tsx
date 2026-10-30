@@ -27,6 +27,8 @@ function NumberInput(props: {
   min: number;
   max: number;
   step?: number;
+  /** Đúng `min` chỉ áp khi rời ô / Enter (xem `liveNumber`). */
+  commitMin?: boolean;
   disabled?: boolean;
   title?: string;
   onValue(v: number): void;
@@ -51,7 +53,7 @@ function NumberInput(props: {
       title={props.title}
       onChange={(e) => {
         setDraft(e.target.value);
-        const v = liveNumber(e.target.value, min, max);
+        const v = liveNumber(e.target.value, min, max, props.commitMin);
         if (v !== null) onValue(v);
       }}
       onBlur={commit}
@@ -219,6 +221,7 @@ export function AdvancedStyle({ children }: { children?: ReactNode }) {
             min={0}
             max={20}
             step={0.5}
+            commitMin
             value={box.stroke?.width ?? 0}
             onValue={(w) =>
               style("stroke", { stroke: w > 0 ? { color: box.stroke?.color ?? "#ffffff", width: w } : null })
