@@ -174,11 +174,16 @@ export class ChapterSession {
     if (!s.pageId) return;
     const c = this.deps.chapter.getState().cache[s.pageId];
     if (!c?.state || c.version <= s.baseVersion || s.doc !== s.base || s.save.status !== "saved") return;
-    s.load({ pageId: s.pageId, state: c.state, version: c.version, ai: { ...s.ai, available: c.ai_update_available } });
-    // Cùng page, bản mới hơn (áp kiểu / tìm & thay / AI): khối đang chọn còn thì giữ chọn — panel Chọn không nhảy về trang.
-    if (s.selection && c.state.text_boxes.some((b) => b.id === s.selection)) {
-      this.deps.editor.getState().select(s.selection);
-    }
+    // Cùng page, bản mới hơn (áp kiểu / tìm & thay / AI): khối đang chọn còn thì giữ chọn ngay trong lần nạp — không
+    // phát chọn rỗng rồi chọn lại (người nghe coi là chọn mới và mở panel công cụ người dùng đã đóng).
+    const keep = s.selection && c.state.text_boxes.some((b) => b.id === s.selection) ? s.selection : null;
+    s.load({
+      pageId: s.pageId,
+      state: c.state,
+      version: c.version,
+      ai: { ...s.ai, available: c.ai_update_available },
+      selection: keep,
+    });
     void this.refreshAi(s.pageId);
   }
 

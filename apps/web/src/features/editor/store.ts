@@ -55,7 +55,15 @@ export type EditorActions = {
    * Mở page để sửa. Giữ công cụ, layout, khung nhìn (toạ độ strip cả chương), chế độ xem gốc và read-only;
    * `history` = lịch sử undo đã cất của page này (chỉ truyền khi version không đổi).
    */
-  load(p: { pageId: string; state: PageState; version: number; ai: AiInfo; history?: History }): void;
+  /** `selection`: giữ khối đang chọn qua lần nạp lại — đặt cùng lượt cập nhật nên người nghe không thấy chọn rỗng rồi chọn lại. */
+  load(p: {
+    pageId: string;
+    state: PageState;
+    version: number;
+    ai: AiInfo;
+    history?: History;
+    selection?: string | null;
+  }): void;
   apply(recipe: Recipe, key?: string | null): void;
   undo(): void;
   redo(): void;
@@ -103,7 +111,7 @@ export function createEditorStore() {
   return createStore<EditorState & EditorActions>()((set, get) => ({
     ...initial(),
 
-    load: ({ pageId, state, version, ai, history }) =>
+    load: ({ pageId, state, version, ai, history, selection }) =>
       set((s) => ({
         ...initial(),
         tool: s.tool,
@@ -113,6 +121,7 @@ export function createEditorStore() {
         mask: { strokes: [], size: s.mask.size },
         readOnly: s.readOnly,
         history: history ?? emptyHistory(),
+        ...(selection ? { selection } : {}),
         pageId,
         doc: state,
         base: state,

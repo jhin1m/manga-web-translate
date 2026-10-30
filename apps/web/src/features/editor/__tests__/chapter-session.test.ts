@@ -253,6 +253,20 @@ describe("ChapterSession", () => {
     expect(editor.getState().selection).toBeNull();
   });
 
+  it("syncActive keeps the selected block without ever emitting an empty selection", async () => {
+    const { editor, chapter, session } = setup();
+    await session.activate("A");
+    editor.getState().select("t1");
+    const seen: (string | null)[] = [];
+    editor.subscribe((s, prev) => {
+      if (s.selection !== prev.selection) seen.push(s.selection);
+    });
+    chapter.getState().setStates([{ page_id: "A", state: doc(5), version: 4, ai_rev: 1, ai_update_available: false }]);
+    session.syncActive();
+    expect(editor.getState()).toMatchObject({ baseVersion: 4, selection: "t1" });
+    expect(seen).toEqual([]);
+  });
+
   it("writes to a busy non-active page wait: restore is deferred, update is refused without a PUT", async () => {
     const { log, srv, queue, session } = setup();
     await session.activate("A");
