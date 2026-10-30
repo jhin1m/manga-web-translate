@@ -782,6 +782,8 @@ test("apply style to same-kind blocks writes every page in one batch; the toast'
   await panel.getByRole("button", { name: /Áp kiểu này cho khối/ }).click();
   const toast = page.locator(".cw-toasts .notice", { hasText: "Đã áp kiểu cho 2 khối" });
   await expect(toast).toContainText("trên 2 trang");
+  // Trang đang mở nạp bản mới nhưng vẫn giữ khối đang chọn (panel Chọn không nhảy về trang).
+  await expect(panel.getByRole("button", { name: /Áp kiểu này cho khối/ })).toBeVisible();
   expect(await aligns()).toEqual(["src:left:18", "same-page:left:18", "src:left:18"]);
 
   // 1 lượt cả chương → 1 lần hoàn tác khôi phục mọi trang (kể cả trang đang mở).

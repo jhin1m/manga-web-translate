@@ -175,6 +175,10 @@ export class ChapterSession {
     const c = this.deps.chapter.getState().cache[s.pageId];
     if (!c?.state || c.version <= s.baseVersion || s.doc !== s.base || s.save.status !== "saved") return;
     s.load({ pageId: s.pageId, state: c.state, version: c.version, ai: { ...s.ai, available: c.ai_update_available } });
+    // Cùng page, bản mới hơn (áp kiểu / tìm & thay / AI): khối đang chọn còn thì giữ chọn — panel Chọn không nhảy về trang.
+    if (s.selection && c.state.text_boxes.some((b) => b.id === s.selection)) {
+      this.deps.editor.getState().select(s.selection);
+    }
     void this.refreshAi(s.pageId);
   }
 

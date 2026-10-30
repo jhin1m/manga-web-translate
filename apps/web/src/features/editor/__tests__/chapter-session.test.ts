@@ -240,6 +240,19 @@ describe("ChapterSession", () => {
     expect(editor.getState().doc?.regions).toHaveLength(5);
   });
 
+  it("syncActive keeps the selected block when it still exists in the newer version", async () => {
+    const { editor, chapter, session } = setup();
+    await session.activate("A");
+    editor.getState().select("t1");
+    chapter.getState().setStates([{ page_id: "A", state: doc(5), version: 4, ai_rev: 1, ai_update_available: false }]);
+    session.syncActive();
+    expect(editor.getState()).toMatchObject({ baseVersion: 4, selection: "t1" });
+    editor.getState().select("gone");
+    chapter.getState().setStates([{ page_id: "A", state: doc(5), version: 5, ai_rev: 1, ai_update_available: false }]);
+    session.syncActive();
+    expect(editor.getState().selection).toBeNull();
+  });
+
   it("writes to a busy non-active page wait: restore is deferred, update is refused without a PUT", async () => {
     const { log, srv, queue, session } = setup();
     await session.activate("A");
