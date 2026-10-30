@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { undoStyleText } from "./chapter-workspace.tsx";
+import { undoStyleText } from "./undo-style-text.ts";
 
 const list = [
   { id: "a", ord: 0 },
