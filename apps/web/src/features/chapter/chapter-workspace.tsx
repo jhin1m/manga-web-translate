@@ -507,9 +507,10 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
         ...(auto_fit ? {} : { font_size }),
       };
       const layout = s.layout;
+      const srcPage = s.pageId;
       const counts = new Map<string, number>();
       const r = await session.session.editMany((st, pageId) => {
-        const ids = sameKindBoxIds(st, row.kind, src.id);
+        const ids = sameKindBoxIds(st, row.kind, pageId === srcPage ? src.id : null);
         counts.set(pageId, ids.length);
         return ids.length ? setStyleMany(ids, style, layout) : null;
       });
@@ -519,6 +520,8 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
       return {
         tone: "info",
         text: `Đã áp kiểu cho ${boxes} khối ${label} trên ${r.pageIds.length} trang.`,
+        // Toast là chỗ duy nhất hoàn tác được lượt này → không tự ẩn (có "Đóng").
+        sticky: true,
         actions: [{ label: "Hoàn tác", run: () => undoKind.mutate(r.batchId) }],
       };
     },

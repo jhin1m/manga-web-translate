@@ -165,9 +165,10 @@ export function filterRows(rows: Row[], f: TableFilter, activeId: string | null,
 
 /**
  * Box cùng loại với khối nguồn để "Áp kiểu cho khối cùng loại": trừ chính box nguồn và box đang ẩn (ẩn khi xuất —
- * không đổi kiểu của khung người dùng đã cất đi).
+ * không đổi kiểu của khung người dùng đã cất đi). Id box chỉ duy nhất trong 1 trang (AI đặt `tb-r1`, `tb-r3`… ở mọi
+ * trang) → `exceptId` chỉ truyền cho trang của khối nguồn, trang khác truyền null.
  */
-export function sameKindBoxIds(state: PageState, kind: RowKind, exceptId: string): string[] {
+export function sameKindBoxIds(state: PageState, kind: RowKind, exceptId: string | null): string[] {
   return state.text_boxes
     .filter(
       (b) =>

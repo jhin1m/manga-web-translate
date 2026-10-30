@@ -185,5 +185,7 @@ describe("text table rows", () => {
     s.text_boxes.push({ ...box("ta2", "a", "Hai"), hidden: true }, box("ta3", "a", "Ba"));
     expect(sameKindBoxIds(s, "dialog", "ta")).toEqual(["ta3"]);
     expect(sameKindBoxIds(s, "box", "x")).toEqual(["free"]);
+    // Trang khác trang nguồn: box trùng id với khối nguồn vẫn được áp.
+    expect(sameKindBoxIds(s, "dialog", null)).toEqual(["ta", "ta3"]);
   });
 });

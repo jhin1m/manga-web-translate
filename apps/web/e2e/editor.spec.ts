@@ -750,7 +750,8 @@ test("apply style to same-kind blocks writes every page in one batch; the toast'
     state: { text_boxes: { id: string; align: string; font_size: number }[] } & Record<string, unknown>;
   };
   const detailOf = async (id: string) => (await (await page.request.get(`/api/pages/${id}`)).json()) as Detail;
-  const seeds = [[box("src", "left"), box("same-page", "center", 300)], [box("other-page", "center")]];
+  // Id box chỉ duy nhất trong trang (AI đặt tb-r1… ở mọi trang): trang 2 có box trùng id với khối nguồn.
+  const seeds = [[box("src", "left"), box("same-page", "center", 300)], [box("src", "center")]];
   expect((await page.request.post(`/api/chapters/${chapterId}/lock`, { headers })).ok()).toBe(true);
   for (const [i, id] of pageIds.entries()) {
     const d = await detailOf(id);
@@ -781,10 +782,10 @@ test("apply style to same-kind blocks writes every page in one batch; the toast'
   await panel.getByRole("button", { name: /Áp kiểu này cho khối/ }).click();
   const toast = page.locator(".cw-toasts .notice", { hasText: "Đã áp kiểu cho 2 khối" });
   await expect(toast).toContainText("trên 2 trang");
-  expect(await aligns()).toEqual(["src:left:18", "same-page:left:18", "other-page:left:18"]);
+  expect(await aligns()).toEqual(["src:left:18", "same-page:left:18", "src:left:18"]);
 
   // 1 lượt cả chương → 1 lần hoàn tác khôi phục mọi trang (kể cả trang đang mở).
   await toast.getByRole("button", { name: "Hoàn tác" }).click();
   await expect(page.locator(".cw-toasts .notice", { hasText: "Đã hoàn tác áp kiểu trên 2 trang" })).toBeVisible();
-  expect(await aligns()).toEqual(["src:left:18", "same-page:center:22", "other-page:center:22"]);
+  expect(await aligns()).toEqual(["src:left:18", "same-page:center:22", "src:center:22"]);
 });
