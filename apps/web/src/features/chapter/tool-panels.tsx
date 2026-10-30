@@ -24,7 +24,7 @@ export function OcrToolView({ lang, pending }: { lang: string | undefined; pendi
       <div className="cw-field">
         <span className="cw-field-head">Ngôn ngữ gốc</span>
         <div className="cw-src-box">{lang ? (LANG_NAMES[lang as SourceLang] ?? lang) : "—"}</div>
-        <span className="muted small">Theo series — đổi ở Cài đặt series.</span>
+        <span className="muted small">Theo series — đổi ở chip ngôn ngữ trên thanh trên.</span>
       </div>
       {pending > 0 && (
         <p role="status">

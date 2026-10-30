@@ -858,6 +858,7 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
     <div className="cw">
       <ChapterTopbar
         seriesId={seriesId}
+        series={series.data}
         detail={data.detail}
         chip={chip}
         access={access}

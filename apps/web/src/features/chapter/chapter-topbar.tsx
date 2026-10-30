@@ -1,6 +1,7 @@
 /**
  * Thanh trên màn chương: ‹ series, tên chương (bấm → đổi series / số chương), chip trạng thái chương (chỗ duy nhất
- * nói chương đang ở đâu), chỉ báo sửa/lưu thu nhỏ (giữ khoá · Đã lưu / Chỉ xem) · Hoàn tác / Làm lại · Xem gốc ·
+ * nói chương đang ở đâu), chỉ báo sửa/lưu thu nhỏ (giữ khoá · Đã lưu / Chỉ xem), chip ngôn ngữ "Hàn → Việt" (bấm →
+ * đổi cặp ngôn ngữ của series) · Hoàn tác / Làm lại · Xem gốc ·
  * Hoạt động (+ số việc đang chạy) · menu ⋯ (Chia đôi, Dịch lại cả chương, Chạy lại trang lỗi, Phím tắt) · Huỷ xử lý
  * (khi đang chạy) · Xuất phụ · nút chính theo trạng thái (primary-action.ts; "Xuất" mở drawer).
  * Dưới nó là băng cảnh báo — chỉ hiện khi người dùng phải biết/làm gì (khoá bị giữ/mất/lỗi, khôi phục, lỗi lưu, chờ AI).
@@ -11,10 +12,12 @@ import type { LockState } from "../chapter/use-chapter-lock.ts";
 import { PAGE_BUSY_SAVE_TEXT } from "../editor/save.ts";
 import { editorStore, type ReadOnlyReason, type SaveStatus, useEditor } from "../editor/store.ts";
 import type { RecoveryItem } from "../editor/use-chapter-session.ts";
+import type { Series } from "../series/api.ts";
 import { FilePickButton } from "../upload/drop-zone.tsx";
 import { ActivityButton } from "./activity-drawer.tsx";
 import type { ChapterDetail } from "./api.ts";
 import { ChapterMetaPopover } from "./chapter-meta-popover.tsx";
+import { LangPairPopover } from "./lang-pair-popover.tsx";
 import { MoreMenu, OriginalToggle } from "./more-menu.tsx";
 import type { ChapterCommand, PrimaryAction } from "./primary-action.ts";
 import type { Tone } from "./status.ts";
@@ -33,6 +36,8 @@ export type EditAccess = { lock: LockState; lockEnabled: boolean; hasPages: bool
 
 export function ChapterTopbar(props: {
   seriesId: string;
+  /** Chi tiết series (chip ngôn ngữ gốc → đích); chưa tải → ẩn chip. */
+  series: Series | undefined;
   detail: ChapterDetail | undefined;
   /** Chip trạng thái chương (status.ts chapterChip). */
   chip: { label: string; tone: Tone } | null;
@@ -90,6 +95,7 @@ export function ChapterTopbar(props: {
         )}
       </span>
       <EditState {...props.access} />
+      <LangPairPopover series={props.series} />
       <span className="spacer" />
       <UndoRedo />
       <span className="cw-top-sep" />
