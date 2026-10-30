@@ -158,8 +158,11 @@ export class ChapterSession {
       const d = await this.deps.fetchPage(pageId);
       const s = this.deps.editor.getState();
       if (s.pageId !== pageId) return;
-      if (d.version > s.baseVersion && s.doc === s.base) s.load({ pageId, ...d });
-      else s.setAi(d.ai);
+      if (d.version > s.baseVersion && s.doc === s.base) {
+        // Giữ khối đang chọn nếu còn (như syncActive) — không thì panel công cụ đóng/mở lại khi nạp nền.
+        const keep = s.selection && d.state.text_boxes.some((b) => b.id === s.selection) ? s.selection : null;
+        s.load({ pageId, ...d, selection: keep });
+      } else s.setAi(d.ai);
     } catch (e) {
       this.deps.onError(e);
     }

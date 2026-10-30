@@ -267,6 +267,19 @@ describe("ChapterSession", () => {
     expect(seen).toEqual([]);
   });
 
+  it("refreshAi keeps the selected block when the background reload brings a newer version", async () => {
+    const { editor, srv, session } = setup();
+    await session.activate("A");
+    editor.getState().select("t1");
+    srv.A = { state: doc(5), version: 4 };
+    await (session as unknown as { refreshAi(id: string): Promise<void> }).refreshAi("A");
+    expect(editor.getState()).toMatchObject({ baseVersion: 4, selection: "t1" });
+    editor.getState().select("gone");
+    srv.A = { state: doc(5), version: 5 };
+    await (session as unknown as { refreshAi(id: string): Promise<void> }).refreshAi("A");
+    expect(editor.getState()).toMatchObject({ baseVersion: 5, selection: null });
+  });
+
   it("writes to a busy non-active page wait: restore is deferred, update is refused without a PUT", async () => {
     const { log, srv, queue, session } = setup();
     await session.activate("A");
