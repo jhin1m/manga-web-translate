@@ -34,44 +34,64 @@ class Rect:
 
 
 def inscribed_rect(mask: np.ndarray) -> Rect | None:
-    """Hình chữ nhật trục song song lớn (tham lam) quanh điểm xa biên nhất của mask (uint8, >0 = dùng được)."""
-    m = (mask > 0).astype(np.uint8)
+    """Hình chữ nhật trục song song có diện tích lớn nhất nằm trọn trong mask (uint8, >0 = dùng được).
+
+    Quét từng hàng, giữ chiều cao cột liên tục → bài "hình chữ nhật lớn nhất dưới histogram" bằng ngăn xếp.
+    (Mọc tham lam đều 4 phía quanh điểm xa biên nhất cho hình gần vuông trong bóng elip dẹt, và lệch hẳn sang một bên
+    khi lòng bóng có lỗ.)"""
+    m = mask > 0
     if not m.any():
         return None
-    dist = cv2.distanceTransform(m, cv2.DIST_L2, 5)
-    cy, cx = np.unravel_index(int(np.argmax(dist)), dist.shape)
-    integral = cv2.integral(m)
-
-    def full(x0: int, y0: int, x1: int, y1: int) -> bool:
-        if x0 < 0 or y0 < 0 or x1 > m.shape[1] or y1 > m.shape[0]:
-            return False
-        s = integral[y1, x1] - integral[y0, x1] - integral[y1, x0] + integral[y0, x0]
-        return int(s) == (x1 - x0) * (y1 - y0)
-
-    x0, y0, x1, y1 = int(cx), int(cy), int(cx) + 1, int(cy) + 1
-    grew = True
-    while grew:
-        grew = False
-        # Nới cạnh ngang trước (chữ ngang cần bề rộng), rồi cạnh dọc.
-        for dx0, dy0, dx1, dy1 in ((-1, 0, 0, 0), (0, 0, 1, 0), (0, -1, 0, 0), (0, 0, 0, 1)):
-            if full(x0 + dx0, y0 + dy0, x1 + dx1, y1 + dy1):
-                x0, y0, x1, y1 = x0 + dx0, y0 + dy0, x1 + dx1, y1 + dy1
-                grew = True
-    return Rect(x0, y0, x1 - x0, y1 - y0)
+    rows, cols = m.shape
+    heights = np.zeros(cols, np.int64)
+    best = (0, 0, 0, 0, 0)  # area, x, y, w, h
+    for y in range(rows):
+        heights = np.where(m[y], heights + 1, 0)
+        hs = heights.tolist()
+        hs.append(0)
+        stack: list[int] = []
+        for x, hx in enumerate(hs):
+            while stack and hs[stack[-1]] >= hx:
+                top = stack.pop()
+                left = stack[-1] + 1 if stack else 0
+                area = hs[top] * (x - left)
+                if area > best[0]:
+                    best = (area, left, y - hs[top] + 1, x - left, hs[top])
+            stack.append(x)
+    _, x, y, w, h = best
+    return Rect(x, y, w, h)
 
 
-def bubble_interior(clean_rgb: np.ndarray, bubble: BBox, seed: tuple[int, int]) -> np.ndarray:
-    """Mask lòng bóng: vùng cùng màu nối với seed trên ảnh đã xoá chữ, trong khung bóng."""
+def _fill_holes(mask: np.ndarray) -> np.ndarray:
+    """Lấp các lỗ của mask (vùng 0 không nối ra mép khung)."""
+    h, w = mask.shape
+    outside = np.zeros((h + 2, w + 2), np.uint8)
+    outside[1:-1, 1:-1] = mask > 0
+    cv2.floodFill(outside, np.zeros((h + 4, w + 4), np.uint8), (0, 0), 1)
+    return ((outside[1:-1, 1:-1] == 0) | (mask > 0)).astype(np.uint8)
+
+
+def bubble_interior(clean_rgb: np.ndarray, bubble: BBox, text: BBox) -> np.ndarray:
+    """Mask lòng bóng chứa vùng chữ `text`, trên ảnh đã xoá chữ, trong khung bóng.
+
+    Inpaint hay để lại vệt chữ mờ: màu nền lấy median vùng chữ (không lấy 1 pixel seed — rơi trúng vệt mờ thì lòng
+    bóng chỉ còn vài px), chọn mảng cùng màu phủ vùng chữ nhiều nhất, rồi lấp lỗ do vệt mờ đục."""
     crop = clean_rgb[bubble.y : bubble.y2, bubble.x : bubble.x2]
     gray = cv2.cvtColor(crop, cv2.COLOR_RGB2GRAY)
-    sx = int(np.clip(seed[0] - bubble.x, 0, gray.shape[1] - 1))
-    sy = int(np.clip(seed[1] - bubble.y, 0, gray.shape[0] - 1))
-    ff = np.zeros((gray.shape[0] + 2, gray.shape[1] + 2), np.uint8)
-    flags = 4 | cv2.FLOODFILL_MASK_ONLY | cv2.FLOODFILL_FIXED_RANGE | (255 << 8)
-    cv2.floodFill(gray, ff, (sx, sy), 0, INTERIOR_TOL, INTERIOR_TOL, flags)
-    interior = ff[1:-1, 1:-1]
+    tx0, ty0 = max(0, text.x - bubble.x), max(0, text.y - bubble.y)
+    tx1, ty1 = min(gray.shape[1], text.x2 - bubble.x), min(gray.shape[0], text.y2 - bubble.y)
+    if tx1 <= tx0 or ty1 <= ty0:
+        return np.zeros(gray.shape, np.uint8)
+    bg = int(np.median(gray[ty0:ty1, tx0:tx1]))
+    same = (np.abs(gray.astype(np.int16) - bg) <= INTERIOR_TOL).astype(np.uint8)
+    _, labels = cv2.connectedComponents(same, connectivity=4)
+    under_text = labels[ty0:ty1, tx0:tx1]
+    ids, counts = np.unique(under_text[under_text > 0], return_counts=True)
+    if not len(ids):
+        return np.zeros(gray.shape, np.uint8)
+    interior = _fill_holes(labels == ids[int(np.argmax(counts))]) * 255
     # Lùi khỏi viền bóng vài px cho chữ không chạm nét viền.
-    return cv2.erode(interior, np.ones((3, 3), np.uint8), iterations=3)
+    return cv2.erode(interior.astype(np.uint8), np.ones((3, 3), np.uint8), iterations=3)
 
 
 def _bbox_distance(shape: tuple[int, int], origin: BBox, b: BBox) -> np.ndarray:
@@ -108,8 +128,7 @@ def available_rect(
 ) -> Rect:
     b = region.bbox
     if bubble is not None:
-        seed = (b.x + b.w // 2, b.y + b.h // 2)
-        interior = bubble_interior(clean_rgb, bubble.bbox, seed)
+        interior = bubble_interior(clean_rgb, bubble.bbox, b)
         if siblings:
             interior = own_share(interior, bubble.bbox, region.bbox, [s.bbox for s in siblings])
         r = inscribed_rect(interior)

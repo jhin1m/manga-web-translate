@@ -13,6 +13,7 @@ from mtl_pipeline.typeset import (
     LINE_HEIGHT,
     PAD,
     STROKE_BUBBLE,
+    available_rect,
     block_height,
     bubble_siblings,
     fit_text,
@@ -32,12 +33,45 @@ def test_inscribed_rect_inside_ellipse():
     r = inscribed_rect(mask)
     assert r is not None
     assert mask[r.y : r.y + r.h, r.x : r.x + r.w].all()
-    # Hình chữ nhật nội tiếp ellipse tối đa ~ 2/π diện tích; tham lam phải đạt phần lớn.
-    assert r.w * r.h > 0.45 * (np.pi * 140 * 90)
+    # Hình chữ nhật nội tiếp ellipse tối đa = 2/π diện tích, cạnh ~ √2 bán trục, nằm giữa.
+    assert r.w * r.h > 0.6 * (np.pi * 140 * 90)
+    assert r.w > r.h
+    assert abs(r.x + r.w / 2 - 150) <= 2 and abs(r.y + r.h / 2 - 100) <= 2
 
 
 def test_inscribed_rect_empty_mask():
     assert inscribed_rect(np.zeros((10, 10), np.uint8)) is None
+
+
+def test_inscribed_rect_is_largest_in_l_shape():
+    mask = np.zeros((100, 100), np.uint8)
+    mask[0:100, 0:20] = 255
+    mask[70:100, 0:100] = 255
+    r = inscribed_rect(mask)
+    assert r is not None and (r.x, r.y, r.w, r.h) == (0, 70, 100, 30)
+
+
+def _ghost_bubble() -> tuple[np.ndarray, Region, Region]:
+    """Bóng elip dẹt trên ảnh đã xoá chữ, còn vệt chữ mờ (xám nhạt) ngay giữa vùng chữ."""
+    clean = np.full((300, 460, 3), 90, np.uint8)
+    cv2.ellipse(clean, (230, 150), (210, 130), 0, 0, 360, (255, 255, 255), -1)
+    cv2.ellipse(clean, (230, 150), (210, 130), 0, 0, 360, (0, 0, 0), 3)
+    for x in range(158, 300, 9):
+        cv2.rectangle(clean, (x, 140), (x + 4, 158), (200, 200, 200), -1)
+    bubble = Region(id="b", kind="bubble", bbox=BBox(x=17, y=17, w=426, h=266), score=1.0)
+    text = Region(id="t", kind="text_bubble", bbox=BBox(x=150, y=130, w=160, h=40), score=1.0, bubble_id="b")
+    return clean, bubble, text
+
+
+def test_bubble_interior_ignores_inpaint_ghost_text():
+    # Pixel giữa vùng chữ rơi trúng vệt mờ: trước đây flood-fill từ đó chỉ lấy vài px → rơi về bbox chữ gốc.
+    # Vệt mờ đục lỗ lòng bóng còn đẩy điểm xa biên nhất sang một bên → hình chữ nhật nhỏ, lệch khỏi chữ.
+    clean, bubble, text = _ghost_bubble()
+    assert tuple(clean[150, 230]) == (200, 200, 200)
+    rect = available_rect(clean, text, bubble)
+    assert rect.w > 1.6 * text.bbox.w and rect.h > 3 * text.bbox.h
+    assert abs(rect.x + rect.w / 2 - 230) <= 3 and abs(rect.y + rect.h / 2 - 150) <= 3
+    assert all(clean[y, rect.x : rect.x + rect.w].min() >= 200 for y in (rect.y, rect.y + rect.h - 1))
 
 
 def test_fit_text_lines_fit_box():

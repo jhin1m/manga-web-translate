@@ -66,7 +66,9 @@ lệch bbox mực từng dòng ≤ 1px — xem `benchmarks/phase-01-results.md`)
 - **Đích không phải tiếng Việt** (`en | id | es | pt | fr`): cùng bộ font — mọi font trong `manifest.json` phải đủ glyph
   cho các đích này (`worker/tests/test_font_coverage.py`). Đích CJK/Thái chưa hỗ trợ (cần font + ngắt dòng không dấu cách).
 - **Vùng đặt chữ** (`available_rect` ở `typeset.py`, chỉ server tính; editor nhận sẵn `x, y, w, h`): chữ trong bóng
-  dùng hình chữ nhật nội tiếp lòng bóng. Bóng có nhiều vùng chữ được dịch (bóng dính nhau, nhiều cụm chữ) → lòng bóng
+  dùng hình chữ nhật **diện tích lớn nhất** nội tiếp lòng bóng. Lòng bóng = mảng cùng màu nền (median vùng chữ trên ảnh
+  clean, ±`INTERIOR_TOL`) phủ vùng chữ nhiều nhất, đã lấp lỗ — inpaint hay để lại vệt chữ mờ, lấy màu 1 pixel giữa vùng
+  chữ hoặc để lỗ thì box co về bbox chữ gốc / lệch sang một bên. Bóng có nhiều vùng chữ được dịch (bóng dính nhau, nhiều cụm chữ) → lòng bóng
   chia Voronoi theo khoảng cách tới bbox từng vùng chữ, mỗi vùng lấy phần của mình (khe `SPLIT_GAP`); vùng OCR rỗng
   không giữ chỗ. Lòng bóng/phần chia nhỏ hơn bbox gốc → dùng bbox gốc.
 - **Màu chữ/viền**: prepare đo từ ảnh gốc `region.text_color` (median dưới mask nét chữ co 1px) và `outline_color`
