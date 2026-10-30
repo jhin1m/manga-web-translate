@@ -45,29 +45,38 @@ test("changing a series language warns about its own glossary and switches the i
   await post(page, "/glossary?source_lang=ko&target_lang=vi", { source_term: "회장e2e", target_term: "chủ tịch e2e" });
   await post(page, "/glossary?source_lang=ko&target_lang=en", { source_term: "회장e2e", target_term: "chairman e2e" });
 
+  // Glossary và Cài đặt dịch là modal trên màn series (`?tab=`), mở từ link đầu trang.
   await page.goto(`/s/${s.id}?tab=glossary`);
-  await expect(page.getByRole("row").filter({ hasText: "chủ tịch e2e" })).toContainText(
+  const glossary = page.getByRole("dialog", { name: "Glossary của series" });
+  await expect(glossary.getByRole("row").filter({ hasText: "chủ tịch e2e" })).toContainText(
     "từ glossary chung (Hàn → Việt)",
   );
+  await glossary.getByRole("button", { name: "Đóng" }).click();
+  await expect(glossary).toHaveCount(0);
 
-  const tabs = page.getByRole("navigation", { name: "Mục của series" });
-  await tabs.getByRole("link", { name: "Cài đặt dịch" }).click();
-  const warning = page.getByRole("status").filter({ hasText: "Glossary riêng của series" });
+  await page.getByRole("main").getByRole("link", { name: "Cài đặt dịch" }).click();
+  const settings = page.getByRole("dialog", { name: "Cài đặt dịch" });
+  const warning = settings.getByRole("status").filter({ hasText: "Glossary riêng của series" });
   await expect(warning).toHaveCount(0);
-  await page.getByLabel("Ngôn ngữ đích").selectOption("en");
+  await settings.getByLabel("Ngôn ngữ đích").selectOption("en");
   await expect(warning).toHaveText(
     "Glossary riêng của series có 1 từ viết cho Hàn → Việt — kiểm lại sau khi đổi ngôn ngữ. " +
       "Glossary chung sẽ chuyển sang cặp Hàn → Anh.",
   );
   // Cảnh báo không chặn lưu.
-  await page.getByRole("button", { name: "Lưu cài đặt" }).click();
+  await settings.getByRole("button", { name: "Lưu cài đặt" }).click();
   await expect(page.getByText(/Hàn → Anh · /)).toBeVisible();
+  await settings.getByRole("button", { name: "Đóng" }).click();
+  await expect(settings).toHaveCount(0);
 
   // Không tải lại trang: glossary series làm mới theo cặp mới.
-  await tabs.getByRole("link", { name: /^Glossary/ }).click();
-  await expect(page.getByRole("row").filter({ hasText: "chairman e2e" })).toContainText(
+  await page
+    .getByRole("main")
+    .getByRole("link", { name: /^Glossary/ })
+    .click();
+  await expect(glossary.getByRole("row").filter({ hasText: "chairman e2e" })).toContainText(
     "từ glossary chung (Hàn → Anh)",
   );
-  await expect(page.getByRole("cell", { name: "chủ tịch e2e" })).toHaveCount(0);
-  await expect(page.getByRole("cell", { name: "kiếm riêng" })).toBeVisible();
+  await expect(glossary.getByRole("cell", { name: "chủ tịch e2e" })).toHaveCount(0);
+  await expect(glossary.getByRole("cell", { name: "kiếm riêng" })).toBeVisible();
 });

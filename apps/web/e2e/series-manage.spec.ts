@@ -71,20 +71,31 @@ test("delete a chapter from the series page, after an explicit confirm", async (
   expect(gone.status()).toBe(404);
 });
 
-test("series tabs keep the series header and mark the current tab", async ({ page }) => {
+test("series modals keep the series header behind them and close back to the series page", async ({ page }) => {
   await login(page);
   await page.goto(`/s/${state.seriesId}`);
-  const tabs = page.getByRole("navigation", { name: "Mục của series" });
-  await tabs.getByRole("link", { name: "Cài đặt dịch" }).click();
+  await page.getByRole("main").getByRole("link", { name: "Cài đặt dịch" }).click();
+  const settings = page.getByRole("dialog", { name: "Cài đặt dịch" });
   await expect(page).toHaveURL(/\?tab=settings/);
+  await expect(settings).toBeVisible();
   await expect(page.getByRole("heading", { level: 1, name: "Series e2e" })).toBeVisible();
-  await expect(tabs.getByRole("link", { name: "Cài đặt dịch" })).toHaveAttribute("aria-current", "page");
-  await expect(tabs.getByRole("link", { name: /^Chương/ })).not.toHaveAttribute("aria-current", "page");
-  await expect(page.getByLabel("Tên series", { exact: true })).toHaveValue("Series e2e");
+  await expect(settings.getByLabel("Tên series", { exact: true })).toHaveValue("Series e2e");
 
-  await tabs.getByRole("link", { name: /^Glossary/ }).click();
+  await settings.getByRole("button", { name: "Đóng" }).click();
+  await expect(settings).toHaveCount(0);
+  await expect(page).toHaveURL(`${WEB_URL}/s/${state.seriesId}`);
+  await expect(page.getByRole("heading", { level: 1, name: "Series e2e" })).toBeVisible();
+
+  await page
+    .getByRole("main")
+    .getByRole("link", { name: /^Glossary/ })
+    .click();
   await expect(page).toHaveURL(/\?tab=glossary/);
-  await expect(page.getByRole("form", { name: "Thêm từ vào glossary" })).toBeVisible();
+  const glossary = page.getByRole("dialog", { name: "Glossary của series" });
+  await expect(glossary.getByRole("form", { name: "Thêm từ vào glossary" })).toBeVisible();
+  await glossary.getByRole("button", { name: "Đóng" }).click();
+  await expect(glossary).toHaveCount(0);
+  await expect(page).toHaveURL(`${WEB_URL}/s/${state.seriesId}`);
 });
 
 test("new series picks the comic kind (source language); settings edit target language, page format and ignored text", async ({
@@ -101,25 +112,29 @@ test("new series picks the comic kind (source language); settings edit target la
   await expect(page.getByRole("heading", { level: 1, name: "Manga Nhật e2e" })).toBeVisible();
   await expect(page.getByText(/Nhật → Việt/)).toBeVisible();
 
-  await page.getByRole("navigation", { name: "Mục của series" }).getByRole("link", { name: "Cài đặt dịch" }).click();
+  // Cài đặt dịch là modal trên màn series: form nằm trong dialog, save giữ modal mở.
+  await page.getByRole("main").getByRole("link", { name: "Cài đặt dịch" }).click();
+  const settings = page.getByRole("dialog", { name: "Cài đặt dịch" });
   // ja → server tự chọn "Từng trang".
-  await expect(page.getByLabel("Định dạng truyện")).toHaveValue("pages");
-  await page.getByLabel("Ngôn ngữ đích").selectOption("en");
-  await page.getByLabel("Định dạng truyện").selectOption("strip");
-  await page.getByRole("button", { name: "Lưu cài đặt" }).click();
+  await expect(settings.getByLabel("Định dạng truyện")).toHaveValue("pages");
+  await settings.getByLabel("Ngôn ngữ đích").selectOption("en");
+  await settings.getByLabel("Định dạng truyện").selectOption("strip");
+  await settings.getByRole("button", { name: "Lưu cài đặt" }).click();
   // Lưu đổi settings_rev → form dựng lại theo giá trị mới từ server.
   await expect(page.getByText(/Nhật → Anh/)).toBeVisible();
-  await expect(page.getByLabel("Định dạng truyện")).toHaveValue("strip");
+  await expect(settings.getByLabel("Định dạng truyện")).toHaveValue("strip");
 
   // Chữ bỏ qua (watermark): dòng quá ngắn báo lỗi tại dòng, chặn lưu; sửa xong lưu được, mục trùng gộp lại.
-  const ignore = page.getByLabel("Chữ bỏ qua (watermark)");
+  const ignore = settings.getByLabel("Chữ bỏ qua (watermark)");
   await ignore.fill("discord.gg/nhom\nab");
-  await expect(page.getByText("Dòng 2: mỗi mục 3–100 ký tự (không tính http:// và dấu cách).")).toBeVisible();
-  await expect(page.getByRole("button", { name: "Lưu cài đặt" })).toBeDisabled();
+  await expect(settings.getByText("Dòng 2: mỗi mục 3–100 ký tự (không tính http:// và dấu cách).")).toBeVisible();
+  await expect(settings.getByRole("button", { name: "Lưu cài đặt" })).toBeDisabled();
   await ignore.fill("discord.gg/nhom\nDISCORD.GG/NHOM\nNhóm Mèo");
-  await page.getByRole("button", { name: "Lưu cài đặt" }).click();
-  await expect(page.getByRole("status").filter({ hasText: "Đã lưu" })).toBeVisible();
+  await settings.getByRole("button", { name: "Lưu cài đặt" }).click();
+  await expect(settings.getByRole("status").filter({ hasText: "Đã lưu" })).toBeVisible();
   await expect(ignore).toHaveValue("discord.gg/nhom\nNhóm Mèo");
+  await settings.getByRole("button", { name: "Đóng" }).click();
+  await expect(settings).toHaveCount(0);
 
   const url = new URL(page.url());
   const seriesId = url.pathname.split("/").at(-1) as string;

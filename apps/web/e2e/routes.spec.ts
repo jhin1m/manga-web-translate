@@ -23,10 +23,14 @@ test("series, chapter, glossary and settings open at their own URLs; old /w/ pat
   expect(created.status()).toBe(201);
   const c = ((await created.json()) as { chapter: { id: string } }).chapter.id;
 
+  // `?tab=` mở modal trên màn series; đóng modal quay về URL series không tab.
   await page.goto(`/s/${s}?tab=settings`);
-  await expect(
-    page.getByRole("navigation", { name: "Mục của series" }).getByRole("link", { name: "Cài đặt dịch" }),
-  ).toHaveAttribute("aria-current", "page");
+  const settings = page.getByRole("dialog", { name: "Cài đặt dịch" });
+  await expect(settings).toBeVisible();
+  await expect(settings.getByLabel("Ngôn ngữ đích")).toBeVisible();
+  await settings.getByRole("button", { name: "Đóng" }).click();
+  await expect(settings).toHaveCount(0);
+  await expect(page).toHaveURL(`${WEB_URL}/s/${s}`);
 
   const fakePage = "00000000-0000-7000-8000-000000000001";
   await page.goto(`/s/${s}/c/${c}?page=${fakePage}`);
