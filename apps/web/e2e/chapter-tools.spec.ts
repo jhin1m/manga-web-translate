@@ -132,6 +132,8 @@ test.describe("công cụ chương", () => {
     await dlg.getByRole("button", { name: "Áp dụng", exact: true }).click();
     await expect(dlg.getByText("Đã thay 1 chỗ trên 1 trang.")).toBeVisible();
     await expect.poll(() => regionTranslation(page.request, pageId)).toBe("Xin Hello");
+    // Bản xem trước đã áp → không áp lại được (áp lần 2 từng tạo batch rỗng làm mất "Hoàn tác" của lần thật).
+    await expect(dlg.getByRole("button", { name: "Áp dụng", exact: true })).toBeDisabled();
     // Bảng văn bản cập nhật không cần tải lại (page đang sửa nạp lại bản server mới).
     await expect(await tableCell(page)).toHaveValue("Xin Hello");
 

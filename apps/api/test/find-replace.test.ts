@@ -176,6 +176,18 @@ describe("find/replace", () => {
     expect(hist.map((h) => h.version)).toEqual([3, 3, 3]);
   });
 
+  it("applying the same preview again → 409 preview_stale, not an empty batch that hides the one to undo", async () => {
+    const res = await api("/find-replace/apply", {
+      find: "kiếm",
+      replace: "đao",
+      case_sensitive: false,
+      versions: preview.versions,
+    });
+    expect(res.status).toBe(409);
+    expect(((await res.json()) as { error: string }).error).toBe("preview_stale");
+    expect((await stateOf(pageIds[2] as string)).version).toBe(4);
+  });
+
   it("undo restores the batch; undoing again (or after a later edit) → 409", async () => {
     const res = await api("/find-replace/undo", { batch_id: batchId });
     expect(res.status, await res.clone().text()).toBe(200);

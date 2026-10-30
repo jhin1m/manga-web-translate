@@ -146,8 +146,11 @@ export function FlowPanel({
         <button
           type="button"
           className="btn-primary"
-          disabled={!preview || preview.total === 0 || !held || flow.busy}
-          title={held ? undefined : "Cần giữ khoá chương để áp dụng"}
+          // Bản xem trước đã áp rồi thì phải xem trước lại (server cũng từ chối `preview_stale`).
+          disabled={!preview || preview.total === 0 || !!applied || !held || flow.busy}
+          title={
+            held ? (applied ? "Đã áp dụng — bấm Xem trước để tìm lại" : undefined) : "Cần giữ khoá chương để áp dụng"
+          }
           onClick={flow.runApply}
         >
           Áp dụng

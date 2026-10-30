@@ -76,7 +76,12 @@ export async function applyBatch<M extends { count: number }>(
   return sdb.transaction(async (tx) => {
     const rows = await chapterPages(tx, chapterId);
     const results = rows.map((p) => ({ p, r: transform(p.state) })).filter((x) => x.r.matches.length);
-    const stale = results.filter(({ p }) => versions[p.id] !== p.version).map(({ p }) => p.id);
+    // Stale: page có khớp mà khác bản đã xem, hoặc page đã xem (có trong `versions`) đổi version — kể cả khi giờ hết
+    // khớp (VD bấm áp dụng lần 2 với bản xem trước cũ: không được thành batch rỗng thay cho batch vừa áp).
+    const matched = new Set(results.map(({ p }) => p.id));
+    const stale = rows
+      .filter((p) => (matched.has(p.id) || p.id in versions) && versions[p.id] !== p.version)
+      .map((p) => p.id);
     if (stale.length) throw httpError(409, { error: "preview_stale", pages: stale });
     let changed = 0;
     for (const { p, r } of results) {
