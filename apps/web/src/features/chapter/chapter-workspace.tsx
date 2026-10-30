@@ -495,18 +495,26 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
       // Trang đã sửa tiếp sau lượt áp thì bỏ qua (không làm hỏng cả lượt) và báo rõ trang nào.
       return undoBatch(chapterId, batchId, "skip");
     },
-    onSuccess: (r) => {
+    // Ẩn nút ngay khi bấm: bấm lần 2 sẽ thấy mọi trang "đã sửa" và báo sai. Lỗi mạng thì trả lại để thử lại; lỗi từ
+    // server (lượt không còn…) thử lại cũng vô ích.
+    onMutate: () => {
+      const prev = styleUndo;
       setStyleUndo(null);
-      notify({ tone: "info", text: undoStyleText(r.pages, r.skipped, pages) });
+      return prev;
     },
-    onError: (e) =>
+    onSuccess: (r) =>
+      // Không hoàn tác được trang nào → không tự ẩn (toast Hoàn tác đã mất, dễ bỏ lỡ).
+      notify({ tone: r.pages ? "info" : "warn", text: undoStyleText(r.pages, r.skipped, pages) }),
+    onError: (e, _batchId, prev) => {
+      if (!(e instanceof ApiError) && prev) setStyleUndo(prev);
       notify({
         tone: "danger",
         text:
           e instanceof ApiError
             ? describeWriteError(e.status, typeof e.body.error === "string" ? e.body.error : undefined, errorMessage(e))
             : errorMessage(e),
-      }),
+      });
+    },
     onSettled: data.refresh,
   });
   const applyKind = useMutation({

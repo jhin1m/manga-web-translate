@@ -805,10 +805,14 @@ test("apply style to same-kind blocks writes every page in one batch; the toast'
   await expect(page.locator(".cw-toasts .notice", { hasText: "Đã ẩn trang 2" })).toBeVisible();
   await expect(toast).toBeVisible();
 
-  // 1 lượt cả chương → 1 lần hoàn tác khôi phục mọi trang (kể cả trang đang mở).
-  await toast.getByRole("button", { name: "Hoàn tác" }).click();
-  await expect(page.locator(".cw-toasts .notice", { hasText: "Đã hoàn tác áp kiểu trên 2 trang" })).toBeVisible();
+  // 1 lượt cả chương → 1 lần hoàn tác khôi phục mọi trang (kể cả trang đang mở). Bấm đúp: lần 2 không được chạy lại
+  // hoàn tác rồi báo sai "Không hoàn tác được" đè thông báo thành công.
+  await toast.getByRole("button", { name: "Hoàn tác" }).dblclick();
+  const done = page.locator(".cw-toasts .notice", { hasText: "Đã hoàn tác áp kiểu trên 2 trang" });
+  await expect(done).toBeVisible();
   expect(await aligns()).toEqual(["src:left:18", "same-page:center:22", "src:center:22"]);
+  await expect(done).toBeVisible();
+  await expect(page.locator(".cw-toasts .notice", { hasText: "Không hoàn tác được" })).toHaveCount(0);
 });
 
 test("apply style then edit one page: Hoàn tác restores the other pages and names the skipped page", async ({
