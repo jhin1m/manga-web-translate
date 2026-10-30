@@ -53,7 +53,7 @@ test("drop a strip on home → translate → edit → export", async ({ page }) 
   await expect(chip).toHaveText("Nháp");
   await translate.click();
   await expect(chip).toHaveText("Đang cắt trang", { timeout: 30_000 });
-  await expect(page.getByRole("button", { name: "Xuất", exact: true })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Export", exact: true })).toBeDisabled();
   await expect(page.getByText(/Bắt đầu dịch|Đang dịch \d+ ảnh/)).toHaveCount(0);
 
   let ready = false;
@@ -65,7 +65,7 @@ test("drop a strip on home → translate → edit → export", async ({ page }) 
   const rail = pageThumbs(page);
   // 1 click chạy tới hết: không dừng ở "Chờ dịch", không cần bấm thêm.
   await expect(rail.getByRole("button", { name: /· Xong$/ })).toHaveCount(3, { timeout: 30_000 });
-  const primary = page.getByRole("button", { name: "Xuất", exact: true });
+  const primary = page.getByRole("button", { name: "Export", exact: true });
   await expect(primary).toBeEnabled({ timeout: 15_000 });
   await expect(chip).toHaveText(/^Chờ duyệt/);
   await expect(page.getByRole("status", { name: "Khoá chương" })).toContainText("Bạn đang giữ khoá chương");
@@ -95,7 +95,7 @@ test("drop a strip on home → translate → edit → export", async ({ page }) 
   ready = true;
   await worker;
   await primary.click();
-  const dlg = page.getByRole("dialog", { name: "Xuất chương" });
+  const dlg = page.getByRole("dialog", { name: "Export chương" });
   await expect(dlg).toBeVisible();
   await expect(dlg.getByRole("region", { name: "Trước khi xuất" })).toHaveCount(0);
   await dlg.getByRole("button", { name: "Tải chương (.zip)", exact: true }).click();
