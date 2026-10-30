@@ -5,10 +5,11 @@
  * Thay đổi liên tục cùng trường (gõ số, kéo màu) gộp 1 bước undo qua key `style:<field>:<id>`.
  */
 import type { TextBox } from "@mtl/shared";
-import type { ReactNode } from "react";
+import { type ReactNode, useState } from "react";
 import { type BoxStyle, setStyle } from "../actions.ts";
 import { fontPreview } from "../fonts.ts";
 import { editorStore, useEditor } from "../store.ts";
+import { committedNumber, liveNumber } from "./number-input.ts";
 
 const ALIGN: { id: TextBox["align"]; label: string }[] = [
   { id: "left", label: "Trái" },
@@ -16,10 +17,50 @@ const ALIGN: { id: TextBox["align"]; label: string }[] = [
   { id: "right", label: "Phải" },
 ];
 
-const num = (v: string, min: number, max: number) => {
-  const n = Number(v);
-  return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : null;
-};
+/**
+ * Ô số giữ chuỗi đang gõ: chỉ áp số hợp lệ trong khoảng ngay khi gõ; rời ô / Enter kẹp trong khoảng (rỗng → giữ giá trị
+ * cũ) rồi hiện lại giá trị của box. Đặt `key` theo box để đổi khối là bỏ chuỗi dở.
+ */
+function NumberInput(props: {
+  id: string;
+  value: number;
+  min: number;
+  max: number;
+  step?: number;
+  disabled?: boolean;
+  title?: string;
+  onValue(v: number): void;
+}) {
+  const { min, max, onValue } = props;
+  const [draft, setDraft] = useState<string | null>(null);
+  const commit = () => {
+    if (draft === null) return;
+    const v = committedNumber(draft, min, max);
+    if (v !== null && v !== props.value) onValue(v);
+    setDraft(null);
+  };
+  return (
+    <input
+      id={props.id}
+      type="number"
+      min={min}
+      max={max}
+      step={props.step}
+      value={draft ?? props.value}
+      disabled={props.disabled}
+      title={props.title}
+      onChange={(e) => {
+        setDraft(e.target.value);
+        const v = liveNumber(e.target.value, min, max);
+        if (v !== null) onValue(v);
+      }}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") commit();
+      }}
+    />
+  );
+}
 
 /** Box đang chọn + hàm đổi 1 trường kiểu (1 bước undo mỗi chuỗi thay đổi cùng trường). */
 function useBoxStyle() {
@@ -81,19 +122,16 @@ export function BasicStyle({
         </div>
         <div>
           <label htmlFor="ed-size">Cỡ chữ (px)</label>
-          <input
+          <NumberInput
+            key={box.id}
             id="ed-size"
-            type="number"
             min={6}
             max={200}
             step={1}
             value={box.font_size}
             disabled={box.auto_fit}
             title={box.auto_fit ? "Đang tự khớp cỡ chữ vào khung" : undefined}
-            onChange={(e) => {
-              const v = num(e.target.value, 6, 200);
-              if (v !== null) style("font_size", { font_size: v });
-            }}
+            onValue={(v) => style("font_size", { font_size: v })}
           />
         </div>
       </div>
@@ -118,31 +156,25 @@ export function AdvancedStyle({ children }: { children?: ReactNode }) {
       <div className="ed-row">
         <div>
           <label htmlFor="ed-lh">Giãn dòng</label>
-          <input
+          <NumberInput
+            key={box.id}
             id="ed-lh"
-            type="number"
             min={0.6}
             max={3}
             step={0.05}
             value={box.line_height}
-            onChange={(e) => {
-              const v = num(e.target.value, 0.6, 3);
-              if (v !== null) style("line_height", { line_height: v });
-            }}
+            onValue={(v) => style("line_height", { line_height: v })}
           />
         </div>
         <div>
           <label htmlFor="ed-pad">Lề</label>
-          <input
+          <NumberInput
+            key={box.id}
             id="ed-pad"
-            type="number"
             min={0}
             max={100}
             value={box.pad}
-            onChange={(e) => {
-              const v = num(e.target.value, 0, 100);
-              if (v !== null) style("pad", { pad: v });
-            }}
+            onValue={(v) => style("pad", { pad: v })}
           />
         </div>
       </div>
@@ -181,18 +213,16 @@ export function AdvancedStyle({ children }: { children?: ReactNode }) {
         </div>
         <div>
           <label htmlFor="ed-stroke-w">Viền ngoài (px)</label>
-          <input
+          <NumberInput
+            key={box.id}
             id="ed-stroke-w"
-            type="number"
             min={0}
             max={20}
             step={0.5}
             value={box.stroke?.width ?? 0}
-            onChange={(e) => {
-              const w = num(e.target.value, 0, 20);
-              if (w === null) return;
-              style("stroke", { stroke: w > 0 ? { color: box.stroke?.color ?? "#ffffff", width: w } : null });
-            }}
+            onValue={(w) =>
+              style("stroke", { stroke: w > 0 ? { color: box.stroke?.color ?? "#ffffff", width: w } : null })
+            }
           />
         </div>
       </div>
