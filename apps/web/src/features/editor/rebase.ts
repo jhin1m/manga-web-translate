@@ -74,6 +74,23 @@ export function diffStates(base: PageState, local: PageState): Op[] {
 const keyOf = (op: Op) =>
   op.t === "root" ? `root:${op.field}` : `${op.coll}:${op.t === "add" ? op.entity.id : op.id}`;
 
+/** Field quyết định ngắt dòng (đầu vào `layoutBox`); x/y/màu/viền không đổi `lines`. */
+const LINE_INPUTS = ["text", "w", "h", "font_family", "font_size", "line_height", "pad", "letter_spacing", "auto_fit"];
+const sameLineInputs = (a: Record<string, unknown>, b: Record<string, unknown>) =>
+  LINE_INPUTS.every((k) => same(a[k], b[k]));
+
+/**
+ * `lines` là ngắt dòng suy ra từ text + kiểu của chính box (hợp đồng layout mục 5), không gộp riêng từng field được:
+ * box gộp (vd text của server + font của mình) mà giữ `lines` của một bên thì canvas/export vẽ chữ khác `text`.
+ * Giữ `lines` của bên mà box gộp trùng mọi đầu vào ngắt dòng; lẫn cả hai → `[]` để renderer ngắt lại.
+ */
+function syncLines(cur: Record<string, unknown>, local: Entity, server: Record<string, unknown>) {
+  const mine = local as unknown as Record<string, unknown>;
+  if (sameLineInputs(cur, mine)) cur.lines = [...(mine.lines as string[])];
+  else if (sameLineInputs(cur, server)) cur.lines = [...(server.lines as string[])];
+  else cur.lines = [];
+}
+
 type Mutable = { regions: Entity[]; text_boxes: Entity[] } & Omit<PageState, "regions" | "text_boxes">;
 
 /** Áp op lên bản sao `server`; trả state mới + danh sách xung đột (không đoán khi id không còn). */
@@ -105,11 +122,13 @@ export function rebase(server: PageState, ops: readonly Op[]): { state: PageStat
       continue;
     }
     const cur = list[i] as Record<string, unknown>;
+    const serverEnt = structuredClone(cur);
     const clashed: string[] = [];
     for (const [k, f] of Object.entries(op.fields)) {
       if (same(cur[k], f.from) || same(cur[k], f.to)) cur[k] = structuredClone(f.to);
       else clashed.push(k);
     }
+    if (op.coll === "text_boxes") syncLines(cur, op.local, serverEnt);
     if (clashed.length) conflicts.push({ key: keyOf(op), reason: "changed_on_server", op, fields: clashed });
   }
   return { state: s as unknown as PageState, conflicts };
@@ -138,7 +157,9 @@ export function restoreConflict(c: Conflict) {
     // Chỉ field xung đột — field server đổi mà mình không đụng đã được giữ ở bước rebase.
     if (op.t === "update" && i >= 0) {
       const cur = list[i] as Record<string, unknown>;
+      const before = JSON.parse(JSON.stringify(cur)) as Record<string, unknown>; // draft immer: không structuredClone được
       for (const k of c.fields ?? Object.keys(op.fields)) cur[k] = structuredClone(op.fields[k]?.to);
+      if (op.coll === "text_boxes") syncLines(cur, op.local, before);
       return;
     }
     if (i >= 0) list[i] = structuredClone(ent);

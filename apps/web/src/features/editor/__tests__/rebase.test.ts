@@ -60,6 +60,50 @@ describe("rebase pending ops onto a newer server state", () => {
     expect(r.conflicts[0]?.reason).toBe("removed_but_changed");
   });
 
+  // Tìm/Thay phía server đổi `text` và để `lines: []`; gốc cũng `lines: []` (box AI chưa qua editor) nên `lines` của server
+  // "không đổi" — không được lấy `lines` của mình ghép với `text` của server.
+  const serverReplace = (s: PageState, id: string, text: string) => {
+    const next = structuredClone(s);
+    const b = next.text_boxes.find((x) => x.id === id) as (typeof next.text_boxes)[number];
+    b.text = text;
+    b.lines = [];
+    return next;
+  };
+  const unlaid = (s: PageState) => ({ ...s, text_boxes: s.text_boxes.map((b) => ({ ...b, lines: [] })) });
+
+  it("keeps the server's lines when the server's text wins a text conflict", () => {
+    const fresh = unlaid(base);
+    const local = run(fresh, editText("t1", "của tôi", layout));
+    expect(local.text_boxes[1]?.lines.length).toBeGreaterThan(0);
+    const r = rebase(serverReplace(fresh, "t1", "của server"), diffStates(fresh, local));
+    expect(r.state.text_boxes[1]).toMatchObject({ text: "của server", lines: [] });
+    expect(r.conflicts.map((c) => c.key)).toContain("text_boxes:t1");
+  });
+
+  it("drops stale lines when my style change meets the server's text change", () => {
+    const fresh = unlaid(base);
+    const local = run(fresh, setStyle("t1", { font_size: 40 }, layout));
+    const r = rebase(serverReplace(fresh, "t1", "của server"), diffStates(fresh, local));
+    expect(r.conflicts).toEqual([]);
+    expect(r.state.text_boxes[1]).toMatchObject({ text: "của server", font_size: 40, lines: [] });
+  });
+
+  it("keeps the server's lines when I only moved the box", () => {
+    const local = run(base, moveBox("t1", 7, 7));
+    const server = run(base, editText("t1", "server sửa", layout));
+    const r = rebase(server, diffStates(base, local));
+    expect(r.state.text_boxes[1]).toMatchObject({ x: 7, text: "server sửa", lines: server.text_boxes[1]?.lines });
+  });
+
+  it("restoring my text brings my lines back with it", () => {
+    const fresh = unlaid(base);
+    const local = run(fresh, editText("t1", "của tôi", layout));
+    const r = rebase(serverReplace(fresh, "t1", "của server"), diffStates(fresh, local));
+    const c = r.conflicts.find((x) => x.key === "text_boxes:t1") as NonNullable<(typeof r.conflicts)[number]>;
+    const restored = run(r.state, restoreConflict(c) as never);
+    expect(restored.text_boxes[1]).toEqual(local.text_boxes[1]);
+  });
+
   it("is idempotent when the server already has my change", () => {
     const local = run(base, moveBox("t1", 3, 3));
     const r = rebase(local, diffStates(base, local));
