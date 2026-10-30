@@ -196,8 +196,11 @@ describe("editing while the chapter translates batch by batch", () => {
       ...(await claimJobs(token, { caps: ["page.prepare"], max: 8 })),
     ];
     expect(prep).toHaveLength(N);
-    for (const j of prep) expect((await doPrepare(token, j)).status).toBe(200);
     const ids = (await pageRows(S.chapterId)).map((p) => p.id);
+    // Job prepare của một chương cùng `created_at` (một giao dịch) nên claim trả theo thứ tự tuỳ ý. Lô 1 gồm mọi trang
+    // đã prepare liền từ đầu chương → hoàn tất theo thứ tự đọc để lô 1 luôn chỉ có trang 1 (lô 2 còn chờ).
+    prep.sort((a, b) => ids.indexOf(String(a.payload.page_id)) - ids.indexOf(String(b.payload.page_id)));
+    for (const j of prep) expect((await doPrepare(token, j)).status).toBe(200);
     const [p0, p1] = ids as [string, string];
 
     // Tab mở editor và giữ khoá suốt lượt dịch.
