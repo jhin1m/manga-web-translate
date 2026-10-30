@@ -196,7 +196,9 @@ chương chưa dịch xong → Tìm, Hiệu đính tắt.
 
 - **Chọn** (`select-panel.tsx`): có khối — "Trang n · Khối i / tổng · Loại" (loại chỉ đọc), Gốc (OCR), Bản dịch
   (`#cw-translation`, cùng nguồn với bảng), cảnh báo tràn khung, font / cỡ / tự khớp, "Kiểu chữ nâng cao" (thu gọn:
-  giãn dòng, lề, căn lề, màu, viền, ẩn khi xuất, "Áp kiểu này cho khối <loại> trong chương" — hỏi xác nhận), Dịch lại
+  giãn dòng, lề, căn lề, màu, viền, ẩn khi xuất, "Áp kiểu này cho khối <loại> trong chương" — mọi trang, kể cả trang
+  đang mở, ghi trong 1 lượt `PUT /chapters/:id/states` chung `batch_id`; toast "Hoàn tác" khôi phục cả lượt qua
+  `find-replace/undo`, Cmd+Z không tách lượt này theo trang; chương đang xử lý → 409 `chapter_busy`), Dịch lại
   khối, Xoá khối, link Dịch trang này / Dịch lại trang này (không có khi trang bận). Chưa có khối — trang + trạng thái + cờ (AI có bản mới, tràn khung, cắt ở
   trần chiều cao, lỗi job + "Chi tiết kỹ thuật"), Dịch trang này / Dịch lại trang này · Ẩn trang này, "Bỏ chỉnh sửa tay, dùng lại bản
   AI" (khi trang khác bản AI). "AI có bản mới" và xung đột khi lưu luôn ở đầu panel.

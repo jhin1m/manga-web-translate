@@ -15,7 +15,7 @@ import { errorMessage } from "../../lib/api.ts";
 import { lockChapter } from "../chapter/api.ts";
 import { serial, useChapterLock } from "../chapter/use-chapter-lock.ts";
 import { fetchFonts, fontKeys } from "../fonts/api.ts";
-import { fetchPageDetail, type PageDetail, putPageState } from "./api.ts";
+import { fetchPageDetail, type PageDetail, putChapterStates, putPageState } from "./api.ts";
 import { type ChapterStore, chapterStore } from "./chapter-store.ts";
 import { type FontKit, loadFonts } from "./fonts.ts";
 import type { History } from "./history.ts";
@@ -33,14 +33,16 @@ export type SessionDeps = {
   /** GET /pages/:id (state + version + ai_state). */
   fetchPage(pageId: string): Promise<LoadedPage>;
   putState(pageId: string, state: PageState, version: number): Promise<{ version: number }>;
+  /** PUT /chapters/:id/states — nhiều page, 1 transaction, chung batch_id. */
+  putStates(
+    pages: { page_id: string; version: number; state: PageState }[],
+  ): Promise<{ batch_id: string; versions: Record<string, number> }>;
   queue: Pick<PendingQueue, "delete">;
   onError(e: unknown): void;
 };
 
 const statusOf = (e: unknown) =>
   e && typeof e === "object" && "status" in e && typeof e.status === "number" ? e.status : 0;
-
-const PAGE_BUSY_TEXT = "trang đang dịch — sửa được khi xong";
 
 /** Page đang sửa còn thay đổi chưa lưu được → không đổi page (sửa vẫn nằm trong editor + IndexedDB). */
 export class UnsavedPageError extends Error {
@@ -278,29 +280,40 @@ export class ChapterSession {
   }
 
   /**
-   * Ghi 1 thay đổi thẳng lên page KHÔNG active (VD áp kiểu cho khối cùng loại cả chương): áp `recipe` lên state
-   * cache (chưa có thì lấy server) → PUT If-Match → cập nhật cache; 409 → lấy bản mới, áp lại 1 lần.
-   * Trả false khi không có gì đổi. Không có undo (ngoài page active).
+   * Sửa nhiều page trong 1 lượt ghi server (VD "Áp kiểu cho khối cùng loại" cả chương): lưu page đang sửa → áp
+   * `recipeFor` lên state đã lưu của từng page (page active: `base` của editor; page khác: cache) → `putStates` ghi
+   * mọi page đổi trong 1 transaction, chung `batch_id` (hoàn tác cả lượt bằng `undoBatch`). Page active nạp lại bản
+   * mới (lịch sử undo của nó bỏ — lượt này hoàn tác theo cả chương, không theo từng page). Page bận bỏ qua.
+   * Trả null khi không page nào đổi.
    */
-  async updateOther(pageId: string, recipe: (draft: Draft<PageState>) => void): Promise<boolean> {
-    const { chapter, editor } = this.deps;
-    if (editor.getState().pageId === pageId) throw new Error("page đang sửa — dùng editor.apply");
-    if (this.busy.has(pageId)) throw new Error(PAGE_BUSY_TEXT);
-    const c = chapter.getState().cache[pageId];
-    let server = c?.state ? { state: c.state, version: c.version } : await this.deps.fetchPage(pageId);
-    for (let round = 0; ; round++) {
-      const next = produce(server.state, recipe);
-      if (next === server.state) return false;
-      try {
-        const { version } = await this.deps.putState(pageId, next, server.version);
-        chapter.getState().setCached(pageId, { state: next, version });
-        return true;
-      } catch (e) {
-        if (isPageBusyError(e)) throw new Error(PAGE_BUSY_TEXT);
-        if (statusOf(e) !== 409 || round > 0) throw e;
-        server = await this.deps.fetchPage(pageId);
-      }
+  async editMany(
+    recipeFor: (state: PageState, pageId: string) => ((draft: Draft<PageState>) => void) | null,
+  ): Promise<{ batchId: string; pageIds: string[] } | null> {
+    const { editor, chapter, saver } = this.deps;
+    await saver.flush();
+    const s = editor.getState();
+    if (s.pageId && s.doc !== s.base) {
+      throw new UnsavedPageError(chapter.getState().pages.find((p) => p.id === s.pageId)?.ord);
     }
+    const list: { page_id: string; version: number; state: PageState }[] = [];
+    for (const p of chapter.getState().pages) {
+      if (this.busy.has(p.id)) continue;
+      const cur =
+        p.id === s.pageId && s.base ? { state: s.base, version: s.baseVersion } : chapter.getState().cache[p.id];
+      if (!cur?.state) continue;
+      const recipe = recipeFor(cur.state, p.id);
+      if (!recipe) continue;
+      const next = produce(cur.state, recipe);
+      if (next !== cur.state) list.push({ page_id: p.id, version: cur.version, state: next });
+    }
+    if (!list.length) return null;
+    const r = await this.deps.putStates(list);
+    for (const p of list) {
+      const version = r.versions[p.page_id];
+      if (version !== undefined) chapter.getState().setCached(p.page_id, { state: p.state, version });
+    }
+    this.syncActive();
+    return { batchId: r.batch_id, pageIds: list.map((p) => p.page_id) };
   }
 
   /** Khôi phục bản ghi của page active vào editor (rebase lên base hiện tại; xung đột liệt kê). */
@@ -413,10 +426,11 @@ export function useChapterSession(opts: {
         saver,
         fetchPage: async (id) => loadedOf(await fetchPageDetail(id)),
         putState: (id, state, version) => putPageState(id, state, version),
+        putStates: (list) => putChapterStates(chapterId, list),
         queue,
         onError: (e) => setError(errorMessage(e)),
       }),
-    [saver, queue],
+    [saver, queue, chapterId],
   );
 
   // Mọi thay đổi doc → lưu nháp IndexedDB + autosave. Phải khai báo TRƯỚC useChapterLock (thứ tự cleanup).

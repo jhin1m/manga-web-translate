@@ -52,6 +52,18 @@ function setup() {
       return api.get(id);
     },
     putState: (id, state, version) => api.put(id, state, version),
+    async putStates(list) {
+      log.push(`putStates:${list.map((p) => p.page_id).join(",")}`);
+      if (list.some((p) => srv[p.page_id]?.version !== p.version)) {
+        throw Object.assign(new Error("409"), { status: 409 });
+      }
+      const versions: Record<string, number> = {};
+      for (const p of list) {
+        srv[p.page_id] = { state: structuredClone(p.state), version: p.version + 1 };
+        versions[p.page_id] = p.version + 1;
+      }
+      return { batch_id: "batch-1", versions };
+    },
     queue,
     onError: (e) => {
       errors.push(e);
@@ -60,6 +72,18 @@ function setup() {
   chapter
     .getState()
     .setStates(Object.entries(srv).map(([page_id, v]) => ({ page_id, ...v, ai_rev: 0, ai_update_available: false })));
+  chapter.getState().setPages(
+    ["A", "B"].map((id, ord) => ({
+      id,
+      ord,
+      width: 1000,
+      height: 1000,
+      status: "ready" as const,
+      version: 1,
+      clean_rev: 1,
+      ai_update_available: false,
+    })),
+  );
   editor.getState().setReadOnly(null);
   return { log, errors, srv, editor, chapter, saver, queue, session: new ChapterSession(deps) };
 }
@@ -227,12 +251,11 @@ describe("ChapterSession", () => {
     await queue.put(rec);
     log.length = 0;
     expect(await session.restoreOther(rec)).toBe("deferred");
-    await expect(
-      session.updateOther("B", (d) => {
-        for (const b of d.text_boxes) b.align = "left";
-      }),
-    ).rejects.toThrow("đang dịch");
-    expect(log.filter((l) => l.startsWith("put:"))).toEqual([]);
+    // Sửa hàng loạt bỏ qua page bận (chỉ ghi A).
+    await session.editMany(() => (d) => {
+      for (const b of d.text_boxes) b.align = "left";
+    });
+    expect(log.filter((l) => l.startsWith("put"))).toEqual(["putStates:A"]);
     expect(srv.B?.version).toBe(1);
     expect(await queue.get("B")).toBeDefined();
   });
@@ -250,19 +273,33 @@ describe("ChapterSession", () => {
     expect(await queue.get("B")).toBeUndefined();
   });
 
-  it("updateOther writes a non-active page (retrying once on 409) and refreshes its cache", async () => {
-    const { srv, chapter, editor, session } = setup();
+  it("editMany writes active + other pages in one batch, reloads the active page and refreshes the cache", async () => {
+    const { log, srv, chapter, editor, session } = setup();
     await session.activate("A");
-    // Cache của B cũ hơn server → PUT đầu 409, lấy lại rồi áp lại.
-    srv.B = { state: srv.B?.state ?? doc(3), version: 2 };
-    const ok = await session.updateOther("B", (d) => {
+    editor.getState().apply(moveBox("t0", 7, 7));
+    log.length = 0;
+    const r = await session.editMany(() => (d) => {
       for (const b of d.text_boxes) b.align = "left";
     });
-    expect(ok).toBe(true);
-    expect(srv.B?.version).toBe(3);
+    expect(r).toEqual({ batchId: "batch-1", pageIds: ["A", "B"] });
+    // Sửa đang chờ của A lưu trước (PUT riêng), rồi 1 lượt ghi cả hai page.
+    expect(log.filter((l) => l.startsWith("put"))).toEqual(["put:A", "putStates:A,B"]);
+    expect(srv.A).toMatchObject({ version: 3 });
+    expect(srv.A?.state.text_boxes[0]).toMatchObject({ x: 7, align: "left" });
     expect(srv.B?.state.text_boxes.every((b) => b.align === "left")).toBe(true);
-    expect(chapter.getState().cache.B?.version).toBe(3);
-    expect(await session.updateOther("B", (d) => void d)).toBe(false);
-    await expect(session.updateOther(editor.getState().pageId ?? "", () => {})).rejects.toThrow();
+    expect(chapter.getState().cache.B?.version).toBe(2);
+    // Page active nạp bản mới; Cmd+Z không tách lượt này ra từng page.
+    expect(editor.getState()).toMatchObject({ baseVersion: 3 });
+    expect(editor.getState().doc?.text_boxes.every((b) => b.align === "left")).toBe(true);
+    expect(editor.getState().history.past).toHaveLength(0);
+  });
+
+  it("editMany with nothing to change writes nothing", async () => {
+    const { log, session } = setup();
+    await session.activate("A");
+    log.length = 0;
+    expect(await session.editMany(() => null)).toBeNull();
+    expect(await session.editMany(() => (d) => void d)).toBeNull();
+    expect(log.filter((l) => l.startsWith("put"))).toEqual([]);
   });
 });

@@ -20,7 +20,6 @@
  */
 import "../editor/editor.css";
 import "./chapter-workspace.css";
-import type { PageState } from "@mtl/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -54,6 +53,7 @@ import {
   retryFailed,
   setPageSkip,
   translatePrepared,
+  undoBatch,
 } from "./api.ts";
 import { BlockToolbar } from "./block-toolbar.tsx";
 import { CanvasPager, CanvasZoom } from "./canvas-controls.tsx";
@@ -79,6 +79,7 @@ import { stageLabel } from "./stage-labels.ts";
 import { chapterChip, isChapterSettled } from "./status.ts";
 import { filterRows, KIND_LABEL, type Row, rowKeyOfBox, sameKindBoxIds, type TableFilter } from "./text-table/rows.ts";
 import { TableFilters, TextTable, useChapterRows } from "./text-table/text-table.tsx";
+import { describeWriteError } from "./text-utils.ts";
 import { OcrToolView, TextToolView } from "./tool-panels.tsx";
 import { ToolRail } from "./tool-rail.tsx";
 import { isWidePanel, PANEL_TITLE, type PanelId, type RailTarget, railClick } from "./tool-rail-model.ts";
@@ -470,13 +471,29 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
       }),
     onSettled: data.refresh,
   });
-  // "Áp kiểu này cho khối cùng loại trong chương" (panel Chọn hỏi xác nhận trước): page active = 1 bước undo; page
-  // khác ghi thẳng (cần khoá, không hoàn tác được). Lỗi giữa chừng → báo rõ trang nào đã áp.
+  // "Áp kiểu này cho khối cùng loại trong chương": mọi trang (kể cả trang đang mở) ghi trong 1 lượt chung batch_id →
+  // toast "Hoàn tác" khôi phục cả lượt (Cmd+Z chỉ hoàn tác trong 1 trang nên không dùng cho lượt này).
+  const undoKind = useMutation({
+    mutationFn: async (batchId: string) => {
+      await session.saver.flush();
+      return undoBatch(chapterId, batchId);
+    },
+    onSuccess: (r) => notify({ tone: "info", text: `Đã hoàn tác áp kiểu trên ${r.pages} trang.` }),
+    onError: (e) =>
+      notify({
+        tone: "danger",
+        text:
+          e instanceof ApiError
+            ? describeWriteError(e.status, typeof e.body.error === "string" ? e.body.error : undefined, errorMessage(e))
+            : errorMessage(e),
+      }),
+    onSettled: data.refresh,
+  });
   const applyKind = useMutation({
-    mutationFn: async (row: Row) => {
+    mutationFn: async (row: Row): Promise<Notice> => {
       const s = editorStore.getState();
       const src = s.doc?.text_boxes.find((b) => b.id === row.boxId);
-      if (!s.doc || !s.layout || !src) return "Chưa chọn khung chữ.";
+      if (!s.doc || !s.layout || !src) return { tone: "danger", text: "Chưa chọn khung chữ." };
       const { font_family, font_size, line_height, pad, align, fill, stroke, auto_fit } = src;
       // Box tự khớp: cỡ chữ là kết quả khớp của riêng box đó — không chép sang box khác.
       const style = {
@@ -490,38 +507,35 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
         ...(auto_fit ? {} : { font_size }),
       };
       const layout = s.layout;
-      const idsOf = (st: PageState) => sameKindBoxIds(st, row.kind, src.id);
-      let boxes = 0;
-      let touched = 0;
-      const own = idsOf(s.doc);
-      if (own.length) {
-        s.apply(setStyleMany(own, style, layout));
-        boxes += own.length;
-        touched++;
-      }
-      await session.saver.flush();
-      const done: number[] = [];
-      for (const p of chapterStore.getState().pages) {
-        const st = chapterStore.getState().cache[p.id]?.state;
-        // Page có thể vừa thành active (người dùng đổi trang giữa chừng) → bỏ qua, không ghi đè bản đang sửa.
-        if (p.id === editorStore.getState().pageId || !st) continue;
-        const ids = idsOf(st);
-        if (!ids.length) continue;
-        try {
-          if (await session.session.updateOther(p.id, setStyleMany(ids, style, layout))) {
-            boxes += ids.length;
-            touched++;
-            done.push(p.ord + 1);
-          }
-        } catch (e) {
-          const ok = done.length ? `Đã áp ở trang ${done.join(", ")}; ` : "";
-          throw new Error(`${ok}lỗi ở trang ${p.ord + 1}: ${errorMessage(e)}`);
-        }
-      }
-      return `Đã áp kiểu cho ${boxes} khối ${KIND_LABEL[row.kind].toLowerCase()} trên ${touched} trang.`;
+      const counts = new Map<string, number>();
+      const r = await session.session.editMany((st, pageId) => {
+        const ids = sameKindBoxIds(st, row.kind, src.id);
+        counts.set(pageId, ids.length);
+        return ids.length ? setStyleMany(ids, style, layout) : null;
+      });
+      const label = KIND_LABEL[row.kind].toLowerCase();
+      if (!r) return { tone: "info", text: `Mọi khối ${label} trong chương đã cùng kiểu này.` };
+      const boxes = r.pageIds.reduce((n, id) => n + (counts.get(id) ?? 0), 0);
+      return {
+        tone: "info",
+        text: `Đã áp kiểu cho ${boxes} khối ${label} trên ${r.pageIds.length} trang.`,
+        actions: [{ label: "Hoàn tác", run: () => undoKind.mutate(r.batchId) }],
+      };
     },
-    onSuccess: (text) => notify({ tone: "info", text }),
-    onError: (e) => notify({ tone: "danger", text: errorMessage(e) }),
+    onSuccess: notify,
+    onError: (e) =>
+      notify({
+        tone: "danger",
+        text:
+          e instanceof ApiError && e.body.error === "version_conflict"
+            ? "Có trang vừa thay đổi (AI hoặc tab khác) — đã tải lại, bấm Áp kiểu lần nữa."
+            : e instanceof ApiError && e.body.error === "chapter_busy"
+              ? "Chương đang xử lý — chờ xong rồi áp kiểu cho cả chương."
+              : errorMessage(e),
+      }),
+    onSettled: (_r, e) => {
+      if (e) data.refresh();
+    },
   });
 
   const { mutate: runAction } = action;

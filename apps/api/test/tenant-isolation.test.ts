@@ -172,6 +172,9 @@ const BODIES: Record<string, unknown> = {
   "POST /api/glossary/csv": { csv: "source_term,target_term\n용,rồng\n" },
   "POST /api/series/:seriesId/glossary/csv": { csv: "source_term,target_term\n용,long\n" },
   "PUT /api/pages/:pageId/state": { state: emptyPageState(100, 100) },
+  get "PUT /api/chapters/:chapterId/states"() {
+    return { pages: [{ page_id: pageOf[A.userId], version: 0, state: emptyPageState(100, 100) }] };
+  },
   "PATCH /api/pages/:pageId": { skipped: false },
   "POST /api/pages/:pageId/ai-update/ack": { ai_rev: 0 },
   "POST /api/pages/:pageId/reinpaint": {
@@ -248,6 +251,7 @@ const RESOURCE_CASES: Record<string, (b: Seed) => Record<string, string>> = {
   "POST /api/chapters/:chapterId/glossary-apply/preview": (b) => ({ chapterId: b.chapterId }),
   "POST /api/chapters/:chapterId/glossary-apply/apply": (b) => ({ chapterId: b.chapterId }),
   "GET /api/chapters/:chapterId/states": (b) => ({ chapterId: b.chapterId }),
+  "PUT /api/chapters/:chapterId/states": (b) => ({ chapterId: b.chapterId }),
   "GET /api/series/:seriesId/skip-images": (b) => ({ seriesId: b.seriesId }),
   "POST /api/series/:seriesId/skip-images": (b) => ({ seriesId: b.seriesId }),
   "DELETE /api/series/:seriesId/skip-images/:imageId": (b) => ({

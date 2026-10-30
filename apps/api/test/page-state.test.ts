@@ -255,3 +255,68 @@ describe("GET /chapters/:id/states", () => {
     });
   });
 });
+
+describe("PUT /chapters/:id/states (nhiều page, 1 batch)", () => {
+  const putMany = (list: { page_id: string; version: number; state: PageState }[]) =>
+    call(`/api/chapters/${A.chapterId}/states`, { method: "PUT", cookie: A.cookie, body: { pages: list } });
+  const versionOf = async (id: string) =>
+    (await scoped(db, A.userId).select(pageStates, eq(pageStates.pageId, id)))[0]?.version;
+
+  it("writes every page in one batch; find-replace/undo restores the whole batch", async () => {
+    await lock();
+    const [a, b] = [await newPage(), await newPage()] as [string, string];
+    const res = await putMany([
+      { page_id: a, version: 0, state: edited("Kiểu A") },
+      { page_id: b, version: 0, state: edited("Kiểu B") },
+    ]);
+    expect(res.status, await res.clone().text()).toBe(200);
+    const { batch_id, versions } = (await res.json()) as { batch_id: string; versions: Record<string, number> };
+    expect(versions).toEqual({ [a]: 1, [b]: 1 });
+    const hist = await scoped(db, A.userId).select(pageStateHistory, eq(pageStateHistory.batchId, batch_id));
+    expect(hist.map((h) => h.pageId).sort()).toEqual([a, b].sort());
+
+    const undo = await call(`/api/chapters/${A.chapterId}/find-replace/undo`, {
+      method: "POST",
+      cookie: A.cookie,
+      body: { batch_id },
+    });
+    expect(undo.status, await undo.clone().text()).toBe(200);
+    expect(await undo.json()).toEqual({ pages: 2 });
+    for (const id of [a, b]) {
+      const [row] = await scoped(db, A.userId).select(pageStates, eq(pageStates.pageId, id));
+      expect(row?.version).toBe(2);
+      expect(row?.state?.regions[0]?.translation).toBe("AI");
+    }
+  });
+
+  it("one stale version → 409 with that page, nothing written", async () => {
+    await lock();
+    const [a, b] = [await newPage(), await newPage()] as [string, string];
+    const res = await putMany([
+      { page_id: a, version: 0, state: edited("x") },
+      { page_id: b, version: 5, state: edited("x") },
+    ]);
+    expect(res.status).toBe(409);
+    expect(await res.json()).toEqual({ error: "version_conflict", pages: [b] });
+    expect(await versionOf(a)).toBe(0);
+  });
+
+  it("requires the lock (423), rejects busy (409), foreign (404) and duplicate (400) pages", async () => {
+    await unlock();
+    const a = await newPage();
+    expect((await putMany([{ page_id: a, version: 0, state: edited("x") }])).status).toBe(423);
+    await lock();
+    const busy = await newPage(null);
+    const r1 = await putMany([{ page_id: busy, version: 0, state: edited("x") }]);
+    expect(r1.status).toBe(409);
+    expect(await r1.json()).toEqual({ error: "page_busy" });
+    const r2 = await putMany([{ page_id: "00000000-0000-7000-8000-000000000000", version: 0, state: edited("x") }]);
+    expect(r2.status).toBe(404);
+    const r3 = await putMany([
+      { page_id: a, version: 0, state: edited("x") },
+      { page_id: a, version: 0, state: edited("y") },
+    ]);
+    expect(r3.status).toBe(400);
+    expect(await versionOf(a)).toBe(0);
+  });
+});

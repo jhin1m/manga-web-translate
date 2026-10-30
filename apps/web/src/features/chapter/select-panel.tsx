@@ -115,8 +115,6 @@ function BlockView(props: SelectPanelProps & { page: ProgressPage; row: Row }) {
   const { page, row } = props;
   const readOnly = useEditor((s) => !!s.readOnly);
   const box = useEditor((s) => (row.boxId ? s.doc?.text_boxes.find((b) => b.id === row.boxId) : undefined));
-  // Áp kiểu cả chương ghi thẳng các trang khác (không hoàn tác được) → hỏi lại 1 bước, gắn với khối đang chọn.
-  const [confirmKind, setConfirmKind] = useState<string | null>(null);
   const warn = box ? overflowText(box, props.kit) : null;
   const kind = KIND_LABEL[row.kind];
   const reocrOff = reocrDisabled(row, readOnly, props.busy.ocr);
@@ -158,39 +156,15 @@ function BlockView(props: SelectPanelProps & { page: ProgressPage; row: Row }) {
           <details className="cw-adv">
             <summary>Kiểu chữ nâng cao</summary>
             <AdvancedStyle>
-              {confirmKind === row.key ? (
-                <div className="cw-field">
-                  <p className="notice" role="status">
-                    Áp font, cỡ, căn lề, màu, viền của khối này cho mọi khối {kind.toLowerCase()} trong chương? Trang
-                    khác ghi ngay, không hoàn tác được.
-                  </p>
-                  <div className="row">
-                    <button
-                      type="button"
-                      className="btn-primary"
-                      disabled={readOnly || props.busy.applyKind}
-                      onClick={() => {
-                        setConfirmKind(null);
-                        props.onApplyKind(row);
-                      }}
-                    >
-                      Áp kiểu
-                    </button>
-                    <button type="button" className="btn-ghost" onClick={() => setConfirmKind(null)}>
-                      Huỷ
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <button
-                  type="button"
-                  className="cw-wide"
-                  disabled={readOnly || props.busy.applyKind}
-                  onClick={() => setConfirmKind(row.key)}
-                >
-                  {props.busy.applyKind ? "Đang áp kiểu…" : `Áp kiểu này cho khối ${kind.toLowerCase()} trong chương`}
-                </button>
-              )}
+              <button
+                type="button"
+                className="cw-wide"
+                disabled={readOnly || props.busy.applyKind}
+                title={`Áp font, cỡ, căn lề, màu, viền của khối này cho mọi khối ${kind.toLowerCase()} trong chương (hoàn tác được)`}
+                onClick={() => props.onApplyKind(row)}
+              >
+                {props.busy.applyKind ? "Đang áp kiểu…" : `Áp kiểu này cho khối ${kind.toLowerCase()} trong chương`}
+              </button>
             </AdvancedStyle>
           </details>
         </>

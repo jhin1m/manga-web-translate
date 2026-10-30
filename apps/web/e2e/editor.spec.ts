@@ -718,3 +718,62 @@ test("dragging a block while the panel is collapsed moves it only by the drag di
   expect(moved?.x ?? 0).toBeLessThan(60 + 60);
   expect(Math.abs((moved?.y ?? 0) - 300)).toBeLessThan(10);
 });
+
+test("apply style to same-kind blocks writes every page in one batch; the toast's Hoàn tác restores all pages", async ({
+  page,
+}) => {
+  await login(page);
+  const { chapterId, pageIds } = await readyChapter(page, { pagesPerSource: 2 });
+  const box = (id: string, align: string, y = 120) => ({
+    id,
+    region_id: "t0",
+    x: 40,
+    y,
+    w: 200,
+    h: 80,
+    rotation: 0,
+    text: "Xin chào",
+    lines: ["Xin chào"],
+    font_family: "PatrickHand-Regular",
+    font_size: 22,
+    line_height: 1.15,
+    pad: 4,
+    letter_spacing: 0,
+    align,
+    fill: "#000000",
+    stroke: null,
+    auto_fit: false,
+    hidden: false,
+  });
+  type Detail = { version: number; state: { text_boxes: { id: string; align: string }[] } & Record<string, unknown> };
+  const detailOf = async (id: string) => (await (await page.request.get(`/api/pages/${id}`)).json()) as Detail;
+  const seeds = [[box("src", "left"), box("same-page", "center", 300)], [box("other-page", "center")]];
+  expect((await page.request.post(`/api/chapters/${chapterId}/lock`, { headers })).ok()).toBe(true);
+  for (const [i, id] of pageIds.entries()) {
+    const d = await detailOf(id);
+    const put = await page.request.put(`/api/pages/${id}/state`, {
+      headers: { ...headers, "if-match": `"${d.version}"` },
+      data: { state: { ...d.state, text_boxes: seeds[i] } },
+    });
+    expect(put.ok()).toBe(true);
+  }
+  expect((await page.request.delete(`/api/chapters/${chapterId}/lock`, { headers })).ok()).toBe(true);
+  const aligns = async () =>
+    (await Promise.all(pageIds.map(detailOf))).flatMap((d) => d.state.text_boxes.map((b) => `${b.id}:${b.align}`));
+
+  await page.goto(chapterUrl(chapterId));
+  await openTable(page);
+  await expect(page.getByRole("status", { name: "Khoá chương" })).toContainText("Bạn đang giữ khoá chương");
+  await page.locator(".cw-tbody [data-row]").first().locator(".cw-src").click();
+  const panel = await openPanel(page, "select");
+  await panel.getByText("Kiểu chữ nâng cao").click();
+  await panel.getByRole("button", { name: /Áp kiểu này cho khối/ }).click();
+  const toast = page.locator(".cw-toasts .notice", { hasText: "Đã áp kiểu cho 2 khối" });
+  await expect(toast).toContainText("trên 2 trang");
+  expect(await aligns()).toEqual(["src:left", "same-page:left", "other-page:left"]);
+
+  // 1 lượt cả chương → 1 lần hoàn tác khôi phục mọi trang (kể cả trang đang mở).
+  await toast.getByRole("button", { name: "Hoàn tác" }).click();
+  await expect(page.locator(".cw-toasts .notice", { hasText: "Đã hoàn tác áp kiểu trên 2 trang" })).toBeVisible();
+  expect(await aligns()).toEqual(["src:left", "same-page:center", "other-page:center"]);
+});

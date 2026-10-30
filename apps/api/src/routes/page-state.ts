@@ -16,7 +16,7 @@ import { z } from "zod";
 import { assertQuota } from "../billing/user-quota.ts";
 import { enqueueOcrRegion, enqueueReinpaint, inJobTx } from "../jobs/enqueue.ts";
 import { HISTORY_KEEP } from "../jobs/page-state-writer.ts";
-import { assertChapterLock, isPageBusy, pageBusyError } from "../lib/chapter-lock.ts";
+import { assertChapterIdle, assertChapterLock, isPageBusy, pageBusyError } from "../lib/chapter-lock.ts";
 import { parseJson } from "../lib/validate.ts";
 import type { AppEnv } from "../middleware/user.ts";
 import { head, MAX_GET_TTL_S, presignGet, presignPost, readPrefix } from "../storage.ts";
@@ -28,6 +28,12 @@ const MASK_POST_TTL_S = 5 * 60;
 const PNG_MAGIC = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
 
 const PutStateBody = z.object({ state: PageState });
+const PutStatesBody = z.object({
+  pages: z
+    .array(z.object({ page_id: z.uuid(), version: z.number().int().nonnegative(), state: PageState }))
+    .min(1)
+    .max(1000),
+});
 const AckBody = z.object({ ai_rev: z.number().int().nonnegative() });
 const ReinpaintBody = z.object({
   user_mask_key: z.string().min(1).max(512),
@@ -36,7 +42,7 @@ const ReinpaintBody = z.object({
 });
 const OcrRegionBody = z.object({ bbox: BBox });
 
-const httpError = (status: 409 | 412 | 428 | 400, body: Record<string, unknown>) =>
+const httpError = (status: 409 | 412 | 428 | 400 | 404, body: Record<string, unknown>) =>
   new HTTPException(status, { res: Response.json(body, { status }) });
 
 async function stateOf(sdb: Scoped, pageId: string) {
@@ -184,6 +190,62 @@ pageStateRoutes.put("/pages/:pageId/state", async (c) => {
   });
   c.header("ETag", `"${version}"`);
   return c.json({ version });
+});
+
+/**
+ * Ghi state nhiều page của 1 chương trong 1 transaction, chung `batch_id` trong `page_state_history` (VD "Áp kiểu cho
+ * khối cùng loại" — client tính state mới bằng layout của trình duyệt). Hoàn tác cả lượt = `POST
+ * /chapters/:id/find-replace/undo {batch_id}`. Cùng điều kiện với thao tác hàng loạt: giữ khoá (423), chương không cắt
+ * trang / chạy AI (409 `chapter_busy`); mỗi page thuộc chương, không ẩn, không bận, đúng kích thước; version lệch →
+ * 409 `version_conflict` kèm `pages` và không ghi page nào.
+ */
+pageStateRoutes.put("/chapters/:chapterId/states", async (c) => {
+  const body = await parseJson(c, PutStatesBody);
+  const sdb = c.get("sdb");
+  const user = c.get("user");
+  const ch = await sdb.byId(chapters, c.req.param("chapterId"), "chapter");
+  await assertChapterLock(sdb, ch.id, c.get("lockHolder"));
+  assertChapterIdle(ch);
+  const ids = body.pages.map((p) => p.page_id);
+  if (new Set(ids).size !== ids.length) throw httpError(400, { error: "duplicate_pages" });
+  const rows = new Map(
+    (await sdb.select(pages, and(eq(pages.chapterId, ch.id), inArray(pages.id, ids)) as SQL)).map((p) => [p.id, p]),
+  );
+  for (const p of body.pages) {
+    const page = rows.get(p.page_id);
+    if (!page) throw httpError(404, { error: "page_not_found", page_id: p.page_id });
+    if (page.skipped) throw httpError(409, { error: "page_skipped", page_id: page.id });
+    if (isPageBusy(page)) throw pageBusyError();
+    if (p.state.size.w !== page.width || p.state.size.h !== page.height) {
+      throw httpError(400, { error: "size_mismatch", page_id: page.id });
+    }
+  }
+  const batchId = uuidv7();
+  const versions = await sdb.transaction(async (tx) => {
+    const cur = new Map((await tx.select(pageStates, inArray(pageStates.pageId, ids))).map((s) => [s.pageId, s]));
+    const stale = body.pages.filter((p) => cur.get(p.page_id)?.version !== p.version).map((p) => p.page_id);
+    if (stale.length) throw httpError(409, { error: "version_conflict", pages: stale });
+    const out: Record<string, number> = {};
+    for (const p of body.pages) {
+      const [row] = await tx.update(
+        pageStates,
+        and(eq(pageStates.pageId, p.page_id), eq(pageStates.version, p.version)) as SQL,
+        { state: p.state, version: p.version + 1, stateOrigin: "user", updatedBy: `user:${user.id}` },
+      );
+      if (!row) throw httpError(409, { error: "version_conflict", pages: [p.page_id] });
+      await tx.insert(pageStateHistory, {
+        pageId: p.page_id,
+        version: p.version,
+        state: cur.get(p.page_id)?.state ?? null,
+        actor: `user:${user.id}`,
+        batchId,
+      });
+      await pruneHistory(tx, p.page_id);
+      out[p.page_id] = row.version;
+    }
+    return out;
+  });
+  return c.json({ batch_id: batchId, versions });
 });
 
 /** Đã xem kết quả AI mới → tắt cờ. Chỉ tắt khi đúng ai_rev đã xem (AI ghi bản mới hơn giữa chừng thì cờ giữ nguyên). */

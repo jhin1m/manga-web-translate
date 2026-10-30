@@ -36,6 +36,13 @@ export const putPageState = (id: string, state: PageState, version: number) =>
     headers: { "if-match": `"${version}"` },
   });
 
+/** Ghi state nhiều page của chương trong 1 lượt (chung batch_id → hoàn tác bằng undoBatch). */
+export const putChapterStates = (chapterId: string, pages: { page_id: string; version: number; state: PageState }[]) =>
+  api<{ batch_id: string; versions: Record<string, number> }>(`/api/chapters/${chapterId}/states`, {
+    method: "PUT",
+    body: { pages },
+  });
+
 export const ackAiUpdate = (id: string, aiRev: number) =>
   api<{ ai_rev: number; ai_update_available: boolean }>(page(id, "/ai-update/ack"), {
     method: "POST",
