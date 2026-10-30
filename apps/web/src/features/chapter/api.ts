@@ -244,8 +244,12 @@ export const previewFindReplace = (ch: string, body: FindReplaceInput) =>
   api<PreviewResult>(base(ch, "/find-replace/preview"), { method: "POST", body });
 export const applyFindReplace = (ch: string, body: FindReplaceInput, versions: Record<string, number>) =>
   api<ApplyResult>(base(ch, "/find-replace/apply"), { method: "POST", body: { ...body, versions } });
-export const undoBatch = (ch: string, batchId: string) =>
-  api<{ pages: number }>(base(ch, "/find-replace/undo"), { method: "POST", body: { batch_id: batchId } });
+/** `conflicts: "skip"` = trang đã sửa tiếp thì bỏ qua (trả id trong `skipped`) thay vì 409 `undo_conflict`. */
+export const undoBatch = (ch: string, batchId: string, conflicts: "fail" | "skip" = "fail") =>
+  api<{ pages: number; skipped: string[] }>(base(ch, "/find-replace/undo"), {
+    method: "POST",
+    body: { batch_id: batchId, conflicts },
+  });
 export const previewGlossaryApply = (ch: string, rules: GlossaryRule[]) =>
   api<PreviewResult>(base(ch, "/glossary-apply/preview"), { method: "POST", body: { rules } });
 export const applyGlossaryRules = (ch: string, rules: GlossaryRule[], versions: Record<string, number>) =>

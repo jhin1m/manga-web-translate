@@ -281,12 +281,47 @@ describe("PUT /chapters/:id/states (nhiều page, 1 batch)", () => {
       body: { batch_id },
     });
     expect(undo.status, await undo.clone().text()).toBe(200);
-    expect(await undo.json()).toEqual({ pages: 2 });
+    expect(await undo.json()).toEqual({ pages: 2, skipped: [] });
     for (const id of [a, b]) {
       const [row] = await scoped(db, A.userId).select(pageStates, eq(pageStates.pageId, id));
       expect(row?.version).toBe(2);
       expect(row?.state?.regions[0]?.translation).toBe("AI");
     }
+  });
+
+  it("undo after one page was edited: default 409 restores nothing; conflicts=skip restores the rest and lists the skipped", async () => {
+    await lock();
+    const [a, b] = [await newPage(), await newPage()] as [string, string];
+    const res = await putMany([
+      { page_id: a, version: 0, state: edited("Kiểu A") },
+      { page_id: b, version: 0, state: edited("Kiểu B") },
+    ]);
+    const { batch_id } = (await res.json()) as { batch_id: string };
+    expect((await put(a, edited("Sửa tay"), 1)).status).toBe(200);
+    const undo = (extra: object = {}) =>
+      call(`/api/chapters/${A.chapterId}/find-replace/undo`, {
+        method: "POST",
+        cookie: A.cookie,
+        body: { batch_id, ...extra },
+      });
+    const text = async (id: string) =>
+      (await scoped(db, A.userId).select(pageStates, eq(pageStates.pageId, id)))[0]?.state?.regions[0]?.translation;
+
+    const failed = await undo();
+    expect(failed.status).toBe(409);
+    expect(await failed.json()).toEqual({ error: "undo_conflict", pages: [a] });
+    expect(await text(b)).toBe("Kiểu B");
+
+    const skipped = await undo({ conflicts: "skip" });
+    expect(skipped.status, await skipped.clone().text()).toBe(200);
+    expect(await skipped.json()).toEqual({ pages: 1, skipped: [a] });
+    expect(await text(a)).toBe("Sửa tay");
+    expect(await text(b)).toBe("AI");
+    expect(await versionOf(a)).toBe(2);
+    expect(await versionOf(b)).toBe(2);
+
+    const bad = await undo({ conflicts: "nope" });
+    expect(bad.status).toBe(400);
   });
 
   it("one stale version → 409 with that page, nothing written", async () => {

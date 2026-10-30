@@ -110,6 +110,20 @@ type Notice = {
   key?: "skip" | "reorder";
 };
 
+/** Thông báo sau hoàn tác áp kiểu: nêu số trang đã khôi phục + trang bị bỏ qua (đã sửa sau đó). */
+const undoStyleText = (restored: number, skipped: string[], list: { id: string; ord: number }[]) => {
+  if (!skipped.length) return `Đã hoàn tác áp kiểu trên ${restored} trang.`;
+  const ords = skipped
+    .map((id) => list.find((p) => p.id === id)?.ord)
+    .filter((o): o is number => o !== undefined)
+    .sort((a, b) => a - b)
+    .map((o) => o + 1)
+    .join(", ");
+  return restored
+    ? `Đã hoàn tác áp kiểu trên ${restored} trang · bỏ qua trang ${ords} vì đã sửa sau đó.`
+    : `Không hoàn tác được: trang ${ords} đã sửa sau khi áp kiểu.`;
+};
+
 /** Dịch chương mà có ảnh bị loại: giữ tới khi chương chạy xong lượt xử lý vừa bắt đầu. */
 const rejectedNotice = (accepted: number, rejected: Rejected[]): Notice => ({
   tone: "warn",
@@ -478,11 +492,12 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
   const undoKind = useMutation({
     mutationFn: async (batchId: string) => {
       await session.saver.flush();
-      return undoBatch(chapterId, batchId);
+      // Trang đã sửa tiếp sau lượt áp thì bỏ qua (không làm hỏng cả lượt) và báo rõ trang nào.
+      return undoBatch(chapterId, batchId, "skip");
     },
     onSuccess: (r) => {
       setStyleUndo(null);
-      notify({ tone: "info", text: `Đã hoàn tác áp kiểu trên ${r.pages} trang.` });
+      notify({ tone: "info", text: undoStyleText(r.pages, r.skipped, pages) });
     },
     onError: (e) =>
       notify({

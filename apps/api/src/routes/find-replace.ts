@@ -36,7 +36,8 @@ const GlossaryRule = z.object({
   from: Term.refine((s) => s.trim().length > 0, "from rỗng"),
 });
 const GlossaryBody = z.object({ rules: z.array(GlossaryRule).min(1).max(MAX_RULES) });
-const UndoBody = z.object({ batch_id: z.uuid() });
+// conflicts: "fail" (mặc định) = page đã sửa tiếp → 409; "skip" = bỏ qua page đó (áp kiểu cả chương).
+const UndoBody = z.object({ batch_id: z.uuid(), conflicts: z.enum(["fail", "skip"]).default("fail") });
 
 // ---- Thay thế thuần (test được không cần DB) ----
 
@@ -171,7 +172,7 @@ findReplaceRoutes.post(`${base}/find-replace/apply`, async (c) => {
   return c.json(await applyRulesToChapter(sdb, ch.id, user.id, findRule(body), body.versions));
 });
 
-/** Hoàn tác 1 batch (find/replace hoặc áp glossary). */
+/** Hoàn tác 1 batch (find/replace, áp glossary hoặc áp kiểu); `skipped` = id page bỏ qua vì đã sửa tiếp. */
 findReplaceRoutes.post(`${base}/find-replace/undo`, async (c) => {
   const body = await parseJson(c, UndoBody);
   const sdb = c.get("sdb");
@@ -179,9 +180,9 @@ findReplaceRoutes.post(`${base}/find-replace/undo`, async (c) => {
   const ch = await sdb.byId(chapters, c.req.param("chapterId"), "chapter");
   await assertChapterLock(sdb, ch.id, c.get("lockHolder"));
   assertChapterIdle(ch);
-  const r = await undoBatch(sdb, ch.id, user.id, body.batch_id, "fail");
+  const r = await undoBatch(sdb, ch.id, user.id, body.batch_id, body.conflicts);
   if (!r.found) throw httpError(404, { error: "batch_not_found" });
-  return c.json({ pages: r.restored });
+  return c.json({ pages: r.restored, skipped: r.skipped });
 });
 
 findReplaceRoutes.post(`${base}/glossary-apply/preview`, async (c) => {

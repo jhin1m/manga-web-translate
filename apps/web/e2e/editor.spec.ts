@@ -719,9 +719,8 @@ test("dragging a block while the panel is collapsed moves it only by the drag di
   expect(Math.abs((moved?.y ?? 0) - 300)).toBeLessThan(10);
 });
 
-test("apply style to same-kind blocks writes every page in one batch; the toast's Hoàn tác restores all pages", async ({
-  page,
-}) => {
+/** Chương 2 trang: trang 1 có 2 khối (src left, same-page center), trang 2 có 1 khối (src center) — áp kiểu từ "src". */
+async function seedStyleChapter(page: Page) {
   await login(page);
   const { chapterId, pageIds } = await readyChapter(page, { pagesPerSource: 2 });
   const box = (id: string, align: string, y = 120) => ({
@@ -767,6 +766,11 @@ test("apply style to same-kind blocks writes every page in one batch; the toast'
       d.state.text_boxes.map((b) => `${b.id}:${b.align}:${b.font_size}`),
     );
 
+  return { chapterId, pageIds, aligns };
+}
+
+/** Mở bảng, chọn khối "src" trang 1, đổi cỡ chữ 18 rồi bấm "Áp kiểu này cho khối…" → trả toast hoàn tác. */
+async function applyStyleFromFirstBlock(page: Page, chapterId: string) {
   await page.goto(chapterUrl(chapterId));
   await openTable(page);
   await expect(page.getByRole("status", { name: "Khoá chương" })).toContainText("Bạn đang giữ khoá chương");
@@ -784,6 +788,15 @@ test("apply style to same-kind blocks writes every page in one batch; the toast'
   await expect(toast).toContainText("trên 2 trang");
   // Trang đang mở nạp bản mới nhưng vẫn giữ khối đang chọn (panel Chọn không nhảy về trang).
   await expect(panel.getByRole("button", { name: /Áp kiểu này cho khối/ })).toBeVisible();
+
+  return { toast, panel };
+}
+
+test("apply style to same-kind blocks writes every page in one batch; the toast's Hoàn tác restores all pages", async ({
+  page,
+}) => {
+  const { chapterId, aligns } = await seedStyleChapter(page);
+  const { toast } = await applyStyleFromFirstBlock(page, chapterId);
   expect(await aligns()).toEqual(["src:left:18", "same-page:left:18", "src:left:18"]);
 
   // Thông báo khác xuất hiện sau đó (ẩn trang) không được đè mất toast hoàn tác của lượt trước.
@@ -796,4 +809,30 @@ test("apply style to same-kind blocks writes every page in one batch; the toast'
   await toast.getByRole("button", { name: "Hoàn tác" }).click();
   await expect(page.locator(".cw-toasts .notice", { hasText: "Đã hoàn tác áp kiểu trên 2 trang" })).toBeVisible();
   expect(await aligns()).toEqual(["src:left:18", "same-page:center:22", "src:center:22"]);
+});
+
+test("apply style then edit one page: Hoàn tác restores the other pages and names the skipped page", async ({
+  page,
+}) => {
+  const { chapterId, aligns } = await seedStyleChapter(page);
+  const { toast, panel } = await applyStyleFromFirstBlock(page, chapterId);
+  expect(await aligns()).toEqual(["src:left:18", "same-page:left:18", "src:left:18"]);
+
+  // Sửa tiếp trang đang mở (trang 1) sau khi áp → trang 1 bị bỏ qua, trang 2 vẫn khôi phục.
+  const size = panel.getByLabel("Cỡ chữ (px)");
+  await size.selectText();
+  await size.pressSequentially("20");
+  await size.press("Enter");
+  await expect(size).toHaveValue("20");
+  await expect.poll(async () => (await aligns())[0]).toBe("src:left:20");
+
+  await toast.getByRole("button", { name: "Hoàn tác" }).click();
+  await expect(
+    page.locator(".cw-toasts .notice", {
+      hasText: "Đã hoàn tác áp kiểu trên 1 trang · bỏ qua trang 1 vì đã sửa sau đó",
+    }),
+  ).toBeVisible();
+  expect(await aligns()).toEqual(["src:left:20", "same-page:left:18", "src:center:22"]);
+  // Trang đang mở nạp lại đúng bản đã giữ, không mất khối đang chọn.
+  await expect(size).toHaveValue("20");
 });

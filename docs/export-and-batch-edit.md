@@ -72,7 +72,7 @@ Chữ thường (không regex), phạm vi trong 1 chương, thay trong `region.t
 |---|---|
 | `find-replace/preview` `{find, replace, case_sensitive}` | không cần khoá; → `{matches, total, truncated, versions}` |
 | `find-replace/apply` `{…, versions}` | cần khoá chương (423); chương đang cắt trang / xử lý → 409 `chapter_busy`; page đổi sau preview (page có khớp **hoặc** page trong `versions`, kể cả khi giờ hết khớp — áp lại cùng bản xem trước) → 409 `preview_stale`. UI tắt "Áp dụng" sau khi áp tới lần Xem trước kế |
-| `find-replace/undo` `{batch_id}` | cần khoá, chương không bận (409 `chapter_busy`); page đã bị sửa tiếp (hoặc đã hoàn tác) → 409 `undo_conflict` |
+| `find-replace/undo` `{batch_id, conflicts?}` | cần khoá, chương không bận (409 `chapter_busy`); → `{pages, skipped}`. `conflicts` mặc định `"fail"`: page đã bị sửa tiếp (hoặc đã hoàn tác) → 409 `undo_conflict`, không ghi gì; `"skip"`: bỏ qua page đó, khôi phục phần còn lại, `skipped` = id page bỏ qua |
 | `glossary-apply/preview` `{rules: [{source_term, from}]}` | target lấy từ glossary đã gộp (entry series đè entry chung **cùng cặp** nguồn→đích của series; term chỉ có ở cặp khác → 400 `unknown_terms`); chỉ thay trong vùng có `source_text` chứa term nguồn và box gắn vùng đó |
 | `glossary-apply/apply` `{rules, versions}` | như find-replace (cũng 409 `chapter_busy` khi chương đang chạy); hoàn tác qua `find-replace/undo` |
 
@@ -83,7 +83,7 @@ version lúc áp + 1. History giữ 50 bản/page — batch quá cũ có thể k
 "Áp kiểu cho khối cùng loại" (panel Chọn) cũng ghi theo `batch_id` nhưng client tự tính state (layout trình duyệt) và gửi
 `PUT /api/chapters/:id/states {pages: [{page_id, version, state}]}` (1 transaction; khoá 423, `chapter_busy`, page ẩn /
 bận / khác chương / sai kích thước bị từ chối, version lệch → 409 `version_conflict` kèm `pages`, không ghi page nào);
-hoàn tác qua `find-replace/undo` từ toast.
+hoàn tác qua `find-replace/undo` với `conflicts: "skip"` từ toast (trang đã sửa tiếp được giữ nguyên, toast nêu số trang đã hoàn tác + các trang bị bỏ qua; bỏ qua hết → báo không hoàn tác được).
 
 ## Ẩn chữ bỏ qua trong chương đã dịch (Cài đặt series → "Ẩn chữ khớp trong chương đã dịch…")
 
