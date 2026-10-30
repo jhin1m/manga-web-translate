@@ -873,3 +873,25 @@ test("cancelling a block's re-OCR while its job is still queued restores the but
     .poll(async () => ((await (await page.request.get(`/api/jobs/${jobId}`)).json()) as { status: string }).status)
     .toBe("cancelled");
 });
+
+test("leaving the chapter while a block's re-OCR is queued cancels the job on the server", async ({ page }) => {
+  await login(page);
+  const { chapterId, pageId } = await readyChapter(page);
+  await seedTextBox(page, chapterId, pageId);
+  await page.goto(chapterUrl(chapterId));
+  await openTable(page);
+  await page.locator(".cw-tbody [data-row]").first().locator(".cw-src").click();
+
+  const panel = await openPanel(page, "select");
+  const started = page.waitForResponse((r) => r.url().includes("/ocr-region") && r.request().method() === "POST");
+  await panel.getByRole("button", { name: "Dịch lại khối" }).click();
+  const jobId = ((await (await started).json()) as { job: { id: string } }).job.id;
+  await expect(panel.getByRole("button", { name: "Đang OCR…" })).toBeVisible();
+
+  // Rời editor trong app (không tải lại trang) → kết quả bị bỏ, job trên server cũng phải dừng.
+  await page.locator(".cw-back").click();
+  await expect(page).not.toHaveURL(new RegExp(`/c/${chapterId}`));
+  await expect
+    .poll(async () => ((await (await page.request.get(`/api/jobs/${jobId}`)).json()) as { status: string }).status)
+    .toBe("cancelled");
+});
