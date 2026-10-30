@@ -32,8 +32,14 @@ export function useOcrRegion(pageId: string, defaultFont: string, page: { w: num
     setPending([]);
     setError(null);
     setRetry(null);
-    waits.current.clear();
-    return () => ctl.abort();
+    const mine = waits.current;
+    mine.clear();
+    return () => {
+      ctl.abort();
+      // Kết quả page cũ luôn bị bỏ → báo server dừng job, khỏi tốn AI vô ích.
+      for (const w of mine.values()) if (w.jobId) void cancelJob(w.jobId).catch(() => undefined);
+      mine.clear();
+    };
   }, [pageId]);
 
   const start = useCallback(
@@ -56,6 +62,8 @@ export function useOcrRegion(pageId: string, defaultFont: string, page: { w: num
         const bbox: [number, number, number, number] = [x0, y0, x1 - x0, y1 - y0];
         const { job } = await startOcrRegion(pageId, bbox);
         wait.jobId = job.id;
+        // Đã huỷ từ lúc POST còn bay (chưa có job id để báo server) → huỷ ngay khi có id.
+        if (signal.aborted) void cancelJob(job.id).catch(() => undefined);
         const done = await waitJob(job.id, signal, undefined, (j) => {
           if (!signal.aborted) setRetry(ocrRetryNote(j));
         });

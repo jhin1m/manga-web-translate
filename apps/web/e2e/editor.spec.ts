@@ -570,12 +570,8 @@ test("tool rail: clicking the open tool collapses the panel and widens the canva
   await expect(fit).toHaveAttribute("aria-pressed", "true");
 });
 
-test("floating block toolbar: edit focuses the translation, duplicate adds a free box (undoable), delete removes it", async ({
-  page,
-}) => {
-  await login(page);
-  const { chapterId, pageId } = await readyChapter(page);
-  // Box chữ gắn vùng t0 (ghi qua API, cần khoá chương).
+/** Box chữ gắn vùng t0 (ghi qua API, cần khoá chương). */
+async function seedTextBox(page: Page, chapterId: string, pageId: string) {
   const detail = (await (await page.request.get(`/api/pages/${pageId}`)).json()) as {
     version: number;
     state: { text_boxes: unknown[] } & Record<string, unknown>;
@@ -608,6 +604,14 @@ test("floating block toolbar: edit focuses the translation, duplicate adds a fre
   });
   expect(put.ok()).toBe(true);
   expect((await page.request.delete(`/api/chapters/${chapterId}/lock`, { headers })).ok()).toBe(true);
+}
+
+test("floating block toolbar: edit focuses the translation, duplicate adds a free box (undoable), delete removes it", async ({
+  page,
+}) => {
+  await login(page);
+  const { chapterId, pageId } = await readyChapter(page);
+  await seedTextBox(page, chapterId, pageId);
 
   await page.goto(chapterUrl(chapterId));
   await openTable(page);
@@ -839,4 +843,33 @@ test("apply style then edit one page: Hoàn tác restores the other pages and na
   expect(await aligns()).toEqual(["src:left:20", "same-page:left:18", "src:center:22"]);
   // Trang đang mở nạp lại đúng bản đã giữ, không mất khối đang chọn.
   await expect(size).toHaveValue("20");
+});
+
+test("cancelling a block's re-OCR while its job is still queued restores the button and cancels the job on the server", async ({
+  page,
+}) => {
+  await login(page);
+  // Worker giả đã dừng và không nhận page.ocr_region → job OCR nằm queued mãi.
+  const { chapterId, pageId } = await readyChapter(page);
+  await seedTextBox(page, chapterId, pageId);
+  await page.goto(chapterUrl(chapterId));
+  await openTable(page);
+  const rows = page.locator(".cw-tbody [data-row]");
+  await expect(rows).toHaveCount(1);
+  await rows.first().locator(".cw-src").click();
+
+  const panel = await openPanel(page, "select");
+  const started = page.waitForResponse((r) => r.url().includes("/ocr-region") && r.request().method() === "POST");
+  await panel.getByRole("button", { name: "Dịch lại khối" }).click();
+  const jobId = ((await (await started).json()) as { job: { id: string } }).job.id;
+
+  await expect(panel.getByRole("button", { name: "Đang OCR…" })).toBeVisible();
+  await panel.getByRole("button", { name: "Huỷ OCR" }).click();
+
+  await expect(panel.getByRole("button", { name: "Dịch lại khối" })).toBeVisible();
+  await expect(panel.getByRole("button", { name: "Huỷ OCR" })).toHaveCount(0);
+  await expect(page.getByRole("alert")).toHaveCount(0);
+  await expect
+    .poll(async () => ((await (await page.request.get(`/api/jobs/${jobId}`)).json()) as { status: string }).status)
+    .toBe("cancelled");
 });

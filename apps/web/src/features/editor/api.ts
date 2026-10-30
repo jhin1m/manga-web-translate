@@ -60,7 +60,7 @@ export const startReinpaint = (
 export const startOcrRegion = (id: string, bbox: [number, number, number, number]) =>
   api<{ job: JobWithResult }>(page(id, "/ocr-region"), { method: "POST", body: { bbox } });
 
-export const fetchJob = (jobId: string) => api<JobWithResult>(`/api/jobs/${jobId}`);
+export const fetchJob = (jobId: string, signal?: AbortSignal) => api<JobWithResult>(`/api/jobs/${jobId}`, { signal });
 
 const DONE = new Set(["succeeded", "failed", "cancelled"]);
 
@@ -73,10 +73,14 @@ export async function waitJob(
 ): Promise<JobWithResult> {
   for (;;) {
     signal?.throwIfAborted();
-    const j = await fetchJob(jobId);
+    const j = await fetchJob(jobId, signal);
+    // Huỷ khi GET đang bay: job vừa xong cũng không trả kết quả (người dùng đã bấm Huỷ).
+    signal?.throwIfAborted();
     if (DONE.has(j.status)) return j;
     onPoll?.(j);
     await new Promise<void>((resolve, reject) => {
+      // Signal đã huỷ trước khi gắn listener thì sự kiện "abort" không bắn nữa → từ chối ngay.
+      if (signal?.aborted) return reject(new DOMException("aborted", "AbortError"));
       const onAbort = () => {
         clearTimeout(t);
         reject(new DOMException("aborted", "AbortError"));
