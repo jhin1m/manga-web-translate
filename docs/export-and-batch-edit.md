@@ -71,7 +71,7 @@ Chữ thường (không regex), phạm vi trong 1 chương, thay trong `region.t
 | API (`/api/chapters/:id/…`) | Ghi chú |
 |---|---|
 | `find-replace/preview` `{find, replace, case_sensitive}` | không cần khoá; → `{matches, total, truncated, versions}` |
-| `find-replace/apply` `{…, versions}` | cần khoá chương (423); chương đang cắt trang / xử lý → 409 `chapter_busy`; page đổi sau preview → 409 `preview_stale` |
+| `find-replace/apply` `{…, versions}` | cần khoá chương (423); chương đang cắt trang / xử lý → 409 `chapter_busy`; page đổi sau preview (page có khớp **hoặc** page trong `versions`, kể cả khi giờ hết khớp — áp lại cùng bản xem trước) → 409 `preview_stale`. UI tắt "Áp dụng" sau khi áp tới lần Xem trước kế |
 | `find-replace/undo` `{batch_id}` | cần khoá, chương không bận (409 `chapter_busy`); page đã bị sửa tiếp (hoặc đã hoàn tác) → 409 `undo_conflict` |
 | `glossary-apply/preview` `{rules: [{source_term, from}]}` | target lấy từ glossary đã gộp (entry series đè entry chung **cùng cặp** nguồn→đích của series; term chỉ có ở cặp khác → 400 `unknown_terms`); chỉ thay trong vùng có `source_text` chứa term nguồn và box gắn vùng đó |
 | `glossary-apply/apply` `{rules, versions}` | như find-replace (cũng 409 `chapter_busy` khi chương đang chạy); hoàn tác qua `find-replace/undo` |
@@ -79,6 +79,11 @@ Chữ thường (không regex), phạm vi trong 1 chương, thay trong `region.t
 Apply = 1 transaction: mỗi page ghi bản cũ vào `page_state_history` với chung `batch_id`, version +1,
 `state_origin = user` (job AI sau đó không ghi đè, xem luật AI-không-ghi-đè). Undo khôi phục khi version hiện tại =
 version lúc áp + 1. History giữ 50 bản/page — batch quá cũ có thể không còn (404).
+
+"Áp kiểu cho khối cùng loại" (panel Chọn) cũng ghi theo `batch_id` nhưng client tự tính state (layout trình duyệt) và gửi
+`PUT /api/chapters/:id/states {pages: [{page_id, version, state}]}` (1 transaction; khoá 423, `chapter_busy`, page ẩn /
+bận / khác chương / sai kích thước bị từ chối, version lệch → 409 `version_conflict` kèm `pages`, không ghi page nào);
+hoàn tác qua `find-replace/undo` từ toast.
 
 ## Ẩn chữ bỏ qua trong chương đã dịch (Cài đặt series → "Ẩn chữ khớp trong chương đã dịch…")
 
