@@ -71,7 +71,7 @@ describe("primary action", () => {
 
   it("ingesting / processing → Xuất disabled (progress lives in the status chip), cancel in the menu", () => {
     const p = primaryAction({ ...base, status: "processing" });
-    expect(p).toMatchObject({ command: "export", label: "Xuất", disabled: true });
+    expect(p).toMatchObject({ command: "export", label: "Export", disabled: true });
     expect(p.menu.map((m) => m.command)).toEqual(["cancel"]);
     expect(primaryAction({ ...base, status: "ingesting", pages: 0 })).toMatchObject({
       command: "export",
@@ -95,7 +95,7 @@ describe("primary action", () => {
   it("review / done → Xuất; menu Dịch lại cả chương", () => {
     for (const status of ["review", "done"] as const) {
       const p = primaryAction({ ...base, status });
-      expect(p).toMatchObject({ command: "export", label: "Xuất", disabled: false });
+      expect(p).toMatchObject({ command: "export", label: "Export", disabled: false });
       expect(p.menu.map((m) => m.command)).toEqual(["retranslate"]);
     }
   });

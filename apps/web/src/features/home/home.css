@@ -410,25 +410,6 @@ label.file-pick input {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.chips {
-  border: 0;
-  margin: 0;
-  padding: 0;
-  min-width: 0;
-  display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
-}
-.chips button {
-  height: 30px;
-  border-radius: 15px;
-  font-weight: 400;
-}
-.chips button[aria-pressed="true"] {
-  border-color: var(--c-accent);
-  background: var(--c-accent-weak);
-  color: var(--c-accent-hover);
-}
 /* Hàng chương: phần số + trạng thái là link mở chương (bấm cả vùng). */
 .ch-open {
   flex: 1;

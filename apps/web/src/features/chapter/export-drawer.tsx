@@ -27,7 +27,7 @@ export function ExportDrawer(props: {
   // Khớp tên server đặt khi tải (apps/api/src/routes/export.ts): `{series}-ch{số}`.
   const fileBase = detail ? `${detail.series.title}-ch${detail.number}` : "chuong";
   return (
-    <Drawer title="Xuất chương" onClose={props.onClose}>
+    <Drawer title="Export chương" onClose={props.onClose}>
       <ExportPanel
         chapterId={props.chapterId}
         fileBase={fileBase}

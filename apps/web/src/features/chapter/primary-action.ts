@@ -90,7 +90,7 @@ export function primaryAction(input: {
   if (status === "ingesting" || status === "processing") {
     return {
       command: "export",
-      label: "Xuất",
+      label: "Export",
       disabled: true,
       title: status === "ingesting" ? "Đang cắt trang — dịch xong mới xuất được" : "Dịch xong mới xuất được",
       menu: [{ command: "cancel", label: "Huỷ xử lý" }],
@@ -117,9 +117,14 @@ export function primaryAction(input: {
       command: "retry",
       label: "Chạy lại trang lỗi",
       disabled: false,
-      menu: [{ command: "export", label: "Xuất" }, retranslate],
+      menu: [{ command: "export", label: "Export" }, retranslate],
     };
   }
   // review / done
-  return { command: "export", label: "Xuất", disabled: input.pages === 0, menu: input.pages > 0 ? [retranslate] : [] };
+  return {
+    command: "export",
+    label: "Export",
+    disabled: input.pages === 0,
+    menu: input.pages > 0 ? [retranslate] : [],
+  };
 }

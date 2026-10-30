@@ -18,6 +18,18 @@
   border-left: 1px solid var(--c-line-strong);
   outline: none;
 }
+/* Biến thể modal: hộp giữa màn, cùng scrim + head/body/foot. */
+.drawer.modal {
+  top: 50%;
+  left: 50%;
+  right: auto;
+  bottom: auto;
+  transform: translate(-50%, -50%);
+  width: min(880px, calc(100vw - 32px));
+  max-height: calc(100vh - 64px);
+  border: 1px solid var(--c-line-strong);
+  border-radius: var(--radius);
+}
 .drawer-head {
   display: flex;
   align-items: center;

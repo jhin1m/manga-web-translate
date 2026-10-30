@@ -3,7 +3,7 @@
  * nói chương đang ở đâu), chỉ báo sửa/lưu thu nhỏ (giữ khoá · Đã lưu / Chỉ xem), chip ngôn ngữ "Hàn → Việt" (bấm →
  * đổi cặp ngôn ngữ của series) · Hoàn tác / Làm lại · Xem gốc ·
  * Hoạt động (+ số việc đang chạy) · menu ⋯ (Chia đôi, Dịch lại cả chương, Chạy lại trang lỗi, Phím tắt) · Huỷ xử lý
- * (khi đang chạy) · Xuất phụ · nút chính theo trạng thái (primary-action.ts; "Xuất" mở drawer).
+ * (khi đang chạy) · Export phụ · nút chính theo trạng thái (primary-action.ts; "Export" mở drawer).
  * Dưới nó là băng cảnh báo — chỉ hiện khi người dùng phải biết/làm gì (khoá bị giữ/mất/lỗi, khôi phục, lỗi lưu, chờ AI).
  */
 import { Link } from "@tanstack/react-router";
@@ -114,7 +114,7 @@ export function ChapterTopbar(props: {
       )}
       {has("export") && (
         <button type="button" onClick={() => props.onCommand("export")}>
-          Xuất
+          Export
         </button>
       )}
       {primary &&

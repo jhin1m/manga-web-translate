@@ -24,7 +24,7 @@ const JOB_LABEL: Record<string, string> = {
   "chapter.translate": "Dịch lô trang",
   "page.reinpaint": "Xoá chữ lại theo mask",
   "page.ocr_region": "OCR vùng",
-  "chapter.export": "Xuất",
+  "chapter.export": "Export",
   "chapter.proofread": "AI hiệu đính",
 };
 const JOB_STATUS: Record<string, { label: string; tone: string }> = {
@@ -264,8 +264,8 @@ function ExportSection({ chapterId }: { chapterId: string }) {
   const exports = q.data?.exports ?? [];
   const cancel = useMutation({ mutationFn: (id: string) => cancelJob(id), onSettled: refresh });
   return (
-    <section className="drawer-section" aria-label="Xuất gần đây">
-      <h3>Xuất gần đây</h3>
+    <section className="drawer-section" aria-label="Export gần đây">
+      <h3>Export gần đây</h3>
       {cancel.error && <p className="notice danger">{errorMessage(cancel.error)}</p>}
       {exports.length === 0 ? (
         <p className="muted small">{q.isLoading ? "Đang tải…" : "Chưa có lượt xuất nào."}</p>

@@ -1,11 +1,12 @@
 /**
- * Màn series: đầu trang + thanh tab (Chương / Glossary / Cài đặt, `?tab=`) dùng chung cho cả 3 tab.
- * Tab Chương: vùng thả "Chương {next}", lọc chip Cần làm/Đã xuất/Tất cả, danh sách chương (bấm cả hàng hoặc icon
- * Sửa để mở — dịch/xuất/chạy lại làm trong màn chương; icon Xoá), cột phải tóm tắt cài đặt dịch + glossary.
+ * Màn series: đầu trang (nút Glossary / Cài đặt dịch), vùng thả "Chương {next}", toàn bộ danh sách chương (bấm cả hàng
+ * hoặc icon Sửa để mở — dịch/xuất/chạy lại làm trong màn chương; icon Xoá), cột phải tóm tắt cài đặt dịch + glossary.
+ * Glossary / Cài đặt dịch mở thành modal trên danh sách; `?tab=` giữ trạng thái modal (link sâu từ home / màn chương).
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
+import { Drawer } from "../../app/drawer.tsx";
 import { ApiError, errorMessage } from "../../lib/api.ts";
 import { timeAgo } from "../../lib/format.ts";
 import { needsWork, nextAction } from "../chapter/next-action.ts";
@@ -33,7 +34,6 @@ import { SkipImagesSection } from "./skip-images-section.tsx";
 import "../home/home.css";
 
 export type SeriesTab = "chapters" | "glossary" | "settings";
-type Filter = "todo" | "exported" | "all";
 
 const useSeries = (seriesId: string) =>
   useQuery({
@@ -48,6 +48,8 @@ export function SeriesPage(props: { seriesId: string; tab?: SeriesTab }) {
   const { seriesId, tab = "chapters" } = props;
   const q = useSeries(seriesId);
   const s = q.data;
+  const navigate = useNavigate();
+  const closeModal = () => void navigate({ to: "/s/$seriesId", params: { seriesId }, search: {} });
   return (
     <div className="series-layout">
       <main className="series-main">
@@ -58,25 +60,24 @@ export function SeriesPage(props: { seriesId: string; tab?: SeriesTab }) {
         {s && (
           <>
             <SeriesHead series={s} />
-            <SeriesTabs series={s} />
-            {tab === "chapters" && <ChapterList series={s} />}
+            <ChapterList series={s} />
             {/* key: dựng lại form khi dữ liệu server đổi rev (sau khi lưu). */}
             {tab === "settings" && (
-              <div className="tab-panel">
+              <Drawer variant="modal" title="Cài đặt dịch" onClose={closeModal}>
                 <SeriesSettingsForm key={`${s.id}:${s.settings_rev}`} series={s} />
                 <SkipImagesSection seriesId={s.id} />
                 <DeleteSeries series={s} />
-              </div>
+              </Drawer>
             )}
             {tab === "glossary" && (
-              <section aria-label="Glossary của series (đầy đủ)" className="tab-panel">
+              <Drawer variant="modal" title="Glossary của series" onClose={closeModal}>
                 <GlossaryEditor scope={{ seriesId }} inheritedLabel={`từ glossary chung (${pairLabel(s)})`} />
-              </section>
+              </Drawer>
             )}
           </>
         )}
       </main>
-      {s && tab === "chapters" && <SeriesSidebar series={s} />}
+      {s && <SeriesSidebar series={s} />}
     </div>
   );
 }
@@ -95,42 +96,34 @@ function SeriesHead({ series }: { series: SeriesDetail }) {
           {exported} đã xuất
         </span>
       </div>
+      <SeriesModalLinks series={series} />
     </div>
   );
 }
 
-/** Tab đang mở do router đánh dấu (`aria-current`), so cả `?tab`. */
-function SeriesTabs({ series }: { series: SeriesDetail }) {
+/** Mở modal Glossary / Cài đặt dịch (`?tab=`). */
+function SeriesModalLinks({ series }: { series: SeriesDetail }) {
   const scope = { seriesId: series.id };
   const glossary = useQuery({ queryKey: glossaryKey(scope), queryFn: () => fetchGlossary(scope) });
   const terms = glossary.data?.entries.length;
-  const tabs: [SeriesTab, string][] = [
-    ["chapters", `Chương · ${series.chapters.length}`],
+  const links: [Exclude<SeriesTab, "chapters">, string][] = [
     ["glossary", terms === undefined ? "Glossary" : `Glossary · ${terms}`],
     ["settings", "Cài đặt dịch"],
   ];
   return (
-    <nav className="tabs" aria-label="Mục của series">
-      {tabs.map(([t, label]) => (
-        <Link
-          key={t}
-          to="/s/$seriesId"
-          params={{ seriesId: series.id }}
-          search={t === "chapters" ? {} : { tab: t }}
-          // So cả `?tab` (mặc định router chỉ so path → tab Chương luôn "active").
-          activeOptions={{ exact: true, includeSearch: true }}
-        >
+    <div className="row">
+      {links.map(([t, label]) => (
+        <Link key={t} className="btn" to="/s/$seriesId" params={{ seriesId: series.id }} search={{ tab: t }}>
           {label}
         </Link>
       ))}
-    </nav>
+    </div>
   );
 }
 
 function ChapterList({ series }: { series: SeriesDetail }) {
   const listQ = useQuery({ queryKey: seriesKeys.list(), queryFn: () => fetchSeriesList() });
   const uploads = useUploads();
-  const [filter, setFilter] = useState<Filter>("todo");
   const [pending, setPending] = useState<{ files: File[]; seq: number } | null>(null);
   const auto = useDropToTranslate((files) => setPending((p) => ({ files, seq: (p?.seq ?? 0) + 1 })));
   const drop = (files: File[]) => {
@@ -141,9 +134,6 @@ function ChapterList({ series }: { series: SeriesDetail }) {
 
   const chapters = series.chapters;
   const next = nextChapterNumber(chapters);
-  const exported = chapters.filter((c) => !needsWork(c)).length;
-  const todo = chapters.length - exported;
-  const shown = chapters.filter((c) => (filter === "all" ? true : filter === "todo" ? needsWork(c) : !needsWork(c)));
 
   return (
     <>
@@ -172,33 +162,12 @@ function ChapterList({ series }: { series: SeriesDetail }) {
         />
       )}
 
-      <fieldset className="chips" aria-label="Lọc chương">
-        {(
-          [
-            ["todo", `Cần làm · ${todo}`],
-            ["exported", `Đã xuất · ${exported}`],
-            ["all", `Tất cả · ${chapters.length}`],
-          ] as const
-        ).map(([f, label]) => (
-          <button key={f} type="button" aria-pressed={filter === f} onClick={() => setFilter(f)}>
-            {label}
-          </button>
-        ))}
-      </fieldset>
-
       <div className="rows">
-        {shown.length === 0 && (
-          <div className="rows-empty">
-            {chapters.length === 0 ? "Chưa có chương nào — thả strip ở trên." : "Không có chương nào trong bộ lọc này."}
-          </div>
-        )}
-        {shown.map((c) => (
+        {chapters.length === 0 && <div className="rows-empty">Chưa có chương nào — thả strip ở trên.</div>}
+        {chapters.map((c) => (
           <ChapterLine key={c.id} ch={c} upload={uploadManager.view(c.id, uploads[c.id])} />
         ))}
       </div>
-      {filter === "todo" && exported > 0 && (
-        <div className="small muted">{exported} chương đã xuất ẩn trong bộ lọc "Đã xuất".</div>
-      )}
     </>
   );
 }

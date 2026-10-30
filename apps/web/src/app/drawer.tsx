@@ -1,7 +1,8 @@
 /**
  * Drawer phải (420px) dùng ở màn chương + app shell: scrim xám (không blur), `role="dialog"` + `aria-labelledby`,
  * Esc / bấm scrim / nút Đóng = đóng. Mở → focus vào drawer, Tab vòng trong drawer; đóng → trả focus về phần tử
- * đang focus lúc mở (VD nút "Xuất"). Chỉ mount khi đang mở.
+ * đang focus lúc mở (VD nút "Export"). Chỉ mount khi đang mở. `variant="modal"`: cùng hành vi nhưng là hộp giữa màn
+ * (rộng hơn — cài đặt dịch / glossary của series).
  */
 import { type KeyboardEvent as ReactKeyboardEvent, type ReactNode, useEffect, useId, useRef } from "react";
 import "./drawer.css";
@@ -9,7 +10,13 @@ import "./drawer.css";
 const FOCUSABLE =
   'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea, [tabindex="0"]';
 
-export function Drawer(props: { title: string; onClose(): void; children: ReactNode; footer?: ReactNode }) {
+export function Drawer(props: {
+  title: string;
+  onClose(): void;
+  children: ReactNode;
+  footer?: ReactNode;
+  variant?: "drawer" | "modal";
+}) {
   const titleId = useId();
   const ref = useRef<HTMLDivElement>(null);
   const close = useRef(props.onClose);
@@ -53,7 +60,7 @@ export function Drawer(props: { title: string; onClose(): void; children: ReactN
       <div className="drawer-scrim" aria-hidden="true" onClick={props.onClose} />
       <div
         ref={ref}
-        className="drawer"
+        className={props.variant === "modal" ? "drawer modal" : "drawer"}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
