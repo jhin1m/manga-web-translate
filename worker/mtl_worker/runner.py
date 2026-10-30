@@ -283,6 +283,11 @@ def region_from_shared(d: dict[str, Any], is_sfx: bool = False) -> Region:
 Handler = Callable[[JobContext, Deps], dict[str, Any]]
 
 
+def inputs_schema(job_type: str) -> str:
+    """Tên JSON Schema inputs của job: `page.ocr_region` → `inputs-page-ocr-region` (tên emit dạng kebab, cả `_`)."""
+    return "inputs-" + job_type.replace(".", "-").replace("_", "-")
+
+
 def run_job(
     client: WorkerApi,
     job: dict[str, Any],
@@ -298,7 +303,7 @@ def run_job(
         with Heartbeat(ctx, heartbeat_s, heartbeat_gap_s):
             try:
                 validate_contract("job-payload", job["payload"])
-                validate_contract(f"inputs-{job['type'].replace('.', '-')}", job["inputs"])
+                validate_contract(inputs_schema(job["type"]), job["inputs"])
                 handler = handlers.get(job["type"])
                 if handler is None:
                     raise JobFailure("internal", f"worker không có handler cho {job['type']}")
