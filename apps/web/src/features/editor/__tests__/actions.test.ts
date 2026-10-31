@@ -144,6 +144,21 @@ describe("editor actions", () => {
     expect(s2.text_boxes.map((b) => b.valign)).toEqual(["top", "middle"]);
   });
 
+  it("re-applying a style the boxes already have changes nothing (no patches, no version bump)", () => {
+    const s0 = doc(2);
+    const style = {
+      font_family: "F",
+      line_height: 1.15,
+      pad: 4,
+      align: "center" as const,
+      fill: "#000000",
+      stroke: null,
+    };
+    expect(change(s0, setStyleMany(["t0", "t1"], style, layout)).patches).toEqual([]);
+    // Đổi thật (giãn dòng) vẫn ghi: layout chạy lại khi có trường ảnh hưởng ngắt dòng.
+    expect(change(s0, setStyle("t0", { line_height: 1.5 }, layout)).patches.length).toBeGreaterThan(0);
+  });
+
   it("setStyle with the valign a box already resolves to writes nothing (old boxes stay unchanged)", () => {
     const s0 = doc(2);
     expect(change(s0, setStyleMany(["t0", "t1"], { valign: "top" }, layout)).patches).toEqual([]);

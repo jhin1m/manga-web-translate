@@ -24,8 +24,10 @@ const regionOf = (s: S, id: string) => s.regions.find((r) => r.id === id);
 
 function relayout(box: Draft<TextBox>, layout: Layout) {
   const r = layout(box as TextBox);
-  box.lines = r.lines.map(nfc);
-  box.font_size = r.font_size;
+  // Chỉ ghi khi khác: gán mảng bằng nội dung cũ vẫn là patch của immer → áp lại cùng kiểu thành lưu + tăng version vô ích.
+  const lines = r.lines.map(nfc);
+  if (lines.length !== box.lines.length || lines.some((l, i) => l !== box.lines[i])) box.lines = lines;
+  if (box.font_size !== r.font_size) box.font_size = r.font_size;
 }
 
 export const moveBox = (id: string, x: number, y: number) => (s: S) => {

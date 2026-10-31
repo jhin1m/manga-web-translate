@@ -25,6 +25,7 @@ type Box = {
   [k: string]: unknown;
 };
 type Fixture = {
+  excluded_fonts: string[];
   pages: {
     id: string;
     state: { text_boxes: Box[] };
@@ -178,6 +179,21 @@ test("Konva (drawBoxText của editor) khớp render.py ≤ 1px bbox mực từn
     `parity: ${report.length} dòng, khớp tuyệt đối ${exact}, lệch tối đa ${max}px, vượt ngưỡng ${bad.length}`,
   );
   expect(report.length).toBeGreaterThanOrEqual(40);
+  // Mỗi font trong manifest hoặc nằm trong gate (≥ 2 box, ≥ 1 box căn giữa dọc) hoặc bị loại tường minh trong fixture.
+  const manifestFonts = Object.keys(
+    (
+      JSON.parse(readFileSync(new URL("../../../worker/fonts/manifest.json", import.meta.url), "utf8")) as {
+        fonts: object;
+      }
+    ).fonts,
+  );
+  const allBoxes = fixture.pages.flatMap((p) => p.state.text_boxes);
+  for (const f of manifestFonts) {
+    if (fixture.excluded_fonts.includes(f)) continue;
+    const own = allBoxes.filter((b) => b.font_family === f);
+    expect(own.length, `${f}: số box`).toBeGreaterThanOrEqual(2);
+    expect(own.filter((b) => b.valign === "middle").length, `${f}: box căn giữa dọc`).toBeGreaterThanOrEqual(1);
+  }
   // Gate phải phủ cả căn giữa dọc có dư chỗ (dy > 0) lẫn box tràn (dy kẹp 0).
   const middles = fixture.pages.flatMap((p) => p.state.text_boxes).filter((b) => b.valign === "middle");
   expect(middles.length).toBeGreaterThanOrEqual(10);

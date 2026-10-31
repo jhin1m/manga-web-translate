@@ -188,10 +188,28 @@ dịch chương theo chuỗi job lô, tiến độ từng trang, drawer Xuất m
 **Pipeline 0.7.1 (căn giữa dọc `valign`)**: worker lên 0.7.1 trước API (`MIN_PIPELINE_VERSION` mặc định 0.7.1). Worker cũ **không**
 bỏ qua `valign` mà fail job export: input được kiểm bằng schema `additionalProperties: false` (`runner.py`), nên mọi chương có
 box tạo sau khi deploy đều không xuất được; bởi vậy API từ chối worker < 0.7.1 bằng 426. Không có migration; box lưu từ trước
-(không có trường) vẽ như cũ, và worker 0.7.1 đọc được dữ liệu không có `valign`. Rollback: giữ worker ≥ 0.7.1 (đừng hạ
-`MIN_PIPELINE_VERSION`); nếu buộc phải quay lại worker 0.7.0, trước đó xoá `valign` khỏi `page_states.state`, `page_states.ai_state`
-và `page_state_history.state` (SQL jsonb: `UPDATE ... SET state = jsonb_set(state, '{text_boxes}', (SELECT coalesce(jsonb_agg(b - 'valign'), '[]') FROM jsonb_array_elements(state->'text_boxes') b))`).
+(không có trường) vẽ như cũ, và worker 0.7.1 đọc được dữ liệu không có `valign`. Rollback: giữ worker ≥ 0.7.1 (đừng hạ `MIN_PIPELINE_VERSION`). Nếu buộc phải quay lại worker 0.7.0, làm đúng thứ tự:
+(1) hạ `MIN_PIPELINE_VERSION` về 0.7.0; (2) quay web/API về bản trước (để không còn ai ghi `valign` lại); (3) chạy SQL dưới đây;
+(4) rồi mới khởi động worker 0.7.0. Job export đã xếp hàng không cần sửa: input dựng lúc worker nhận job.
 
+SQL xoá `valign` (**chưa chạy thử, chạy trong transaction**, kiểm số dòng rồi mới `COMMIT`):
+
+```sql
+BEGIN;
+UPDATE page_states SET state = jsonb_set(state, '{text_boxes}', (
+  SELECT coalesce(jsonb_agg(e.b - 'valign' ORDER BY e.i), '[]'::jsonb)
+  FROM jsonb_array_elements(state->'text_boxes') WITH ORDINALITY AS e(b, i)))
+WHERE state @? '$.text_boxes[*].valign';
+UPDATE page_states SET ai_state = jsonb_set(ai_state, '{text_boxes}', (
+  SELECT coalesce(jsonb_agg(e.b - 'valign' ORDER BY e.i), '[]'::jsonb)
+  FROM jsonb_array_elements(ai_state->'text_boxes') WITH ORDINALITY AS e(b, i)))
+WHERE ai_state @? '$.text_boxes[*].valign';
+UPDATE page_state_history SET state = jsonb_set(state, '{text_boxes}', (
+  SELECT coalesce(jsonb_agg(e.b - 'valign' ORDER BY e.i), '[]'::jsonb)
+  FROM jsonb_array_elements(state->'text_boxes') WITH ORDINALITY AS e(b, i)))
+WHERE state @? '$.text_boxes[*].valign';
+COMMIT;
+```
 Log: `journalctl -u mtl-api -o cat` (JSON mỗi request: method, path, status, ms — không query/header/body),
 `journalctl -u mtl-jobs`.
 

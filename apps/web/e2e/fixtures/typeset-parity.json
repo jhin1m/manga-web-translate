@@ -1,5 +1,6 @@
 {
   "version": 1,
+  "excluded_fonts": ["ShantellSans-Variable"],
   "note": "Sinh bởi scripts/typeset-parity.ts — không sửa tay. expected = số đo của worker/mtl_pipeline/render.py.",
   "pages": [
     {
@@ -31,6 +32,7 @@
             "pad": 4,
             "letter_spacing": 0,
             "align": "center",
+            "valign": "middle",
             "fill": "#111111",
             "stroke": null,
             "auto_fit": false,
@@ -77,7 +79,7 @@
             "pad": 6,
             "letter_spacing": 0,
             "align": "right",
-            "valign": "top",
+            "valign": "middle",
             "fill": "#111111",
             "stroke": {
               "color": "#1a1a1a",
@@ -120,11 +122,11 @@
           "lines": [
             {
               "x": 143.765625,
-              "baseline": 41.50634765625,
+              "baseline": 70.257861328125,
               "advance": 124.46875
             }
           ],
-          "ink": [[143, 18, 269, 43]]
+          "ink": [[143, 47, 269, 72]]
         },
         {
           "id": "b01",
@@ -147,16 +149,16 @@
           "lines": [
             {
               "x": 305.390625,
-              "baseline": 330.640625,
+              "baseline": 344.04296875,
               "advance": 99.109375
             },
             {
               "x": 308.5,
-              "baseline": 393.2640625,
+              "baseline": 406.66640625,
               "advance": 96
             }
           ],
-          "ink": [[304, 293, 406, 339], [307, 354, 406, 402]]
+          "ink": [[304, 306, 406, 353], [307, 368, 406, 415]]
         },
         {
           "id": "b03",
@@ -192,25 +194,22 @@
           {
             "id": "b04",
             "region_id": null,
-            "x": 30.5,
-            "y": 20,
+            "x": 23.25,
+            "y": 34,
             "w": 298,
             "h": 120,
             "rotation": 0,
             "text": "Đường đời ngoằn ngoèo lắm, cẩn thận kẻo vấp ngã nhé.",
             "lines": [],
-            "font_family": "Bangers-Regular",
-            "font_size": 23,
-            "line_height": 1.3,
-            "pad": 6,
+            "font_family": "Baloo2-Variable",
+            "font_size": 46,
+            "line_height": 1.15,
+            "pad": 5,
             "letter_spacing": 0,
-            "align": "right",
+            "align": "left",
             "valign": "middle",
-            "fill": "#fafafa",
-            "stroke": {
-              "color": "#ffffff",
-              "width": 1.5
-            },
+            "fill": "#111111",
+            "stroke": null,
             "auto_fit": true,
             "hidden": false
           },
@@ -255,7 +254,7 @@
             "pad": 4,
             "letter_spacing": 0,
             "align": "center",
-            "valign": "top",
+            "valign": "middle",
             "fill": "#111111",
             "stroke": {
               "color": "#1a1a1a",
@@ -296,27 +295,22 @@
         {
           "id": "b04",
           "wrapped": {
-            "lines": ["Đường đời ngoằn ngoèo", "lắm, cẩn thận kẻo vấp ngã", "nhé."],
-            "font_size": 28
+            "lines": ["Đường đời ngoằn ngoèo lắm,", "cẩn thận kẻo vấp ngã nhé."],
+            "font_size": 23
           },
           "lines": [
             {
-              "x": 80.3125,
-              "baseline": 51.0984,
-              "advance": 242.1875
+              "x": 28.25,
+              "baseline": 79.18455,
+              "advance": 280.140625
             },
             {
-              "x": 59.796875,
-              "baseline": 89.828,
-              "advance": 262.703125
-            },
-            {
-              "x": 282.09375,
-              "baseline": 128.5576,
-              "advance": 40.40625
+              "x": 28.25,
+              "baseline": 121.55745,
+              "advance": 251.453125
             }
           ],
-          "ink": [[79, 11, 326, 53], [59, 50, 328, 96], [281, 97, 324, 131]]
+          "ink": [[28, 60, 308, 84], [30, 103, 279, 126]]
         },
         {
           "id": "b05",
@@ -334,11 +328,11 @@
           "lines": [
             {
               "x": 68.9375,
-              "baseline": 318,
+              "baseline": 346.05875,
               "advance": 274.125
             }
           ],
-          "ink": [[68, 287, 344, 327]]
+          "ink": [[68, 315, 344, 355]]
         },
         {
           "id": "b07",
@@ -382,6 +376,7 @@
             "pad": 6,
             "letter_spacing": 0,
             "align": "right",
+            "valign": "middle",
             "fill": "#111111",
             "stroke": null,
             "auto_fit": false,
@@ -390,24 +385,24 @@
           {
             "id": "b09",
             "region_id": null,
-            "x": 23.25,
-            "y": 150,
+            "x": 16,
+            "y": 164,
             "w": 283,
             "h": 120,
             "rotation": 0,
             "text": "Đường đời ngoằn ngoèo lắm, cẩn thận kẻo vấp ngã nhé.",
             "lines": [],
-            "font_family": "Bungee-Regular",
+            "font_family": "BlambotClassic-Regular",
             "font_size": 18.5,
-            "line_height": 1.15,
-            "pad": 5,
+            "line_height": 1,
+            "pad": 4,
             "letter_spacing": 0,
-            "align": "left",
-            "valign": "top",
-            "fill": "#111111",
+            "align": "center",
+            "valign": "middle",
+            "fill": "#fafafa",
             "stroke": {
-              "color": "#1a1a1a",
-              "width": 2
+              "color": "#ffffff",
+              "width": 1.5
             },
             "auto_fit": false,
             "hidden": false
@@ -428,7 +423,7 @@
             "pad": 5,
             "letter_spacing": 0,
             "align": "left",
-            "valign": "top",
+            "valign": "middle",
             "fill": "#111111",
             "stroke": {
               "color": "#1a1a1a",
@@ -471,21 +466,21 @@
           "lines": [
             {
               "x": 180.09375,
-              "baseline": 69.5,
+              "baseline": 106.69999999999999,
               "advance": 224.40625
             },
             {
               "x": 147.59375,
-              "baseline": 126.7,
+              "baseline": 163.89999999999998,
               "advance": 256.90625
             },
             {
               "x": 158.59375,
-              "baseline": 183.9,
+              "baseline": 221.1,
               "advance": 245.90625
             }
           ],
-          "ink": [[184, 30, 411, 73], [149, 91, 410, 137], [156, 152, 412, 188]]
+          "ink": [[184, 67, 412, 110], [149, 129, 410, 175], [156, 189, 412, 225]]
         },
         {
           "id": "b09",
@@ -495,38 +490,38 @@
           },
           "lines": [
             {
-              "x": 28.25,
-              "baseline": 173.87,
-              "advance": 254.6875
+              "x": 28.7265625,
+              "baseline": 213.1035,
+              "advance": 257.546875
             },
             {
-              "x": 28.25,
-              "baseline": 201.953,
-              "advance": 236.875
+              "x": 38.765625,
+              "baseline": 231.6035,
+              "advance": 237.46875
             },
             {
-              "x": 28.25,
-              "baseline": 230.036,
-              "advance": 91.78125
+              "x": 111.1953125,
+              "baseline": 250.1035,
+              "advance": 92.609375
             }
           ],
-          "ink": [[26, 149, 284, 176], [27, 177, 267, 208], [27, 210, 121, 232]]
+          "ink": [[28, 193, 287, 215], [38, 211, 277, 236], [111, 233, 204, 252]]
         },
         {
           "id": "b10",
           "lines": [
             {
               "x": 28.25,
-              "baseline": 313.56,
+              "baseline": 338.02799999999996,
               "advance": 255.03125
             },
             {
               "x": 28.25,
-              "baseline": 356.064,
+              "baseline": 380.532,
               "advance": 189.8125
             }
           ],
-          "ink": [[28, 284, 284, 322], [28, 326, 219, 358]]
+          "ink": [[28, 309, 284, 347], [28, 350, 219, 383]]
         },
         {
           "id": "b11",
@@ -570,6 +565,7 @@
             "pad": 4,
             "letter_spacing": 0,
             "align": "center",
+            "valign": "middle",
             "fill": "#111111",
             "stroke": null,
             "auto_fit": false,
@@ -603,24 +599,24 @@
           {
             "id": "b14",
             "region_id": null,
-            "x": 16,
-            "y": 280,
+            "x": 30.5,
+            "y": 294,
             "w": 268,
             "h": 120,
             "rotation": 0,
             "text": "Đường đời ngoằn ngoèo lắm, cẩn thận kẻo vấp ngã nhé.",
             "lines": [],
-            "font_family": "JimLeeThought-Regular",
-            "font_size": 33.5,
-            "line_height": 1,
-            "pad": 4,
+            "font_family": "Itim-Regular",
+            "font_size": 26,
+            "line_height": 1.3,
+            "pad": 6,
             "letter_spacing": 0,
-            "align": "center",
+            "align": "right",
             "valign": "middle",
-            "fill": "#fafafa",
+            "fill": "#111111",
             "stroke": {
-              "color": "#ffffff",
-              "width": 3.5
+              "color": "#1a1a1a",
+              "width": 2
             },
             "auto_fit": true,
             "hidden": false
@@ -659,16 +655,16 @@
           "lines": [
             {
               "x": 135.5234375,
-              "baseline": 65.595,
+              "baseline": 107.1925,
               "advance": 140.953125
             },
             {
               "x": 112.1640625,
-              "baseline": 109.4975,
+              "baseline": 151.095,
               "advance": 187.671875
             }
           ],
-          "ink": [[135, 32, 276, 73], [114, 70, 299, 117]]
+          "ink": [[135, 74, 276, 114], [114, 111, 299, 158]]
         },
         {
           "id": "b13",
@@ -684,32 +680,27 @@
         {
           "id": "b14",
           "wrapped": {
-            "lines": ["Đường đời ngoằn", "ngoèo lắm, cẩn", "thận kẻo vấp ngã", "nhé."],
-            "font_size": 29
+            "lines": ["Đường đời ngoằn ngoèo", "lắm, cẩn thận kẻo vấp", "ngã nhé."],
+            "font_size": 25
           },
           "lines": [
             {
-              "x": 26.1171875,
-              "baseline": 309.7822265625,
-              "advance": 247.765625
+              "x": 40.890625,
+              "baseline": 323.75,
+              "advance": 251.609375
             },
             {
-              "x": 38,
-              "baseline": 337.01220703125,
-              "advance": 224
+              "x": 59.3125,
+              "baseline": 362.75,
+              "advance": 233.1875
             },
             {
-              "x": 23.9375,
-              "baseline": 364.2421875,
-              "advance": 252.125
-            },
-            {
-              "x": 121.40625,
-              "baseline": 391.47216796875,
-              "advance": 57.1875
+              "x": 201.3125,
+              "baseline": 401.75,
+              "advance": 91.1875
             }
           ],
-          "ink": [[21, 280, 279, 314], [34, 308, 267, 344], [23, 336, 282, 371], [118, 364, 181, 396]]
+          "ink": [[40, 304, 293, 331], [59, 342, 293, 370], [200, 383, 293, 409]]
         },
         {
           "id": "b15",
@@ -753,6 +744,7 @@
             "pad": 5,
             "letter_spacing": 0,
             "align": "left",
+            "valign": "middle",
             "fill": "#111111",
             "stroke": null,
             "auto_fit": false,
@@ -799,7 +791,7 @@
             "pad": 4,
             "letter_spacing": 0,
             "align": "center",
-            "valign": "top",
+            "valign": "middle",
             "fill": "#111111",
             "stroke": {
               "color": "#1a1a1a",
@@ -811,21 +803,25 @@
           {
             "id": "b19",
             "region_id": null,
-            "x": 30.5,
-            "y": 410,
+            "x": 23.25,
+            "y": 424,
             "w": 253,
             "h": 120,
             "rotation": 0,
             "text": "Đường đời ngoằn ngoèo lắm, cẩn thận kẻo vấp ngã nhé.",
             "lines": [],
-            "font_family": "MTOComic-Regular",
+            "font_family": "MTOChiller-Regular",
             "font_size": 23.5,
-            "line_height": 1.3,
-            "pad": 6,
+            "line_height": 1.15,
+            "pad": 5,
             "letter_spacing": 0,
-            "align": "right",
-            "fill": "#111111",
-            "stroke": null,
+            "align": "left",
+            "valign": "middle",
+            "fill": "#fafafa",
+            "stroke": {
+              "color": "#ffffff",
+              "width": 3.5
+            },
             "auto_fit": false,
             "hidden": false
           }
@@ -838,11 +834,11 @@
           "lines": [
             {
               "x": 28.25,
-              "baseline": 67.3,
+              "baseline": 97.02,
               "advance": 75.328125
             }
           ],
-          "ink": [[31, 31, 103, 68]]
+          "ink": [[31, 61, 103, 98]]
         },
         {
           "id": "b17",
@@ -860,41 +856,31 @@
           "lines": [
             {
               "x": 149.4375,
-              "baseline": 319.4306640625,
+              "baseline": 347.2262939453125,
               "advance": 113.125
             }
           ],
-          "ink": [[148, 298, 263, 322]]
+          "ink": [[148, 326, 263, 350]]
         },
         {
           "id": "b19",
           "wrapped": {
-            "lines": ["Đường đời ngoằn", "ngoèo lắm, cẩn", "thận kẻo vấp ngã", "nhé."],
+            "lines": ["Đường đời ngoằn ngoèo lắm, cẩn", "thận kẻo vấp ngã nhé."],
             "font_size": 23.5
           },
           "lines": [
             {
-              "x": 71.265625,
-              "baseline": 432.45458984375,
-              "advance": 206.234375
+              "x": 28.25,
+              "baseline": 474.79478149414064,
+              "advance": 220.140625
             },
             {
-              "x": 98.109375,
-              "baseline": 459.9615234375,
-              "advance": 179.390625
-            },
-            {
-              "x": 73.578125,
-              "baseline": 487.46845703125,
-              "advance": 203.921875
-            },
-            {
-              "x": 230.765625,
-              "baseline": 514.975390625,
-              "advance": 46.734375
+              "x": 28.25,
+              "baseline": 505.97645874023436,
+              "advance": 152.21875
             }
           ],
-          "ink": [[70, 412, 276, 432], [96, 440, 276, 462], [72, 467, 279, 489], [229, 495, 275, 515]]
+          "ink": [[25, 452, 251, 483], [25, 487, 183, 514]]
         }
       ]
     },
@@ -927,6 +913,7 @@
             "pad": 6,
             "letter_spacing": 0,
             "align": "right",
+            "valign": "middle",
             "fill": "#111111",
             "stroke": null,
             "auto_fit": false,
@@ -973,7 +960,7 @@
             "pad": 5,
             "letter_spacing": 0,
             "align": "left",
-            "valign": "top",
+            "valign": "middle",
             "fill": "#111111",
             "stroke": {
               "color": "#1a1a1a",
@@ -1016,16 +1003,16 @@
           "lines": [
             {
               "x": 263.671875,
-              "baseline": 52.607421875,
+              "baseline": 90.4603515625,
               "advance": 140.828125
             },
             {
               "x": 256.421875,
-              "baseline": 97.08671875,
+              "baseline": 134.9396484375,
               "advance": 148.078125
             }
           ],
-          "ink": [[261, 21, 403, 58], [252, 64, 403, 100]]
+          "ink": [[261, 59, 403, 96], [252, 102, 403, 138]]
         },
         {
           "id": "b21",
@@ -1048,11 +1035,11 @@
           "lines": [
             {
               "x": 28.25,
-              "baseline": 315.1,
+              "baseline": 341.20000000000005,
               "advance": 163.234375
             }
           ],
-          "ink": [[28, 292, 192, 321]]
+          "ink": [[28, 319, 192, 347]]
         },
         {
           "id": "b23",
@@ -1083,25 +1070,22 @@
           {
             "id": "b24",
             "region_id": null,
-            "x": 23.25,
-            "y": 20,
+            "x": 16,
+            "y": 34,
             "w": 238,
             "h": 120,
             "rotation": 0,
             "text": "Đường đời ngoằn ngoèo lắm, cẩn thận kẻo vấp ngã nhé.",
             "lines": [],
-            "font_family": "PatrickHand-Regular",
-            "font_size": 43,
-            "line_height": 1.15,
-            "pad": 5,
+            "font_family": "Pangolin-Regular",
+            "font_size": 36.5,
+            "line_height": 1,
+            "pad": 4,
             "letter_spacing": 0,
-            "align": "left",
+            "align": "center",
             "valign": "middle",
-            "fill": "#fafafa",
-            "stroke": {
-              "color": "#ffffff",
-              "width": 1.5
-            },
+            "fill": "#111111",
+            "stroke": null,
             "auto_fit": true,
             "hidden": false
           },
@@ -1146,7 +1130,7 @@
             "pad": 6,
             "letter_spacing": 0,
             "align": "right",
-            "valign": "top",
+            "valign": "middle",
             "fill": "#111111",
             "stroke": {
               "color": "#1a1a1a",
@@ -1187,27 +1171,27 @@
         {
           "id": "b24",
           "wrapped": {
-            "lines": ["Đường đời ngoằn ngoèo", "lắm, cẩn thận kẻo vấp ngã", "nhé."],
-            "font_size": 24
+            "lines": ["Đường đời ngoằn", "ngoèo lắm, cẩn thận", "kẻo vấp ngã nhé."],
+            "font_size": 26
           },
           "lines": [
             {
-              "x": 28.25,
-              "baseline": 51.3896,
-              "advance": 198.265625
+              "x": 40.1796875,
+              "baseline": 69.651,
+              "advance": 189.640625
             },
             {
-              "x": 28.25,
-              "baseline": 88.75999999999999,
-              "advance": 222.046875
+              "x": 20.984375,
+              "baseline": 102.125,
+              "advance": 228.03125
             },
             {
-              "x": 28.25,
-              "baseline": 126.1304,
-              "advance": 35.609375
+              "x": 44.71875,
+              "baseline": 134.599,
+              "advance": 180.5625
             }
           ],
-          "ink": [[27, 31, 227, 60], [28, 68, 251, 98], [28, 108, 64, 128]]
+          "ink": [[41, 46, 229, 75], [22, 77, 248, 108], [45, 111, 223, 140]]
         },
         {
           "id": "b25",
@@ -1225,21 +1209,21 @@
           "lines": [
             {
               "x": 282.640625,
-              "baseline": 308.24,
+              "baseline": 329.276,
               "advance": 121.859375
             },
             {
               "x": 260.296875,
-              "baseline": 340.714,
+              "baseline": 361.75,
               "advance": 144.203125
             },
             {
               "x": 269.421875,
-              "baseline": 373.188,
+              "baseline": 394.224,
               "advance": 135.078125
             }
           ],
-          "ink": [[281, 282, 406, 318], [258, 320, 405, 351], [268, 349, 406, 376]]
+          "ink": [[281, 303, 406, 339], [258, 341, 405, 372], [268, 370, 406, 397]]
         },
         {
           "id": "b27",
@@ -1283,6 +1267,7 @@
             "pad": 5,
             "letter_spacing": 0,
             "align": "left",
+            "valign": "middle",
             "fill": "#111111",
             "stroke": null,
             "auto_fit": false,
@@ -1291,24 +1276,24 @@
           {
             "id": "b29",
             "region_id": null,
-            "x": 16,
-            "y": 150,
+            "x": 30.5,
+            "y": 164,
             "w": 223,
             "h": 120,
             "rotation": 0,
             "text": "Đường đời ngoằn ngoèo lắm, cẩn thận kẻo vấp ngã nhé.",
             "lines": [],
-            "font_family": "WildWords-Roman",
+            "font_family": "WildWords-BoldItalic",
             "font_size": 18.5,
-            "line_height": 1,
-            "pad": 4,
+            "line_height": 1.3,
+            "pad": 6,
             "letter_spacing": 0,
-            "align": "center",
-            "valign": "top",
-            "fill": "#111111",
+            "align": "right",
+            "valign": "middle",
+            "fill": "#fafafa",
             "stroke": {
-              "color": "#1a1a1a",
-              "width": 2
+              "color": "#ffffff",
+              "width": 1.5
             },
             "auto_fit": false,
             "hidden": false
@@ -1329,7 +1314,7 @@
             "pad": 4,
             "letter_spacing": 0,
             "align": "center",
-            "valign": "top",
+            "valign": "middle",
             "fill": "#111111",
             "stroke": {
               "color": "#1a1a1a",
@@ -1372,52 +1357,57 @@
           "lines": [
             {
               "x": 28.25,
-              "baseline": 76.97999999999999,
+              "baseline": 84.88650000000001,
               "advance": 234.046875
             },
             {
               "x": 28.25,
-              "baseline": 146.18699999999995,
+              "baseline": 154.0935,
               "advance": 169.390625
             }
           ],
-          "ink": [[29, 52, 262, 86], [28, 120, 199, 147]]
+          "ink": [[29, 60, 262, 94], [28, 128, 199, 155]]
         },
         {
           "id": "b29",
           "wrapped": {
-            "lines": ["Đường đời ngoằn ngoèo lắm,", "cẩn thận kẻo vấp ngã nhé."],
+            "lines": ["Đường đời ngoằn ngoèo", "lắm, cẩn thận kẻo vấp ngã", "nhé."],
             "font_size": 18.5
           },
           "lines": [
             {
-              "x": 29.3984375,
-              "baseline": 170.81033333333335,
-              "advance": 196.203125
+              "x": 63.203125,
+              "baseline": 202.8064,
+              "advance": 184.296875
             },
             {
-              "x": 35.4921875,
-              "baseline": 190.44500000000002,
-              "advance": 184.015625
+              "x": 44.40625,
+              "baseline": 231.474,
+              "advance": 203.09375
+            },
+            {
+              "x": 215.140625,
+              "baseline": 260.1416,
+              "advance": 32.359375
             }
           ],
-          "ink": [[27, 153, 226, 174], [34, 173, 220, 195]]
+          "ink": [[61, 185, 249, 205], [42, 213, 251, 236], [213, 245, 247, 263]]
         },
         {
           "id": "b30",
           "lines": [
             {
               "x": 172.15625,
-              "baseline": 300.81033333333335,
+              "baseline": 333.0756666666667,
               "advance": 67.6875
             },
             {
               "x": 160.9765625,
-              "baseline": 320.445,
+              "baseline": 352.7103333333333,
               "advance": 90.046875
             }
           ],
-          "ink": [[169, 286, 241, 303], [160, 303, 253, 323]]
+          "ink": [[169, 318, 241, 335], [160, 335, 253, 355]]
         },
         {
           "id": "b31",
@@ -1461,6 +1451,7 @@
             "pad": 6,
             "letter_spacing": 0,
             "align": "right",
+            "valign": "middle",
             "fill": "#111111",
             "stroke": null,
             "auto_fit": false,
@@ -1482,7 +1473,7 @@
             "pad": 4,
             "letter_spacing": 0,
             "align": "center",
-            "valign": "middle",
+            "valign": "top",
             "fill": "#fafafa",
             "stroke": {
               "color": "#ffffff",
@@ -1494,24 +1485,23 @@
           {
             "id": "b34",
             "region_id": null,
-            "x": 30.5,
-            "y": 280,
+            "x": 23.25,
+            "y": 294,
             "w": 208,
             "h": 120,
             "rotation": 0,
             "text": "Đường đời ngoằn ngoèo lắm, cẩn thận kẻo vấp ngã nhé.",
             "lines": [],
-            "font_family": "Anton-Regular",
-            "font_size": 23,
-            "line_height": 1.3,
-            "pad": 6,
+            "font_family": "AnimeAce3-Italic",
+            "font_size": 46,
+            "line_height": 1.15,
+            "pad": 5,
             "letter_spacing": 0,
-            "align": "right",
-            "valign": "middle",
-            "fill": "#fafafa",
+            "align": "left",
+            "fill": "#111111",
             "stroke": {
-              "color": "#ffffff",
-              "width": 3.5
+              "color": "#1a1a1a",
+              "width": 2
             },
             "auto_fit": true,
             "hidden": false
@@ -1532,7 +1522,7 @@
             "pad": 6,
             "letter_spacing": 0,
             "align": "right",
-            "valign": "middle",
+            "valign": "top",
             "fill": "#fafafa",
             "stroke": {
               "color": "#ffffff",
@@ -1550,57 +1540,62 @@
           "lines": [
             {
               "x": 282.140625,
-              "baseline": 56.647999999999996,
+              "baseline": 90.24799999999999,
               "advance": 122.359375
             },
             {
               "x": 281.328125,
-              "baseline": 98.24799999999999,
+              "baseline": 131.84799999999998,
               "advance": 123.171875
             },
             {
               "x": 313.78125,
-              "baseline": 139.848,
+              "baseline": 173.44799999999998,
               "advance": 90.71875
             }
           ],
-          "ink": [[282, 26, 407, 59], [282, 72, 404, 106], [314, 113, 404, 142]]
+          "ink": [[282, 60, 406, 92], [282, 105, 404, 140], [314, 146, 404, 175]]
         },
         {
           "id": "b33",
           "lines": [
             {
               "x": -58.546875,
-              "baseline": 233.753271484375,
+              "baseline": 201.87841796875,
               "advance": 529.09375
             }
           ],
-          "ink": [[-59, 175, 474, 248]]
+          "ink": [[-59, 143, 474, 216]]
         },
         {
           "id": "b34",
           "wrapped": {
-            "lines": ["Đường đời ngoằn ngoèo", "lắm, cẩn thận kẻo vấp", "ngã nhé."],
-            "font_size": 19
+            "lines": ["Đường đời ngoằn", "ngoèo lắm, cẩn", "thận kẻo vấp ngã", "nhé."],
+            "font_size": 18
           },
           "lines": [
             {
-              "x": 52.5625,
-              "baseline": 310.8654296875,
-              "advance": 179.9375
+              "x": 28.25,
+              "baseline": 318.8,
+              "advance": 170.796875
             },
             {
-              "x": 64.3125,
-              "baseline": 348.048095703125,
-              "advance": 168.1875
+              "x": 28.25,
+              "baseline": 346.41380000000004,
+              "advance": 155.859375
             },
             {
-              "x": 167.109375,
-              "baseline": 385.23076171875005,
-              "advance": 65.390625
+              "x": 28.25,
+              "baseline": 374.0276,
+              "advance": 168.3125
+            },
+            {
+              "x": 28.25,
+              "baseline": 401.6414,
+              "advance": 38.34375
             }
           ],
-          "ink": [[49, 286, 235, 316], [61, 323, 235, 355], [164, 363, 236, 391]]
+          "ink": [[27, 298, 203, 321], [27, 326, 188, 350], [29, 354, 200, 379], [27, 384, 68, 404]]
         },
         {
           "id": "b35",
@@ -1665,7 +1660,7 @@
             "pad": 5,
             "letter_spacing": 0,
             "align": "left",
-            "valign": "middle",
+            "valign": "top",
             "fill": "#fafafa",
             "stroke": {
               "color": "#ffffff",
@@ -1690,7 +1685,6 @@
             "pad": 6,
             "letter_spacing": 0,
             "align": "right",
-            "valign": "top",
             "fill": "#111111",
             "stroke": {
               "color": "#1a1a1a",
@@ -1702,21 +1696,25 @@
           {
             "id": "b39",
             "region_id": null,
-            "x": 23.25,
-            "y": 410,
+            "x": 16,
+            "y": 424,
             "w": 193,
             "h": 120,
             "rotation": 0,
             "text": "Đường đời ngoằn ngoèo lắm, cẩn thận kẻo vấp ngã nhé.",
             "lines": [],
-            "font_family": "BeVietnamPro-Regular",
+            "font_family": "BeVietnamPro-Bold",
             "font_size": 23.5,
-            "line_height": 1.15,
-            "pad": 5,
+            "line_height": 1,
+            "pad": 4,
             "letter_spacing": 0,
-            "align": "left",
-            "fill": "#111111",
-            "stroke": null,
+            "align": "center",
+            "valign": "top",
+            "fill": "#fafafa",
+            "stroke": {
+              "color": "#ffffff",
+              "width": 3.5
+            },
             "auto_fit": false,
             "hidden": false
           }
@@ -1740,16 +1738,16 @@
           "lines": [
             {
               "x": 28.25,
-              "baseline": 214.96644999999998,
+              "baseline": 201.886,
               "advance": 244.015625
             },
             {
               "x": 28.25,
-              "baseline": 283.13154999999995,
+              "baseline": 270.0511,
               "advance": 173.984375
             }
           ],
-          "ink": [[29, 188, 271, 224], [29, 256, 202, 285]]
+          "ink": [[29, 175, 271, 211], [29, 243, 202, 272]]
         },
         {
           "id": "b38",
@@ -1775,37 +1773,37 @@
           },
           "lines": [
             {
-              "x": 28.25,
-              "baseline": 438.5,
-              "advance": 119.28125
+              "x": 51.5,
+              "baseline": 451.5,
+              "advance": 122
             },
             {
-              "x": 28.25,
-              "baseline": 472.686625,
-              "advance": 149.65625
+              "x": 35.46875,
+              "baseline": 481.2275,
+              "advance": 154.0625
             },
             {
-              "x": 28.25,
-              "baseline": 506.87325,
-              "advance": 156.0625
+              "x": 32.1171875,
+              "baseline": 510.955,
+              "advance": 160.765625
             },
             {
-              "x": 28.25,
-              "baseline": 541.059875,
-              "advance": 139.265625
+              "x": 40.84375,
+              "baseline": 540.6825,
+              "advance": 143.3125
             },
             {
-              "x": 28.25,
-              "baseline": 575.2465,
-              "advance": 48.203125
+              "x": 87.2109375,
+              "baseline": 570.41,
+              "advance": 50.578125
             }
           ],
           "ink": [
-            [29, 420, 146, 443],
-            [30, 450, 176, 478],
-            [30, 484, 183, 512],
-            [30, 519, 166, 546],
-            [30, 557, 75, 575]
+            [48, 429, 176, 460],
+            [33, 455, 192, 489],
+            [30, 485, 195, 520],
+            [39, 516, 186, 549],
+            [85, 548, 139, 574]
           ]
         }
       ]
@@ -1860,7 +1858,7 @@
             "pad": 6,
             "letter_spacing": 0,
             "align": "right",
-            "valign": "middle",
+            "valign": "top",
             "fill": "#fafafa",
             "stroke": {
               "color": "#ffffff",
@@ -1885,7 +1883,6 @@
             "pad": 4,
             "letter_spacing": 0,
             "align": "center",
-            "valign": "top",
             "fill": "#111111",
             "stroke": {
               "color": "#1a1a1a",
@@ -1910,7 +1907,7 @@
             "pad": 5,
             "letter_spacing": 0,
             "align": "left",
-            "valign": "middle",
+            "valign": "top",
             "fill": "#fafafa",
             "stroke": {
               "color": "#ffffff",
@@ -1961,11 +1958,11 @@
           "lines": [
             {
               "x": 28.25,
-              "baseline": 470.64,
+              "baseline": 444.88,
               "advance": 52.171875
             }
           ],
-          "ink": [[26, 445, 82, 474]]
+          "ink": [[26, 419, 82, 449]]
         }
       ]
     },
@@ -1985,25 +1982,21 @@
           {
             "id": "b44",
             "region_id": null,
-            "x": 16,
-            "y": 20,
+            "x": 30.5,
+            "y": 34,
             "w": 178,
             "h": 120,
             "rotation": 0,
             "text": "Đường đời ngoằn ngoèo lắm, cẩn thận kẻo vấp ngã nhé.",
             "lines": [],
-            "font_family": "Felt-Regular",
-            "font_size": 33.5,
-            "line_height": 1,
-            "pad": 4,
+            "font_family": "Chinacat-Regular",
+            "font_size": 26,
+            "line_height": 1.3,
+            "pad": 6,
             "letter_spacing": 0,
-            "align": "center",
-            "valign": "middle",
-            "fill": "#fafafa",
-            "stroke": {
-              "color": "#ffffff",
-              "width": 1.5
-            },
+            "align": "right",
+            "fill": "#111111",
+            "stroke": null,
             "auto_fit": true,
             "hidden": false
           },
@@ -2023,7 +2016,7 @@
             "pad": 4,
             "letter_spacing": 0,
             "align": "center",
-            "valign": "middle",
+            "valign": "top",
             "fill": "#fafafa",
             "stroke": {
               "color": "#ffffff",
@@ -2048,7 +2041,6 @@
             "pad": 5,
             "letter_spacing": 0,
             "align": "left",
-            "valign": "top",
             "fill": "#111111",
             "stroke": {
               "color": "#1a1a1a",
@@ -2073,7 +2065,7 @@
             "pad": 6,
             "letter_spacing": 0,
             "align": "right",
-            "valign": "middle",
+            "valign": "top",
             "fill": "#fafafa",
             "stroke": {
               "color": "#ffffff",
@@ -2090,42 +2082,42 @@
           "id": "b44",
           "wrapped": {
             "lines": ["Đường đời ngoằn", "ngoèo lắm, cẩn", "thận kẻo vấp", "ngã nhé."],
-            "font_size": 27
+            "font_size": 21
           },
           "lines": [
             {
-              "x": 26.921875,
-              "baseline": 46.196,
-              "advance": 156.15625
+              "x": 42.578125,
+              "baseline": 56.8,
+              "advance": 159.921875
             },
             {
-              "x": 32.6015625,
-              "baseline": 74.087,
-              "advance": 144.796875
+              "x": 56.15625,
+              "baseline": 84.1,
+              "advance": 146.34375
             },
             {
-              "x": 40.4921875,
-              "baseline": 101.97800000000001,
-              "advance": 129.015625
+              "x": 74.15625,
+              "baseline": 111.4,
+              "advance": 128.34375
             },
             {
-              "x": 63.953125,
-              "baseline": 129.869,
-              "advance": 82.09375
+              "x": 119.84375,
+              "baseline": 138.7,
+              "advance": 82.65625
             }
           ],
-          "ink": [[25, 20, 184, 52], [32, 47, 179, 80], [38, 74, 170, 109], [63, 108, 147, 136]]
+          "ink": [[42, 36, 201, 61], [56, 63, 201, 88], [74, 92, 201, 116], [120, 122, 201, 143]]
         },
         {
           "id": "b45",
           "lines": [
             {
               "x": 149.984375,
-              "baseline": 213.41625,
+              "baseline": 181.269,
               "advance": 112.03125
             }
           ],
-          "ink": [[149, 186, 263, 216]]
+          "ink": [[149, 154, 263, 184]]
         },
         {
           "id": "b46",
@@ -2193,24 +2185,24 @@
           {
             "id": "b49",
             "region_id": null,
-            "x": 30.5,
-            "y": 150,
+            "x": 23.25,
+            "y": 164,
             "w": 163,
             "h": 120,
             "rotation": 0,
             "text": "Đường đời ngoằn ngoèo lắm, cẩn thận kẻo vấp ngã nhé.",
             "lines": [],
-            "font_family": "Lexend-Variable",
+            "font_family": "KomikaText-Regular",
             "font_size": 18.5,
-            "line_height": 1.3,
-            "pad": 6,
+            "line_height": 1.15,
+            "pad": 5,
             "letter_spacing": 0,
-            "align": "right",
+            "align": "left",
             "valign": "top",
-            "fill": "#111111",
+            "fill": "#fafafa",
             "stroke": {
-              "color": "#1a1a1a",
-              "width": 2
+              "color": "#ffffff",
+              "width": 1.5
             },
             "auto_fit": false,
             "hidden": false
@@ -2231,7 +2223,6 @@
             "pad": 6,
             "letter_spacing": 0,
             "align": "right",
-            "valign": "top",
             "fill": "#111111",
             "stroke": {
               "color": "#1a1a1a",
@@ -2256,7 +2247,7 @@
             "pad": 4,
             "letter_spacing": 0,
             "align": "center",
-            "valign": "middle",
+            "valign": "top",
             "fill": "#fafafa",
             "stroke": {
               "color": "#ffffff",
@@ -2288,43 +2279,32 @@
         {
           "id": "b49",
           "wrapped": {
-            "lines": ["Đường đời", "ngoằn ngoèo", "lắm, cẩn thận", "kẻo vấp ngã", "nhé."],
+            "lines": ["Đường đời ngoằn", "ngoèo lắm, cẩn", "thận kẻo vấp ngã", "nhé."],
             "font_size": 18.5
           },
           "lines": [
             {
-              "x": 94.65625,
-              "baseline": 174.5,
-              "advance": 92.84375
+              "x": 28.25,
+              "baseline": 186.945,
+              "advance": 129.65625
             },
             {
-              "x": 68.640625,
-              "baseline": 204.5625,
-              "advance": 118.859375
+              "x": 28.25,
+              "baseline": 211.70909999999998,
+              "advance": 114.5625
             },
             {
-              "x": 65.59375,
-              "baseline": 234.625,
-              "advance": 121.90625
+              "x": 28.25,
+              "baseline": 236.4732,
+              "advance": 128.84375
             },
             {
-              "x": 76.40625,
-              "baseline": 264.6875,
-              "advance": 111.09375
-            },
-            {
-              "x": 150.4375,
-              "baseline": 294.75,
-              "advance": 37.0625
+              "x": 28.25,
+              "baseline": 261.2373,
+              "advance": 30.3125
             }
           ],
-          "ink": [
-            [94, 158, 188, 181],
-            [68, 185, 189, 211],
-            [65, 215, 188, 240],
-            [76, 246, 188, 271],
-            [150, 278, 188, 297]
-          ]
+          "ink": [[27, 168, 159, 189], [28, 193, 144, 215], [27, 219, 159, 242], [28, 245, 59, 263]]
         },
         {
           "id": "b50",
@@ -2352,11 +2332,11 @@
           "lines": [
             {
               "x": 3.390625,
-              "baseline": 493.1345458984375,
+              "baseline": 463.7998046875,
               "advance": 405.21875
             }
           ],
-          "ink": [[2, 444, 414, 504]]
+          "ink": [[2, 414, 414, 474]]
         }
       ]
     },
@@ -2410,7 +2390,7 @@
             "pad": 6,
             "letter_spacing": 0,
             "align": "right",
-            "valign": "middle",
+            "valign": "top",
             "fill": "#fafafa",
             "stroke": {
               "color": "#ffffff",
@@ -2422,24 +2402,23 @@
           {
             "id": "b54",
             "region_id": null,
-            "x": 23.25,
-            "y": 280,
+            "x": 16,
+            "y": 294,
             "w": 348,
             "h": 120,
             "rotation": 0,
             "text": "Đường đời ngoằn ngoèo lắm, cẩn thận kẻo vấp ngã nhé.",
             "lines": [],
-            "font_family": "Mali-Regular",
-            "font_size": 43,
-            "line_height": 1.15,
-            "pad": 5,
+            "font_family": "MTOGrungeSans-Regular",
+            "font_size": 36.5,
+            "line_height": 1,
+            "pad": 4,
             "letter_spacing": 0,
-            "align": "left",
-            "valign": "middle",
-            "fill": "#fafafa",
+            "align": "center",
+            "fill": "#111111",
             "stroke": {
-              "color": "#ffffff",
-              "width": 3.5
+              "color": "#1a1a1a",
+              "width": 2
             },
             "auto_fit": true,
             "hidden": false
@@ -2460,7 +2439,7 @@
             "pad": 5,
             "letter_spacing": 0,
             "align": "left",
-            "valign": "middle",
+            "valign": "top",
             "fill": "#fafafa",
             "stroke": {
               "color": "#ffffff",
@@ -2498,43 +2477,38 @@
         {
           "id": "b54",
           "wrapped": {
-            "lines": ["Đường đời ngoằn ngoèo", "lắm, cẩn thận kẻo vấp ngã", "nhé."],
-            "font_size": 25
+            "lines": ["Đường đời ngoằn ngoèo lắm,", "cẩn thận kẻo vấp ngã nhé."],
+            "font_size": 47
           },
           "lines": [
             {
-              "x": 28.25,
-              "baseline": 312.625,
-              "advance": 285.453125
+              "x": 20.3359375,
+              "baseline": 342.26904296875,
+              "advance": 339.328125
             },
             {
-              "x": 28.25,
-              "baseline": 350,
-              "advance": 318.640625
-            },
-            {
-              "x": 28.25,
-              "baseline": 387.375,
-              "advance": 50.8125
+              "x": 29.7578125,
+              "baseline": 396.314453125,
+              "advance": 320.484375
             }
           ],
-          "ink": [[26, 287, 316, 322], [27, 325, 349, 360], [26, 364, 80, 391]]
+          "ink": [[13, 307, 359, 351], [28, 357, 350, 408]]
         },
         {
           "id": "b55",
           "lines": [
             {
               "x": 28.25,
-              "baseline": 485.25749999999994,
+              "baseline": 460.15,
               "advance": 330.015625
             },
             {
               "x": 28.25,
-              "baseline": 549.5424999999999,
+              "baseline": 524.435,
               "advance": 231.71875
             }
           ],
-          "ink": [[27, 450, 359, 500], [27, 511, 261, 553]]
+          "ink": [[27, 425, 359, 475], [27, 486, 261, 528]]
         }
       ]
     },
@@ -2588,7 +2562,7 @@
             "pad": 4,
             "letter_spacing": 0,
             "align": "center",
-            "valign": "middle",
+            "valign": "top",
             "fill": "#fafafa",
             "stroke": {
               "color": "#ffffff",
@@ -2613,7 +2587,6 @@
             "pad": 5,
             "letter_spacing": 0,
             "align": "left",
-            "valign": "top",
             "fill": "#111111",
             "stroke": {
               "color": "#1a1a1a",
@@ -2625,21 +2598,25 @@
           {
             "id": "b59",
             "region_id": null,
-            "x": 16,
-            "y": 410,
+            "x": 30.5,
+            "y": 424,
             "w": 333,
             "h": 120,
             "rotation": 0,
             "text": "Đường đời ngoằn ngoèo lắm, cẩn thận kẻo vấp ngã nhé.",
             "lines": [],
-            "font_family": "SigmarOne-Regular",
+            "font_family": "SedgwickAve-Regular",
             "font_size": 23.5,
-            "line_height": 1,
-            "pad": 4,
+            "line_height": 1.3,
+            "pad": 6,
             "letter_spacing": 0,
-            "align": "center",
-            "fill": "#111111",
-            "stroke": null,
+            "align": "right",
+            "valign": "top",
+            "fill": "#fafafa",
+            "stroke": {
+              "color": "#ffffff",
+              "width": 3.5
+            },
             "auto_fit": false,
             "hidden": false
           }
@@ -2668,16 +2645,16 @@
           "lines": [
             {
               "x": 145.6640625,
-              "baseline": 216.92000000000002,
+              "baseline": 186.76749999999998,
               "advance": 120.671875
             },
             {
               "x": 129.2578125,
-              "baseline": 251.2675,
+              "baseline": 221.11499999999998,
               "advance": 153.484375
             }
           ],
-          "ink": [[145, 194, 267, 224], [129, 225, 283, 259]]
+          "ink": [[145, 163, 267, 194], [129, 194, 283, 228]]
         },
         {
           "id": "b58",
@@ -2693,27 +2670,22 @@
         {
           "id": "b59",
           "wrapped": {
-            "lines": ["Đường đời ngoằn", "ngoèo lắm, cẩn thận", "kẻo vấp ngã nhé."],
+            "lines": ["Đường đời ngoằn ngoèo lắm, cẩn", "thận kẻo vấp ngã nhé."],
             "font_size": 23.5
           },
           "lines": [
             {
-              "x": 62.765625,
-              "baseline": 441.54200000000003,
-              "advance": 239.46875
+              "x": 38.703125,
+              "baseline": 452.0195,
+              "advance": 318.796875
             },
             {
-              "x": 38.0234375,
-              "baseline": 480.035,
-              "advance": 288.953125
-            },
-            {
-              "x": 63.359375,
-              "baseline": 518.528,
-              "advance": 238.28125
+              "x": 137.921875,
+              "baseline": 490.17645,
+              "advance": 219.578125
             }
           ],
-          "ink": [[64, 416, 301, 442], [39, 455, 326, 486], [65, 493, 300, 519]]
+          "ink": [[34, 421, 361, 465], [135, 461, 360, 504]]
         }
       ]
     },
@@ -2767,7 +2739,7 @@
             "pad": 5,
             "letter_spacing": 0,
             "align": "left",
-            "valign": "middle",
+            "valign": "top",
             "fill": "#fafafa",
             "stroke": {
               "color": "#ffffff",
@@ -2792,7 +2764,6 @@
             "pad": 6,
             "letter_spacing": 0,
             "align": "right",
-            "valign": "top",
             "fill": "#111111",
             "stroke": {
               "color": "#1a1a1a",
@@ -2817,7 +2788,7 @@
             "pad": 4,
             "letter_spacing": 0,
             "align": "center",
-            "valign": "middle",
+            "valign": "top",
             "fill": "#fafafa",
             "stroke": {
               "color": "#ffffff",
@@ -2846,11 +2817,11 @@
           "lines": [
             {
               "x": 28.25,
-              "baseline": 209.375,
+              "baseline": 189,
               "advance": 53.625
             }
           ],
-          "ink": [[27, 188, 84, 212]]
+          "ink": [[27, 167, 84, 191]]
         },
         {
           "id": "b62",
@@ -2878,11 +2849,11 @@
           "lines": [
             {
               "x": 139.375,
-              "baseline": 493.081,
+              "baseline": 460.39233333333334,
               "advance": 133.25
             }
           ],
-          "ink": [[137, 462, 275, 498]]
+          "ink": [[137, 430, 275, 465]]
         }
       ]
     },
@@ -2902,25 +2873,21 @@
           {
             "id": "b64",
             "region_id": null,
-            "x": 30.5,
-            "y": 20,
+            "x": 23.25,
+            "y": 34,
             "w": 318,
             "h": 120,
             "rotation": 0,
             "text": "Đường đời ngoằn ngoèo lắm, cẩn thận kẻo vấp ngã nhé.",
             "lines": [],
-            "font_family": "Zoinks-Regular",
-            "font_size": 23,
-            "line_height": 1.3,
-            "pad": 6,
+            "font_family": "ZapRaygun-Regular",
+            "font_size": 46,
+            "line_height": 1.15,
+            "pad": 5,
             "letter_spacing": 0,
-            "align": "right",
-            "valign": "middle",
-            "fill": "#fafafa",
-            "stroke": {
-              "color": "#ffffff",
-              "width": 1.5
-            },
+            "align": "left",
+            "fill": "#111111",
+            "stroke": null,
             "auto_fit": true,
             "hidden": false
           },
@@ -2940,7 +2907,7 @@
             "pad": 6,
             "letter_spacing": 0,
             "align": "right",
-            "valign": "middle",
+            "valign": "top",
             "fill": "#fafafa",
             "stroke": {
               "color": "#ffffff",
@@ -2965,7 +2932,7 @@
             "pad": 4,
             "letter_spacing": 0,
             "align": "center",
-            "valign": "top",
+            "valign": "middle",
             "fill": "#111111",
             "stroke": {
               "color": "#1a1a1a",
@@ -3006,27 +2973,27 @@
         {
           "id": "b64",
           "wrapped": {
-            "lines": ["Đường đời ngoằn ngoèo", "lắm, cẩn thận kẻo vấp ngã", "nhé."],
+            "lines": ["Đường đời ngoằn", "ngoèo lắm, cẩn thận", "kẻo vấp ngã nhé."],
             "font_size": 30
           },
           "lines": [
             {
-              "x": 72.5,
-              "baseline": 48.17,
-              "advance": 270
+              "x": 28.25,
+              "baseline": 66.36328125,
+              "advance": 253.671875
             },
             {
-              "x": 39.125,
-              "baseline": 87.17,
-              "advance": 303.375
+              "x": 28.25,
+              "baseline": 104.5693359375,
+              "advance": 306.25
             },
             {
-              "x": 292.859375,
-              "baseline": 126.17,
-              "advance": 49.640625
+              "x": 28.25,
+              "baseline": 142.775390625,
+              "advance": 244.671875
             }
           ],
-          "ink": [[72, 17, 343, 57], [38, 55, 344, 96], [292, 100, 342, 129]]
+          "ink": [[27, 32, 281, 67], [30, 71, 334, 109], [30, 110, 270, 144]]
         },
         {
           "id": "b65",
@@ -3044,16 +3011,16 @@
           "lines": [
             {
               "x": 87.8515625,
-              "baseline": 316.36181640625,
+              "baseline": 351.434375,
               "advance": 236.296875
             },
             {
               "x": 49.328125,
-              "baseline": 349.9892578125,
+              "baseline": 385.06181640625,
               "advance": 313.34375
             }
           ],
-          "ink": [[83, 276, 327, 321], [45, 303, 364, 355]]
+          "ink": [[83, 311, 327, 356], [45, 338, 364, 390]]
         },
         {
           "id": "b67",

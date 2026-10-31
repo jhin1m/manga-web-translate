@@ -392,6 +392,9 @@ function TextEditOverlay({ kit }: { kit: FontKit }) {
 
   if (!editing || !box) return null;
   const k = view.scale;
+  // Cùng box canvas đang vẽ (wrap lại khi lines rỗng, auto_fit có thể đổi cỡ): font, giãn dòng và dy khớp chữ trên canvas.
+  const drawn = drawnBox(box, kit);
+  const metrics = kit.metrics(box.font_family);
   const commit = (value: string) => {
     const s = editorStore.getState();
     s.setEditing(null);
@@ -418,11 +421,11 @@ function TextEditOverlay({ kit }: { kit: FontKit }) {
         width: box.w * k,
         height: box.h * k,
         transform: `rotate(${box.rotation}deg)`,
-        font: canvasFont(box.font_family, box.font_size * k),
-        lineHeight: `${lineStep(kit.metrics(box.font_family), box.font_size, box.line_height) * k}px`,
+        font: canvasFont(box.font_family, drawn.font_size * k),
+        lineHeight: `${lineStep(metrics, drawn.font_size, box.line_height) * k}px`,
         // Từng cạnh riêng (không dùng shorthand `padding`): khi chỉ `pad` đổi, React không để paddingTop bị ghi đè.
         // Textarea neo mép trên; căn giữa dọc = đẩy chữ xuống đúng dy như linePlacements của box canvas đang vẽ.
-        paddingTop: (box.pad + verticalOffset(drawnBox(box, kit), kit.metrics(box.font_family))) * k,
+        paddingTop: (box.pad + verticalOffset(drawn, metrics)) * k,
         paddingRight: box.pad * k,
         paddingBottom: box.pad * k,
         paddingLeft: box.pad * k,

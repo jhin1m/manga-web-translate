@@ -78,7 +78,12 @@ function plainBox(i: number, slot: number) {
     letter_spacing: 0,
     align: ALIGNS[i % 3] as (typeof ALIGNS)[number],
     // Một phần box không có trường (lưu từ trước = top), phần còn lại thử "top" tường minh và "middle".
-    ...(i % 2 === 1 ? { valign: "middle" as const } : i % 4 === 2 ? { valign: "top" as const } : {}),
+    // Vòng đầu (mỗi font đúng 1 box/vòng) luôn middle → mỗi font ≥ 1 box căn giữa; vòng sau trộn top / không trường.
+    ...(Math.floor(i / FONTS.length) % 2 === 0
+      ? { valign: "middle" as const }
+      : i % 2 === 1
+        ? { valign: "top" as const }
+        : {}),
     fill: i % 2 === 0 ? "#111111" : "#fafafa",
     stroke: sw > 0 ? { color: i % 2 ? "#ffffff" : "#1a1a1a", width: sw } : null,
     auto_fit: false,
@@ -88,7 +93,7 @@ function plainBox(i: number, slot: number) {
 
 /** Box thiếu lines: nửa auto_fit (dò cỡ), nửa giữ cỡ (wrap theo bề rộng). */
 function wrapBox(i: number, slot: number): Box {
-  const base = plainBox(i + 1, slot);
+  const base = plainBox(i, slot); // cùng font + valign với box i: mỗi font đủ box, kể cả box thiếu lines
   const autoFit = i % 10 === 4;
   return {
     ...base,
@@ -136,6 +141,7 @@ function generate() {
   const measured = (JSON.parse(out) as { pages: { id: string; boxes: unknown[] }[] }).pages;
   return {
     version: 1,
+    excluded_fonts: Object.keys(EXCLUDED_FONTS),
     note: "Sinh bởi scripts/typeset-parity.ts — không sửa tay. expected = số đo của worker/mtl_pipeline/render.py.",
     pages: pages.map((p) => ({ ...p, expected: measured.find((m) => m.id === p.id)?.boxes ?? [] })),
   };
