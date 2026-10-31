@@ -9,9 +9,8 @@ import { useState } from "react";
 import { useStore } from "zustand";
 import { Drawer } from "../../app/drawer.tsx";
 import { errorMessage } from "../../lib/api.ts";
-import { fetchRecentChapters, seriesKeys } from "../series/api.ts";
-import { uploadManager, useUploads } from "../upload/upload-manager.ts";
-import { cancelJob, type JobView, type Progress } from "./api.ts";
+import { type ChapterUpload, uploadManager, useUploads } from "../upload/upload-manager.ts";
+import { cancelJob, chapterKeys, fetchChapter, type JobView, type Progress } from "./api.ts";
 import { ExportRow, useExports } from "./export-panel.tsx";
 import { ERROR_CLASS, failedPageGroups, providerWait, providerWaitText } from "./job-error.ts";
 import { pageLevel } from "./page-status.ts";
@@ -123,12 +122,6 @@ export function ShellActivity() {
 
 function UploadSection() {
   const uploads = Object.values(useUploads());
-  // Tên chương: danh sách "Việc cần làm" (gồm chương nháp đang tải) — cùng query với home, không poll thêm.
-  const recent = useQuery({
-    queryKey: seriesKeys.recent(),
-    queryFn: () => fetchRecentChapters(),
-    enabled: uploads.length > 0,
-  }).data?.chapters;
   return (
     <section className="drawer-section" aria-label="Upload">
       <h3>Upload</h3>
@@ -136,49 +129,55 @@ function UploadSection() {
         <p className="muted small">Không có ảnh nào đang tải trong tab này.</p>
       ) : (
         <div className="drawer-list">
-          {uploads.map((u) => {
-            const ch = recent?.find((c) => c.id === u.chapterId);
-            const name = ch ? `Chương ${ch.number} · ${ch.series_title}` : "Chương mới";
-            const pct = u.bytesTotal ? Math.round((u.bytesDone / u.bytesTotal) * 100) : 0;
-            const tone = u.phase === "failed" ? "danger" : u.phase === "uploaded" ? "ok" : "busy";
-            const label =
-              u.phase === "failed"
-                ? `Lỗi ${u.total - u.done} ảnh · đã tải ${u.done}/${u.total}`
-                : u.phase === "uploaded"
-                  ? `Đã tải xong ${u.total} ảnh — chờ bấm Dịch chương`
-                  : `Đang tải ${u.done}/${u.total} ảnh · ${formatBytes(u.bytesDone)}/${formatBytes(u.bytesTotal)}`;
-            return (
-              <div key={u.chapterId} className="drawer-item" data-chapter={u.chapterId}>
-                <div className="drawer-item-head">
-                  <span className="grow">
-                    {ch ? (
-                      <Link to="/s/$seriesId/c/$chapterId" params={{ seriesId: ch.series_id, chapterId: ch.id }}>
-                        {name}
-                      </Link>
-                    ) : (
-                      name
-                    )}
-                  </span>
-                  {u.phase === "failed" && (
-                    <button type="button" className="btn-ghost" onClick={() => uploadManager.retryFailed(u.chapterId)}>
-                      Thử lại
-                    </button>
-                  )}
-                </div>
-                <span className="status small" data-tone={tone}>
-                  {label}
-                </span>
-                {u.phase === "uploading" && (
-                  <div className="bar" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}>
-                    <span style={{ width: `${pct}%` }} />
-                  </div>
-                )}
-              </div>
-            );
-          })}
+          {uploads.map((u) => (
+            <UploadItem key={u.chapterId} u={u} />
+          ))}
         </div>
       )}
     </section>
+  );
+}
+
+function UploadItem({ u }: { u: ChapterUpload }) {
+  // Tên chương lấy theo từng chương đang tải (cùng khoá với màn chương): danh sách "Việc cần làm" bị cắt ở 20 chương
+  // và chương đang mở ở tab khác xếp trước, nên chương nháp vừa tải có thể không nằm trong đó.
+  const ch = useQuery({ queryKey: chapterKeys.detail(u.chapterId), queryFn: () => fetchChapter(u.chapterId) }).data;
+  const name = ch ? `Chương ${ch.number} · ${ch.series.title}` : "Chương mới";
+  const pct = u.bytesTotal ? Math.round((u.bytesDone / u.bytesTotal) * 100) : 0;
+  const tone = u.phase === "failed" ? "danger" : u.phase === "uploaded" ? "ok" : "busy";
+  const label =
+    u.phase === "failed"
+      ? `Lỗi ${u.total - u.done} ảnh · đã tải ${u.done}/${u.total}`
+      : u.phase === "uploaded"
+        ? `Đã tải xong ${u.total} ảnh — chờ bấm Dịch chương`
+        : `Đang tải ${u.done}/${u.total} ảnh · ${formatBytes(u.bytesDone)}/${formatBytes(u.bytesTotal)}`;
+  return (
+    <div className="drawer-item" data-chapter={u.chapterId}>
+      <div className="drawer-item-head">
+        <span className="grow">
+          {ch ? (
+            <Link to="/s/$seriesId/c/$chapterId" params={{ seriesId: ch.series.id, chapterId: ch.id }}>
+              {name}
+            </Link>
+          ) : (
+            name
+          )}
+        </span>
+        {u.phase === "failed" && (
+          <button type="button" className="btn-ghost" onClick={() => uploadManager.retryFailed(u.chapterId)}>
+            Thử lại
+          </button>
+        )}
+      </div>
+      <span className="status small" data-tone={tone}>
+        {label}
+      </span>
+      {u.phase === "uploading" && (
+        <div className="bar" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}>
+          <span style={{ width: `${pct}%` }} />
+        </div>
+      )}
+    </div>
   );
 }
 
