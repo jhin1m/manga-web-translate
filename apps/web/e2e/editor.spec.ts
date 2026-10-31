@@ -945,3 +945,52 @@ test("leaving the chapter while a block's re-OCR is queued cancels the job on th
     .poll(async () => ((await (await page.request.get(`/api/jobs/${jobId}`)).json()) as { status: string }).status)
     .toBe("cancelled");
 });
+
+test("scrolling past the page edge turns the page; small, zoom and reduced-motion cases", async ({ page }) => {
+  await login(page);
+  const { chapterId } = await readyChapter(page, { pagesPerSource: 3 });
+  await page.goto(chapterUrl(chapterId));
+  const canvas = page.locator(".ed-canvas");
+  await expect(canvas.locator("canvas").first()).toBeVisible();
+  const foot = pager(page);
+  await expect(foot).toContainText("Trang 1 / 3");
+
+  const box = await canvas.boundingBox();
+  if (!box) throw new Error("canvas has no box");
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+
+  // Một nấc nhỏ ở mép, hoặc Ctrl+cuộn (zoom), không đổi trang.
+  await page.mouse.wheel(0, 40);
+  await page.waitForTimeout(400);
+  await expect(foot).toContainText("Trang 1 / 3");
+  await page.keyboard.down("Control");
+  await page.mouse.wheel(0, 600);
+  await page.keyboard.up("Control");
+  await page.waitForTimeout(400);
+  await expect(foot).toContainText("Trang 1 / 3");
+
+  // Đầu chương cuộn lên: không có trang trước → ở yên.
+  await page.mouse.wheel(0, -600);
+  await page.waitForTimeout(400);
+  await expect(foot).toContainText("Trang 1 / 3");
+
+  // Cuộn xuống quá mép dưới → trang 2; quán tính ngay sau đó không lật tiếp sang trang 3.
+  await page.mouse.wheel(0, 100);
+  await page.waitForTimeout(60);
+  await page.mouse.wheel(0, 100);
+  await expect(foot).toContainText("Trang 2 / 3");
+  await page.mouse.wheel(0, 100);
+  await page.waitForTimeout(300);
+  await expect(foot).toContainText("Trang 2 / 3");
+
+  // Cuộn lên quá mép trên → về trang 1.
+  await page.waitForTimeout(700);
+  await page.mouse.wheel(0, -300);
+  await expect(foot).toContainText("Trang 1 / 3");
+
+  // Giảm chuyển động: vẫn đổi trang (tức thì).
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.waitForTimeout(1000);
+  await page.mouse.wheel(0, 300);
+  await expect(foot).toContainText("Trang 2 / 3");
+});

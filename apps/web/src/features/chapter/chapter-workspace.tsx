@@ -200,6 +200,14 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
     },
     [session.session, setError],
   );
+  /** Cuộn quá mép page: như pager nhưng cho canvas đợi xong để đặt khung nhìn + hiệu ứng. */
+  const activateAwait = useCallback(
+    (id: string) => {
+      setError(null);
+      return session.session.activate(id);
+    },
+    [session.session, setError],
+  );
   const go = useCallback(
     (id: string | undefined) => {
       if (!id) return;
@@ -1154,6 +1162,7 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
                 ocrPending={ocr.pending}
                 onOcr={onOcr}
                 onImageError={setImageError}
+                onActivate={activateAwait}
               />
             ) : (
               <div className="ed-canvas ed-loading">

@@ -9,7 +9,8 @@
  * 100%), căn giữa ngang; đã tự zoom thì giữ zoom. Page đang chạy AI (`processing`) hiện ảnh gốc + nhãn trạng thái,
  * không vẽ chữ.
  *
- * Cuộn = cuộn trong page; Ctrl/Cmd+cuộn = zoom quanh con trỏ; Space giữ (hoặc chuột giữa) + kéo = kéo canvas.
+ * Cuộn = cuộn trong page; cuộn tiếp khi đã ở mép dưới/trên = sang trang sau/trước (`wheel-page-flip.ts`, trượt nhẹ
+ * ~200ms, tắt khi `prefers-reduced-motion`; xuống thì vào đầu trang mới, lên thì vào cuối trang mới); Ctrl/Cmd+cuộn = zoom quanh con trỏ; Space giữ (hoặc chuột giữa) + kéo = kéo canvas.
  * Sửa chữ = textarea HTML phủ lên box.
  */
 import type Konva from "konva";
@@ -19,8 +20,9 @@ import { addBox, editText, newTextBox } from "../actions.ts";
 import { chapterStore, effectiveMode, useChapterStore } from "../chapter-store.ts";
 import { canvasFont, type FontKit } from "../fonts.ts";
 import { lineStep } from "../measure.ts";
-import { clampView, contentBox, FIT_EDGE, fitScale, pageStartView, screenToPage } from "../page-layout.ts";
+import { clampView, contentBox, EDGE, FIT_EDGE, fitScale, pageStartView, screenToPage } from "../page-layout.ts";
 import { editorStore, useEditor, type View } from "../store.ts";
+import { type FlipState, initialFlip, stepFlip } from "../wheel-page-flip.ts";
 import { MaskLayer } from "./MaskLayer.tsx";
 import { OcrOverlay, type PageRect } from "./OcrSelect.tsx";
 import { PageSlot, type SlotImages, type SlotProcessing } from "./PageSlot.tsx";
@@ -52,6 +54,8 @@ export const ChapterCanvas = memo(function ChapterCanvas(props: {
   ocrPending: PageRect[];
   onOcr(r: PageRect): void;
   onImageError(msg: string | null): void;
+  /** Đổi page active như pager (lưu page cũ trước); resolve khi xong. */
+  onActivate(pageId: string): Promise<void>;
 }) {
   const { kit } = props;
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -72,6 +76,8 @@ export const ChapterCanvas = memo(function ChapterCanvas(props: {
     from: { x: number; y: number };
   } | null>(null);
   const [fitted, setFitted] = useState(false);
+  const flip = useRef<FlipState>(initialFlip);
+  const flipping = useRef(false);
   /** Khung nhìn do lần vừa khung gần nhất đặt; khung nhìn hiện tại khác nó = người dùng đã cuộn/zoom/đổi trang. */
   const lastFit = useRef<View | null>(null);
 
@@ -160,9 +166,58 @@ export const ChapterCanvas = memo(function ChapterCanvas(props: {
   /** Toạ độ màn hình → toạ độ trong page active. */
   const toPage = (p: { x: number; y: number }) => screenToPage(p, view);
 
+  /** Sang trang kế/trước theo hướng cuộn; hiệu ứng trượt ngắn sau khi page mới đã vào. */
+  const flipTo = async (dir: 1 | -1) => {
+    const list = chapterStore.getState().pages;
+    const from = list.findIndex((p) => p.id === editorStore.getState().pageId);
+    const target = list[from + dir];
+    if (!target || flipping.current) return;
+    flipping.current = true;
+    try {
+      await props.onActivate(target.id);
+      const cs = chapterStore.getState();
+      if (cs.activePageId !== target.id) return; // đổi trang không thành (lỗi lưu…) — ở lại
+      // Lên: vào cuối page mới (đọc webtoon ngược); kẹp view đưa y về mép dưới.
+      if (dir < 0) {
+        const v = editorStore.getState().view;
+        const c = contentBox({ w: target.width, h: target.height }, cs.viewMode === "split");
+        editorStore.getState().setView(clampView({ ...v, y: Number.NEGATIVE_INFINITY }, c, cs.box, c.x));
+      }
+      if (!matchMedia("(prefers-reduced-motion: reduce)").matches)
+        wrapRef.current?.animate(
+          [
+            { opacity: 0.2, transform: `translateY(${dir * 28}px)` },
+            { opacity: 1, transform: "none" },
+          ],
+          { duration: 200, easing: "ease-out" },
+        );
+    } finally {
+      flipping.current = false;
+    }
+  };
+
   const onWheel = (e: Konva.KonvaEventObject<WheelEvent>) => {
     e.evt.preventDefault();
     const { deltaX, deltaY, ctrlKey, metaKey, shiftKey } = e.evt;
+    if (!gesture.current && !editorStore.getState().editing) {
+      const ph = content.h * view.scale;
+      const fits = ph + 2 * EDGE <= size.h;
+      const idx = pages.findIndex((p) => p.id === activeId);
+      const r = stepFlip(flip.current, {
+        t: e.evt.timeStamp,
+        deltaX,
+        deltaY,
+        deltaMode: e.evt.deltaMode,
+        modified: ctrlKey || metaKey || shiftKey,
+        atTop: fits || view.y >= EDGE - 0.5,
+        atBottom: fits || view.y <= size.h - ph - EDGE + 0.5,
+        hasPrev: idx > 0,
+        hasNext: idx >= 0 && idx < pages.length - 1,
+        frameH: size.h,
+      });
+      flip.current = r.state;
+      if (r.flip) return void flipTo(r.flip);
+    }
     if (ctrlKey || metaKey) {
       chapterStore.getState().setZoomed(true);
       const p = e.target.getStage()?.getPointerPosition() ?? { x: size.w / 2, y: size.h / 2 };
