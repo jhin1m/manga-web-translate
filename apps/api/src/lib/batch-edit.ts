@@ -12,7 +12,7 @@
 import { isDeepStrictEqual } from "node:util";
 import { pageStateHistory, pageStates, pages, type Scoped } from "@mtl/db";
 import type { PageState } from "@mtl/shared";
-import { and, eq, inArray, type SQL } from "drizzle-orm";
+import { and, eq, inArray, type SQL, sql } from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
 import { v7 as uuidv7 } from "uuid";
 import { pruneHistory } from "../routes/page-state.ts";
@@ -149,21 +149,16 @@ export async function undoBatch(
     // Page "đã sửa tiếp" khi nội dung hiện tại khác nội dung lượt đã ghi (state ở version h.version+1). Version tăng mà nội
     // dung không đổi (VD hoàn tác lượt sau rồi mới hoàn tác lượt này, hay sửa rồi Cmd+Z đúng sửa đó) vẫn khôi phục được.
     const moved = hist.filter((h) => cur.get(h.pageId)?.version !== h.version + 1);
-    // Chỉ lấy đúng các bản ghi (page, version h.version+1) cần so — không đọc cả lịch sử (tới 50 state/page).
+    // Chỉ lấy đúng các cặp (page, version h.version+1) cần so (row-value IN trên index (page_id, version)) — không đọc
+    // cả lịch sử (tới 50 state/page), cũng không lấy chéo mọi version của mọi page.
     const wrote = new Map(
       (moved.length
         ? await tx.select(
             pageStateHistory,
-            and(
-              inArray(
-                pageStateHistory.pageId,
-                moved.map((h) => h.pageId),
-              ),
-              inArray(
-                pageStateHistory.version,
-                moved.map((h) => h.version + 1),
-              ),
-            ) as SQL,
+            sql`(${pageStateHistory.pageId}, ${pageStateHistory.version}) in (${sql.join(
+              moved.map((h) => sql`(${h.pageId}::uuid, ${h.version + 1}::bigint)`),
+              sql`, `,
+            )})`,
           )
         : []
       ).map((w) => [`${w.pageId}:${w.version}`, w.state]),
