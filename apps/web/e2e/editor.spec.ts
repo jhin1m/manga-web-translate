@@ -1035,7 +1035,10 @@ test("scrolling past the page edge turns the page; small, zoom, drag and reduced
   if (!box) throw new Error("canvas has no box");
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
 
-  // Trang cao hơn khung ở mức vừa khung (cuộn được ~vài chục px): cuộn hết cỡ tới mép dưới trước.
+  // Mức 100%: trang cao hơn khung nên cuộn được; cuộn hết cỡ tới mép dưới trước (ở "Vừa khung" trang nằm trọn
+  // khung nên đổi trang ngay, xem test "a fitted page" bên dưới).
+  await page.getByRole("button", { name: "100%", exact: true }).click();
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
   await page.mouse.wheel(0, 200);
   await page.waitForTimeout(200);
   await expect(foot).toContainText("Trang 1 / 3");
@@ -1052,7 +1055,7 @@ test("scrolling past the page edge turns the page; small, zoom, drag and reduced
   await page.keyboard.up("Control");
   await page.waitForTimeout(400);
   await expect(foot).toContainText("Trang 1 / 3");
-  await page.getByRole("button", { name: "Vừa khung" }).click();
+  await page.getByRole("button", { name: "100%", exact: true }).click();
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
   await page.mouse.wheel(0, 200);
   await page.waitForTimeout(400);
@@ -1109,4 +1112,50 @@ test("scrolling past the page edge turns the page; small, zoom, drag and reduced
   await page.waitForTimeout(1000);
   await page.mouse.wheel(0, 300);
   await expect(foot).toContainText("Trang 2 / 3");
+});
+
+test("a page fitted with Vừa khung counts as fitting: one wheel notch does not move the view, two notches turn the page", async ({
+  page,
+}) => {
+  await login(page);
+  const { chapterId } = await readyChapter(page, { pagesPerSource: 3 });
+  await page.goto(chapterUrl(chapterId));
+  const canvas = page.locator(".ed-canvas");
+  await expect(canvas.locator("canvas").first()).toBeVisible();
+  const foot = pager(page);
+  await expect(foot).toContainText("Trang 1 / 3");
+  const fit = page.getByRole("button", { name: "Vừa khung", exact: true });
+  await expect(fit).toHaveAttribute("aria-pressed", "true");
+  const box = await canvas.boundingBox();
+  if (!box) throw new Error("canvas has no box");
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+
+  const before = await viewOf(page);
+  // Trang vừa khung với lề FIT_EDGE nhưng chưa với lề EDGE: vẫn phải coi là nằm trọn khung.
+  const pageH = await page.evaluate(async () => {
+    const m = await import(/* @vite-ignore */ "/src/features/editor/store.ts");
+    const s = m.editorStore.getState();
+    return (s.doc ? 1000 : 0) * s.view.scale;
+  });
+  expect(pageH + 2 * 16).toBeLessThanOrEqual(box.height + 0.5);
+  expect(pageH + 2 * 40).toBeGreaterThan(box.height);
+
+  // Một nấc (100px < ngưỡng 160): không đổi trang, không xê dịch khung nhìn.
+  await page.mouse.wheel(0, 100);
+  await page.waitForTimeout(100); // < 300ms: nấc kế vẫn cộng dồn
+  await expect(foot).toContainText("Trang 1 / 3");
+  expect(await viewOf(page)).toEqual(before);
+  // Nấc thứ hai cộng dồn qua ngưỡng → trang sau.
+  await page.mouse.wheel(0, 100);
+  await expect(foot).toContainText("Trang 2 / 3");
+
+  // Cuộn lên cũng đúng 2 nấc, và nấc đầu không dịch khung nhìn.
+  await page.waitForTimeout(1800);
+  const at2 = await viewOf(page);
+  await page.mouse.wheel(0, -100);
+  await page.waitForTimeout(100); // < 300ms: nấc kế vẫn cộng dồn
+  await expect(foot).toContainText("Trang 2 / 3");
+  expect(await viewOf(page)).toEqual(at2);
+  await page.mouse.wheel(0, -100);
+  await expect(foot).toContainText("Trang 1 / 3");
 });

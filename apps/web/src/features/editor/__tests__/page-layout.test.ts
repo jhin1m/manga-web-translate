@@ -6,6 +6,7 @@ import {
   FIT_EDGE,
   FIT_HEIGHT_MIN,
   fitScale,
+  fitsAxis,
   pageStartView,
   SPLIT_GAP,
 } from "../page-layout.ts";
@@ -89,6 +90,18 @@ describe("page layout", () => {
     const v = clampView({ scale: 1, x: 999, y: -99_999 }, { w: 800, h: 12_000 }, { w: 1200, h: 800 });
     expect(v.x).toBe(200);
     expect(v.y).toBe(800 - 12_000 - 40);
+  });
+
+  it("a page fitted with FIT_EDGE margins is pinned: any wheel offset clamps back to the fit view", () => {
+    const box = { w: 1170, h: 900 };
+    const page = { w: 954, h: 1500 };
+    const scale = fitScale(page, page, box);
+    const fit = pageStartView(page, false, box);
+    expect(fitsAxis(page.h * scale, box.h)).toBe(true);
+    expect(fit.y).toBeCloseTo(FIT_EDGE);
+    for (const y of [-500, -8, 0, 40, 500]) expect(clampView({ ...fit, y }, page, box).y).toBeCloseTo(fit.y);
+    // Không vừa với lề FIT_EDGE (cao hơn 1px) thì vẫn cuộn được.
+    expect(fitsAxis(box.h - 2 * FIT_EDGE + 1, box.h)).toBe(false);
   });
 
   it("split view: original column sits left of the strip, clamping keeps both columns in view", () => {

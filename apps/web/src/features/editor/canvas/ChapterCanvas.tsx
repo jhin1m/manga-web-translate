@@ -20,7 +20,16 @@ import { addBox, editText, newTextBox } from "../actions.ts";
 import { chapterStore, effectiveMode, useChapterStore } from "../chapter-store.ts";
 import { canvasFont, type FontKit } from "../fonts.ts";
 import { lineStep, verticalOffset } from "../measure.ts";
-import { clampView, contentBox, EDGE, FIT_EDGE, fitScale, pageStartView, screenToPage } from "../page-layout.ts";
+import {
+  clampView,
+  contentBox,
+  EDGE,
+  FIT_EDGE,
+  fitScale,
+  fitsAxis,
+  pageStartView,
+  screenToPage,
+} from "../page-layout.ts";
 import { editorStore, useEditor, type View } from "../store.ts";
 import { type FlipState, initialFlip, stepFlip } from "../wheel-page-flip.ts";
 import { MaskLayer } from "./MaskLayer.tsx";
@@ -204,7 +213,7 @@ export const ChapterCanvas = memo(function ChapterCanvas(props: {
     const view = editorStore.getState().view;
     if (!gesture.current && !editorStore.getState().editing) {
       const ph = content.h * view.scale;
-      const fits = ph + 2 * EDGE <= size.h;
+      const fits = fitsAxis(ph, size.h);
       const idx = pages.findIndex((p) => p.id === activeId);
       const r = stepFlip(flip.current, {
         t: e.evt.timeStamp,

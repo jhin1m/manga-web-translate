@@ -28,15 +28,25 @@ export const contentBox = (page: Size, split: boolean): Size & { x: number } =>
   split ? { x: -(page.w + SPLIT_GAP), w: 2 * page.w + SPLIT_GAP, h: page.h } : { x: 0, ...page };
 
 /**
+ * Nội dung `len` (px màn hình) có nằm trọn trong chiều `box` không: lề `FIT_EDGE` mỗi phía đủ (đúng mức "Vừa khung"),
+ * dung sai 0,5px cho số thực. Dùng chung cho căn giữa trong `clampView` và kiểm "vừa khung" khi cuộn quá mép.
+ */
+export const fitsAxis = (len: number, box: number) => len + 2 * FIT_EDGE <= box + 0.5;
+
+/** Một chiều: vừa với lề `EDGE` → ghim `EDGE`/căn giữa; chỉ vừa với `FIT_EDGE` → căn giữa; còn lại kẹp trong tầm cuộn. */
+const clampAxis = (pos: number, len: number, box: number, centered: boolean) =>
+  centered ? (box - len) / 2 : Math.min(EDGE, Math.max(box - len - EDGE, pos));
+
+/**
  * Giữ nội dung (rộng `content.w`, mép trái tại `x0` toạ độ page) trong tầm: hẹp hơn khung → căn giữa ngang; không
- * cuộn quá đầu/cuối page.
+ * cuộn quá đầu/cuối page. Page vừa khung (lề `FIT_EDGE`) coi là nằm trọn: đứng yên giữa khung, không cuộn được.
  */
 export function clampView(v: View, content: Size, box: Size, x0 = 0): View {
   const pw = content.w * v.scale;
   const ph = content.h * v.scale;
   const left = v.x + x0 * v.scale;
-  const l = pw + 2 * EDGE <= box.w ? (box.w - pw) / 2 : Math.min(EDGE, Math.max(box.w - pw - EDGE, left));
-  const y = ph + 2 * EDGE <= box.h ? EDGE : Math.min(EDGE, Math.max(box.h - ph - EDGE, v.y));
+  const l = clampAxis(left, pw, box.w, fitsAxis(pw, box.w));
+  const y = ph + 2 * EDGE <= box.h ? EDGE : clampAxis(v.y, ph, box.h, fitsAxis(ph, box.h));
   return { scale: v.scale, x: l - x0 * v.scale, y };
 }
 
