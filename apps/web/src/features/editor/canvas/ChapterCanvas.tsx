@@ -13,7 +13,7 @@
  * ~200ms, tắt khi `prefers-reduced-motion`; xuống thì vào đầu trang mới, lên thì vào cuối trang mới); Ctrl/Cmd+cuộn = zoom quanh con trỏ; Space giữ (hoặc chuột giữa) + kéo = kéo canvas.
  * Sửa chữ = textarea HTML phủ lên box.
  */
-import type Konva from "konva";
+import Konva from "konva";
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { Stage as KStage, Layer } from "react-konva";
 import { addBox, editText, newTextBox } from "../actions.ts";
@@ -79,8 +79,6 @@ export const ChapterCanvas = memo(function ChapterCanvas(props: {
   const [fitted, setFitted] = useState(false);
   const flip = useRef<FlipState>(initialFlip);
   const flipping = useRef(false);
-  /** Con trỏ đang nhấn trên Stage (kéo box, đổi cỡ, kéo canvas, vẽ) — `wheel.buttons` không phải trình duyệt nào cũng điền. */
-  const held = useRef(false);
   /** Khung nhìn do lần vừa khung gần nhất đặt; khung nhìn hiện tại khác nó = người dùng đã cuộn/zoom/đổi trang. */
   const lastFit = useRef<View | null>(null);
 
@@ -219,8 +217,9 @@ export const ChapterCanvas = memo(function ChapterCanvas(props: {
         atBottom: fits || view.y <= size.h - ph - EDGE + 0.5,
         hasPrev: idx > 0,
         hasNext: idx >= 0 && idx < pages.length - 1,
-        // Giữ nút chuột = đang kéo/đổi cỡ box hoặc kéo canvas: không đổi trang (id box lặp giữa các page).
-        busy: held.current || e.evt.buttons !== 0,
+        // Giữ nút chuột / đang kéo hoặc đổi cỡ box: không đổi trang (id box lặp giữa các page). Chỉ đọc trạng thái
+        // tự reset của trình duyệt/Konva — không giữ cờ riêng (thả chuột ngoài Stage sẽ làm cờ kẹt).
+        busy: e.evt.buttons !== 0 || Konva.isDragging() || Konva.isTransforming(),
         frameH: size.h,
       });
       flip.current = r.state;
@@ -238,7 +237,6 @@ export const ChapterCanvas = memo(function ChapterCanvas(props: {
   };
 
   const onDown = (e: Konva.KonvaEventObject<PointerEvent>) => {
-    held.current = true;
     const stage = e.target.getStage();
     const p = stage?.getPointerPosition();
     if (!stage || !p) return;
@@ -291,7 +289,6 @@ export const ChapterCanvas = memo(function ChapterCanvas(props: {
   };
 
   const onUp = () => {
-    held.current = false;
     const g = gesture.current;
     gesture.current = null;
     if (g?.kind !== "rect" || !draft || !active) return;

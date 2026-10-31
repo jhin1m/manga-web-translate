@@ -990,7 +990,41 @@ const viewOf = (page: Page) =>
 
 test("scrolling past the page edge turns the page; small, zoom, drag and reduced-motion cases", async ({ page }) => {
   await login(page);
-  const { chapterId } = await readyChapter(page, { pagesPerSource: 3 });
+  const { chapterId, pageIds } = await readyChapter(page, { pagesPerSource: 3 });
+  // Một khối lớn giữa trang 1 để kéo thử.
+  const first = (await (await page.request.get(`/api/pages/${pageIds[0]}`)).json()) as {
+    version: number;
+    state: { text_boxes: unknown[] } & Record<string, unknown>;
+  };
+  const big = {
+    id: "tb-big",
+    region_id: "t0",
+    x: 60,
+    y: 300,
+    w: 600,
+    h: 400,
+    rotation: 0,
+    text: "Xin chào",
+    lines: ["Xin chào"],
+    font_family: "PatrickHand-Regular",
+    font_size: 40,
+    line_height: 1.15,
+    pad: 4,
+    letter_spacing: 0,
+    align: "center",
+    fill: "#000000",
+    stroke: null,
+    auto_fit: false,
+    hidden: false,
+  };
+  expect((await page.request.post(`/api/chapters/${chapterId}/lock`, { headers })).ok()).toBe(true);
+  const put = await page.request.put(`/api/pages/${pageIds[0]}/state`, {
+    headers: { ...headers, "if-match": `"${first.version}"` },
+    data: { state: { ...first.state, text_boxes: [big] } },
+  });
+  expect(put.ok()).toBe(true);
+  expect((await page.request.delete(`/api/chapters/${chapterId}/lock`, { headers })).ok()).toBe(true);
+
   await page.goto(chapterUrl(chapterId));
   const canvas = page.locator(".ed-canvas");
   await expect(canvas.locator("canvas").first()).toBeVisible();
@@ -1023,30 +1057,46 @@ test("scrolling past the page edge turns the page; small, zoom, drag and reduced
   await page.mouse.wheel(0, 200);
   await page.waitForTimeout(400);
 
-  // Đang giữ nút chuột (kéo box / canvas) thì cuộn quá mép không đổi trang.
-  await page.mouse.down();
-  await page.mouse.wheel(0, 400);
-  await page.waitForTimeout(400);
-  await page.mouse.up();
-  await expect(foot).toContainText("Trang 1 / 3");
-
   // Đầu chương cuộn lên: không có trang trước → ở yên.
   await page.mouse.wheel(0, -1200);
   await page.waitForTimeout(400);
   await expect(foot).toContainText("Trang 1 / 3");
-
-  // Cuộn xuống quá mép dưới → trang 2, vào đầu trang; wheel ngay sau (quán tính) không lật tiếp và không cuộn trang mới.
   await page.mouse.wheel(0, 1200);
-  await page.waitForTimeout(500);
+  await page.waitForTimeout(400);
+
+  // Đang kéo một khối thì cuộn quá mép không đổi trang; thả chuột ngoài canvas rồi cuộn lại vẫn đổi được.
+  await expect(page.getByRole("status", { name: "Khoá chương" })).toContainText("Bạn đang giữ khoá chương");
+  const at = await page.evaluate(async () => {
+    const m = await import(/* @vite-ignore */ "/src/features/editor/store.ts");
+    const { view, doc } = m.editorStore.getState();
+    const b = doc?.text_boxes[0];
+    return b ? { x: view.x + (b.x + b.w / 2) * view.scale, y: view.y + (b.y + b.h / 2) * view.scale } : null;
+  });
+  if (!at) throw new Error("page has no text box");
+  await page.mouse.move(box.x + at.x, box.y + at.y);
+  await page.mouse.down();
+  await page.mouse.move(box.x + at.x + 20, box.y + at.y + 5, { steps: 5 });
+  await page.mouse.wheel(0, 400);
+  await page.waitForTimeout(400);
+  await expect(foot).toContainText("Trang 1 / 3");
+  await page.mouse.move(box.x + box.width / 2, 4, { steps: 5 }); // ra ngoài Stage rồi mới thả
+  await page.mouse.up();
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await expect(page.locator(".status", { hasText: "Đã lưu" })).toBeVisible({ timeout: 10_000 });
+  await page.waitForTimeout(700);
+
+  // Cuộn xuống quá mép dưới → trang 2, vào đầu trang. Hai wheel ngay sau (quán tính) gửi liền, không chờ API:
+  // không lật tiếp và không cuộn trang mới.
   await page.mouse.wheel(0, 300);
+  await page.mouse.wheel(0, 100);
+  await page.mouse.wheel(0, 100);
+  await expect(foot).toContainText("Trang 2 / 3");
+  await expect.poll(async () => (await viewOf(page)).y).toBeGreaterThan(0);
+  await page.waitForTimeout(300);
   await expect(foot).toContainText("Trang 2 / 3");
   const top = await viewOf(page);
-  await page.mouse.wheel(0, 100);
-  await page.mouse.wheel(0, 100);
-  await page.waitForTimeout(200);
-  await expect(foot).toContainText("Trang 2 / 3");
-  expect((await viewOf(page)).y).toBe(top.y);
   expect(top.y).toBeGreaterThan(0);
+  expect(top.y).toBeLessThanOrEqual(40);
 
   // Cuộn lên quá mép trên → về trang 1, vào cuối trang.
   await page.waitForTimeout(700);

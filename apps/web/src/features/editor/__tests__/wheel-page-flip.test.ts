@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   FLIP_COOLDOWN_MS,
+  FLIP_LOCK_MAX_MS,
   FLIP_PAUSE_MS,
   FLIP_THRESHOLD,
   type FlipState,
@@ -120,6 +121,26 @@ describe("stepFlip", () => {
     expect(stepFlip(st, { ...base, t: st.last + FLIP_PAUSE_MS + 1, deltaY: 10, atBottom: false }).locked).toBe(false);
     // Zoom / ngang trong lúc khoá không bị nuốt.
     expect(stepFlip(st, { ...base, t: st.last + 10, deltaY: 10, modified: true }).locked).toBe(false);
+  });
+
+  it("while locked, opposite-direction wheel scrolls (not locked) and cannot flip", () => {
+    const first = stepFlip(initialFlip, { ...base, t: 1000, deltaY: FLIP_THRESHOLD });
+    const back = stepFlip(first.state, { ...base, t: 1050, deltaY: -FLIP_THRESHOLD * 2, atTop: true });
+    expect(back.flip).toBe(0);
+    expect(back.locked).toBe(false);
+    // Vẫn khoá theo hướng cũ.
+    expect(stepFlip(back.state, { ...base, t: 1100, deltaY: 30 }).locked).toBe(true);
+  });
+
+  it("caps the lock at FLIP_LOCK_MAX_MS even if wheel events never pause", () => {
+    let st = stepFlip(initialFlip, { ...base, t: 1000, deltaY: FLIP_THRESHOLD }).state;
+    for (let t = 1100; t < 1000 + FLIP_LOCK_MAX_MS; t += 100) {
+      const r = stepFlip(st, { ...base, t, deltaY: 40 });
+      expect(r.locked).toBe(true);
+      st = r.state;
+    }
+    const after = stepFlip(st, { ...base, t: 1000 + FLIP_LOCK_MAX_MS + 50, deltaY: 40 });
+    expect(after.locked).toBe(false);
   });
 
   it("ignores horizontal-dominant wheel", () => {

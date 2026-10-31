@@ -13,6 +13,8 @@ export const FLIP_THRESHOLD = 160;
 export const FLIP_PAUSE_MS = 300;
 /** Khoá tối thiểu sau khi đổi trang. */
 export const FLIP_COOLDOWN_MS = 600;
+/** Trần tuyệt đối của khoá kể từ lần đổi — cuộn chuột liên tục không bị nuốt mãi. */
+export const FLIP_LOCK_MAX_MS = 1500;
 
 const LINE_PX = 16;
 
@@ -21,8 +23,12 @@ export type FlipState = {
   acc: number;
   /** Thời điểm sự kiện wheel tính được gần nhất. */
   last: number;
-  /** Trước mốc này không đổi trang (và quán tính còn chạy thì được gia hạn). */
+  /** Trước mốc này không đổi trang (và quán tính còn chạy thì được gia hạn, tới `lockCap`). */
   lockUntil: number;
+  /** Hướng lần đổi gần nhất; lúc khoá, cuộn ngược hướng này vẫn cuộn page nhưng không đổi trang. */
+  lockDir: 0 | 1 | -1;
+  /** Mốc khoá không thể kéo dài quá. */
+  lockCap: number;
 };
 
 export type WheelInput = {
@@ -44,7 +50,7 @@ export type WheelInput = {
   frameH: number;
 };
 
-export const initialFlip: FlipState = { acc: 0, last: Number.NEGATIVE_INFINITY, lockUntil: 0 };
+export const initialFlip: FlipState = { acc: 0, last: Number.NEGATIVE_INFINITY, lockUntil: 0, lockDir: 0, lockCap: 0 };
 
 const px = (i: WheelInput) =>
   i.deltaMode === 1 ? i.deltaY * LINE_PX : i.deltaMode === 2 ? i.deltaY * i.frameH : i.deltaY;
@@ -62,9 +68,11 @@ export function stepFlip(s: FlipState, i: WheelInput): { state: FlipState; flip:
   const idle = i.t - s.last > FLIP_PAUSE_MS;
 
   if (i.t < s.lockUntil) {
-    // Quán tính sau lần đổi: giữ khoá chừng nào wheel còn đến liên tục.
+    // Cuộn ngược hướng vừa đổi: người dùng chủ động quay lại → cuộn page bình thường, chưa cho đổi trang.
+    if (dir !== s.lockDir) return { state: s, flip: 0, locked: false };
+    // Quán tính sau lần đổi: giữ khoá chừng nào wheel còn đến liên tục, tối đa tới `lockCap`.
     return {
-      state: { acc: 0, last: i.t, lockUntil: Math.max(s.lockUntil, i.t + FLIP_PAUSE_MS) },
+      state: { ...s, acc: 0, last: i.t, lockUntil: Math.min(s.lockCap, Math.max(s.lockUntil, i.t + FLIP_PAUSE_MS)) },
       flip: 0,
       locked: true,
     };
@@ -75,6 +83,16 @@ export function stepFlip(s: FlipState, i: WheelInput): { state: FlipState; flip:
 
   const acc = idle || Math.sign(s.acc) !== dir ? dy : s.acc + dy;
   if (Math.abs(acc) >= FLIP_THRESHOLD)
-    return { state: { acc: 0, last: i.t, lockUntil: i.t + FLIP_COOLDOWN_MS }, flip: dir, locked: true };
+    return {
+      state: {
+        acc: 0,
+        last: i.t,
+        lockUntil: i.t + FLIP_COOLDOWN_MS,
+        lockDir: dir,
+        lockCap: i.t + FLIP_LOCK_MAX_MS,
+      },
+      flip: dir,
+      locked: true,
+    };
   return { state: { ...s, acc, last: i.t }, flip: 0, locked: false };
 }
