@@ -88,7 +88,15 @@ lệch bbox mực từng dòng ≤ 1px — xem `benchmarks/phase-01-results.md`)
   `contrastStroke` ở editor, cùng ngưỡng). Viền nằm ngoài glyph, có thể tràn quá `pad` ở cỡ chữ lớn — không tính vào tràn khung.
 - Thêm font: chép file vào `worker/fonts/` → `cd worker && uv run python scripts/font_glyph_check.py` (sinh manifest)
   → `pnpm --filter @mtl/web fonts:sync` (API đọc id từ manifest, web tải `/fonts/manifest.json`; không còn danh sách id riêng cần sửa)
-  → `node scripts/typeset-parity.ts`.
+  → `node scripts/typeset-parity.ts` (gate lấy mọi font trong manifest, trừ `EXCLUDED_FONTS`; mỗi font ≥ 2 box) → chạy
+  `pnpm --filter @mtl/web e2e typeset-parity`. Font vượt 1px: thêm vào `EXCLUDED_FONTS` trong `scripts/typeset-parity.ts`
+  (kèm số đo) **và** vào bảng dưới; không sửa code layout riêng cho một font.
+
+**Font chưa đạt gate** (hiện trong editor nhưng export có thể lệch quá 1px so với canvas; theo dõi, chưa sửa):
+
+| Font | Lệch bbox mực tối đa | Ghi chú |
+|---|---|---|
+| `ShantellSans-Variable` | 2px | font variable; đo 2026-10-31: cả 2 box mẫu của font đều lệch 2px (advance Konva ≠ Pillow) |
 
 ## Editor (Phase 5)
 

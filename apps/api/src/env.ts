@@ -36,7 +36,7 @@ const Env = z.object({
    * 0.4.2: export pages[].skipped. 0.5.1: translate/export inputs.fonts (font tuỳ chỉnh của người dùng).
    * 0.6.0: payload có cài đặt pipeline (page.prepare.pipeline, page.reinpaint.inpaint, page.ocr_region.ocr_engine).
    * 0.7.0: chapter.translate theo lô — payload/result `carry` (ngữ cảnh chuyền giữa các job lô).
-   * 0.7.1: TextBox.valign — worker cũ export box căn giữa dọc thành căn trên, lệch với editor.
+   * 0.7.1: TextBox.valign — schema input export của worker cũ (additionalProperties: false) từ chối state có valign → job export fail.
    */
   MIN_PIPELINE_VERSION: z
     .string()

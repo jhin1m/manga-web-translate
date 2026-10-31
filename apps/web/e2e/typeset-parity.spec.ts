@@ -1,5 +1,5 @@
 /**
- * Gate parity Konva ↔ render.py: vẽ từng dòng của 10 page_state golden bằng CHÍNH `drawBoxText` + `loadFonts` của
+ * Gate parity Konva ↔ render.py: vẽ từng dòng của các page_state golden (mọi font trong manifest trừ font loại ở scripts/typeset-parity.ts) bằng CHÍNH `drawBoxText` + `loadFonts` của
  * editor (nạp qua Vite dev) trên Konva canvas pixelRatio 1, đo bbox pixel alpha ≥ 128 và so từng cạnh với bbox
  * mực do render.py đo (fixtures/typeset-parity.json, sinh bởi scripts/typeset-parity.ts). Ngưỡng ≤ 1px mọi dòng.
  */

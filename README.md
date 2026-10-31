@@ -137,8 +137,8 @@ Mọi test tự động hiện dùng worker giả lập; chưa có số đo vớ
       `0011_pages_skip_changed_at`, `0012_workspace_fonts`, `0013_workspace_pipeline_settings`,
       `0014_proofread_suggestions`, `0015_single_user_guard_worker_kind`, `0016_drop_workspaces`,
       `0017_user_ownership`, `0018_auth_error_class`, `0019_jobs_progress_counts`, `0020_translate_chain`) — 0015 từ chối chạy nếu còn dữ liệu workspace nên **bắt buộc reset DB + MinIO và tạo lại
-      token worker** theo "Checklist release single-user-accounts" ở `docs/deployment-guide.md`; worker Mac/Modal phải lên pipeline **0.7.0** (dịch theo lô, `carry`; gồm cài đặt pipeline,
-      OCR local, AI hiệu đính của 0.6.0) **trước** khi deploy API (`MIN_PIPELINE_VERSION` 0.7.0, worker cũ nhận 426), không thì
+      token worker** theo "Checklist release single-user-accounts" ở `docs/deployment-guide.md`; worker Mac/Modal phải lên pipeline **0.7.1** (căn giữa dọc `valign`; gồm dịch theo lô `carry` của 0.7.0, cài đặt pipeline,
+      OCR local, AI hiệu đính của 0.6.0) **trước** khi deploy API (`MIN_PIPELINE_VERSION` 0.7.1, worker cũ nhận 426), không thì
       hàng đợi dừng; rollback về 0.6.0 phải huỷ job dịch còn chờ có `carry` trước; chương manga đang cắt trang / xoá chữ lúc
       deploy sẽ dừng ở "Chờ dịch" (bấm "Dịch chương" để tiếp) — xem "Checklist nâng cấp lên pipeline 0.7.0" ở `docs/deployment-guide.md` (API deploy trước hoặc cùng web: web mới cần `ocr_ready` trong `/progress`); tải model optional mới
       (`fetch_models.py`) vào volume Modal; VPS cần dựng được addon `re2` — xem checklist ở

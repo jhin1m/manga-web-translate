@@ -144,6 +144,16 @@ describe("editor actions", () => {
     expect(s2.text_boxes.map((b) => b.valign)).toEqual(["top", "middle"]);
   });
 
+  it("setStyle with the valign a box already resolves to writes nothing (old boxes stay unchanged)", () => {
+    const s0 = doc(2);
+    expect(change(s0, setStyleMany(["t0", "t1"], { valign: "top" }, layout)).patches).toEqual([]);
+    const withAlign = run(s0, setStyle("t0", { valign: "top", align: "left" }, layout));
+    expect(withAlign.text_boxes[0]).toMatchObject({ align: "left" });
+    expect(withAlign.text_boxes[0]).not.toHaveProperty("valign");
+    const mid = run(s0, setStyle("t0", { valign: "middle" }, layout));
+    expect(change(mid, setStyle("t0", { valign: "middle" }, layout)).patches).toEqual([]);
+  });
+
   it("setStyleMany styles several boxes in one change; refreshRegionFromOcr keeps ids and box geometry", () => {
     const s0 = doc(2);
     const s1 = run(s0, setStyleMany(["t0", "t1"], { align: "left", fill: "#ff0000" }, layout));

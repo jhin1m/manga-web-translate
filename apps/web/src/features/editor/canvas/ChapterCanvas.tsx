@@ -26,6 +26,7 @@ import { type FlipState, initialFlip, stepFlip } from "../wheel-page-flip.ts";
 import { MaskLayer } from "./MaskLayer.tsx";
 import { OcrOverlay, type PageRect } from "./OcrSelect.tsx";
 import { PageSlot, type SlotImages, type SlotProcessing } from "./PageSlot.tsx";
+import { drawnBox } from "./TextBoxNode.tsx";
 import { TextLayer } from "./TextLayer.tsx";
 
 const MIN_SCALE = 0.1;
@@ -409,9 +410,12 @@ function TextEditOverlay({ kit }: { kit: FontKit }) {
         transform: `rotate(${box.rotation}deg)`,
         font: canvasFont(box.font_family, box.font_size * k),
         lineHeight: `${lineStep(kit.metrics(box.font_family), box.font_size, box.line_height) * k}px`,
-        padding: box.pad * k,
-        // Textarea neo mép trên; căn giữa dọc = đẩy chữ xuống đúng dy như linePlacements.
-        paddingTop: (box.pad + verticalOffset(box, kit.metrics(box.font_family))) * k,
+        // Từng cạnh riêng (không dùng shorthand `padding`): khi chỉ `pad` đổi, React không để paddingTop bị ghi đè.
+        // Textarea neo mép trên; căn giữa dọc = đẩy chữ xuống đúng dy như linePlacements của box canvas đang vẽ.
+        paddingTop: (box.pad + verticalOffset(drawnBox(box, kit), kit.metrics(box.font_family))) * k,
+        paddingRight: box.pad * k,
+        paddingBottom: box.pad * k,
+        paddingLeft: box.pad * k,
         textAlign: box.align,
         color: box.fill,
       }}

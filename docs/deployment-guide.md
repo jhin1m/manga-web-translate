@@ -185,8 +185,12 @@ dịch chương theo chuỗi job lô, tiến độ từng trang, drawer Xuất m
    `UPDATE chapters c SET status='prepared', run_target=NULL WHERE status='processing' AND NOT EXISTS (SELECT 1 FROM jobs j WHERE j.chapter_id=c.id AND j.status IN ('queued','running','paused_budget'));`
    rồi người dùng bấm dịch lại (trang `ready` giữ nguyên).
 
-**Pipeline 0.7.1 (căn giữa dọc `valign`)**: worker lên 0.7.1 trước API (`MIN_PIPELINE_VERSION` mặc định 0.7.1). Worker cũ không
-đọc `valign` nên export box căn giữa thành căn trên, lệch với editor; không có migration, box lưu từ trước (không có trường) vẽ như cũ.
+**Pipeline 0.7.1 (căn giữa dọc `valign`)**: worker lên 0.7.1 trước API (`MIN_PIPELINE_VERSION` mặc định 0.7.1). Worker cũ **không**
+bỏ qua `valign` mà fail job export: input được kiểm bằng schema `additionalProperties: false` (`runner.py`), nên mọi chương có
+box tạo sau khi deploy đều không xuất được; bởi vậy API từ chối worker < 0.7.1 bằng 426. Không có migration; box lưu từ trước
+(không có trường) vẽ như cũ, và worker 0.7.1 đọc được dữ liệu không có `valign`. Rollback: giữ worker ≥ 0.7.1 (đừng hạ
+`MIN_PIPELINE_VERSION`); nếu buộc phải quay lại worker 0.7.0, trước đó xoá `valign` khỏi `page_states.state`, `page_states.ai_state`
+và `page_state_history.state` (SQL jsonb: `UPDATE ... SET state = jsonb_set(state, '{text_boxes}', (SELECT coalesce(jsonb_agg(b - 'valign'), '[]') FROM jsonb_array_elements(state->'text_boxes') b))`).
 
 Log: `journalctl -u mtl-api -o cat` (JSON mỗi request: method, path, status, ms — không query/header/body),
 `journalctl -u mtl-jobs`.

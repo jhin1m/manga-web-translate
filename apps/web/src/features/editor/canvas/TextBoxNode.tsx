@@ -21,11 +21,17 @@ type Props = {
   onEdit(id: string): void;
 };
 
+/**
+ * Box như canvas vẽ: box auto chưa có lines (chưa qua editor) được wrap bằng typesetter — chỉ hiển thị, không ghi state;
+ * worker export làm y hệt (docs/typeset-layout-contract.md). Ô sửa chữ dùng cùng box này để chữ không nhảy khi mở.
+ */
+export function drawnBox(box: TextBox, kit: FontKit): TextBox {
+  return box.lines.length === 0 && box.text.trim() !== "" ? { ...box, ...kit.layout(box) } : box;
+}
+
 /** Vẽ chữ của box vào context gốc = góc trái-trên box (chưa xoay). Dùng chung cho Shape và test parity. */
 export function drawBoxText(ctx: Konva.Context, box: TextBox, kit: FontKit) {
-  // Box auto chưa có lines (chưa qua editor): wrap bằng typesetter rồi vẽ — chỉ hiển thị, không ghi state;
-  // worker export làm y hệt (docs/typeset-layout-contract.md).
-  const drawn = box.lines.length === 0 && box.text.trim() !== "" ? { ...box, ...kit.layout(box) } : box;
+  const drawn = drawnBox(box, kit);
   const lines = linePlacements(drawn, kit.metrics(box.font_family), kit.measure);
   ctx.setAttr("font", canvasFont(box.font_family, drawn.font_size));
   ctx.setAttr("textBaseline", "alphabetic");

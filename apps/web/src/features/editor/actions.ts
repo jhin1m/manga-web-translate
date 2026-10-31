@@ -61,7 +61,10 @@ const LAYOUT_FIELDS = new Set<keyof BoxStyle>(["font_family", "font_size", "line
 export const setStyle = (id: string, style: BoxStyle, layout: Layout) => (s: S) => {
   const b = boxOf(s, id);
   if (!b) return;
-  Object.assign(b, style);
+  const { valign, ...rest } = style;
+  Object.assign(b, rest);
+  // Box lưu từ trước không có valign (= "top"): ghi lại cùng giá trị chỉ làm đổi dữ liệu mà không đổi gì nhìn thấy.
+  if (valign && (b.valign ?? "top") !== valign) b.valign = valign;
   if ((Object.keys(style) as (keyof BoxStyle)[]).some((k) => LAYOUT_FIELDS.has(k))) relayout(b, layout);
 };
 

@@ -1,5 +1,5 @@
 /**
- * Sinh fixture parity Konva ↔ render.py: 10 page_state golden tất định (nền trơn, không ảnh có bản quyền) +
+ * Sinh fixture parity Konva ↔ render.py: N page_state golden tất định (nền trơn, không ảnh có bản quyền) +
  * bbox mực từng dòng do render.py đo. Ghi apps/web/e2e/fixtures/typeset-parity.json (commit).
  *   node scripts/typeset-parity.ts           ghi lại fixture
  *   node scripts/typeset-parity.ts --check   sinh lại và báo lệch với fixture đã commit (exit 1)
@@ -11,21 +11,19 @@ import { fileURLToPath } from "node:url";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
 const FIXTURE = fileURLToPath(new URL("../apps/web/e2e/fixtures/typeset-parity.json", import.meta.url));
+const manifest = JSON.parse(readFileSync(`${root}worker/fonts/manifest.json`, "utf8")) as {
+  fonts: Record<string, unknown>;
+};
 /**
- * Bộ font cố định của gate (đã kiểm ≤ 1px). Không đọc manifest: thêm font vào worker/fonts làm đổi font gán cho từng box
- * và fixture trôi theo; font mới (nhất là variable) cần được đo riêng rồi mới thêm vào đây.
+ * Font bị loại khỏi gate vì lệch Konva ↔ render.py quá 1px (kèm số đo). Danh sách này phải khớp bảng "Font chưa đạt
+ * gate" ở docs/typeset-layout-contract.md; font mới trong manifest tự vào gate, không đạt thì ghi vào đây.
  */
-const FONTS = [
-  "Anton-Regular",
-  "Baloo2-Variable",
-  "Bangers-Regular",
-  "BeVietnamPro-Bold",
-  "BeVietnamPro-Regular",
-  "Itim-Regular",
-  "Lexend-Variable",
-  "Mali-Regular",
-  "PatrickHand-Regular",
-];
+const EXCLUDED_FONTS: Record<string, string> = {
+  "ShantellSans-Variable": "lệch tối đa 2px (cả 2 box mẫu; font variable, advance Konva ≠ Pillow)",
+};
+const FONTS = Object.keys(manifest.fonts)
+  .filter((f) => !(f in EXCLUDED_FONTS))
+  .sort();
 
 const SAMPLES: string[][] = [
   ["Xin chào!"],
@@ -49,14 +47,14 @@ const WRAP_TEXTS = [
 const ALIGNS = ["center", "left", "right"] as const;
 const STROKES = [0, 1.5, 2, 3.5];
 const BOXES_PER_PAGE = 4;
-const PAGES = 10;
+/** Mỗi font ≥ 2 box (cỡ/căn/viền khác nhau); tối thiểu 10 page. */
+const PAGES = Math.max(10, Math.ceil((2 * FONTS.length) / BOXES_PER_PAGE));
 
 type Box = ReturnType<typeof plainBox>;
 
-const makeBox = (i: number, pageIdx: number, slot: number): Box =>
-  i % 5 === 4 ? wrapBox(i, pageIdx, slot) : plainBox(i, pageIdx, slot);
+const makeBox = (i: number, slot: number): Box => (i % 5 === 4 ? wrapBox(i, slot) : plainBox(i, slot));
 
-function plainBox(i: number, pageIdx: number, slot: number) {
+function plainBox(i: number, slot: number) {
   const sample = SAMPLES[i % SAMPLES.length] as string[];
   // Box tràn dọc (valign middle kẹp dy = 0): 1 dòng trong khung thấp hơn khối chữ — tràn < lề cửa sổ đo.
   const overflow = i % 6 === 5;
@@ -73,7 +71,7 @@ function plainBox(i: number, pageIdx: number, slot: number) {
     rotation: 0,
     text: lines.join(" ").normalize("NFC"),
     lines: lines.map((l) => l.normalize("NFC")),
-    font_family: FONTS[(i + pageIdx) % FONTS.length] as string,
+    font_family: FONTS[i % FONTS.length] as string,
     font_size: size,
     line_height: [1.0, 1.15, 1.3][i % 3] as number,
     pad: 4 + (i % 3),
@@ -89,8 +87,8 @@ function plainBox(i: number, pageIdx: number, slot: number) {
 }
 
 /** Box thiếu lines: nửa auto_fit (dò cỡ), nửa giữ cỡ (wrap theo bề rộng). */
-function wrapBox(i: number, pageIdx: number, slot: number): Box {
-  const base = plainBox(i + 1, pageIdx, slot);
+function wrapBox(i: number, slot: number): Box {
+  const base = plainBox(i + 1, slot);
   const autoFit = i % 10 === 4;
   return {
     ...base,
@@ -109,7 +107,7 @@ function buildPages() {
   let n = 0;
   for (let p = 0; p < PAGES; p++) {
     const boxes: Box[] = [];
-    for (let s = 0; s < BOXES_PER_PAGE; s++) boxes.push(makeBox(n++, p, s));
+    for (let s = 0; s < BOXES_PER_PAGE; s++) boxes.push(makeBox(n++, s));
     pages.push({
       id: `golden-${String(p).padStart(2, "0")}`,
       state: {
