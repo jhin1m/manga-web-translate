@@ -76,4 +76,10 @@ describe("resolveKey", () => {
     expect(resolveKey(down("v", { repeat: true }), sel)).toBeNull();
     expect(resolveKey(down("ArrowRight", { repeat: true }), sel)).toEqual({ type: "page", dir: 1 });
   });
+
+  it("leaves undo/redo to the browser while typing in a field (e.g. the find/replace inputs)", () => {
+    expect(resolveKey(down("z", { mod: true, inField: true }), sel)).toBeNull();
+    expect(resolveKey(down("z", { mod: true, shift: true, inField: true }), sel)).toBeNull();
+    expect(resolveKey(down("y", { mod: true, inField: true }), sel)).toBeNull();
+  });
 });

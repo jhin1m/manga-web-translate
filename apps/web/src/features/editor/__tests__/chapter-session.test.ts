@@ -107,7 +107,7 @@ function setup() {
     return { restored, local };
   };
   const session = new ChapterSession(deps);
-  return { log, errors, srv, editor, chapter, saver, queue, session, undoBatchServer };
+  return { log, errors, srv, before, editor, chapter, saver, queue, session, undoBatchServer };
 }
 
 describe("ChapterSession", () => {
@@ -493,6 +493,89 @@ describe("ChapterSession", () => {
       const t = setup();
       await applyBatch(t);
       t.session.dropBatch("batch-1");
+      expect(batchOnTop(t.editor.getState().history)).toBeNull();
+    });
+  });
+
+  describe("bulk edit applied on the server (find/replace, glossary)", () => {
+    /** Giả server áp lượt lên page `ids` rồi màn chương tải lại state vào cache (kích hoạt nạp lại page đang mở). */
+    const serverApply = (t: ReturnType<typeof setup>, ids: string[]) => {
+      const versions: Record<string, number> = {};
+      for (const id of ids) {
+        const cur = t.srv[id];
+        if (!cur) continue;
+        t.before[id] = structuredClone(cur.state);
+        const next = structuredClone(cur.state);
+        for (const b of next.text_boxes) b.align = "left";
+        t.srv[id] = { state: next, version: cur.version + 1 };
+        versions[id] = cur.version + 1;
+      }
+      const refresh = () => {
+        for (const id of ids) {
+          const e = t.srv[id];
+          if (e) t.chapter.getState().setCached(id, { state: e.state, version: e.version });
+        }
+      };
+      return { versions, refresh };
+    };
+    const open = async (t: ReturnType<typeof setup>) => {
+      t.chapter.subscribe((s, prev) => s.cache !== prev.cache && t.session.syncActive());
+      await t.session.activate("A");
+      t.editor.getState().apply(moveBox("t0", 7, 7));
+      await t.saver.flush();
+    };
+
+    it("keeps the earlier history across the reload and puts the mark last; undo then steps back the earlier edit", async () => {
+      const t = setup();
+      await open(t);
+      const a = serverApply(t, ["A", "B"]);
+      t.session.recordServerBatch("batch-1", a.versions);
+      a.refresh();
+      const s = t.editor.getState();
+      expect(s.doc?.text_boxes[0]).toMatchObject({ align: "left" });
+      expect(s.history.past).toHaveLength(2);
+      expect(batchOnTop(s.history)).toMatchObject({ id: "batch-1" });
+      t.undoBatchServer();
+      expect(batchOnTop(t.editor.getState().history)).toBeNull();
+      t.editor.getState().undo();
+      expect(t.editor.getState().doc?.text_boxes[0]).toMatchObject({ x: 10 });
+    });
+
+    it("edit after the batch, then Cmd+Z the edit, then the batch: restored in place", async () => {
+      const t = setup();
+      await open(t);
+      const a = serverApply(t, ["A"]);
+      t.session.recordServerBatch("batch-1", a.versions);
+      a.refresh();
+      t.editor.getState().apply(moveBox("t0", 40, 40));
+      await t.saver.flush();
+      t.editor.getState().undo();
+      await t.saver.flush();
+      const { local } = t.undoBatchServer(["A"]);
+      expect(local).toBe(true);
+      expect(t.editor.getState().doc?.text_boxes[0]).toMatchObject({ x: 7, align: "center" });
+    });
+
+    it("a batch that skips the open page only adds a mark that does not touch the history", async () => {
+      const t = setup();
+      await open(t);
+      const a = serverApply(t, ["B"]);
+      t.session.recordServerBatch("batch-1", a.versions);
+      a.refresh();
+      expect(t.editor.getState().history.past).toHaveLength(2);
+      expect(t.editor.getState().doc?.text_boxes[0]).toMatchObject({ x: 7, align: "center" });
+      t.undoBatchServer();
+      expect(t.editor.getState().history.past).toHaveLength(1);
+    });
+
+    it("without per-page versions (older server) or with unsaved edits nothing is marked", async () => {
+      const t = setup();
+      await open(t);
+      t.session.recordServerBatch("batch-1", undefined);
+      expect(t.editor.getState().history.past).toHaveLength(1);
+      t.editor.getState().apply(moveBox("t0", 9, 9));
+      t.session.recordServerBatch("batch-2", { A: 5 });
+      expect(t.editor.getState().history.past).toHaveLength(2);
       expect(batchOnTop(t.editor.getState().history)).toBeNull();
     });
   });

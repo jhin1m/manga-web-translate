@@ -164,8 +164,15 @@ describe("find/replace", () => {
       versions: preview.versions,
     });
     expect(res.status, await res.clone().text()).toBe(200);
-    const body = (await res.json()) as { batch_id: string; pages: number; replaced: number };
+    const body = (await res.json()) as {
+      batch_id: string;
+      pages: number;
+      replaced: number;
+      versions: Record<string, number>;
+    };
     expect(body).toMatchObject({ pages: 3, replaced: 8 });
+    // Version mới của từng page đã ghi (client dựa vào đó để biết page đang mở có trong lượt).
+    expect(body.versions).toEqual(Object.fromEntries(pageIds.map((id) => [id, 4])));
     batchId = body.batch_id;
     const p2 = await stateOf(pageIds[2] as string);
     expect(p2.version).toBe(4);

@@ -84,6 +84,7 @@ export async function applyBatch<M extends { count: number }>(
       .map((p) => p.id);
     if (stale.length) throw httpError(409, { error: "preview_stale", pages: stale });
     let changed = 0;
+    const newVersions: Record<string, number> = {};
     for (const { p, r } of results) {
       const [row] = await tx.update(
         pageStates,
@@ -100,8 +101,10 @@ export async function applyBatch<M extends { count: number }>(
       });
       await pruneHistory(tx, p.id);
       changed += r.matches.reduce((n, m) => n + m.count, 0);
+      newVersions[p.id] = p.version + 1;
     }
-    return { batch_id: batchId, pages: results.length, changed };
+    // `versions` = version mới của từng page đã ghi (client biết page đang mở có trong lượt không và bản nạp lại nào là của lượt).
+    return { batch_id: batchId, pages: results.length, changed, versions: newVersions };
   });
 }
 

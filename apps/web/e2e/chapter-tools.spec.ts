@@ -154,6 +154,45 @@ test.describe("công cụ chương", () => {
     expect(locked).toEqual([]);
   });
 
+  test("tìm & thay: Cmd+Z hoàn tác cả lượt như nút Hoàn tác, Cmd+Z tiếp lùi sửa trước lượt", async ({ page }) => {
+    await login(page);
+    const { chapterId, pageId } = await readyChapter(page);
+    await openChapter(page, chapterId);
+    // Sửa trước lượt ở trang đang mở (vào lịch sử undo của editor), đợi autosave ghi lên server.
+    const cell = await tableCell(page);
+    await cell.fill("Xin chào!");
+    await cell.blur();
+    await expect.poll(() => regionTranslation(page.request, pageId)).toBe("Xin chào!");
+
+    const dlg = await openFind(page, "Tìm / Thay");
+    await dlg.getByLabel("Tìm", { exact: true }).fill("chào");
+    await dlg.getByLabel("Thay bằng", { exact: true }).fill("Hello");
+    await dlg.getByRole("button", { name: "Xem trước", exact: true }).click();
+    await dlg.getByRole("button", { name: "Áp dụng", exact: true }).click();
+    await expect(dlg.getByText("Đã thay 1 chỗ trên 1 trang.")).toBeVisible();
+    await expect.poll(() => regionTranslation(page.request, pageId)).toBe("Xin Hello!");
+    await expect(await tableCell(page)).toHaveValue("Xin Hello!");
+    await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+
+    // Cmd+Z đang gõ trong ô Tìm vẫn là undo gốc của ô (không đụng lượt).
+    await openFind(page, "Tìm / Thay");
+    await dlg.getByLabel("Tìm", { exact: true }).focus();
+    await page.keyboard.press("ControlOrMeta+z");
+    expect(await regionTranslation(page.request, pageId)).toBe("Xin Hello!");
+    await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+
+    // Lượt là bước cuối → Cmd+Z hoàn tác cả lượt; nút Hoàn tác của panel không còn treo.
+    await page.keyboard.press("ControlOrMeta+z");
+    await expect(page.locator(".cw-toasts .notice", { hasText: "Đã hoàn tác thay thế trên 1 trang" })).toBeVisible();
+    await expect.poll(() => regionTranslation(page.request, pageId)).toBe("Xin chào!");
+    await expect(dlg.getByRole("button", { name: "Hoàn tác", exact: true })).toHaveCount(0);
+
+    // Cmd+Z tiếp theo hoàn tác sửa trước lượt trên trang đang mở.
+    await page.keyboard.press("ControlOrMeta+z");
+    await expect.poll(() => regionTranslation(page.request, pageId)).toBe(FAKE_TRANSLATION);
+    await expect(await tableCell(page)).toHaveValue(FAKE_TRANSLATION);
+  });
+
   test("áp glossary: entry không khớp vùng nào thì không áp; entry khớp → áp dụng → hoàn tác", async ({ page }) => {
     await login(page);
     // Glossary series: thuật ngữ nguồn 안녕하세요 → "Chào bạn"; thuật ngữ 없는말 không xuất hiện trong chương.

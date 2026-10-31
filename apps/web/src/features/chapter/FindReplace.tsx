@@ -6,7 +6,7 @@
  * Cũng export `useBatchFlow` + `MatchList` + `FlowPanel` để đoạn "Glossary" dùng lại cùng luồng.
  */
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Fragment, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { ApiError, errorMessage } from "../../lib/api.ts";
 import {
   type ApplyResult,
@@ -34,6 +34,16 @@ const writeError = (e: unknown) => {
  * Luồng xem trước → áp dụng → hoàn tác dùng chung find/replace và áp glossary. Áp dụng gửi ĐÚNG input đã xem trước
  * (chụp lúc bấm Xem trước), và kết quả xem trước về muộn sau khi input đã đổi bị bỏ — không bao giờ áp thứ chưa xem.
  */
+/** Nối lượt sửa của panel với lịch sử undo của editor (Cmd+Z hoàn tác lượt gần nhất). */
+export type BatchHooks = {
+  /** Server vừa áp lượt, trước khi tải lại state chương. */
+  applied(r: ApplyResult): void;
+  /** Nút Hoàn tác của panel vừa hoàn tác xong lượt. */
+  undone(batchId: string, r: { pages: number; skipped: string[] }): void;
+  /** Lượt vừa hoàn tác từ ngoài panel (Cmd+Z): panel bỏ trạng thái "đã áp dụng" để nút Hoàn tác không còn treo. */
+  lastUndone: string | null;
+};
+
 export function useBatchFlow<I>(
   ids: Pick<Ids, "chapterId">,
   fns: {
@@ -42,6 +52,7 @@ export function useBatchFlow<I>(
     beforeWrite?(): Promise<unknown>;
     preview(input: I): Promise<PreviewResult>;
     apply(input: I, versions: Record<string, number>): Promise<ApplyResult>;
+    hooks?: BatchHooks;
   },
 ) {
   const { chapterId } = ids;
@@ -76,6 +87,7 @@ export function useBatchFlow<I>(
     onSuccess: (r) => {
       setApplied(r);
       setMessage({ tone: "info", text: `Đã thay ${r.replaced} chỗ trên ${r.pages} trang.` });
+      fns.hooks?.applied(r);
       refresh();
     },
     onError: (e) => {
@@ -89,14 +101,25 @@ export function useBatchFlow<I>(
       await fns.beforeWrite?.();
       return undoBatch(chapterId, batchId);
     },
-    onSuccess: (r) => {
+    onSuccess: (r, batchId) => {
       setApplied(null);
       setPreview(null);
       setMessage({ tone: "info", text: `Đã hoàn tác trên ${r.pages} trang.` });
+      fns.hooks?.undone(batchId, r);
       refresh();
     },
     onError: (e) => setMessage({ tone: "danger", text: writeError(e).text }),
   });
+
+  const lastUndone = fns.hooks?.lastUndone ?? null;
+  const appliedBatch = applied?.batch_id;
+  useEffect(() => {
+    if (lastUndone && lastUndone === appliedBatch) {
+      setApplied(null);
+      setPreview(null);
+      setMessage(null);
+    }
+  }, [lastUndone, appliedBatch]);
 
   return {
     preview: preview?.result ?? null,
@@ -265,9 +288,10 @@ export type ToolPanelProps = Ids & {
   /** Lưu phần đang sửa trước khi gọi server. */
   beforeWrite(): Promise<unknown>;
   onJump(m: FindMatch): void;
+  batch: BatchHooks;
 };
 
-export function FindReplacePanel({ chapterId, lock, beforeWrite, onJump }: ToolPanelProps) {
+export function FindReplacePanel({ chapterId, lock, beforeWrite, onJump, batch }: ToolPanelProps) {
   const [find, setFind] = useState("");
   const [replace, setReplace] = useState("");
   const [cs, setCs] = useState(false);
@@ -279,6 +303,7 @@ export function FindReplacePanel({ chapterId, lock, beforeWrite, onJump }: ToolP
       beforeWrite,
       preview: (i) => previewFindReplace(chapterId, i),
       apply: (i, versions) => applyFindReplace(chapterId, i, versions),
+      hooks: batch,
     },
   );
   // Highlight theo đúng cụm của lần xem trước đang hiển thị.

@@ -71,7 +71,7 @@ Chữ thường (không regex), phạm vi trong 1 chương, thay trong `region.t
 | API (`/api/chapters/:id/…`) | Ghi chú |
 |---|---|
 | `find-replace/preview` `{find, replace, case_sensitive}` | không cần khoá; → `{matches, total, truncated, versions}` |
-| `find-replace/apply` `{…, versions}` | cần khoá chương (423); chương đang cắt trang / xử lý → 409 `chapter_busy`; page đổi sau preview (page có khớp **hoặc** page trong `versions`, kể cả khi giờ hết khớp — áp lại cùng bản xem trước) → 409 `preview_stale`. UI tắt "Áp dụng" sau khi áp tới lần Xem trước kế |
+| `find-replace/apply` `{…, versions}` | cần khoá chương (423); chương đang cắt trang / xử lý → 409 `chapter_busy`; page đổi sau preview (page có khớp **hoặc** page trong `versions`, kể cả khi giờ hết khớp — áp lại cùng bản xem trước) → 409 `preview_stale`. UI tắt "Áp dụng" sau khi áp tới lần Xem trước kế. Thành công → `{batch_id, pages, replaced, versions}` (`versions` = version mới của từng page đã ghi) |
 | `find-replace/undo` `{batch_id, conflicts?}` | cần khoá, chương không bận (409 `chapter_busy`); → `{pages, skipped}`. `conflicts` mặc định `"fail"`: page đã bị sửa tiếp (hoặc đã hoàn tác) → 409 `undo_conflict`, không ghi gì; `"skip"`: bỏ qua page đó, khôi phục phần còn lại, `skipped` = id page bỏ qua |
 | `glossary-apply/preview` `{rules: [{source_term, from}]}` | target lấy từ glossary đã gộp (entry series đè entry chung **cùng cặp** nguồn→đích của series; term chỉ có ở cặp khác → 400 `unknown_terms`); chỉ thay trong vùng có `source_text` chứa term nguồn và box gắn vùng đó |
 | `glossary-apply/apply` `{rules, versions}` | như find-replace (cũng 409 `chapter_busy` khi chương đang chạy); hoàn tác qua `find-replace/undo` |

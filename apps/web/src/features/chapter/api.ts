@@ -235,7 +235,8 @@ export type PreviewResult = {
   truncated: boolean;
   versions: Record<string, number>;
 };
-export type ApplyResult = { batch_id: string; pages: number; replaced: number };
+/** `versions` = version mới của từng page đã ghi (server cũ không có → không nối được với lịch sử undo). */
+export type ApplyResult = { batch_id: string; pages: number; replaced: number; versions?: Record<string, number> };
 
 export type FindReplaceInput = { find: string; replace: string; case_sensitive: boolean };
 export type GlossaryRule = { source_term: string; from: string };

@@ -29,3 +29,12 @@ describe("undoStyleText", () => {
     );
   });
 });
+
+describe("undoStyleText with another batch kind", () => {
+  it("names the kind of the undone batch", () => {
+    expect(undoStyleText(2, [], list, "a", "thay thế")).toBe("Đã hoàn tác thay thế trên 2 trang.");
+    expect(undoStyleText(0, ["a"], list, "a", "áp glossary")).toBe(
+      "Không hoàn tác được: trang 1 đã sửa sau khi áp glossary. Trang đang mở giữ nguyên.",
+    );
+  });
+});

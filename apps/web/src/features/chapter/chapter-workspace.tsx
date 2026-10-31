@@ -63,7 +63,7 @@ import { ContextPanel, type FocusRequest } from "./context-panel.tsx";
 import { ExportDrawer } from "./export-drawer.tsx";
 import { isExportActive } from "./export-options.ts";
 import { triggerDownload, useExports } from "./export-panel.tsx";
-import { FindReplacePanel } from "./FindReplace.tsx";
+import { type BatchHooks, FindReplacePanel } from "./FindReplace.tsx";
 import { providerWait, providerWaitText } from "./job-error.ts";
 import { readPanel, writePanel } from "./layout-prefs.ts";
 import { PageRail } from "./page-rail.tsx";
@@ -478,6 +478,20 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
   // "Áp kiểu này cho khối cùng loại trong chương": mọi trang (kể cả trang đang mở) ghi trong 1 lượt chung batch_id →
   // hoàn tác cả lượt bằng toast "Hoàn tác" hoặc Cmd+Z khi lượt là bước cuối của trang đang mở (cùng mutation này).
   const styleUndoBatch = useRef<string | null>(null);
+  // Tên từng lượt cho thông báo hoàn tác ("áp kiểu" mặc định) + lượt vừa hoàn tác (panel Tìm/Thay bỏ nút Hoàn tác treo).
+  const batchLabels = useRef(new Map<string, string>());
+  const [undoneBatch, setUndoneBatch] = useState<string | null>(null);
+  const batchHooks = (label: string): BatchHooks => ({
+    applied: (r) => {
+      batchLabels.current.set(r.batch_id, label);
+      session.session.recordServerBatch(r.batch_id, r.versions);
+    },
+    undone: (batchId, r) => {
+      session.session.afterBatchUndo(batchId, r.skipped);
+      setUndoneBatch(batchId);
+    },
+    lastUndone: undoneBatch,
+  });
   const undoKind = useMutation({
     mutationFn: async (batchId: string) => {
       await session.saver.flush();
@@ -500,13 +514,20 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
       if (styleUndoBatch.current === batchId) styleUndoBatch.current = null;
       // Không hoàn tác được trang nào → không tự ẩn (toast Hoàn tác đã mất, dễ bỏ lỡ).
       const restored = r.pages + (local ? 1 : 0);
-      notify({ tone: restored ? "info" : "warn", text: undoStyleText(restored, skipped, pages, openId) });
+      setUndoneBatch(batchId);
+      notify({
+        tone: restored ? "info" : "warn",
+        text: undoStyleText(restored, skipped, pages, openId, batchLabels.current.get(batchId)),
+      });
     },
     onError: (e, batchId, prev) => {
       if (!(e instanceof ApiError) && prev) setStyleUndo(prev);
       // Server từ chối hẳn (lượt không còn / xung đột): bỏ mốc, không thì Cmd+Z kẹt mãi ở mốc này. Lỗi khác: giữ nguyên
       // lịch sử để thử lại.
-      if (e instanceof ApiError && (e.status === 404 || e.status === 409)) session.session.dropBatch(batchId);
+      if (e instanceof ApiError && (e.status === 404 || e.status === 409)) {
+        session.session.dropBatch(batchId);
+        setUndoneBatch(batchId);
+      }
       notify({
         tone: "danger",
         text:
@@ -1064,6 +1085,7 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
                 lock={session.lock}
                 beforeWrite={flush}
                 onJump={jump}
+                batch={batchHooks("thay thế")}
               />
             </fieldset>
             <fieldset className="cw-find-part" aria-label="Áp glossary" hidden={findTab !== "glossary"}>
@@ -1073,6 +1095,7 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
                 lock={session.lock}
                 beforeWrite={flush}
                 onJump={jump}
+                batch={batchHooks("áp glossary")}
               />
             </fieldset>
           </div>
