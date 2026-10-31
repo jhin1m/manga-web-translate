@@ -90,13 +90,16 @@ lệch bbox mực từng dòng ≤ 1px — xem `benchmarks/phase-01-results.md`)
   → `pnpm --filter @mtl/web fonts:sync` (API đọc id từ manifest, web tải `/fonts/manifest.json`; không còn danh sách id riêng cần sửa)
   → `node scripts/typeset-parity.ts` (gate lấy mọi font trong manifest, trừ `EXCLUDED_FONTS`; mỗi font ≥ 2 box) → chạy
   `pnpm --filter @mtl/web e2e typeset-parity`. Font vượt 1px: thêm vào `EXCLUDED_FONTS` trong `scripts/typeset-parity.ts`
-  (kèm số đo) **và** vào bảng dưới; không sửa code layout riêng cho một font.
+  (kèm số đo) **và** ghi vào mục "Font chưa đạt gate" ngay dưới; không sửa code layout riêng cho một font.
 
-**Font chưa đạt gate** (hiện trong editor nhưng export có thể lệch quá 1px so với canvas; theo dõi, chưa sửa):
+**Font chưa đạt gate**: hiện không có (`EXCLUDED_FONTS` rỗng).
 
-| Font | Lệch bbox mực tối đa | Ghi chú |
-|---|---|---|
-| `ShantellSans-Variable` | 2px | font variable; đo 2026-10-31: cả 2 box mẫu của font đều lệch 2px (advance Konva ≠ Pillow) |
+**Font variable phải đóng băng thành bản static**: trình duyệt áp `font-weight` CSS (400) lên trục `wght`, còn Pillow luôn
+dùng giá trị mặc định của file — font mặc định ≠ 400 sẽ lệch advance. `ShantellSans-Variable` (mặc định `wght=300`) từng lệch
+2px vì vậy; nay là bản static `wght=300` (đúng độ đậm worker đã render từ trước), id/tên file giữ nguyên để box đã lưu vẫn
+khớp. Tạo lại: `cd worker && uv run --with fonttools python -m fontTools.varLib.instancer fonts/ShantellSans-Variable.ttf
+wght=300 INFM=0 BNCE=0 SPAC=0 -o fonts/ShantellSans-Variable.ttf`, rồi `pnpm --filter @mtl/web fonts:sync` và
+`node scripts/typeset-parity.ts`. Font variable mặc định `wght=400` (Baloo2, Lexend) không cần.
 
 ## Editor (Phase 5)
 

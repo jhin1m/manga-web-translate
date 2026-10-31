@@ -15,12 +15,10 @@ const manifest = JSON.parse(readFileSync(`${root}worker/fonts/manifest.json`, "u
   fonts: Record<string, unknown>;
 };
 /**
- * Font bị loại khỏi gate vì lệch Konva ↔ render.py quá 1px (kèm số đo). Danh sách này phải khớp bảng "Font chưa đạt
+ * Font bị loại khỏi gate vì lệch Konva ↔ render.py quá 1px (kèm số đo). Danh sách này phải khớp mục "Font chưa đạt
  * gate" ở docs/typeset-layout-contract.md; font mới trong manifest tự vào gate, không đạt thì ghi vào đây.
  */
-const EXCLUDED_FONTS: Record<string, string> = {
-  "ShantellSans-Variable": "lệch tối đa 2px (cả 2 box mẫu; font variable, advance Konva ≠ Pillow)",
-};
+const EXCLUDED_FONTS: Record<string, string> = {};
 const FONTS = Object.keys(manifest.fonts)
   .filter((f) => !(f in EXCLUDED_FONTS))
   .sort();
