@@ -101,6 +101,9 @@ export async function claim(w: WorkerIdentity, req: z.infer<typeof ClaimRequest>
     const picked = await t
       .select({ id: jobs.id })
       .from(jobs)
+      // Job cùng created_at (ingest tạo cả loạt page.prepare trong một transaction) → page đầu chương claim trước.
+      // Job không gắn page: ord NULL, xếp sau trong nhóm hoà.
+      .leftJoin(pages, eq(pages.id, jobs.pageId))
       .where(
         and(
           eq(jobs.status, "queued"),
@@ -110,7 +113,7 @@ export async function claim(w: WorkerIdentity, req: z.infer<typeof ClaimRequest>
           claimableSql(w.kind),
         ),
       )
-      .orderBy(asc(jobs.priority), asc(jobs.createdAt))
+      .orderBy(asc(jobs.priority), asc(jobs.createdAt), sql`${pages.ord} asc nulls last`, asc(jobs.id))
       .limit(req.max)
       .for("update", { of: jobs, skipLocked: true });
 

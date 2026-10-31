@@ -97,6 +97,39 @@ describe("claim", () => {
     expect(seen.every((id) => ids.has(id))).toBe(true);
   }, 120_000);
 
+  it("claims same-timestamp page.prepare jobs in page order, whatever the insert order", async () => {
+    const O = await seedUser("qord");
+    const N = 5;
+    const ids = Array.from({ length: N }, (_, ord) => pageId(O.chapterId, 1, ord));
+    const at = new Date(Date.now() - 60_000);
+    for (let ord = N - 1; ord >= 0; ord--) {
+      const id = ids[ord] as string;
+      await scoped(db, O.userId).insert(pages, {
+        id,
+        chapterId: O.chapterId,
+        ord,
+        width: 100,
+        height: 100,
+        originalKey: `u/${O.userId}/ch/${O.chapterId}/ingest/1/${ord}.png`,
+        originalSha256: SHA,
+      });
+      await db.insert(jobs).values({
+        userId: O.userId,
+        type: "page.prepare",
+        // Chỉ page_id được claim đọc; phần còn lại của payload không ảnh hưởng thứ tự.
+        payload: { type: "page.prepare", page_id: id } as unknown as JobPayload,
+        inputRev: "r",
+        idempotencyKey: uuidv7(),
+        chapterId: O.chapterId,
+        pageId: id,
+        createdAt: at,
+      });
+    }
+    const mac = (await workerToken("mac", "w-ord")).token;
+    const got = await claimJobs(mac, { caps: ["page.prepare"], max: N });
+    expect(got.map((j) => String(j.payload.page_id))).toEqual(ids);
+  });
+
   it("mac and modal tokens both claim jobs of every user (shared workers)", async () => {
     const mac = (await workerToken("mac", "mac-any")).token;
     const modal = (await workerToken("modal", "modal-any")).token;
