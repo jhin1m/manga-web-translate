@@ -819,6 +819,41 @@ test("apply style to same-kind blocks writes every page in one batch; the toast'
   await expect(page.locator(".cw-toasts .notice", { hasText: "Không hoàn tác được" })).toHaveCount(0);
 });
 
+test("vertical alignment toggle saves valign and 'Áp kiểu này' copies it to the same-kind blocks", async ({ page }) => {
+  const { chapterId, pageIds } = await seedStyleChapter(page);
+  const valigns = async () =>
+    (
+      await Promise.all(
+        pageIds.map(
+          async (id) =>
+            (await (await page.request.get(`/api/pages/${id}`)).json()) as {
+              state: { text_boxes: { id: string; valign?: string }[] };
+            },
+        ),
+      )
+    ).flatMap((d) => d.state.text_boxes.map((b) => `${b.id}:${b.valign ?? "-"}`));
+  expect(await valigns()).toEqual(["src:-", "same-page:-", "src:-"]);
+
+  await page.goto(chapterUrl(chapterId));
+  await openTable(page);
+  await expect(page.getByRole("status", { name: "Khoá chương" })).toContainText("Bạn đang giữ khoá chương");
+  await page.locator(".cw-tbody [data-row]").first().locator(".cw-src").click();
+  const panel = await openPanel(page, "select");
+  await panel.getByText("Kiểu chữ nâng cao").click();
+  // Khối lưu từ trước (không có valign) hiện "Trên".
+  const top = panel.getByRole("button", { name: "Căn dọc: sát mép trên" });
+  const middle = panel.getByRole("button", { name: "Căn dọc: giữa khung" });
+  await expect(top).toHaveAttribute("aria-pressed", "true");
+  await middle.click();
+  await expect(middle).toHaveAttribute("aria-pressed", "true");
+  await expect.poll(async () => (await valigns())[0]).toBe("src:middle");
+  expect(await valigns()).toEqual(["src:middle", "same-page:-", "src:-"]);
+
+  await panel.getByRole("button", { name: /Áp kiểu này cho khối/ }).click();
+  await expect(page.locator(".cw-toasts .notice", { hasText: "Đã áp kiểu cho 2 khối" })).toBeVisible();
+  expect(await valigns()).toEqual(["src:middle", "same-page:middle", "src:middle"]);
+});
+
 test("Cmd+Z right after apply style undoes the whole batch, then the next Cmd+Z steps back the earlier edit on the open page", async ({
   page,
 }) => {

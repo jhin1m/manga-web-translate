@@ -19,7 +19,7 @@ import { Stage as KStage, Layer } from "react-konva";
 import { addBox, editText, newTextBox } from "../actions.ts";
 import { chapterStore, effectiveMode, useChapterStore } from "../chapter-store.ts";
 import { canvasFont, type FontKit } from "../fonts.ts";
-import { lineStep } from "../measure.ts";
+import { lineStep, verticalOffset } from "../measure.ts";
 import { clampView, contentBox, EDGE, FIT_EDGE, fitScale, pageStartView, screenToPage } from "../page-layout.ts";
 import { editorStore, useEditor, type View } from "../store.ts";
 import { type FlipState, initialFlip, stepFlip } from "../wheel-page-flip.ts";
@@ -410,6 +410,8 @@ function TextEditOverlay({ kit }: { kit: FontKit }) {
         font: canvasFont(box.font_family, box.font_size * k),
         lineHeight: `${lineStep(kit.metrics(box.font_family), box.font_size, box.line_height) * k}px`,
         padding: box.pad * k,
+        // Textarea neo mép trên; căn giữa dọc = đẩy chữ xuống đúng dy như linePlacements.
+        paddingTop: (box.pad + verticalOffset(box, kit.metrics(box.font_family))) * k,
         textAlign: box.align,
         color: box.fill,
       }}

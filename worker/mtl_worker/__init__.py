@@ -10,4 +10,5 @@
 # 0.6.0: payload có cài đặt pipeline của người dùng (prepare.pipeline, reinpaint.inpaint, ocr_region.ocr_engine);
 #        detector CTD, LaMa manga, OCR local (manga-ocr, PaddleOCR); job chapter.proofread.
 # 0.7.0: chapter.translate theo lô — payload/result `carry` (notes + tên nhân vật chuyền giữa các job lô).
-PIPELINE_VERSION = "0.7.0"
+# 0.7.1: TextBox.valign — export căn giữa dọc; worker cũ bỏ qua trường này nên vẽ box mới lệch so với editor.
+PIPELINE_VERSION = "0.7.1"

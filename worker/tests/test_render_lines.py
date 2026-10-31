@@ -9,7 +9,13 @@ from typing import Any
 import numpy as np
 from PIL import Image
 
-from mtl_pipeline.render import ensure_lines, line_advance, render_page_state, text_box_from_shared
+from mtl_pipeline.render import (
+    ensure_lines,
+    layout_lines,
+    line_advance,
+    render_page_state,
+    text_box_from_shared,
+)
 from mtl_pipeline.schema import TextBox
 from mtl_pipeline.typeset import MAX_SIZE, MIN_SIZE, block_height, fit_text
 
@@ -184,3 +190,32 @@ def test_ensure_lines_hard_wrap_for_overlong_word():
     fit = ensure_lines(tb(text=word, w=40, h=40), auto_fit=True)
     assert fit.font_size == MIN_SIZE
     assert "".join(fit.lines) == word
+
+
+def _baselines(**kw) -> list[float]:
+    return [lp.baseline for lp in layout_lines(text_box_from_shared(shared_box(**kw)))]
+
+
+def test_layout_lines_valign_middle_shifts_block_by_half_the_spare_height():
+    # 2 dòng, h dư nhiều: dy = (h − 2·pad − block_height)/2; thiếu valign hoặc "top" → không dịch.
+    kw = {"lines": ["Hai dòng chữ", "xuống dòng nữa"], "h": 120.0, "y": 10.0}
+    top = _baselines(**kw)
+    block = block_height(FONT, 20.0, 2, 1.15)
+    dy = (120.0 - 8.0 - block) / 2
+    assert dy > 0
+    assert _baselines(**kw, valign="top") == top
+    assert [round(b - t, 6) for b, t in zip(_baselines(**kw, valign="middle"), top, strict=True)] == [
+        round(dy, 6)
+    ] * 2
+
+
+def test_layout_lines_valign_middle_clamps_when_text_overflows_the_box():
+    # Khối cao hơn box → dy kẹp 0: giống "top" (chữ tràn xuống dưới như cũ, không tràn lên trên).
+    kw = {"lines": ["a", "b", "c", "d"], "h": 30.0}
+    assert _baselines(**kw, valign="middle") == _baselines(**kw)
+
+
+def test_text_box_from_shared_copies_valign_default_top():
+    assert text_box_from_shared(shared_box()).valign == "top"
+    assert text_box_from_shared(shared_box(valign=None)).valign == "top"
+    assert text_box_from_shared(shared_box(valign="middle")).valign == "middle"

@@ -2,7 +2,8 @@
 
 Hợp đồng (phải khớp editor Konva):
 - text chuẩn hoá NFC trước khi đo/vẽ;
-- baseline dòng i = box.y + pad + ascent + i·(ascent+descent)·line_height, ascent/descent từ hhea/OS/2 của file font;
+- baseline dòng i = box.y + pad + dy + ascent + i·(ascent+descent)·line_height, ascent/descent từ hhea/OS/2 của file font;
+  dy = valign "middle" ? max(0, (h − 2·pad − block_height)/2) : 0 (thiếu valign = "top");
 - x dòng = box.x + pad (+ căn giữa/phải theo advance của dòng trong vùng w − 2·pad);
 - stroke.width = bề rộng RA NGOÀI glyph, join tròn (Minkowski với đĩa bán kính w), vẽ trước, fill đè lên.
   Không dùng stroke_width của Pillow: offset bị làm tròn, viền trên dày hơn canvas 1–2px (spike parity);
@@ -70,12 +71,23 @@ def line_advance(font_id: str, size: float, text: str) -> float:
     return float(load_font(font_id, size).getlength(nfc(text)))
 
 
+def vertical_offset(box: TextBox) -> float:
+    """Dịch khối chữ xuống để căn giữa dọc (valign "middle"); không âm → chữ tràn vẫn bám mép trên như "top"."""
+    if box.valign != "middle":
+        return 0.0
+    from .typeset import block_height  # nạp lười: typeset import ngược render
+
+    block = block_height(box.font_family, box.font_size, len(box.lines), box.line_height)
+    return max(0.0, (box.h - 2 * box.pad - block) / 2)
+
+
 def layout_lines(box: TextBox) -> list[LinePlacement]:
     """Toạ độ pen + baseline từng dòng trong hệ toạ độ chưa xoay (gốc = page)."""
     m = metrics_for(box.font_family)
     asc, desc = m.ascent_px(box.font_size), m.descent_px(box.font_size)
     step = (asc + desc) * box.line_height
     inner_w = box.w - 2 * box.pad
+    top = box.y + box.pad + vertical_offset(box)
     out = []
     for i, raw in enumerate(box.lines):
         text = nfc(raw)
@@ -85,7 +97,7 @@ def layout_lines(box: TextBox) -> list[LinePlacement]:
             x += (inner_w - adv) / 2
         elif box.align == "right":
             x += inner_w - adv
-        out.append(LinePlacement(text=text, x=x, baseline=box.y + box.pad + asc + i * step, advance=adv))
+        out.append(LinePlacement(text=text, x=x, baseline=top + asc + i * step, advance=adv))
     return out
 
 
@@ -241,6 +253,7 @@ def text_box_from_shared(d: Mapping[str, Any]) -> TextBox:
         line_height=d["line_height"],
         pad=d["pad"],
         align=d["align"],
+        valign=d.get("valign") or "top",
         fill=d["fill"],
         stroke=Stroke(color=stroke["color"], width=stroke["width"]) if stroke else None,
         text=d.get("text", ""),

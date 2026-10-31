@@ -11,10 +11,21 @@ import { fileURLToPath } from "node:url";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
 const FIXTURE = fileURLToPath(new URL("../apps/web/e2e/fixtures/typeset-parity.json", import.meta.url));
-const manifest = JSON.parse(readFileSync(`${root}worker/fonts/manifest.json`, "utf8")) as {
-  fonts: Record<string, unknown>;
-};
-const FONTS = Object.keys(manifest.fonts).sort();
+/**
+ * Bộ font cố định của gate (đã kiểm ≤ 1px). Không đọc manifest: thêm font vào worker/fonts làm đổi font gán cho từng box
+ * và fixture trôi theo; font mới (nhất là variable) cần được đo riêng rồi mới thêm vào đây.
+ */
+const FONTS = [
+  "Anton-Regular",
+  "Baloo2-Variable",
+  "Bangers-Regular",
+  "BeVietnamPro-Bold",
+  "BeVietnamPro-Regular",
+  "Itim-Regular",
+  "Lexend-Variable",
+  "Mali-Regular",
+  "PatrickHand-Regular",
+];
 
 const SAMPLES: string[][] = [
   ["Xin chào!"],
@@ -46,7 +57,10 @@ const makeBox = (i: number, pageIdx: number, slot: number): Box =>
   i % 5 === 4 ? wrapBox(i, pageIdx, slot) : plainBox(i, pageIdx, slot);
 
 function plainBox(i: number, pageIdx: number, slot: number) {
-  const lines = SAMPLES[i % SAMPLES.length] as string[];
+  const sample = SAMPLES[i % SAMPLES.length] as string[];
+  // Box tràn dọc (valign middle kẹp dy = 0): 1 dòng trong khung thấp hơn khối chữ — tràn < lề cửa sổ đo.
+  const overflow = i % 6 === 5;
+  const lines = overflow ? sample.slice(0, 1) : sample;
   const size = 18 + ((i * 7) % 30) + (i % 3 === 0 ? 0.5 : 0); // có cỡ lẻ .5
   const sw = STROKES[i % STROKES.length] as number;
   return {
@@ -55,7 +69,7 @@ function plainBox(i: number, pageIdx: number, slot: number) {
     x: 16 + (i % 3) * 7.25,
     y: 20 + slot * 130 + (i % 5) * 3.5,
     w: 380,
-    h: 60 + lines.length * size * 1.4,
+    h: overflow ? size * 0.9 : 60 + lines.length * size * 1.4, // còn lại dư chỗ dọc ≥ 60px → dy > 0
     rotation: 0,
     text: lines.join(" ").normalize("NFC"),
     lines: lines.map((l) => l.normalize("NFC")),
@@ -65,6 +79,8 @@ function plainBox(i: number, pageIdx: number, slot: number) {
     pad: 4 + (i % 3),
     letter_spacing: 0,
     align: ALIGNS[i % 3] as (typeof ALIGNS)[number],
+    // Một phần box không có trường (lưu từ trước = top), phần còn lại thử "top" tường minh và "middle".
+    ...(i % 2 === 1 ? { valign: "middle" as const } : i % 4 === 2 ? { valign: "top" as const } : {}),
     fill: i % 2 === 0 ? "#111111" : "#fafafa",
     stroke: sw > 0 ? { color: i % 2 ? "#ffffff" : "#1a1a1a", width: sw } : null,
     auto_fit: false,

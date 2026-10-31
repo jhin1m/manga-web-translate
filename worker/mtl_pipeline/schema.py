@@ -245,6 +245,8 @@ class TextBox(BaseModel):
     line_height: float = 1.15
     pad: float = 4.0
     align: Literal["left", "center", "right"] = "center"
+    # Thiếu = "top" (box lưu từ trước vẽ y hệt cũ); box mới do typesetter tạo là "middle".
+    valign: Literal["top", "middle"] = "top"
     fill: str = "#000000"
     stroke: Stroke | None = None
     text: str = ""

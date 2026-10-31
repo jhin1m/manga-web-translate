@@ -13,7 +13,7 @@ export type BoxGeometry = Pick<TextBox, "x" | "y" | "w" | "h" | "rotation">;
 export type BoxStyle = Partial<
   Pick<
     TextBox,
-    "font_family" | "font_size" | "line_height" | "pad" | "align" | "fill" | "stroke" | "auto_fit" | "hidden"
+    "font_family" | "font_size" | "line_height" | "pad" | "align" | "valign" | "fill" | "stroke" | "auto_fit" | "hidden"
   >
 >;
 
@@ -218,6 +218,7 @@ export function newTextBox(id: string, g: Pick<TextBox, "x" | "y" | "w" | "h">, 
     pad: PAD,
     letter_spacing: 0,
     align: "center",
+    valign: "middle",
     fill: "#000000",
     stroke: contrastStroke("#000000", 22),
     auto_fit: true,

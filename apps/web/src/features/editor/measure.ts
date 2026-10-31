@@ -127,25 +127,36 @@ export function layoutBox(
   return { lines, font_size: box.font_size };
 }
 
+/** Dịch khối chữ xuống để căn giữa dọc (valign "middle"); không bao giờ âm → chữ tràn vẫn bám mép trên như "top". */
+export function verticalOffset(
+  box: Pick<TextBox, "lines" | "font_size" | "line_height" | "pad" | "h" | "valign">,
+  m: FontMetrics,
+): number {
+  if (box.valign !== "middle") return 0;
+  const block = blockHeight(m, box.font_size, box.lines.length, box.line_height);
+  return Math.max(0, (box.h - 2 * box.pad - block) / 2);
+}
+
 /**
  * Pen origin + baseline từng dòng trong toạ độ của box (gốc = góc trái-trên box, chưa xoay) — quy tắc 3–4.
  * Cộng (box.x, box.y) để ra toạ độ page như render.py.
  */
 export function linePlacements(
-  box: Pick<TextBox, "lines" | "font_family" | "font_size" | "line_height" | "pad" | "w" | "align">,
+  box: Pick<TextBox, "lines" | "font_family" | "font_size" | "line_height" | "pad" | "w" | "h" | "align" | "valign">,
   m: FontMetrics,
   measure: MeasureFn,
 ): LinePlacement[] {
   const asc = ascentPx(m, box.font_size);
   const step = lineStep(m, box.font_size, box.line_height);
   const innerW = box.w - 2 * box.pad;
+  const top = box.pad + verticalOffset(box, m);
   return box.lines.map((raw, i) => {
     const text = nfc(raw);
     const advance = measure(text, box.font_family, box.font_size);
     let x = box.pad;
     if (box.align === "center") x += (innerW - advance) / 2;
     else if (box.align === "right") x += innerW - advance;
-    return { text, x, baseline: box.pad + asc + i * step, advance };
+    return { text, x, baseline: top + asc + i * step, advance };
   });
 }
 

@@ -262,6 +262,7 @@ def typeset_region(
         font_size=size,
         line_height=LINE_HEIGHT,
         pad=PAD,
+        valign="middle",
         fill=fill,
         stroke=stroke,
         text=nfc(text),

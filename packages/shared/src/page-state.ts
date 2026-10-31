@@ -45,6 +45,8 @@ export const Region = z.object({
 export type Region = z.infer<typeof Region>;
 
 export const TextAlign = z.enum(["left", "center", "right"]);
+/** Căn dọc khối chữ trong box (hợp đồng layout mục 3). Thiếu trường = "top": box lưu từ trước vẽ y hệt cũ. */
+export const TextVAlign = z.enum(["top", "middle"]);
 const HexColor = z.string().regex(/^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/);
 
 export const TextStroke = z.object({
@@ -74,6 +76,7 @@ export const TextBox = z.object({
   pad: z.number().nonnegative(),
   letter_spacing: z.number(),
   align: TextAlign,
+  valign: TextVAlign.optional(),
   fill: HexColor,
   stroke: TextStroke.nullable(),
   auto_fit: z.boolean(),

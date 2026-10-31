@@ -52,6 +52,7 @@
             "pad": 5,
             "letter_spacing": 0,
             "align": "left",
+            "valign": "middle",
             "fill": "#fafafa",
             "stroke": {
               "color": "#ffffff",
@@ -76,6 +77,7 @@
             "pad": 6,
             "letter_spacing": 0,
             "align": "right",
+            "valign": "top",
             "fill": "#111111",
             "stroke": {
               "color": "#1a1a1a",
@@ -100,6 +102,7 @@
             "pad": 4,
             "letter_spacing": 0,
             "align": "center",
+            "valign": "middle",
             "fill": "#fafafa",
             "stroke": {
               "color": "#ffffff",
@@ -128,16 +131,16 @@
           "lines": [
             {
               "x": 28.25,
-              "baseline": 185.45,
+              "baseline": 202.39625,
               "advance": 164.828125
             },
             {
               "x": 28.25,
-              "baseline": 231.5075,
+              "baseline": 248.45375,
               "advance": 117.546875
             }
           ],
-          "ink": [[28, 167, 193, 192], [28, 213, 146, 233]]
+          "ink": [[28, 184, 193, 209], [28, 230, 146, 250]]
         },
         {
           "id": "b02",
@@ -160,16 +163,16 @@
           "lines": [
             {
               "x": 103.484375,
-              "baseline": 464,
+              "baseline": 495.3325,
               "advance": 205.03125
             },
             {
               "x": 76.5078125,
-              "baseline": 513.9675,
+              "baseline": 545.3,
               "advance": 258.984375
             }
           ],
-          "ink": [[101, 429, 310, 475], [75, 472, 337, 525]]
+          "ink": [[101, 461, 310, 507], [75, 504, 337, 557]]
         }
       ]
     },
@@ -202,6 +205,7 @@
             "pad": 6,
             "letter_spacing": 0,
             "align": "right",
+            "valign": "middle",
             "fill": "#fafafa",
             "stroke": {
               "color": "#ffffff",
@@ -216,16 +220,17 @@
             "x": 30.5,
             "y": 150,
             "w": 380,
-            "h": 156.6,
+            "h": 20.7,
             "rotation": 0,
-            "text": "Ừ… để tớ nghĩ thêm chút đã",
-            "lines": ["Ừ… để tớ", "nghĩ thêm", "chút đã"],
+            "text": "Ừ… để tớ",
+            "lines": ["Ừ… để tớ"],
             "font_family": "Lexend-Variable",
             "font_size": 23,
             "line_height": 1.3,
             "pad": 6,
             "letter_spacing": 0,
             "align": "right",
+            "valign": "middle",
             "fill": "#fafafa",
             "stroke": {
               "color": "#ffffff",
@@ -250,6 +255,7 @@
             "pad": 4,
             "letter_spacing": 0,
             "align": "center",
+            "valign": "top",
             "fill": "#111111",
             "stroke": {
               "color": "#1a1a1a",
@@ -274,6 +280,7 @@
             "pad": 5,
             "letter_spacing": 0,
             "align": "left",
+            "valign": "middle",
             "fill": "#fafafa",
             "stroke": {
               "color": "#ffffff",
@@ -318,19 +325,9 @@
               "x": 309.765625,
               "baseline": 179,
               "advance": 94.734375
-            },
-            {
-              "x": 292.984375,
-              "baseline": 216.375,
-              "advance": 111.515625
-            },
-            {
-              "x": 320.171875,
-              "baseline": 253.75,
-              "advance": 84.328125
             }
           ],
-          "ink": [[310, 156, 405, 181], [293, 197, 404, 223], [320, 235, 404, 255]]
+          "ink": [[310, 156, 405, 181]]
         },
         {
           "id": "b06",
@@ -348,11 +345,11 @@
           "lines": [
             {
               "x": 28.25,
-              "baseline": 460.554,
+              "baseline": 486.405,
               "advance": 65.59375
             }
           ],
-          "ink": [[26, 429, 95, 464]]
+          "ink": [[26, 455, 95, 490]]
         }
       ]
     },
@@ -406,6 +403,7 @@
             "pad": 5,
             "letter_spacing": 0,
             "align": "left",
+            "valign": "top",
             "fill": "#111111",
             "stroke": {
               "color": "#1a1a1a",
@@ -430,6 +428,7 @@
             "pad": 5,
             "letter_spacing": 0,
             "align": "left",
+            "valign": "top",
             "fill": "#111111",
             "stroke": {
               "color": "#1a1a1a",
@@ -444,16 +443,17 @@
             "x": 30.5,
             "y": 413.5,
             "w": 380,
-            "h": 158,
+            "h": 31.5,
             "rotation": 0,
-            "text": "ếệỗửữẫ ẤẬỖỬỮẪ",
-            "lines": ["ếệỗửữẫ", "ẤẬỖỬỮẪ"],
+            "text": "ếệỗửữẫ",
+            "lines": ["ếệỗửữẫ"],
             "font_family": "BeVietnamPro-Regular",
             "font_size": 35,
             "line_height": 1.3,
             "pad": 6,
             "letter_spacing": 0,
             "align": "right",
+            "valign": "middle",
             "fill": "#fafafa",
             "stroke": {
               "color": "#ffffff",
@@ -530,14 +530,9 @@
               "x": 273.59375,
               "baseline": 454.5,
               "advance": 130.90625
-            },
-            {
-              "x": 246.5,
-              "baseline": 512.0575,
-              "advance": 158
             }
           ],
-          "ink": [[272, 418, 405, 466], [245, 468, 406, 523]]
+          "ink": [[272, 418, 405, 466]]
         }
       ]
     },
@@ -591,6 +586,7 @@
             "pad": 5,
             "letter_spacing": 0,
             "align": "left",
+            "valign": "middle",
             "fill": "#fafafa",
             "stroke": {
               "color": "#ffffff",
@@ -615,6 +611,7 @@
             "pad": 4,
             "letter_spacing": 0,
             "align": "center",
+            "valign": "middle",
             "fill": "#fafafa",
             "stroke": {
               "color": "#ffffff",
@@ -639,6 +636,7 @@
             "pad": 4,
             "letter_spacing": 0,
             "align": "center",
+            "valign": "middle",
             "fill": "#fafafa",
             "stroke": {
               "color": "#ffffff",
@@ -672,11 +670,11 @@
           "lines": [
             {
               "x": 28.25,
-              "baseline": 185.45,
+              "baseline": 211.39999999999998,
               "advance": 140.96875
             }
           ],
-          "ink": [[28, 166, 169, 190]]
+          "ink": [[28, 192, 169, 216]]
         },
         {
           "id": "b14",
@@ -687,32 +685,32 @@
           "lines": [
             {
               "x": 36.3515625,
-              "baseline": 312.23046875,
+              "baseline": 314.037109375,
               "advance": 227.296875
             },
             {
               "x": 23.1171875,
-              "baseline": 348.359375,
+              "baseline": 350.166015625,
               "advance": 253.765625
             },
             {
               "x": 129.3515625,
-              "baseline": 384.48828125,
+              "baseline": 386.294921875,
               "advance": 41.296875
             }
           ],
-          "ink": [[33, 282, 266, 319], [20, 317, 280, 357], [127, 358, 174, 388]]
+          "ink": [[33, 284, 266, 320], [20, 319, 280, 359], [127, 360, 174, 390]]
         },
         {
           "id": "b15",
           "lines": [
             {
               "x": 87.9609375,
-              "baseline": 453.405029296875,
+              "baseline": 477.6400634765625,
               "advance": 236.078125
             }
           ],
-          "ink": [[85, 412, 327, 464]]
+          "ink": [[85, 436, 327, 488]]
         }
       ]
     },
@@ -756,16 +754,17 @@
             "x": 30.5,
             "y": 157,
             "w": 380,
-            "h": 257.4,
+            "h": 42.300000000000004,
             "rotation": 0,
-            "text": "Thằng nhóc đó đang ở đâu vậy? Mau nói cho tôi!",
-            "lines": ["Thằng nhóc đó", "đang ở đâu vậy?", "Mau nói cho tôi!"],
+            "text": "Thằng nhóc đó",
+            "lines": ["Thằng nhóc đó"],
             "font_family": "BeVietnamPro-Bold",
             "font_size": 47,
             "line_height": 1.3,
             "pad": 6,
             "letter_spacing": 0,
             "align": "right",
+            "valign": "middle",
             "fill": "#fafafa",
             "stroke": {
               "color": "#ffffff",
@@ -790,6 +789,7 @@
             "pad": 4,
             "letter_spacing": 0,
             "align": "center",
+            "valign": "top",
             "fill": "#111111",
             "stroke": {
               "color": "#1a1a1a",
@@ -841,19 +841,9 @@
               "x": 52.15625,
               "baseline": 210,
               "advance": 352.34375
-            },
-            {
-              "x": 12.625,
-              "baseline": 287.2915,
-              "advance": 391.875
-            },
-            {
-              "x": 29.25,
-              "baseline": 364.58299999999997,
-              "advance": 375.25
             }
           ],
-          "ink": [[53, 163, 404, 221], [14, 246, 403, 300], [31, 326, 402, 366]]
+          "ink": [[53, 163, 404, 221]]
         },
         {
           "id": "b18",
@@ -943,6 +933,7 @@
             "pad": 4,
             "letter_spacing": 0,
             "align": "center",
+            "valign": "middle",
             "fill": "#fafafa",
             "stroke": {
               "color": "#ffffff",
@@ -967,6 +958,7 @@
             "pad": 5,
             "letter_spacing": 0,
             "align": "left",
+            "valign": "top",
             "fill": "#111111",
             "stroke": {
               "color": "#1a1a1a",
@@ -981,16 +973,17 @@
             "x": 30.5,
             "y": 420.5,
             "w": 380,
-            "h": 181.8,
+            "h": 26.1,
             "rotation": 0,
-            "text": "Ừ… để tớ nghĩ thêm chút đã",
-            "lines": ["Ừ… để tớ", "nghĩ thêm", "chút đã"],
+            "text": "Ừ… để tớ",
+            "lines": ["Ừ… để tớ"],
             "font_family": "Baloo2-Variable",
             "font_size": 29,
             "line_height": 1.3,
             "pad": 6,
             "letter_spacing": 0,
             "align": "right",
+            "valign": "middle",
             "fill": "#fafafa",
             "stroke": {
               "color": "#ffffff",
@@ -1024,16 +1017,16 @@
           "lines": [
             {
               "x": 125.0703125,
-              "baseline": 204.911,
+              "baseline": 233.004,
               "advance": 161.859375
             },
             {
               "x": 104.1796875,
-              "baseline": 266.51800000000003,
+              "baseline": 294.611,
               "advance": 203.640625
             }
           ],
-          "ink": [[124, 171, 285, 221], [106, 228, 308, 282]]
+          "ink": [[124, 199, 285, 249], [106, 256, 308, 310]]
         },
         {
           "id": "b22",
@@ -1053,19 +1046,9 @@
               "x": 301.28125,
               "baseline": 457.762,
               "advance": 103.21875
-            },
-            {
-              "x": 278.734375,
-              "baseline": 518.1574,
-              "advance": 125.765625
-            },
-            {
-              "x": 311.703125,
-              "baseline": 578.5528,
-              "advance": 92.796875
             }
           ],
-          "ink": [[300, 431, 408, 462], [277, 495, 406, 527], [310, 555, 406, 582]]
+          "ink": [[300, 431, 408, 462]]
         }
       ]
     },
@@ -1098,6 +1081,7 @@
             "pad": 5,
             "letter_spacing": 0,
             "align": "left",
+            "valign": "middle",
             "fill": "#fafafa",
             "stroke": {
               "color": "#ffffff",
@@ -1122,6 +1106,7 @@
             "pad": 5,
             "letter_spacing": 0,
             "align": "left",
+            "valign": "middle",
             "fill": "#fafafa",
             "stroke": {
               "color": "#ffffff",
@@ -1146,6 +1131,7 @@
             "pad": 6,
             "letter_spacing": 0,
             "align": "right",
+            "valign": "top",
             "fill": "#111111",
             "stroke": {
               "color": "#1a1a1a",
@@ -1170,6 +1156,7 @@
             "pad": 4,
             "letter_spacing": 0,
             "align": "center",
+            "valign": "middle",
             "fill": "#fafafa",
             "stroke": {
               "color": "#ffffff",
@@ -1191,32 +1178,32 @@
           "lines": [
             {
               "x": 28.25,
-              "baseline": 47,
+              "baseline": 56.08050000000001,
               "advance": 184.015625
             },
             {
               "x": 28.25,
-              "baseline": 79.0045,
+              "baseline": 88.08500000000001,
               "advance": 218.875
             },
             {
               "x": 28.25,
-              "baseline": 111.00899999999999,
+              "baseline": 120.08949999999999,
               "advance": 180.546875
             }
           ],
-          "ink": [[28, 24, 212, 53], [28, 56, 247, 86], [29, 89, 209, 117]]
+          "ink": [[28, 33, 212, 62], [28, 65, 247, 95], [29, 98, 209, 126]]
         },
         {
           "id": "b25",
           "lines": [
             {
               "x": 28.25,
-              "baseline": 198,
+              "baseline": 225.9025,
               "advance": 105.09375
             }
           ],
-          "ink": [[30, 157, 131, 200]]
+          "ink": [[30, 185, 131, 228]]
         },
         {
           "id": "b26",
@@ -1244,11 +1231,11 @@
           "lines": [
             {
               "x": 144.7890625,
-              "baseline": 448.5,
+              "baseline": 476.5625,
               "advance": 122.421875
             }
           ],
-          "ink": [[142, 424, 269, 452]]
+          "ink": [[142, 452, 269, 480]]
         }
       ]
     },
@@ -1302,6 +1289,7 @@
             "pad": 4,
             "letter_spacing": 0,
             "align": "center",
+            "valign": "top",
             "fill": "#111111",
             "stroke": {
               "color": "#1a1a1a",
@@ -1326,6 +1314,7 @@
             "pad": 4,
             "letter_spacing": 0,
             "align": "center",
+            "valign": "top",
             "fill": "#111111",
             "stroke": {
               "color": "#1a1a1a",
@@ -1350,6 +1339,7 @@
             "pad": 5,
             "letter_spacing": 0,
             "align": "left",
+            "valign": "middle",
             "fill": "#fafafa",
             "stroke": {
               "color": "#ffffff",
@@ -1424,11 +1414,11 @@
           "lines": [
             {
               "x": 28.25,
-              "baseline": 440.575,
+              "baseline": 469.775,
               "advance": 120.71875
             }
           ],
-          "ink": [[25, 411, 156, 449]]
+          "ink": [[25, 440, 156, 478]]
         }
       ]
     },
@@ -1482,6 +1472,7 @@
             "pad": 4,
             "letter_spacing": 0,
             "align": "center",
+            "valign": "middle",
             "fill": "#fafafa",
             "stroke": {
               "color": "#ffffff",
@@ -1506,6 +1497,7 @@
             "pad": 6,
             "letter_spacing": 0,
             "align": "right",
+            "valign": "middle",
             "fill": "#fafafa",
             "stroke": {
               "color": "#ffffff",
@@ -1520,16 +1512,17 @@
             "x": 30.5,
             "y": 410,
             "w": 380,
-            "h": 156.6,
+            "h": 20.7,
             "rotation": 0,
-            "text": "Thằng nhóc đó đang ở đâu vậy? Mau nói cho tôi!",
-            "lines": ["Thằng nhóc đó", "đang ở đâu vậy?", "Mau nói cho tôi!"],
+            "text": "Thằng nhóc đó",
+            "lines": ["Thằng nhóc đó"],
             "font_family": "Mali-Regular",
             "font_size": 23,
             "line_height": 1.3,
             "pad": 6,
             "letter_spacing": 0,
             "align": "right",
+            "valign": "middle",
             "fill": "#fafafa",
             "stroke": {
               "color": "#ffffff",
@@ -1568,11 +1561,11 @@
           "lines": [
             {
               "x": 57.1328125,
-              "baseline": 202.025,
+              "baseline": 231.975,
               "advance": 297.734375
             }
           ],
-          "ink": [[58, 169, 355, 212]]
+          "ink": [[58, 199, 355, 242]]
         },
         {
           "id": "b34",
@@ -1583,21 +1576,21 @@
           "lines": [
             {
               "x": 77.46875,
-              "baseline": 305.95,
+              "baseline": 315.49,
               "advance": 155.03125
             },
             {
               "x": 45.96875,
-              "baseline": 338.06,
+              "baseline": 347.6,
               "advance": 186.53125
             },
             {
               "x": 76.265625,
-              "baseline": 370.16999999999996,
+              "baseline": 379.71000000000004,
               "advance": 156.234375
             }
           ],
-          "ink": [[75, 286, 235, 314], [44, 318, 235, 346], [74, 351, 234, 378]]
+          "ink": [[75, 295, 235, 324], [44, 327, 235, 356], [74, 361, 234, 388]]
         },
         {
           "id": "b35",
@@ -1606,19 +1599,9 @@
               "x": 240.5,
               "baseline": 440.15,
               "advance": 164
-            },
-            {
-              "x": 218.609375,
-              "baseline": 479.02,
-              "advance": 185.890625
-            },
-            {
-              "x": 226.75,
-              "baseline": 517.89,
-              "advance": 177.75
             }
           ],
-          "ink": [[238, 417, 407, 449], [216, 455, 407, 488], [225, 497, 406, 522]]
+          "ink": [[238, 417, 407, 449]]
         }
       ]
     },
@@ -1672,6 +1655,7 @@
             "pad": 5,
             "letter_spacing": 0,
             "align": "left",
+            "valign": "middle",
             "fill": "#fafafa",
             "stroke": {
               "color": "#ffffff",
@@ -1696,6 +1680,7 @@
             "pad": 6,
             "letter_spacing": 0,
             "align": "right",
+            "valign": "top",
             "fill": "#111111",
             "stroke": {
               "color": "#1a1a1a",
@@ -1745,16 +1730,16 @@
           "lines": [
             {
               "x": 28.25,
-              "baseline": 201.886,
+              "baseline": 214.96644999999998,
               "advance": 244.015625
             },
             {
               "x": 28.25,
-              "baseline": 270.0511,
+              "baseline": 283.13154999999995,
               "advance": 173.984375
             }
           ],
-          "ink": [[29, 175, 271, 211], [29, 243, 202, 272]]
+          "ink": [[29, 188, 271, 224], [29, 256, 202, 285]]
         },
         {
           "id": "b38",

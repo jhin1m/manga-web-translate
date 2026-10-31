@@ -146,6 +146,7 @@ def test_typeset_region_uses_bubble_interior_and_renders():
     )
     tb = typeset_region(clean, text, bubble, TEXT, FONT)
     assert tb.w * tb.h > 0 and tb.lines and tb.fill == "#000000"
+    assert tb.valign == "middle"  # box mới căn giữa dọc; box lưu từ trước không có trường này = "top"
     # Chữ đen trong bóng: viền trắng dày theo cỡ chữ (chất lettering manga).
     assert tb.stroke is not None and tb.stroke.color == "#ffffff"
     assert tb.stroke.width == round(max(1.5, tb.font_size * STROKE_BUBBLE), 1)

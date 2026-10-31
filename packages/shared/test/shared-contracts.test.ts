@@ -82,6 +82,39 @@ describe("PageState", () => {
     expect(PageState.safeParse({ ...s, text_boxes: [{ ...box, text: nfd }] }).success).toBe(false);
   });
 
+  it("valign is optional (boxes saved before it exist) and limited to top|middle", () => {
+    const s = emptyPageState(800, 1200);
+    const box = {
+      id: "t1",
+      region_id: null,
+      x: 0,
+      y: 0,
+      w: 10,
+      h: 10,
+      rotation: 0,
+      text: "a",
+      lines: ["a"],
+      font_family: "BeVietnamPro-Bold",
+      font_size: 22,
+      line_height: 1.15,
+      pad: 4,
+      letter_spacing: 0,
+      align: "center",
+      fill: "#111",
+      stroke: null,
+      auto_fit: true,
+      hidden: false,
+    };
+    const parse = (extra: object) => PageState.safeParse({ ...s, text_boxes: [{ ...box, ...extra }] });
+    const old = parse({});
+    expect(old.success && old.data.text_boxes[0]?.valign).toBeUndefined();
+    for (const v of ["top", "middle"]) {
+      const r = parse({ valign: v });
+      expect(r.success && r.data.text_boxes[0]?.valign).toBe(v);
+    }
+    expect(parse({ valign: "bottom" }).success).toBe(false);
+  });
+
   it("region colors are optional (older pages) but must be #rrggbb when present", () => {
     const s = emptyPageState(800, 1200);
     const region = {

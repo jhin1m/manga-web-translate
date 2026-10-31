@@ -119,6 +119,44 @@ describe("PUT /pages/:id/state", () => {
     expect(hist[0]?.actor).toBe(`user:${A.userId}`);
   });
 
+  it("keeps a box's valign across save and load; a box saved without it stays without it", async () => {
+    await lock();
+    const id = await newPage();
+    const box = {
+      id: "tb-1",
+      region_id: null,
+      x: 0,
+      y: 0,
+      w: 120,
+      h: 80,
+      rotation: 0,
+      text: "Xin",
+      lines: ["Xin"],
+      font_family: "BeVietnamPro-Bold",
+      font_size: 20,
+      line_height: 1.15,
+      pad: 4,
+      letter_spacing: 0,
+      align: "center" as const,
+      fill: "#000000",
+      stroke: null,
+      auto_fit: false,
+      hidden: false,
+    };
+    const state: PageState = {
+      ...edited("x"),
+      text_boxes: [
+        { ...box, valign: "middle" },
+        { ...box, id: "tb-2" },
+      ],
+    };
+    expect((await put(id, state, 0)).status).toBe(200);
+    const body = (await (await call(p(id), { cookie: A.cookie })).json()) as { state: PageState };
+    expect(body.state.text_boxes.map((b) => b.valign)).toEqual(["middle", undefined]);
+    const bad = { ...state, text_boxes: [{ ...box, valign: "bottom" }] } as unknown as PageState;
+    expect((await put(id, bad, 1)).status).toBe(400);
+  });
+
   it("stale version → 409 with the current version, state unchanged (no blind overwrite)", async () => {
     await lock();
     const id = await newPage();

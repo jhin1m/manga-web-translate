@@ -17,6 +17,11 @@ const ALIGN: { id: TextBox["align"]; label: string }[] = [
   { id: "right", label: "Phải" },
 ];
 
+const VALIGN: { id: NonNullable<TextBox["valign"]>; label: string; aria: string }[] = [
+  { id: "top", label: "Trên", aria: "Căn dọc: sát mép trên" },
+  { id: "middle", label: "Giữa", aria: "Căn dọc: giữa khung" },
+];
+
 /**
  * Ô số giữ chuỗi đang gõ: chỉ áp số hợp lệ trong khoảng ngay khi gõ; rời ô / Enter kẹp trong khoảng (rỗng → giữ giá trị
  * cũ) rồi hiện lại giá trị của box. Đặt `key` theo box để đổi khối là bỏ chuỗi dở.
@@ -189,6 +194,21 @@ export function AdvancedStyle({ children }: { children?: ReactNode }) {
             aria-pressed={box.align === a.id}
             className={box.align === a.id ? "on" : undefined}
             onClick={() => style("align", { align: a.id })}
+          >
+            {a.label}
+          </button>
+        ))}
+      </div>
+      <span className="label">Căn dọc</span>
+      <div className="ed-seg">
+        {VALIGN.map((a) => (
+          <button
+            key={a.id}
+            type="button"
+            aria-label={a.aria}
+            aria-pressed={(box.valign ?? "top") === a.id}
+            className={(box.valign ?? "top") === a.id ? "on" : undefined}
+            onClick={() => style("valign", { valign: a.id })}
           >
             {a.label}
           </button>

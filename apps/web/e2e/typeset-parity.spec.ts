@@ -19,6 +19,8 @@ type Box = {
   lines: string[];
   font_size: number;
   line_height: number;
+  pad: number;
+  valign?: "top" | "middle";
   font_family: string;
   [k: string]: unknown;
 };
@@ -49,9 +51,10 @@ test("Konva (drawBoxText của editor) khớp render.py ≤ 1px bbox mực từn
   // Lần import đầu có thể làm Vite tối ưu thêm dependency (react-konva…) và reload trang (mất window.Konva) → thử lại.
   const run = () =>
     page.evaluate(async (pages) => {
-      const [node, fonts] = await Promise.all([
+      const [node, fonts, measure] = await Promise.all([
         import(/* @vite-ignore */ "/src/features/editor/canvas/TextBoxNode.tsx"),
         import(/* @vite-ignore */ "/src/features/editor/fonts.ts"),
+        import(/* @vite-ignore */ "/src/features/editor/measure.ts"),
       ]);
       // @ts-expect-error Konva nạp qua script tag
       const Konva = window.Konva;
@@ -71,7 +74,9 @@ test("Konva (drawBoxText của editor) khớp render.py ≤ 1px bbox mực từn
           const box = wrapped ? { ...raw, ...wrapped } : raw;
           const m = kit.metrics(box.font_family);
           const asc = (m.ascent * box.font_size) / m.unitsPerEm;
-          const step = (asc + (m.descent * box.font_size) / m.unitsPerEm) * box.line_height;
+          // Baseline cả khối do editor tính (gồm valign middle, hợp đồng mục 3); từng dòng vẽ riêng nên dịch y để
+          // baseline kiểu "top" của dòng đó trùng baseline này.
+          const placed = measure.linePlacements(box, m, kit.measure);
           const sw = box.stroke && box.stroke.width > 0 ? box.stroke.width : 0;
           // Cùng khung cắt với line_ink_bboxes của render.py.
           const margin = Math.trunc(box.font_size * 2 + sw) + 4;
@@ -81,7 +86,12 @@ test("Konva (drawBoxText của editor) khớp render.py ≤ 1px bbox mực từn
           const H = Math.ceil(box.h) + 2 * margin;
           const bboxes = box.lines.map((line: string, i: number) => {
             // Mỗi dòng vẽ riêng: dịch y để baseline dòng i về dòng 0 (cùng baseline như khi vẽ cả box).
-            const single = { ...box, lines: [line], y: box.y + i * step };
+            const single = {
+              ...box,
+              lines: [line],
+              valign: "top",
+              y: box.y + (placed[i]?.baseline ?? 0) - box.pad - asc,
+            };
             const stage = new Konva.Stage({ container: host, width: W, height: H });
             const layer = new Konva.Layer();
             layer.add(
@@ -168,5 +178,8 @@ test("Konva (drawBoxText của editor) khớp render.py ≤ 1px bbox mực từn
     `parity: ${report.length} dòng, khớp tuyệt đối ${exact}, lệch tối đa ${max}px, vượt ngưỡng ${bad.length}`,
   );
   expect(report.length).toBeGreaterThanOrEqual(40);
+  // Gate phải phủ cả căn giữa dọc có dư chỗ (dy > 0) lẫn box tràn (dy kẹp 0).
+  const middles = fixture.pages.flatMap((p) => p.state.text_boxes).filter((b) => b.valign === "middle");
+  expect(middles.length).toBeGreaterThanOrEqual(10);
   expect(bad, JSON.stringify(bad, null, 1)).toEqual([]);
 });

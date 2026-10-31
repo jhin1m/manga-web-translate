@@ -16,6 +16,7 @@ lệch bbox mực từng dòng ≤ 1px — xem `benchmarks/phase-01-results.md`)
 | `line_height` | Hệ số nhân bước dòng (mặc định 1.15). |
 | `pad` | Lề trong (px). |
 | `align` | `left` \| `center` \| `right`. |
+| `valign` | `top` \| `middle`, tuỳ chọn; **thiếu = `top`** (box lưu từ trước vẽ y hệt cũ). Box mới (vẽ tay, OCR vùng, auto-typeset) ghi `middle`. |
 | `fill` | Màu chữ. |
 | `stroke` | `{color, width}`; `width` = bề rộng viền **ra ngoài** glyph (px). |
 | `lines[]` | Các dòng **đã ngắt sẵn** — server chỉ vẽ, không ngắt lại. Rỗng mà có `text` (box auto, sau find/replace) → editor và export cùng ngắt theo `layoutBox` ≡ `render.ensure_lines` (gate parity kiểm khớp từng dòng). |
@@ -31,7 +32,10 @@ lệch bbox mực từng dòng ≤ 1px — xem `benchmarks/phase-01-results.md`)
    (`apps/api/src/lib/font-metrics.ts`, `fontkit`, test parity với manifest) cho editor, worker đọc từ chính file đó
    bằng `read_metrics`. Id không có file (font đã xoá, hoặc worker không tải được) → cả hai rơi về font thoại mặc định.
    `ascentPx = ascent · size / unitsPerEm`, tương tự `descentPx`.
-3. **Baseline** dòng `i`: `box.y + pad + ascentPx + i · (ascentPx + descentPx) · line_height`.
+3. **Baseline** dòng `i`: `box.y + pad + dy + ascentPx + i · (ascentPx + descentPx) · line_height`, với
+   `blockH = (ascentPx + descentPx) + (n − 1) · (ascentPx + descentPx) · line_height` (`n` = số dòng) và
+   `dy = valign == "middle" ? max(0, (h − 2·pad − blockH) / 2) : 0`. `max(0, …)` giữ nguyên hành vi khi chữ tràn khung
+   (bám mép trên như `top`, không tràn ngược lên).
 4. **Toạ độ x** (pen origin) dòng: `box.x + pad`, cộng `(w − 2·pad − advance)/2` khi `center`, `w − 2·pad − advance`
    khi `right`. `advance` đo trên chính renderer (Pillow `getlength` với raqm; canvas `measureText().width`) —
    spike đo chênh advance ≤ 0.03px.

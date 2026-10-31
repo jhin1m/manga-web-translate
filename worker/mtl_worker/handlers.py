@@ -177,6 +177,7 @@ def _text_box_to_shared(b: TextBox) -> dict[str, Any]:
         "pad": b.pad,
         "letter_spacing": 0,
         "align": b.align,
+        "valign": b.valign,
         "fill": b.fill,
         "stroke": b.stroke.model_dump() if b.stroke and b.stroke.width > 0 else None,
         "auto_fit": True,

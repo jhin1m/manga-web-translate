@@ -185,6 +185,9 @@ dịch chương theo chuỗi job lô, tiến độ từng trang, drawer Xuất m
    `UPDATE chapters c SET status='prepared', run_target=NULL WHERE status='processing' AND NOT EXISTS (SELECT 1 FROM jobs j WHERE j.chapter_id=c.id AND j.status IN ('queued','running','paused_budget'));`
    rồi người dùng bấm dịch lại (trang `ready` giữ nguyên).
 
+**Pipeline 0.7.1 (căn giữa dọc `valign`)**: worker lên 0.7.1 trước API (`MIN_PIPELINE_VERSION` mặc định 0.7.1). Worker cũ không
+đọc `valign` nên export box căn giữa thành căn trên, lệch với editor; không có migration, box lưu từ trước (không có trường) vẽ như cũ.
+
 Log: `journalctl -u mtl-api -o cat` (JSON mỗi request: method, path, status, ms — không query/header/body),
 `journalctl -u mtl-jobs`.
 

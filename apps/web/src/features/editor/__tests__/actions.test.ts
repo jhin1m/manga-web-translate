@@ -132,6 +132,16 @@ describe("editor actions", () => {
     const drawn = newTextBox("x", { x: 0, y: 0, w: 1, h: 1 }, "F", null);
     expect(drawn.w).toBe(8);
     expect(drawn.stroke).toEqual({ color: "#ffffff", width: 2.2 });
+    expect(drawn.valign).toBe("middle");
+  });
+
+  it("setStyleMany propagates valign (a box saved without it counts as top)", () => {
+    const s0 = doc(2);
+    expect(s0.text_boxes[0]?.valign).toBeUndefined();
+    const s1 = run(s0, setStyleMany(["t0", "t1"], { valign: "middle" }, layout));
+    expect(s1.text_boxes.map((b) => b.valign)).toEqual(["middle", "middle"]);
+    const s2 = run(s1, setStyleMany(["t0"], { valign: "top" }, layout));
+    expect(s2.text_boxes.map((b) => b.valign)).toEqual(["top", "middle"]);
   });
 
   it("setStyleMany styles several boxes in one change; refreshRegionFromOcr keeps ids and box geometry", () => {

@@ -72,6 +72,25 @@ describe("measure (layout contract)", () => {
     expect(linePlacements({ ...b, align: "right" }, METRICS, measure)[1]?.x).toBe(4 + 92 - 40);
   });
 
+  it("valign middle shifts the block down by half the spare height; top/missing stay put", () => {
+    // 2 dòng cỡ 20, giãn 1.5: khối cao 20 + 30 = 50; box h 100, pad 4 → còn dư 100 − 8 − 50 = 42 → dy 21.
+    const b = { ...box("t"), lines: ["ab", "abcd"], w: 100, h: 100, pad: 4, font_size: 20, line_height: 1.5 };
+    const top = linePlacements(b, METRICS, measure);
+    expect(top[0]?.baseline).toBe(4 + 16);
+    expect(linePlacements({ ...b, valign: "top" }, METRICS, measure)).toEqual(top);
+    const mid = linePlacements({ ...b, valign: "middle" }, METRICS, measure);
+    expect(mid[0]?.baseline).toBeCloseTo(4 + 21 + 16);
+    expect(mid[1]?.baseline).toBeCloseTo(4 + 21 + 16 + 30);
+    expect(mid[1]?.x).toBe(top[1]?.x);
+    // Khối vừa khít hoặc tràn: dy kẹp về 0, y hệt top.
+    const flush = { ...b, valign: "middle" as const, h: 58 };
+    expect(linePlacements(flush, METRICS, measure)[0]?.baseline).toBeCloseTo(4 + 16);
+    const over = { ...b, valign: "middle" as const, h: 30 };
+    expect(linePlacements(over, METRICS, measure)).toEqual(
+      linePlacements({ ...over, valign: "top" }, METRICS, measure),
+    );
+  });
+
   it("flags a box whose lines no longer fit (height or width)", () => {
     // 3 dòng cỡ 20: cao 20 + 2·20·1.15 = 66 + 2·pad 4 = 74.
     const b = { ...box("t"), lines: ["ab", "ab", "ab"], w: 100, h: 74, pad: 4, font_size: 20, line_height: 1.15 };

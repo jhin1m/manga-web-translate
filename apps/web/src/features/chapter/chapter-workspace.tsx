@@ -563,13 +563,14 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
       const s = editorStore.getState();
       const src = s.doc?.text_boxes.find((b) => b.id === row.boxId);
       if (!s.doc || !s.layout || !src) return { tone: "danger", text: "Chưa chọn khung chữ." };
-      const { font_family, font_size, line_height, pad, align, fill, stroke, auto_fit } = src;
+      const { font_family, font_size, line_height, pad, align, valign, fill, stroke, auto_fit } = src;
       // Box tự khớp: cỡ chữ là kết quả khớp của riêng box đó — không chép sang box khác.
       const style = {
         font_family,
         line_height,
         pad,
         align,
+        valign: valign ?? "top",
         fill,
         stroke,
         auto_fit,

@@ -196,7 +196,7 @@ chương chưa dịch xong → Tìm, Hiệu đính tắt.
 
 - **Chọn** (`select-panel.tsx`): có khối — "Trang n · Khối i / tổng · Loại" (loại chỉ đọc), Gốc (OCR), Bản dịch
   (`#cw-translation`, cùng nguồn với bảng), cảnh báo tràn khung, font / cỡ / tự khớp, "Kiểu chữ nâng cao" (thu gọn:
-  giãn dòng, lề, căn lề, màu, viền, ẩn khi xuất, "Áp kiểu này cho khối <loại> trong chương" — mọi trang, kể cả trang
+  giãn dòng, lề, căn lề, căn dọc (Trên / Giữa — khối mới mặc định Giữa, khối lưu từ trước giữ Trên; chữ ngắn lại thì nằm giữa khung thay vì dính mép trên; "Áp kiểu này" chép cả căn dọc), màu, viền, ẩn khi xuất, "Áp kiểu này cho khối <loại> trong chương" — mọi trang, kể cả trang
   đang mở, ghi trong 1 lượt `PUT /chapters/:id/states` chung `batch_id`; toast "Hoàn tác" khôi phục cả lượt qua
   `find-replace/undo` (`conflicts: "skip"`: trang đã sửa tiếp được giữ và nêu trong toast), lượt là 1 bước trong lịch sử undo của trang đang mở (mốc không có patch): Cmd+Z / nút Hoàn tác ở bước đó gọi đúng hoàn tác của toast, rồi Cmd+Z tiếp lùi các sửa trước lượt; mốc thuộc trang đang mở lúc áp (đổi trang thì Cmd+Z ở trang khác không thấy), không làm lại (redo) được lượt. Cùng cơ chế cho Tìm/Thay và Áp glossary (`apply` trả `versions` = version mới từng page; Cmd+Z hoàn tác với `conflicts: "skip"`, nút Hoàn tác của panel tự tắt; Cmd+Z trong ô nhập vẫn là undo của ô); chương đang xử lý → 409 `chapter_busy`), Dịch lại
   khối, Xoá khối, link Dịch trang này / Dịch lại trang này (không có khi trang bận). Chưa có khối — trang + trạng thái + cờ (AI có bản mới, tràn khung, cắt ở
