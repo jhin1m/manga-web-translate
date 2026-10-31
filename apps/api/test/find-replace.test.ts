@@ -334,21 +334,27 @@ describe("performance", () => {
   });
 
   it("skip mode: two batches on the same pages undo in reverse order, and a same-content save does not count as an edit", async () => {
-    const original = await Promise.all(pageIds.map((id) => stateOf(id)));
+    const c = await newChapter(3, (i) => state(`Rút Kiếm ra! ${i}`, "Chào"));
+    expect((await lock(c.chapterId)).status).toBe(200);
+    const original = await Promise.all(c.ids.map((id) => stateOf(id)));
     const applyOnce = async (find: string, replace: string) => {
       const pv = (await (
-        await api("/find-replace/preview", { find, replace, case_sensitive: true })
+        await api("/find-replace/preview", { find, replace, case_sensitive: true }, c.chapterId)
       ).json()) as Preview;
-      const res = await api("/find-replace/apply", { find, replace, case_sensitive: true, versions: pv.versions });
+      const res = await api(
+        "/find-replace/apply",
+        { find, replace, case_sensitive: true, versions: pv.versions },
+        c.chapterId,
+      );
       expect(res.status, await res.clone().text()).toBe(200);
       return ((await res.json()) as { batch_id: string }).batch_id;
     };
     const a = await applyOnce("ra!", "xong!");
     const b = await applyOnce("xong!", "rồi!");
-    const afterA = await Promise.all(pageIds.map((id) => stateOf(id)));
+    const afterB = await Promise.all(c.ids.map((id) => stateOf(id)));
     // Lưu lại đúng nội dung (như sửa rồi Cmd+Z): version tăng nhưng nội dung không đổi.
-    const p0 = afterA[0];
-    const same = await call(`/api/pages/${pageIds[0]}/state`, {
+    const p0 = afterB[0];
+    const same = await call(`/api/pages/${c.ids[0]}/state`, {
       method: "PUT",
       cookie: A.cookie,
       body: { state: p0?.state },
@@ -356,13 +362,12 @@ describe("performance", () => {
     });
     expect(same.status).toBe(200);
 
-    const undoB = await api("/find-replace/undo", { batch_id: b, conflicts: "skip" });
-    expect(await undoB.json()).toMatchObject({ skipped: [] });
-    const undoA = await api("/find-replace/undo", { batch_id: a, conflicts: "skip" });
-    const body = (await undoA.json()) as { pages: number; skipped: string[] };
-    expect(body.skipped).toEqual([]);
-    expect(body.pages).toBeGreaterThan(0);
-    const restored = await Promise.all(pageIds.map((id) => stateOf(id)));
+    const undoB = await api("/find-replace/undo", { batch_id: b, conflicts: "skip" }, c.chapterId);
+    expect(await undoB.json()).toMatchObject({ pages: 3, skipped: [] });
+    const undoA = await api("/find-replace/undo", { batch_id: a, conflicts: "skip" }, c.chapterId);
+    expect(await undoA.json()).toMatchObject({ pages: 3, skipped: [] });
+    const restored = await Promise.all(c.ids.map((id) => stateOf(id)));
     expect(restored.map((r) => r.state)).toEqual(original.map((r) => r.state));
+    await unlock(c.chapterId);
   });
 });

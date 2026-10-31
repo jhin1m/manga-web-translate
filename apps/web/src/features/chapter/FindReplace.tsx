@@ -39,6 +39,8 @@ export type BatchHooks = {
   /** Xin khoá hoàn tác chung (false = đang có yêu cầu hoàn tác khác bay); gọi `end` khi xong. */
   begin(): boolean;
   end(): void;
+  /** Đang có yêu cầu hoàn tác (của panel, toast hay Cmd+Z) → tắt nút Hoàn tác. */
+  busy: boolean;
   /** Server vừa áp lượt, trước khi tải lại state chương. */
   applied(r: ApplyResult): void;
   /** Nút Hoàn tác của panel vừa hoàn tác xong lượt. */
@@ -131,7 +133,7 @@ export function useBatchFlow<I>(
     previewInput: preview?.input ?? null,
     applied,
     message,
-    busy: previewM.isPending || applyM.isPending || undoM.isPending,
+    busy: previewM.isPending || applyM.isPending || undoM.isPending || !!fns.hooks?.busy,
     runPreview: () => previewM.mutate({ input: fns.input, gen: ++gen.current }),
     runApply: () => preview && applyM.mutate({ input: preview.input, versions: preview.result.versions }),
     runUndo: () => {

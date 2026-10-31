@@ -406,8 +406,10 @@ export class ChapterSession {
       s.finishBatch(batchId, "reload");
       return false;
     }
-    // Chỉ tự khôi phục khi server thực sự đã khôi phục trang nào đó (không thì lượt đã được hoàn tác ở nơi khác).
-    if (restored > 0 && s.doc && mark.after && same(s.doc, mark.after)) {
+    // Tự khôi phục khi server đã khôi phục trang nào đó, hoặc lượt chỉ có đúng trang đang mở (bản ghi lịch sử bị dọn nên server
+    // bỏ qua). Lượt nhiều trang mà server bỏ qua hết = đã hoàn tác ở nơi khác → không đụng. Hai yêu cầu hoàn tác chạy chồng
+    // đã bị khoá chung (`undoBusy`) chặn từ trước.
+    if ((restored > 0 || skipped.length === 1) && s.doc && mark.after && same(s.doc, mark.after)) {
       s.finishBatch(batchId, "local");
       void this.deps.saver.flush();
       return true;

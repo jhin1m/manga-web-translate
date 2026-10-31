@@ -149,21 +149,31 @@ export async function undoBatch(
     // Page "đã sửa tiếp" khi nội dung hiện tại khác nội dung lượt đã ghi (state ở version h.version+1). Version tăng mà nội
     // dung không đổi (VD hoàn tác lượt sau rồi mới hoàn tác lượt này, hay sửa rồi Cmd+Z đúng sửa đó) vẫn khôi phục được.
     const moved = hist.filter((h) => cur.get(h.pageId)?.version !== h.version + 1);
-    const wrote = moved.length
-      ? await tx.select(
-          pageStateHistory,
-          inArray(
-            pageStateHistory.pageId,
-            moved.map((h) => h.pageId),
-          ),
-        )
-      : [];
+    // Chỉ lấy đúng các bản ghi (page, version h.version+1) cần so — không đọc cả lịch sử (tới 50 state/page).
+    const wrote = new Map(
+      (moved.length
+        ? await tx.select(
+            pageStateHistory,
+            and(
+              inArray(
+                pageStateHistory.pageId,
+                moved.map((h) => h.pageId),
+              ),
+              inArray(
+                pageStateHistory.version,
+                moved.map((h) => h.version + 1),
+              ),
+            ) as SQL,
+          )
+        : []
+      ).map((w) => [`${w.pageId}:${w.version}`, w.state]),
+    );
     const unchanged = (h: (typeof hist)[number]) => {
       const now = cur.get(h.pageId);
       if (!now) return false;
       if (now.version === h.version + 1) return true;
-      const written = wrote.find((w) => w.pageId === h.pageId && w.version === h.version + 1);
-      return !!written && isDeepStrictEqual(written.state, now.state);
+      const written = wrote.get(`${h.pageId}:${h.version + 1}`);
+      return !!written && isDeepStrictEqual(written, now.state);
     };
     const changedSince = hist.filter((h) => !unchanged(h)).map((h) => h.pageId);
     if (changedSince.length && conflicts === "fail")

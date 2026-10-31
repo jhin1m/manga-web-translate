@@ -492,15 +492,21 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
   // 1 khoá chung cho mọi đường hoàn tác lượt (nút toast, Cmd+Z, nút Hoàn tác của panel): đang có yêu cầu bay thì bỏ qua yêu
   // cầu mới — hai yêu cầu cùng lúc làm lượt bị hoàn tác 2 lần hoặc báo "không hoàn tác được" sau khi đã thành công.
   const undoBusy = useRef(false);
+  const [undoing, setUndoing] = useState(false);
+  const acquireUndo = () => {
+    if (undoBusy.current) return false;
+    undoBusy.current = true;
+    setUndoing(true);
+    return true;
+  };
+  const releaseUndo = () => {
+    undoBusy.current = false;
+    setUndoing(false);
+  };
   const batchHooks = (label: string): BatchHooks => ({
-    begin: () => {
-      if (undoBusy.current) return false;
-      undoBusy.current = true;
-      return true;
-    },
-    end: () => {
-      undoBusy.current = false;
-    },
+    begin: acquireUndo,
+    end: releaseUndo,
+    busy: undoing,
     applied: (r) => {
       batchLabels.current.set(r.batch_id, label);
       session.session.recordServerBatch(r.batch_id, r.versions);
@@ -512,9 +518,7 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
     lastUndone: undoneBatch,
   });
   const runUndo = (batchId: string) => {
-    if (undoBusy.current) return;
-    undoBusy.current = true;
-    undoKind.mutate(batchId);
+    if (acquireUndo()) undoKind.mutate(batchId);
   };
   const undoKind = useMutation({
     mutationFn: async (batchId: string) => {
@@ -522,8 +526,7 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
       // Trang đã sửa tiếp sau lượt áp thì bỏ qua (không làm hỏng cả lượt) và báo rõ trang nào.
       return undoBatch(chapterId, batchId, "skip");
     },
-    // Ẩn nút ngay khi bấm: bấm lần 2 sẽ thấy mọi trang "đã sửa" và báo sai. Lỗi mạng thì trả lại để thử lại; lỗi từ
-    // server (lượt không còn…) thử lại cũng vô ích. Chỉ ẩn toast của chính lượt này (Cmd+Z có thể hoàn tác lượt cũ hơn).
+    // Ẩn nút ngay khi bấm: bấm lần 2 sẽ thấy mọi trang "đã sửa" và báo sai. Lỗi (trừ 404 lượt không còn) thì trả lại để thử lại. Chỉ ẩn toast của chính lượt này (Cmd+Z có thể hoàn tác lượt cũ hơn).
     onMutate: (batchId) => {
       if (styleUndoBatch.current !== batchId) return null;
       const prev = styleUndo;
@@ -545,7 +548,8 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
       });
     },
     onError: (e, batchId, prev) => {
-      if (!(e instanceof ApiError) && prev) setStyleUndo(prev);
+      // Trả nút Hoàn tác của toast về cho mọi lỗi trừ 404 (lượt không còn): lỗi tạm thử lại được, và Áp kiểu không có nút khác.
+      if (!(e instanceof ApiError && e.status === 404) && prev) setStyleUndo(prev);
       // Lượt không còn (404): bỏ mốc, không thì Cmd+Z kẹt mãi ở mốc này. Lỗi tạm (chương đang bận 409, mất khoá 423, mạng,
       // 5xx): giữ mốc và lịch sử trước lượt để thử lại khi hết lỗi.
       if (e instanceof ApiError && e.status === 404) {
@@ -561,7 +565,7 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
       });
     },
     onSettled: () => {
-      undoBusy.current = false;
+      releaseUndo();
       data.refresh();
     },
   });

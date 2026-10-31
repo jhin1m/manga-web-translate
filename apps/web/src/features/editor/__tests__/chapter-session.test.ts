@@ -622,14 +622,16 @@ describe("ChapterSession", () => {
     it("edit after the batch, then Cmd+Z the edit, then the batch: restored in place", async () => {
       const t = setup();
       await open(t);
-      const a = serverApply(t, ["A", "B"]);
+      // Lượt chỉ có đúng trang đang mở, server bỏ qua (bản ghi lịch sử bị dọn) → pages = 0 mà vẫn khôi phục tại chỗ.
+      const a = serverApply(t, ["A"]);
       t.session.recordServerBatch(a.batchId, a.versions);
       a.refresh();
       t.editor.getState().apply(moveBox("t0", 40, 40));
       await t.saver.flush();
       t.editor.getState().undo();
       await t.saver.flush();
-      const { local } = t.undoBatchServer("batch-1", ["A"]);
+      const { restored, local } = t.undoBatchServer("batch-1", ["A"]);
+      expect(restored).toEqual([]);
       expect(local).toBe(true);
       expect(t.editor.getState().doc?.text_boxes[0]).toMatchObject({ x: 7, align: "center" });
     });
