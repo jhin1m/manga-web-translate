@@ -248,12 +248,16 @@ describe("preview → apply → undo", () => {
     const pv = (await (await api("/preview", {})).json()) as Preview;
     const applied = (await (await api("/apply", { versions: mergedVersions(pv) })).json()) as Applied;
     const edited = await stateOf(c1.pageIds[0] as string);
+    // Sửa thật nội dung (lưu lại y nguyên không tính là sửa: undo so theo nội dung).
+    const changed = structuredClone(edited.state);
+    const box = changed.text_boxes[0];
+    if (box) box.x += 5;
     const lock = (method: string) => call(`/api/chapters/${c1.id}/lock`, { method, cookie: A.cookie });
     expect((await lock("POST")).status).toBe(200);
     const put = await call(`/api/pages/${c1.pageIds[0]}/state`, {
       method: "PUT",
       cookie: A.cookie,
-      body: { state: edited.state },
+      body: { state: changed },
       headers: { "if-match": String(edited.version) },
     });
     expect(put.status).toBe(200);

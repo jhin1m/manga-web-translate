@@ -4,10 +4,12 @@
  * Mỗi phép sửa là một `PageTransform` thuần (state → state mới + danh sách khớp). Luồng: preview (không ghi) → danh
  * sách khớp + `versions` của page bị ảnh hưởng; apply gửi lại `versions`, chạy 1 transaction: mỗi page ghi bản cũ vào
  * `page_state_history` với chung `batch_id`, version +1; page đổi sau preview → 409 `preview_stale`. Hoàn tác = khôi
- * phục theo `batch_id`, chỉ page chưa bị sửa tiếp (version hiện tại = version lúc áp + 1).
+ * phục theo `batch_id`, chỉ page chưa bị sửa tiếp (version hiện tại = version lúc áp + 1, hoặc nội dung hiện tại vẫn bằng nội dung lượt đã ghi — VD hoàn tác lượt sau trước lượt này).
  *
  * Lõi không kiểm khoá chương — nơi gọi tự đảm bảo (route: `assertChapterLock`; áp theo series: lấy khoá từng chương).
  */
+
+import { isDeepStrictEqual } from "node:util";
 import { pageStateHistory, pageStates, pages, type Scoped } from "@mtl/db";
 import type { PageState } from "@mtl/shared";
 import { and, eq, inArray, type SQL } from "drizzle-orm";
@@ -144,7 +146,26 @@ export async function undoBatch(
         )
       ).map((s) => [s.pageId, s]),
     );
-    const changedSince = hist.filter((h) => cur.get(h.pageId)?.version !== h.version + 1).map((h) => h.pageId);
+    // Page "đã sửa tiếp" khi nội dung hiện tại khác nội dung lượt đã ghi (state ở version h.version+1). Version tăng mà nội
+    // dung không đổi (VD hoàn tác lượt sau rồi mới hoàn tác lượt này, hay sửa rồi Cmd+Z đúng sửa đó) vẫn khôi phục được.
+    const moved = hist.filter((h) => cur.get(h.pageId)?.version !== h.version + 1);
+    const wrote = moved.length
+      ? await tx.select(
+          pageStateHistory,
+          inArray(
+            pageStateHistory.pageId,
+            moved.map((h) => h.pageId),
+          ),
+        )
+      : [];
+    const unchanged = (h: (typeof hist)[number]) => {
+      const now = cur.get(h.pageId);
+      if (!now) return false;
+      if (now.version === h.version + 1) return true;
+      const written = wrote.find((w) => w.pageId === h.pageId && w.version === h.version + 1);
+      return !!written && isDeepStrictEqual(written.state, now.state);
+    };
+    const changedSince = hist.filter((h) => !unchanged(h)).map((h) => h.pageId);
     if (changedSince.length && conflicts === "fail")
       throw httpError(409, { error: "undo_conflict", pages: changedSince });
     const skip = new Set(changedSince);

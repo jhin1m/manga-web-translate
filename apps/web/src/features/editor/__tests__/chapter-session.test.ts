@@ -4,7 +4,7 @@ import { moveBox } from "../actions.ts";
 import { createChapterStore } from "../chapter-store.ts";
 import { batchOnTop } from "../history.ts";
 import { PendingQueue } from "../pending-queue.ts";
-import { diffStates } from "../rebase.ts";
+import { diffStates, same } from "../rebase.ts";
 import { Saver } from "../save.ts";
 import { createEditorStore } from "../store.ts";
 import { ChapterSession, type SessionDeps, UnsavedPageError } from "../use-chapter-session.ts";
@@ -20,8 +20,20 @@ function setup() {
     A: { state: doc(2), version: 1 },
     B: { state: doc(3), version: 1 },
   };
-  /** State trước lượt `putStates` gần nhất theo page (để giả `undoBatch`). */
-  const before: Record<string, ReturnType<typeof doc>> = {};
+  /** Các lượt đã ghi: state trước + (version, state) lượt đã ghi theo page — để giả `undoBatch` theo nội dung như server. */
+  type S = ReturnType<typeof doc>;
+  const batches: Record<string, { pre: Record<string, S>; wrote: Record<string, { version: number; state: S }> }> = {};
+  let batchSeq = 0;
+  const batchOf = (id: string) => {
+    const b = batches[id];
+    if (!b) throw new Error(`no batch ${id}`);
+    return b;
+  };
+  const newBatch = () => {
+    const id = `batch-${++batchSeq}`;
+    batches[id] = { pre: {}, wrote: {} };
+    return id;
+  };
   const editor = createEditorStore();
   const chapter = createChapterStore();
   const queue = new PendingQueue(new IDBFactory());
@@ -61,13 +73,15 @@ function setup() {
         throw Object.assign(new Error("409"), { status: 409 });
       }
       const versions: Record<string, number> = {};
+      const id = newBatch();
       for (const p of list) {
         const prev = srv[p.page_id];
-        if (prev) before[p.page_id] = structuredClone(prev.state);
+        if (prev) batchOf(id).pre[p.page_id] = structuredClone(prev.state);
         srv[p.page_id] = { state: structuredClone(p.state), version: p.version + 1 };
+        batchOf(id).wrote[p.page_id] = { version: p.version + 1, state: structuredClone(p.state) };
         versions[p.page_id] = p.version + 1;
       }
-      return { batch_id: "batch-1", versions };
+      return { batch_id: id, versions };
     },
     queue,
     onError: (e) => {
@@ -90,24 +104,35 @@ function setup() {
     })),
   );
   editor.getState().setReadOnly(null);
-  /** Giả `undoBatch(skip)` + việc màn chương làm sau đó: dọn mốc, cập nhật cache, nạp lại page đang mở. */
-  const undoBatchServer = (skip: string[] = []) => {
-    // Như màn chương: onSuccess của hoàn tác (dọn mốc) chạy trước khi `refresh` đưa state mới vào cache.
-    const local = session.afterBatchUndo("batch-1", skip);
+  /**
+   * Giả `undoBatch(skip)` của server (page "đã sửa tiếp" = nội dung hiện tại khác nội dung lượt đã ghi) + việc màn chương làm
+   * sau đó. `forceSkip`: ép server bỏ qua page (VD bản ghi lịch sử đã bị dọn).
+   */
+  const undoBatchServer = (batchId = "batch-1", forceSkip: string[] = []) => {
+    const b = batches[batchId];
+    if (!b) throw new Error(`no batch ${batchId}`);
+    const skipped: string[] = [];
     const restored: string[] = [];
-    for (const id of Object.keys(srv)) {
-      const pre = before[id];
+    for (const id of Object.keys(b.pre)) {
       const cur = srv[id];
-      if (!pre || !cur || skip.includes(id)) continue;
+      const w = b.wrote[id];
+      const unchanged = !!cur && !!w && (cur.version === w.version || same(cur.state, w.state));
+      (unchanged && !forceSkip.includes(id) ? restored : skipped).push(id);
+    }
+    // Như màn chương: onSuccess của hoàn tác (dọn mốc) chạy trước khi `refresh` đưa state mới vào cache.
+    const local = session.afterBatchUndo(batchId, skipped, restored.length);
+    for (const id of restored) {
+      const cur = srv[id];
+      const pre = b.pre[id];
+      if (!cur || !pre) continue;
       srv[id] = { state: structuredClone(pre), version: cur.version + 1 };
       chapter.getState().setCached(id, { state: srv[id].state, version: srv[id].version });
-      restored.push(id);
     }
     session.syncActive();
-    return { restored, local };
+    return { restored, skipped, local };
   };
   const session = new ChapterSession(deps);
-  return { log, errors, srv, before, editor, chapter, saver, queue, session, undoBatchServer };
+  return { log, errors, srv, batchOf, newBatch, editor, chapter, saver, queue, session, undoBatchServer };
 }
 
 describe("ChapterSession", () => {
@@ -412,15 +437,31 @@ describe("ChapterSession", () => {
       expect(batchOnTop(t.editor.getState().history)).toMatchObject({ id: "batch-1" });
     });
 
-    it("edit then Cmd+Z after the bulk edit: server skips the saved open page but it is restored in place", async () => {
+    it("edit then Cmd+Z the edit, then Cmd+Z the batch: the saves bumped the version but the content is the batch's, so the server restores it", async () => {
       const t = setup();
       await applyBatch(t);
       t.editor.getState().apply(moveBox("t0", 40, 40));
       await t.saver.flush();
       t.editor.getState().undo();
       await t.saver.flush();
-      // Mỗi lần lưu tăng version nên server coi A là "đã sửa sau lượt" và bỏ qua.
-      const { restored, local } = t.undoBatchServer(["A"]);
+      const { restored, skipped, local } = t.undoBatchServer();
+      expect(restored).toEqual(["A", "B"]);
+      expect(skipped).toEqual([]);
+      expect(local).toBe(false);
+      const s = t.editor.getState();
+      expect(s.doc?.text_boxes[0]).toMatchObject({ x: 7, align: "center" });
+      s.undo();
+      expect(t.editor.getState().doc?.text_boxes[0]).toMatchObject({ x: 10 });
+    });
+
+    it("server still skipped the open page (history rows pruned) but restored others: the open page is restored in place", async () => {
+      const t = setup();
+      await applyBatch(t);
+      t.editor.getState().apply(moveBox("t0", 40, 40));
+      await t.saver.flush();
+      t.editor.getState().undo();
+      await t.saver.flush();
+      const { restored, local } = t.undoBatchServer("batch-1", ["A"]);
       expect(restored).toEqual(["B"]);
       expect(local).toBe(true);
       await t.saver.flush();
@@ -432,13 +473,48 @@ describe("ChapterSession", () => {
       expect(t.editor.getState().doc?.text_boxes[0]).toMatchObject({ x: 10 });
     });
 
+    it("never restores in place when the server restored nothing (the batch was undone elsewhere)", async () => {
+      const t = setup();
+      await applyBatch(t);
+      const { restored, local } = t.undoBatchServer("batch-1", ["A", "B"]);
+      expect(restored).toEqual([]);
+      expect(local).toBe(false);
+      expect(t.editor.getState().doc?.text_boxes[0]).toMatchObject({ align: "left" });
+      expect(t.editor.getState().save.status).toBe("saved");
+    });
+
+    it("two bulk edits in a row undo one after the other and bring every page back", async () => {
+      const t = setup();
+      t.chapter.subscribe((s, prev) => s.cache !== prev.cache && t.session.syncActive());
+      await t.session.activate("A");
+      t.editor.getState().apply(moveBox("t0", 7, 7));
+      await t.session.editMany(() => (d) => {
+        for (const b of d.text_boxes) b.align = "left";
+      });
+      await t.session.editMany(() => (d) => {
+        for (const b of d.text_boxes) b.align = "right";
+      });
+      expect(t.editor.getState().history.past).toHaveLength(3);
+      const second = t.undoBatchServer("batch-2");
+      expect(second.skipped).toEqual([]);
+      expect(batchOnTop(t.editor.getState().history)).toMatchObject({ id: "batch-1" });
+      const first = t.undoBatchServer("batch-1");
+      expect(first.restored).toEqual(["A", "B"]);
+      expect(first.skipped).toEqual([]);
+      expect(t.srv.B?.state).toEqual(doc(3));
+      expect(t.editor.getState().doc?.text_boxes[0]).toMatchObject({ x: 7, align: "center" });
+      t.editor.getState().undo();
+      expect(t.editor.getState().doc?.text_boxes[0]).toMatchObject({ x: 10 });
+    });
+
     it("open page skipped because of a different edit keeps only the steps after the mark", async () => {
       const t = setup();
       await applyBatch(t);
       t.editor.getState().apply(moveBox("t0", 40, 40));
       await t.saver.flush();
-      const { local } = t.undoBatchServer(["A"]);
+      const { local, skipped } = t.undoBatchServer();
       expect(local).toBe(false);
+      expect(skipped).toEqual(["A"]);
       const s = t.editor.getState();
       expect(s.doc?.text_boxes[0]).toMatchObject({ x: 40, align: "left" });
       expect(s.history.past).toHaveLength(1);
@@ -501,13 +577,15 @@ describe("ChapterSession", () => {
     /** Giả server áp lượt lên page `ids` rồi màn chương tải lại state vào cache (kích hoạt nạp lại page đang mở). */
     const serverApply = (t: ReturnType<typeof setup>, ids: string[]) => {
       const versions: Record<string, number> = {};
+      const batchId = t.newBatch();
       for (const id of ids) {
         const cur = t.srv[id];
         if (!cur) continue;
-        t.before[id] = structuredClone(cur.state);
+        t.batchOf(batchId).pre[id] = structuredClone(cur.state);
         const next = structuredClone(cur.state);
         for (const b of next.text_boxes) b.align = "left";
         t.srv[id] = { state: next, version: cur.version + 1 };
+        t.batchOf(batchId).wrote[id] = { version: cur.version + 1, state: structuredClone(next) };
         versions[id] = cur.version + 1;
       }
       const refresh = () => {
@@ -516,7 +594,7 @@ describe("ChapterSession", () => {
           if (e) t.chapter.getState().setCached(id, { state: e.state, version: e.version });
         }
       };
-      return { versions, refresh };
+      return { batchId, versions, refresh };
     };
     const open = async (t: ReturnType<typeof setup>) => {
       t.chapter.subscribe((s, prev) => s.cache !== prev.cache && t.session.syncActive());
@@ -529,7 +607,7 @@ describe("ChapterSession", () => {
       const t = setup();
       await open(t);
       const a = serverApply(t, ["A", "B"]);
-      t.session.recordServerBatch("batch-1", a.versions);
+      t.session.recordServerBatch(a.batchId, a.versions);
       a.refresh();
       const s = t.editor.getState();
       expect(s.doc?.text_boxes[0]).toMatchObject({ align: "left" });
@@ -544,23 +622,36 @@ describe("ChapterSession", () => {
     it("edit after the batch, then Cmd+Z the edit, then the batch: restored in place", async () => {
       const t = setup();
       await open(t);
-      const a = serverApply(t, ["A"]);
-      t.session.recordServerBatch("batch-1", a.versions);
+      const a = serverApply(t, ["A", "B"]);
+      t.session.recordServerBatch(a.batchId, a.versions);
       a.refresh();
       t.editor.getState().apply(moveBox("t0", 40, 40));
       await t.saver.flush();
       t.editor.getState().undo();
       await t.saver.flush();
-      const { local } = t.undoBatchServer(["A"]);
+      const { local } = t.undoBatchServer("batch-1", ["A"]);
       expect(local).toBe(true);
       expect(t.editor.getState().doc?.text_boxes[0]).toMatchObject({ x: 7, align: "center" });
+    });
+
+    it("a batch not applied right on the editor's base (an AI update slipped in) is not marked: the history is dropped on reload as before", async () => {
+      const t = setup();
+      await open(t);
+      // Server ghi 1 bản (AI) mà editor chưa nạp; rồi lượt áp lên bản đó → version lượt = base + 2.
+      const cur = t.srv.A;
+      if (cur) t.srv.A = { state: cur.state, version: cur.version + 1 };
+      const a = serverApply(t, ["A"]);
+      t.session.recordServerBatch(a.batchId, a.versions);
+      a.refresh();
+      expect(t.editor.getState().doc?.text_boxes[0]).toMatchObject({ align: "left" });
+      expect(t.editor.getState().history.past).toHaveLength(0);
     });
 
     it("a batch that skips the open page only adds a mark that does not touch the history", async () => {
       const t = setup();
       await open(t);
       const a = serverApply(t, ["B"]);
-      t.session.recordServerBatch("batch-1", a.versions);
+      t.session.recordServerBatch(a.batchId, a.versions);
       a.refresh();
       expect(t.editor.getState().history.past).toHaveLength(2);
       expect(t.editor.getState().doc?.text_boxes[0]).toMatchObject({ x: 7, align: "center" });

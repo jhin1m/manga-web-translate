@@ -36,6 +36,9 @@ const writeError = (e: unknown) => {
  */
 /** Nối lượt sửa của panel với lịch sử undo của editor (Cmd+Z hoàn tác lượt gần nhất). */
 export type BatchHooks = {
+  /** Xin khoá hoàn tác chung (false = đang có yêu cầu hoàn tác khác bay); gọi `end` khi xong. */
+  begin(): boolean;
+  end(): void;
   /** Server vừa áp lượt, trước khi tải lại state chương. */
   applied(r: ApplyResult): void;
   /** Nút Hoàn tác của panel vừa hoàn tác xong lượt. */
@@ -97,6 +100,7 @@ export function useBatchFlow<I>(
     },
   });
   const undoM = useMutation({
+    onSettled: () => fns.hooks?.end(),
     mutationFn: async (batchId: string) => {
       await fns.beforeWrite?.();
       return undoBatch(chapterId, batchId);
@@ -130,7 +134,10 @@ export function useBatchFlow<I>(
     busy: previewM.isPending || applyM.isPending || undoM.isPending,
     runPreview: () => previewM.mutate({ input: fns.input, gen: ++gen.current }),
     runApply: () => preview && applyM.mutate({ input: preview.input, versions: preview.result.versions }),
-    runUndo: () => applied && undoM.mutate(applied.batch_id),
+    runUndo: () => {
+      if (!applied || (fns.hooks && !fns.hooks.begin())) return;
+      undoM.mutate(applied.batch_id);
+    },
     /** Input đổi sau khi xem trước → bản xem trước cũ (kể cả đang chờ) không còn đáng tin. */
     invalidate: () => {
       gen.current++;

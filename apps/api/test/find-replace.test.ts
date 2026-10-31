@@ -221,10 +221,13 @@ describe("find/replace", () => {
       })
     ).json()) as { batch_id: string };
     const edited = await stateOf(pageIds[0] as string);
+    const changedState = structuredClone(edited.state);
+    const firstBox = changedState.text_boxes[0];
+    if (firstBox) firstBox.x += 5;
     const put = await call(`/api/pages/${pageIds[0]}/state`, {
       method: "PUT",
       cookie: A.cookie,
-      body: { state: edited.state },
+      body: { state: changedState },
       headers: { "if-match": String(edited.version) },
     });
     expect(put.status).toBe(200);
@@ -328,5 +331,38 @@ describe("performance", () => {
     expect(res.status).toBe(200);
     expect(ms).toBeLessThan(2000);
     await unlock(c.chapterId);
+  });
+
+  it("skip mode: two batches on the same pages undo in reverse order, and a same-content save does not count as an edit", async () => {
+    const original = await Promise.all(pageIds.map((id) => stateOf(id)));
+    const applyOnce = async (find: string, replace: string) => {
+      const pv = (await (
+        await api("/find-replace/preview", { find, replace, case_sensitive: true })
+      ).json()) as Preview;
+      const res = await api("/find-replace/apply", { find, replace, case_sensitive: true, versions: pv.versions });
+      expect(res.status, await res.clone().text()).toBe(200);
+      return ((await res.json()) as { batch_id: string }).batch_id;
+    };
+    const a = await applyOnce("ra!", "xong!");
+    const b = await applyOnce("xong!", "rồi!");
+    const afterA = await Promise.all(pageIds.map((id) => stateOf(id)));
+    // Lưu lại đúng nội dung (như sửa rồi Cmd+Z): version tăng nhưng nội dung không đổi.
+    const p0 = afterA[0];
+    const same = await call(`/api/pages/${pageIds[0]}/state`, {
+      method: "PUT",
+      cookie: A.cookie,
+      body: { state: p0?.state },
+      headers: { "if-match": String(p0?.version) },
+    });
+    expect(same.status).toBe(200);
+
+    const undoB = await api("/find-replace/undo", { batch_id: b, conflicts: "skip" });
+    expect(await undoB.json()).toMatchObject({ skipped: [] });
+    const undoA = await api("/find-replace/undo", { batch_id: a, conflicts: "skip" });
+    const body = (await undoA.json()) as { pages: number; skipped: string[] };
+    expect(body.skipped).toEqual([]);
+    expect(body.pages).toBeGreaterThan(0);
+    const restored = await Promise.all(pageIds.map((id) => stateOf(id)));
+    expect(restored.map((r) => r.state)).toEqual(original.map((r) => r.state));
   });
 });

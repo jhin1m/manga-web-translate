@@ -368,6 +368,8 @@ export class ChapterSession {
     if (!versions || !s.pageId || !s.base || s.doc !== s.base) return;
     const version = versions[s.pageId];
     if (version === undefined) return s.markBatch({ id: batchId, before: null, after: null });
+    // Lượt phải áp ngay trên bản editor đang giữ; có bản khác chen giữa (AI vừa ghi…) thì `before` không phải state ngay trước lượt → không cắm.
+    if (version !== s.baseVersion + 1) return;
     this.carry = {
       pageId: s.pageId,
       history: s.history,
@@ -381,9 +383,10 @@ export class ChapterSession {
    * Trang đang mở được khôi phục → nạp lại bản trước lượt, lịch sử trước lượt đặt lại nguyên vẹn (Cmd+Z tiếp theo hoàn tác
    * các sửa trước đó). Bị bỏ qua vì đã lưu thêm lần nữa mà nội dung vẫn là state sau lượt (VD sửa rồi Cmd+Z) → tự đưa về
    * state trước lượt tại chỗ. Bị bỏ qua vì còn sửa khác → giữ nguyên, chỉ giữ các bước sau mốc. Trả true khi tự khôi phục
-   * trang đang mở tại chỗ (server không đếm trang đó).
+   * trang đang mở tại chỗ (server không đếm trang đó). `restored` = số trang server báo đã khôi phục. Sửa trang đang mở trong lúc
+   * yêu cầu hoàn tác còn bay không giữ được trong lịch sử (trang nạp lại bản khôi phục, sửa đó rebase qua 409).
    */
-  afterBatchUndo(batchId: string, skipped: readonly string[]): boolean {
+  afterBatchUndo(batchId: string, skipped: readonly string[], restored = 0): boolean {
     const { editor } = this.deps;
     for (const [id, st] of this.stash) {
       if (findBatch(st.history, batchId))
@@ -403,7 +406,8 @@ export class ChapterSession {
       s.finishBatch(batchId, "reload");
       return false;
     }
-    if (s.doc && mark.after && same(s.doc, mark.after)) {
+    // Chỉ tự khôi phục khi server thực sự đã khôi phục trang nào đó (không thì lượt đã được hoàn tác ở nơi khác).
+    if (restored > 0 && s.doc && mark.after && same(s.doc, mark.after)) {
       s.finishBatch(batchId, "local");
       void this.deps.saver.flush();
       return true;
@@ -412,7 +416,7 @@ export class ChapterSession {
     return false;
   }
 
-  /** Server từ chối hẳn hoàn tác lượt (không còn/xung đột): bỏ mốc để Cmd+Z đi tiếp được; lịch sử trước lượt không còn khớp. */
+  /** Server báo lượt không còn (404): bỏ mốc để Cmd+Z đi tiếp được; lịch sử trước lượt không còn khớp. */
   dropBatch(batchId: string) {
     this.deps.editor.getState().finishBatch(batchId, "orphaned");
   }

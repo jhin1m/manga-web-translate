@@ -177,7 +177,14 @@ test.describe("công cụ chương", () => {
     // Cmd+Z đang gõ trong ô Tìm vẫn là undo gốc của ô (không đụng lượt).
     await openFind(page, "Tìm / Thay");
     await dlg.getByLabel("Tìm", { exact: true }).focus();
+    const undoCalls: string[] = [];
+    page.on("request", (r) => {
+      if (r.url().includes("/find-replace/undo")) undoCalls.push(r.url());
+    });
     await page.keyboard.press("ControlOrMeta+z");
+    // Hoàn tác là bất đồng bộ: đợi đủ lâu để một lần gọi sai kịp xảy ra rồi mới khẳng định không có gì thay đổi.
+    await page.waitForTimeout(1500);
+    expect(undoCalls).toEqual([]);
     expect(await regionTranslation(page.request, pageId)).toBe("Xin Hello!");
     await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
 

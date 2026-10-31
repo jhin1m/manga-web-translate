@@ -489,7 +489,18 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
   // Tên từng lượt cho thông báo hoàn tác ("áp kiểu" mặc định) + lượt vừa hoàn tác (panel Tìm/Thay bỏ nút Hoàn tác treo).
   const batchLabels = useRef(new Map<string, string>());
   const [undoneBatch, setUndoneBatch] = useState<string | null>(null);
+  // 1 khoá chung cho mọi đường hoàn tác lượt (nút toast, Cmd+Z, nút Hoàn tác của panel): đang có yêu cầu bay thì bỏ qua yêu
+  // cầu mới — hai yêu cầu cùng lúc làm lượt bị hoàn tác 2 lần hoặc báo "không hoàn tác được" sau khi đã thành công.
+  const undoBusy = useRef(false);
   const batchHooks = (label: string): BatchHooks => ({
+    begin: () => {
+      if (undoBusy.current) return false;
+      undoBusy.current = true;
+      return true;
+    },
+    end: () => {
+      undoBusy.current = false;
+    },
     applied: (r) => {
       batchLabels.current.set(r.batch_id, label);
       session.session.recordServerBatch(r.batch_id, r.versions);
@@ -500,6 +511,11 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
     },
     lastUndone: undoneBatch,
   });
+  const runUndo = (batchId: string) => {
+    if (undoBusy.current) return;
+    undoBusy.current = true;
+    undoKind.mutate(batchId);
+  };
   const undoKind = useMutation({
     mutationFn: async (batchId: string) => {
       await session.saver.flush();
@@ -517,7 +533,7 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
     onSuccess: (r, batchId) => {
       const openId = editorStore.getState().pageId;
       // Lượt xong là bỏ mốc trong lịch sử → Cmd+Z / nút Hoàn tác không hoàn tác lại lần nữa.
-      const local = session.session.afterBatchUndo(batchId, r.skipped);
+      const local = session.session.afterBatchUndo(batchId, r.skipped, r.pages);
       const skipped = local ? r.skipped.filter((id) => id !== openId) : r.skipped;
       if (styleUndoBatch.current === batchId) styleUndoBatch.current = null;
       // Không hoàn tác được trang nào → không tự ẩn (toast Hoàn tác đã mất, dễ bỏ lỡ).
@@ -530,9 +546,9 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
     },
     onError: (e, batchId, prev) => {
       if (!(e instanceof ApiError) && prev) setStyleUndo(prev);
-      // Server từ chối hẳn (lượt không còn / xung đột): bỏ mốc, không thì Cmd+Z kẹt mãi ở mốc này. Lỗi khác: giữ nguyên
-      // lịch sử để thử lại.
-      if (e instanceof ApiError && (e.status === 404 || e.status === 409)) {
+      // Lượt không còn (404): bỏ mốc, không thì Cmd+Z kẹt mãi ở mốc này. Lỗi tạm (chương đang bận 409, mất khoá 423, mạng,
+      // 5xx): giữ mốc và lịch sử trước lượt để thử lại khi hết lỗi.
+      if (e instanceof ApiError && e.status === 404) {
         session.session.dropBatch(batchId);
         setUndoneBatch(batchId);
       }
@@ -544,7 +560,10 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
             : errorMessage(e),
       });
     },
-    onSettled: data.refresh,
+    onSettled: () => {
+      undoBusy.current = false;
+      data.refresh();
+    },
   });
   // Cmd+Z / nút Hoàn tác: bước cuối là mốc lượt sửa nhiều trang → hoàn tác cả lượt (như toast); không thì undo thường.
   const undoEdit = () => {
@@ -553,10 +572,10 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
     const batch = batchOnTop(s.history);
     if (!batch) return s.undo();
     // Đang hoàn tác lượt (nút toast đã ẩn): bỏ phím lặp, đừng gọi lần 2.
-    if (!undoKind.isPending) undoKind.mutate(batch.id);
+    runUndo(batch.id);
   };
   const redoEdit = () => {
-    if (!undoKind.isPending) editorStore.getState().redo();
+    if (!undoBusy.current) editorStore.getState().redo();
   };
   const applyKind = useMutation({
     mutationFn: async (row: Row): Promise<Notice> => {
@@ -591,7 +610,7 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
       return {
         tone: "info",
         text: `Đã áp kiểu cho ${boxes} khối ${label} trên ${r.pageIds.length} trang.`,
-        actions: [{ label: "Hoàn tác", run: () => undoKind.mutate(r.batchId) }],
+        actions: [{ label: "Hoàn tác", run: () => runUndo(r.batchId) }],
       };
     },
     onSuccess: (n) => {
