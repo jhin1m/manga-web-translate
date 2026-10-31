@@ -57,6 +57,7 @@ export const SHORTCUT_HELP: { keys: string; action: string }[] = [
   { keys: "Esc", action: "Bỏ chọn khối" },
   { keys: "Space giữ + kéo", action: "Kéo canvas (hoặc chuột giữa)" },
   { keys: "Ctrl/Cmd+cuộn", action: "Phóng to / thu nhỏ" },
+  { keys: "Cuộn quá mép trang", action: "Sang trang sau / trước" },
   { keys: "?", action: "Bảng phím tắt này" },
 ];
 

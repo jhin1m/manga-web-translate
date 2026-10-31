@@ -19,6 +19,7 @@ const base: WheelInput = {
   atBottom: true,
   hasPrev: true,
   hasNext: true,
+  busy: false,
   frameH: 800,
 };
 
@@ -99,6 +100,26 @@ describe("stepFlip", () => {
 
   it("ignores zoom / modified wheel", () => {
     expect(run([{ deltaY: FLIP_THRESHOLD * 3, modified: true }]).flips).toEqual([0]);
+  });
+
+  it("never flips while a box is dragged or a button is held", () => {
+    const r = run([{ deltaY: FLIP_THRESHOLD * 3, busy: true }]);
+    expect(r.flips).toEqual([0]);
+    expect(r.state).toEqual(initialFlip);
+  });
+
+  it("reports locked for the flip and its inertia, not for a fresh gesture after the pause", () => {
+    let st = initialFlip;
+    const locked: boolean[] = [];
+    for (const t of [1000, 1100, 1300, 1500]) {
+      const r = stepFlip(st, { ...base, t, deltaY: FLIP_THRESHOLD });
+      st = r.state;
+      locked.push(r.locked);
+    }
+    expect(locked).toEqual([true, true, true, true]);
+    expect(stepFlip(st, { ...base, t: st.last + FLIP_PAUSE_MS + 1, deltaY: 10, atBottom: false }).locked).toBe(false);
+    // Zoom / ngang trong lúc khoá không bị nuốt.
+    expect(stepFlip(st, { ...base, t: st.last + 10, deltaY: 10, modified: true }).locked).toBe(false);
   });
 
   it("ignores horizontal-dominant wheel", () => {

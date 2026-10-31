@@ -981,7 +981,14 @@ test("leaving the chapter while a block's re-OCR is queued cancels the job on th
     .toBe("cancelled");
 });
 
-test("scrolling past the page edge turns the page; small, zoom and reduced-motion cases", async ({ page }) => {
+/** Khung nhìn hiện tại (cùng instance module với app trong dev server). */
+const viewOf = (page: Page) =>
+  page.evaluate(async () => {
+    const m = await import(/* @vite-ignore */ "/src/features/editor/store.ts");
+    return m.editorStore.getState().view;
+  });
+
+test("scrolling past the page edge turns the page; small, zoom, drag and reduced-motion cases", async ({ page }) => {
   await login(page);
   const { chapterId } = await readyChapter(page, { pagesPerSource: 3 });
   await page.goto(chapterUrl(chapterId));
@@ -994,7 +1001,15 @@ test("scrolling past the page edge turns the page; small, zoom and reduced-motio
   if (!box) throw new Error("canvas has no box");
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
 
+  // Trang cao hơn khung ở mức vừa khung (cuộn được ~vài chục px): cuộn hết cỡ tới mép dưới trước.
+  await page.mouse.wheel(0, 200);
+  await page.waitForTimeout(200);
+  await expect(foot).toContainText("Trang 1 / 3");
+  const bottomY = (await viewOf(page)).y;
+  expect(bottomY).toBeLessThan(0);
+
   // Một nấc nhỏ ở mép, hoặc Ctrl+cuộn (zoom), không đổi trang.
+  await page.waitForTimeout(400);
   await page.mouse.wheel(0, 40);
   await page.waitForTimeout(400);
   await expect(foot).toContainText("Trang 1 / 3");
@@ -1003,25 +1018,41 @@ test("scrolling past the page edge turns the page; small, zoom and reduced-motio
   await page.keyboard.up("Control");
   await page.waitForTimeout(400);
   await expect(foot).toContainText("Trang 1 / 3");
+  await page.getByRole("button", { name: "Vừa khung" }).click();
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.wheel(0, 200);
+  await page.waitForTimeout(400);
+
+  // Đang giữ nút chuột (kéo box / canvas) thì cuộn quá mép không đổi trang.
+  await page.mouse.down();
+  await page.mouse.wheel(0, 400);
+  await page.waitForTimeout(400);
+  await page.mouse.up();
+  await expect(foot).toContainText("Trang 1 / 3");
 
   // Đầu chương cuộn lên: không có trang trước → ở yên.
-  await page.mouse.wheel(0, -600);
+  await page.mouse.wheel(0, -1200);
   await page.waitForTimeout(400);
   await expect(foot).toContainText("Trang 1 / 3");
 
-  // Cuộn xuống quá mép dưới → trang 2; quán tính ngay sau đó không lật tiếp sang trang 3.
-  await page.mouse.wheel(0, 100);
-  await page.waitForTimeout(60);
-  await page.mouse.wheel(0, 100);
+  // Cuộn xuống quá mép dưới → trang 2, vào đầu trang; wheel ngay sau (quán tính) không lật tiếp và không cuộn trang mới.
+  await page.mouse.wheel(0, 1200);
+  await page.waitForTimeout(500);
+  await page.mouse.wheel(0, 300);
   await expect(foot).toContainText("Trang 2 / 3");
+  const top = await viewOf(page);
   await page.mouse.wheel(0, 100);
-  await page.waitForTimeout(300);
+  await page.mouse.wheel(0, 100);
+  await page.waitForTimeout(200);
   await expect(foot).toContainText("Trang 2 / 3");
+  expect((await viewOf(page)).y).toBe(top.y);
+  expect(top.y).toBeGreaterThan(0);
 
-  // Cuộn lên quá mép trên → về trang 1.
+  // Cuộn lên quá mép trên → về trang 1, vào cuối trang.
   await page.waitForTimeout(700);
   await page.mouse.wheel(0, -300);
   await expect(foot).toContainText("Trang 1 / 3");
+  await expect.poll(async () => (await viewOf(page)).y).toBeLessThan(0);
 
   // Giảm chuyển động: vẫn đổi trang (tức thì).
   await page.emulateMedia({ reducedMotion: "reduce" });

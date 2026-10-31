@@ -38,6 +38,8 @@ export type WheelInput = {
   atBottom: boolean;
   hasPrev: boolean;
   hasNext: boolean;
+  /** Đang kéo/đổi cỡ box hoặc giữ nút chuột: không bao giờ đổi trang giữa chừng. */
+  busy: boolean;
   /** Chiều cao khung nhìn, đổi `deltaMode` theo trang. */
   frameH: number;
 };
@@ -47,24 +49,32 @@ export const initialFlip: FlipState = { acc: 0, last: Number.NEGATIVE_INFINITY, 
 const px = (i: WheelInput) =>
   i.deltaMode === 1 ? i.deltaY * LINE_PX : i.deltaMode === 2 ? i.deltaY * i.frameH : i.deltaY;
 
-/** @returns `flip`: 1 = trang sau, −1 = trang trước, 0 = không đổi. */
-export function stepFlip(s: FlipState, i: WheelInput): { state: FlipState; flip: 0 | 1 | -1 } {
+/**
+ * @returns `flip`: 1 = trang sau, −1 = trang trước, 0 = không đổi. `locked`: sự kiện này là quán tính của lần đổi
+ * trước (hoặc chính lần đổi) → canvas nuốt nó, không cuộn page mới, để trang mới vào đúng đầu/cuối.
+ */
+export function stepFlip(s: FlipState, i: WheelInput): { state: FlipState; flip: 0 | 1 | -1; locked: boolean } {
   const dy = px(i);
   // Zoom / cuộn ngang / không cuộn dọc: không phải ý định đổi trang, không đụng trạng thái.
-  if (i.modified || dy === 0 || Math.abs(i.deltaX) > Math.abs(i.deltaY)) return { state: s, flip: 0 };
+  if (i.modified || i.busy || dy === 0 || Math.abs(i.deltaX) > Math.abs(i.deltaY))
+    return { state: s, flip: 0, locked: false };
   const dir = dy > 0 ? 1 : -1;
   const idle = i.t - s.last > FLIP_PAUSE_MS;
 
   if (i.t < s.lockUntil) {
     // Quán tính sau lần đổi: giữ khoá chừng nào wheel còn đến liên tục.
-    return { state: { acc: 0, last: i.t, lockUntil: Math.max(s.lockUntil, i.t + FLIP_PAUSE_MS) }, flip: 0 };
+    return {
+      state: { acc: 0, last: i.t, lockUntil: Math.max(s.lockUntil, i.t + FLIP_PAUSE_MS) },
+      flip: 0,
+      locked: true,
+    };
   }
   const edge = dir > 0 ? i.atBottom : i.atTop;
   const neighbour = dir > 0 ? i.hasNext : i.hasPrev;
-  if (!edge || !neighbour) return { state: { ...s, acc: 0, last: i.t }, flip: 0 };
+  if (!edge || !neighbour) return { state: { ...s, acc: 0, last: i.t }, flip: 0, locked: false };
 
   const acc = idle || Math.sign(s.acc) !== dir ? dy : s.acc + dy;
   if (Math.abs(acc) >= FLIP_THRESHOLD)
-    return { state: { acc: 0, last: i.t, lockUntil: i.t + FLIP_COOLDOWN_MS }, flip: dir };
-  return { state: { ...s, acc, last: i.t }, flip: 0 };
+    return { state: { acc: 0, last: i.t, lockUntil: i.t + FLIP_COOLDOWN_MS }, flip: dir, locked: true };
+  return { state: { ...s, acc, last: i.t }, flip: 0, locked: false };
 }

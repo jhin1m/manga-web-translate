@@ -79,6 +79,8 @@ export const ChapterCanvas = memo(function ChapterCanvas(props: {
   const [fitted, setFitted] = useState(false);
   const flip = useRef<FlipState>(initialFlip);
   const flipping = useRef(false);
+  /** Con trỏ đang nhấn trên Stage (kéo box, đổi cỡ, kéo canvas, vẽ) — `wheel.buttons` không phải trình duyệt nào cũng điền. */
+  const held = useRef(false);
   /** Khung nhìn do lần vừa khung gần nhất đặt; khung nhìn hiện tại khác nó = người dùng đã cuộn/zoom/đổi trang. */
   const lastFit = useRef<View | null>(null);
 
@@ -200,6 +202,8 @@ export const ChapterCanvas = memo(function ChapterCanvas(props: {
   const onWheel = (e: Konva.KonvaEventObject<WheelEvent>) => {
     e.evt.preventDefault();
     const { deltaX, deltaY, ctrlKey, metaKey, shiftKey } = e.evt;
+    // Khung nhìn tươi: nhiều wheel đến trước khi React vẽ lại thì closure `view` đã cũ.
+    const view = editorStore.getState().view;
     if (!gesture.current && !editorStore.getState().editing) {
       const ph = content.h * view.scale;
       const fits = ph + 2 * EDGE <= size.h;
@@ -210,26 +214,31 @@ export const ChapterCanvas = memo(function ChapterCanvas(props: {
         deltaY,
         deltaMode: e.evt.deltaMode,
         modified: ctrlKey || metaKey || shiftKey,
-        atTop: fits || view.y >= EDGE - 0.5,
+        // Đầu page vừa vào nằm ở FIT_EDGE (< EDGE của clampView) — vẫn là mép trên, cuộn lên được là sang trang trước ngay.
+        atTop: fits || view.y >= FIT_EDGE - 0.5,
         atBottom: fits || view.y <= size.h - ph - EDGE + 0.5,
         hasPrev: idx > 0,
         hasNext: idx >= 0 && idx < pages.length - 1,
+        // Giữ nút chuột = đang kéo/đổi cỡ box hoặc kéo canvas: không đổi trang (id box lặp giữa các page).
+        busy: held.current || e.evt.buttons !== 0,
         frameH: size.h,
       });
       flip.current = r.state;
       if (r.flip) return void flipTo(r.flip);
+      if (r.locked) return; // quán tính sau lần đổi: không cuộn page mới
     }
     if (ctrlKey || metaKey) {
       chapterStore.getState().setZoomed(true);
       const p = e.target.getStage()?.getPointerPosition() ?? { x: size.w / 2, y: size.h / 2 };
       const scale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, view.scale * Math.exp(-deltaY * 0.0015)));
-      const at = toPage(p);
+      const at = screenToPage(p, view);
       setView({ scale, x: p.x - at.x * scale, y: p.y - at.y * scale });
     } else if (shiftKey) setView({ ...view, x: view.x - deltaY });
     else setView({ ...view, x: view.x - deltaX, y: view.y - deltaY });
   };
 
   const onDown = (e: Konva.KonvaEventObject<PointerEvent>) => {
+    held.current = true;
     const stage = e.target.getStage();
     const p = stage?.getPointerPosition();
     if (!stage || !p) return;
@@ -282,6 +291,7 @@ export const ChapterCanvas = memo(function ChapterCanvas(props: {
   };
 
   const onUp = () => {
+    held.current = false;
     const g = gesture.current;
     gesture.current = null;
     if (g?.kind !== "rect" || !draft || !active) return;
