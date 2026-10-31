@@ -157,6 +157,24 @@ describe("stepFlip", () => {
     expect(after.flip).toBe(1);
   });
 
+  it("steady scrolling through a tall page flips again at its end without a pause", () => {
+    let st = stepFlip(initialFlip, { ...base, t: 1000, deltaY: FLIP_THRESHOLD }).state;
+    let t = 1000;
+    // Trang mới cao hơn khung: sau trần khoá wheel cuộn qua trang (chưa tới mép dưới), không ngắt lần nào.
+    for (; t < 1000 + FLIP_LOCK_MAX_MS + 500; t += 100) {
+      st = stepFlip(st, { ...base, t: t + 100, deltaY: 100, atBottom: false }).state;
+    }
+    // Tới cuối trang, vẫn cuộn đều → lật trang tiếp theo.
+    const flips: number[] = [];
+    for (let k = 0; k < 3; k++) {
+      t += 100;
+      const r = stepFlip(st, { ...base, t, deltaY: 100 });
+      st = r.state;
+      flips.push(r.flip);
+    }
+    expect(flips).toContain(1);
+  });
+
   it("the post-cap guard is dropped by a pause even if no flip follows", () => {
     let st = stepFlip(initialFlip, { ...base, t: 1000, deltaY: FLIP_THRESHOLD }).state;
     st = stepFlip(st, { ...base, t: 1000 + FLIP_PAUSE_MS + FLIP_COOLDOWN_MS + 1, deltaY: 10, atBottom: false }).state;

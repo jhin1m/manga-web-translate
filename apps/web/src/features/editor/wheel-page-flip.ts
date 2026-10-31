@@ -9,7 +9,7 @@
  * Khoá: trong lúc khoá, wheel cùng hướng bị nuốt (`locked`) và mỗi sự kiện gia hạn khoá thêm `FLIP_PAUSE_MS`, tối đa tới
  * `FLIP_LOCK_MAX_MS` kể từ lần đổi; wheel ngược hướng lần đổi vẫn cuộn page nhưng không đổi trang. Hết trần mà wheel
  * vẫn đến liên tục thì thôi nuốt, nhưng chưa cho đổi trang cho tới khi ngắt ≥ `FLIP_PAUSE_MS` (cú vuốt dài trên page
- * nằm trọn khung không lật thêm trang thứ hai).
+ * nằm trọn khung không lật thêm trang thứ hai); page cao đã cuộn rời mép thì cuộn đều tới cuối page lại lật tiếp.
  */
 
 /** Cuộn thừa cần cộng dồn để đổi trang (px đã chuẩn hoá). */
@@ -82,11 +82,12 @@ export function stepFlip(s: FlipState, i: WheelInput): { state: FlipState; flip:
       locked: true,
     };
   }
-  // Khoá đã hết (hết trần hoặc đã ngắt): wheel còn đến liên tục = vẫn là cú vuốt cũ → không nuốt nữa nhưng chưa cho đổi
-  // trang tới khi ngắt ≥ FLIP_PAUSE_MS (page nằm trọn khung thì lần vuốt dài không lật thêm trang thứ hai).
-  if (s.lockDir !== 0 && !idle) return { state: { ...s, acc: 0, last: i.t }, flip: 0, locked: false };
-  const lockDir = 0;
   const edge = dir > 0 ? i.atBottom : i.atTop;
+  // Khoá đã hết (hết trần hoặc đã ngắt): wheel còn đến liên tục mà page vẫn dính mép = vẫn là cú vuốt cũ → không nuốt
+  // nữa nhưng chưa cho đổi trang tới khi ngắt ≥ FLIP_PAUSE_MS (page nằm trọn khung thì lần vuốt dài không lật thêm trang
+  // thứ hai). Page cao đã cuộn rời mép thì bỏ chặn: cuộn đều tới cuối page lại lật tiếp như đọc webtoon.
+  if (s.lockDir !== 0 && !idle && edge) return { state: { ...s, acc: 0, last: i.t }, flip: 0, locked: false };
+  const lockDir = 0;
   const neighbour = dir > 0 ? i.hasNext : i.hasPrev;
   if (!edge || !neighbour) return { state: { ...s, acc: 0, last: i.t, lockDir }, flip: 0, locked: false };
 

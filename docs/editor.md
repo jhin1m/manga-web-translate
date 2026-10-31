@@ -263,7 +263,7 @@ Cuộn quá mép: đang ở mép dưới (hoặc trên) của page mà vẫn cu�
 trackpad) → sang trang sau (trước), cùng đường `session.activate` như pager (lưu page cũ trước); page nằm trọn khung
 (kể cả vừa khung với lề `FIT_EDGE` = 16px của "Vừa khung"; khung nhìn đứng yên, wheel không xê dịch) = ở cả hai mép. Cuộn xuống vào đầu trang mới, cuộn lên vào cuối trang mới; trượt + mờ dần ~200ms, tắt khi
 `prefers-reduced-motion`. Sau mỗi lần đổi khoá ≥ 600ms và tới khi quán tính dứt (ngắt ≥ 300ms), tối đa 1,5s kể từ lần đổi; Ctrl/Cmd/Shift+cuộn,
-cuộn ngang, đang sửa chữ, đang giữ nút chuột (kéo box/canvas), trang đầu/cuối không đổi trang. Trong lúc khoá, wheel cùng hướng bị nuốt (không cuộn page mới) nên trang mới luôn vào đúng đầu/cuối; wheel ngược hướng vẫn cuộn page bình thường (chưa đổi trang). Hết trần 1,5s mà wheel vẫn đến liên tục thì thôi nuốt nhưng vẫn chưa cho đổi trang cho tới khi ngắt ≥ 300ms (cú vuốt dài trên page nằm trọn khung không lật thêm trang thứ hai). Logic thuần ở `wheel-page-flip.ts`.
+cuộn ngang, đang sửa chữ, đang giữ nút chuột (kéo box/canvas), trang đầu/cuối không đổi trang. Trong lúc khoá, wheel cùng hướng bị nuốt (không cuộn page mới) nên trang mới luôn vào đúng đầu/cuối; wheel ngược hướng vẫn cuộn page bình thường (chưa đổi trang). Hết trần 1,5s mà wheel vẫn đến liên tục thì thôi nuốt nhưng vẫn chưa cho đổi trang cho tới khi ngắt ≥ 300ms (cú vuốt dài trên page nằm trọn khung không lật thêm trang thứ hai); page cao hơn khung đã cuộn rời mép thì cuộn đều tới cuối page lại lật tiếp, không cần ngắt. Logic thuần ở `wheel-page-flip.ts`.
 
 ## Phím tắt
 
