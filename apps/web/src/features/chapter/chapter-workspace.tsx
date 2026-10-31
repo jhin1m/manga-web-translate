@@ -30,6 +30,7 @@ import { type PageRect, useOcrRegion } from "../editor/canvas/OcrSelect.tsx";
 import type { SlotImages, SlotProcessing } from "../editor/canvas/PageSlot.tsx";
 import { chapterStore, revealRect } from "../editor/chapter-store.ts";
 import { dialogueFont } from "../editor/fonts.ts";
+import { batchOnTop } from "../editor/history.ts";
 import { ConflictList } from "../editor/panels/ConflictList.tsx";
 import { MaskPanel } from "../editor/panels/MaskPanel.tsx";
 import type { ShortcutAction } from "../editor/shortcuts.ts";
@@ -475,7 +476,8 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
     onSettled: data.refresh,
   });
   // "Áp kiểu này cho khối cùng loại trong chương": mọi trang (kể cả trang đang mở) ghi trong 1 lượt chung batch_id →
-  // toast "Hoàn tác" khôi phục cả lượt (Cmd+Z chỉ hoàn tác trong 1 trang nên không dùng cho lượt này).
+  // hoàn tác cả lượt bằng toast "Hoàn tác" hoặc Cmd+Z khi lượt là bước cuối của trang đang mở (cùng mutation này).
+  const styleUndoBatch = useRef<string | null>(null);
   const undoKind = useMutation({
     mutationFn: async (batchId: string) => {
       await session.saver.flush();
@@ -483,17 +485,28 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
       return undoBatch(chapterId, batchId, "skip");
     },
     // Ẩn nút ngay khi bấm: bấm lần 2 sẽ thấy mọi trang "đã sửa" và báo sai. Lỗi mạng thì trả lại để thử lại; lỗi từ
-    // server (lượt không còn…) thử lại cũng vô ích.
-    onMutate: () => {
+    // server (lượt không còn…) thử lại cũng vô ích. Chỉ ẩn toast của chính lượt này (Cmd+Z có thể hoàn tác lượt cũ hơn).
+    onMutate: (batchId) => {
+      if (styleUndoBatch.current !== batchId) return null;
       const prev = styleUndo;
       setStyleUndo(null);
       return prev;
     },
-    onSuccess: (r) =>
+    onSuccess: (r, batchId) => {
+      const openId = editorStore.getState().pageId;
+      // Lượt xong là bỏ mốc trong lịch sử → Cmd+Z / nút Hoàn tác không hoàn tác lại lần nữa.
+      const local = session.session.afterBatchUndo(batchId, r.skipped);
+      const skipped = local ? r.skipped.filter((id) => id !== openId) : r.skipped;
+      if (styleUndoBatch.current === batchId) styleUndoBatch.current = null;
       // Không hoàn tác được trang nào → không tự ẩn (toast Hoàn tác đã mất, dễ bỏ lỡ).
-      notify({ tone: r.pages ? "info" : "warn", text: undoStyleText(r.pages, r.skipped, pages, activeId) }),
-    onError: (e, _batchId, prev) => {
+      const restored = r.pages + (local ? 1 : 0);
+      notify({ tone: restored ? "info" : "warn", text: undoStyleText(restored, skipped, pages, openId) });
+    },
+    onError: (e, batchId, prev) => {
       if (!(e instanceof ApiError) && prev) setStyleUndo(prev);
+      // Server từ chối hẳn (lượt không còn / xung đột): bỏ mốc, không thì Cmd+Z kẹt mãi ở mốc này. Lỗi khác: giữ nguyên
+      // lịch sử để thử lại.
+      if (e instanceof ApiError && (e.status === 404 || e.status === 409)) session.session.dropBatch(batchId);
       notify({
         tone: "danger",
         text:
@@ -504,6 +517,18 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
     },
     onSettled: data.refresh,
   });
+  // Cmd+Z / nút Hoàn tác: bước cuối là mốc lượt sửa nhiều trang → hoàn tác cả lượt (như toast); không thì undo thường.
+  const undoEdit = () => {
+    const s = editorStore.getState();
+    if (!s.doc || s.readOnly) return;
+    const batch = batchOnTop(s.history);
+    if (!batch) return s.undo();
+    // Đang hoàn tác lượt (nút toast đã ẩn): bỏ phím lặp, đừng gọi lần 2.
+    if (!undoKind.isPending) undoKind.mutate(batch.id);
+  };
+  const redoEdit = () => {
+    if (!undoKind.isPending) editorStore.getState().redo();
+  };
   const applyKind = useMutation({
     mutationFn: async (row: Row): Promise<Notice> => {
       const s = editorStore.getState();
@@ -530,6 +555,7 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
         return ids.length ? setStyleMany(ids, style, layout) : null;
       });
       const label = KIND_LABEL[row.kind].toLowerCase();
+      if (r) styleUndoBatch.current = r.batchId;
       if (!r) return { tone: "info", text: `Mọi khối ${label} trong chương đã cùng kiểu này.` };
       const boxes = r.pageIds.reduce((n, id) => n + (counts.get(id) ?? 0), 0);
       return {
@@ -828,9 +854,9 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
         return;
       }
       case "undo":
-        return void s.undo();
+        return void undoEdit();
       case "redo":
-        return void s.redo();
+        return void redoEdit();
       case "save":
         void session.saver.flush();
         return;
@@ -912,6 +938,8 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
         activityCount={activityCount}
         onActivity={() => setDrawer("activity")}
         onHelp={() => setDrawer("help")}
+        onUndo={undoEdit}
+        onRedo={redoEdit}
       />
       <LockBand
         access={access}

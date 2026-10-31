@@ -1,7 +1,18 @@
 import type { PageState } from "@mtl/shared";
 import { describe, expect, it } from "vitest";
 import { addBox, deleteBox, editText, moveBox, setStyle } from "../actions.ts";
-import { change, emptyHistory, HISTORY_LIMIT, type History, record, redo, undo } from "../history.ts";
+import {
+  batchOnTop,
+  change,
+  emptyHistory,
+  HISTORY_LIMIT,
+  type History,
+  record,
+  recordBatch,
+  redo,
+  settleBatch,
+  undo,
+} from "../history.ts";
 import { box, doc, layout } from "./fixtures.ts";
 
 type Recipe = Parameters<typeof change<PageState>>[1];
@@ -76,5 +87,43 @@ describe("history", () => {
     const s = doc(1);
     const r = change(s, moveBox("missing", 1, 1));
     expect(record(emptyHistory(), r.patches, r.inverse, null).past).toHaveLength(0);
+  });
+
+  describe("bulk edit mark", () => {
+    const step = (h: History, x: number) => {
+      const r = change(doc(1), moveBox("t0", x, x));
+      return record(h, r.patches, r.inverse, null);
+    };
+    const mark = (id: string, touches = true) => ({ id, before: touches ? {} : null, after: touches ? {} : null });
+
+    it("is a step of its own, clears redo and is on top until another edit", () => {
+      let h = step(emptyHistory(), 1);
+      h = undo(doc(1), h)?.history ?? h;
+      expect(h.future).toHaveLength(1);
+      h = recordBatch(h, mark("b1"));
+      expect(h.future).toHaveLength(0);
+      expect(batchOnTop(h)?.id).toBe("b1");
+      expect(batchOnTop(step(h, 2))).toBeNull();
+    });
+
+    it("settle restored keeps the steps before the mark and drops the rest", () => {
+      let h = recordBatch(step(step(emptyHistory(), 1), 2), mark("b1"));
+      h = step(h, 3);
+      const out = settleBatch(h, "b1", "restored");
+      expect(out.past).toHaveLength(2);
+      expect(out.future).toHaveLength(0);
+    });
+
+    it("settle orphaned keeps the steps after the mark and drops the earlier ones", () => {
+      let h = recordBatch(step(emptyHistory(), 1), mark("b1"));
+      h = step(h, 3);
+      expect(settleBatch(h, "b1", "orphaned").past).toHaveLength(1);
+    });
+
+    it("settle on a mark that did not touch the page only removes the mark", () => {
+      const h = step(recordBatch(step(emptyHistory(), 1), mark("b1", false)), 3);
+      expect(settleBatch(h, "b1", "orphaned").past).toHaveLength(2);
+      expect(settleBatch(h, "other", "restored")).toBe(h);
+    });
   });
 });

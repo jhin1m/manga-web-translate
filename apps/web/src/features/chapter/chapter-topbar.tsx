@@ -10,7 +10,7 @@ import { Link } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 import type { LockState } from "../chapter/use-chapter-lock.ts";
 import { PAGE_BUSY_SAVE_TEXT } from "../editor/save.ts";
-import { editorStore, type ReadOnlyReason, type SaveStatus, useEditor } from "../editor/store.ts";
+import { type ReadOnlyReason, type SaveStatus, useEditor } from "../editor/store.ts";
 import type { RecoveryItem } from "../editor/use-chapter-session.ts";
 import type { Series } from "../series/api.ts";
 import { FilePickButton } from "../upload/drop-zone.tsx";
@@ -54,6 +54,9 @@ export function ChapterTopbar(props: {
   activityCount: number;
   onActivity(): void;
   onHelp(): void;
+  /** Hoàn tác / Làm lại như phím Cmd+Z (bước cuối là lượt sửa nhiều trang thì hoàn tác cả lượt). */
+  onUndo(): void;
+  onRedo(): void;
 }) {
   const { detail, primary, chip } = props;
   const menu = primary?.menu ?? [];
@@ -97,7 +100,7 @@ export function ChapterTopbar(props: {
       <EditState {...props.access} />
       <LangPairPopover series={props.series} />
       <span className="spacer" />
-      <UndoRedo />
+      <UndoRedo onUndo={props.onUndo} onRedo={props.onRedo} />
       <span className="cw-top-sep" />
       <OriginalToggle />
       <ActivityButton icon count={props.activityCount} onClick={props.onActivity} />
@@ -138,11 +141,10 @@ export function ChapterTopbar(props: {
 }
 
 /** Hoàn tác / Làm lại (Ctrl/Cmd+Z, Ctrl/Cmd+Shift+Z) — tắt khi hết lịch sử hoặc đang chỉ xem. */
-function UndoRedo() {
+function UndoRedo({ onUndo, onRedo }: { onUndo(): void; onRedo(): void }) {
   const canUndo = useEditor((s) => s.history.past.length > 0);
   const canRedo = useEditor((s) => s.history.future.length > 0);
   const readOnly = useEditor((s) => !!s.readOnly);
-  const st = editorStore.getState();
   return (
     <span className="cw-icons">
       <button
@@ -151,7 +153,7 @@ function UndoRedo() {
         aria-label="Hoàn tác (Ctrl+Z)"
         title="Hoàn tác (Ctrl+Z)"
         disabled={!canUndo || readOnly}
-        onClick={st.undo}
+        onClick={onUndo}
       >
         <UndoIcon size={18} />
       </button>
@@ -161,7 +163,7 @@ function UndoRedo() {
         aria-label="Làm lại (Ctrl+Shift+Z)"
         title="Làm lại (Ctrl+Shift+Z)"
         disabled={!canRedo || readOnly}
-        onClick={st.redo}
+        onClick={onRedo}
       >
         <RedoIcon size={18} />
       </button>

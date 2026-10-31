@@ -2,6 +2,7 @@ import { IDBFactory } from "fake-indexeddb";
 import { describe, expect, it, vi } from "vitest";
 import { moveBox } from "../actions.ts";
 import { createChapterStore } from "../chapter-store.ts";
+import { batchOnTop } from "../history.ts";
 import { PendingQueue } from "../pending-queue.ts";
 import { diffStates } from "../rebase.ts";
 import { Saver } from "../save.ts";
@@ -19,6 +20,8 @@ function setup() {
     A: { state: doc(2), version: 1 },
     B: { state: doc(3), version: 1 },
   };
+  /** State trước lượt `putStates` gần nhất theo page (để giả `undoBatch`). */
+  const before: Record<string, ReturnType<typeof doc>> = {};
   const editor = createEditorStore();
   const chapter = createChapterStore();
   const queue = new PendingQueue(new IDBFactory());
@@ -59,6 +62,8 @@ function setup() {
       }
       const versions: Record<string, number> = {};
       for (const p of list) {
+        const prev = srv[p.page_id];
+        if (prev) before[p.page_id] = structuredClone(prev.state);
         srv[p.page_id] = { state: structuredClone(p.state), version: p.version + 1 };
         versions[p.page_id] = p.version + 1;
       }
@@ -85,7 +90,24 @@ function setup() {
     })),
   );
   editor.getState().setReadOnly(null);
-  return { log, errors, srv, editor, chapter, saver, queue, session: new ChapterSession(deps) };
+  /** Giả `undoBatch(skip)` + việc màn chương làm sau đó: dọn mốc, cập nhật cache, nạp lại page đang mở. */
+  const undoBatchServer = (skip: string[] = []) => {
+    // Như màn chương: onSuccess của hoàn tác (dọn mốc) chạy trước khi `refresh` đưa state mới vào cache.
+    const local = session.afterBatchUndo("batch-1", skip);
+    const restored: string[] = [];
+    for (const id of Object.keys(srv)) {
+      const pre = before[id];
+      const cur = srv[id];
+      if (!pre || !cur || skip.includes(id)) continue;
+      srv[id] = { state: structuredClone(pre), version: cur.version + 1 };
+      chapter.getState().setCached(id, { state: srv[id].state, version: srv[id].version });
+      restored.push(id);
+    }
+    session.syncActive();
+    return { restored, local };
+  };
+  const session = new ChapterSession(deps);
+  return { log, errors, srv, editor, chapter, saver, queue, session, undoBatchServer };
 }
 
 describe("ChapterSession", () => {
@@ -331,7 +353,9 @@ describe("ChapterSession", () => {
     // Page active nạp bản mới; Cmd+Z không tách lượt này ra từng page.
     expect(editor.getState()).toMatchObject({ baseVersion: 3 });
     expect(editor.getState().doc?.text_boxes.every((b) => b.align === "left")).toBe(true);
-    expect(editor.getState().history.past).toHaveLength(0);
+    // Lịch sử trước lượt giữ nguyên, thêm 1 mốc lượt ở cuối (không có patch).
+    expect(editor.getState().history.past).toHaveLength(2);
+    expect(batchOnTop(editor.getState().history)).toMatchObject({ id: "batch-1" });
   });
 
   it("editMany with nothing to change writes nothing", async () => {
@@ -341,5 +365,135 @@ describe("ChapterSession", () => {
     expect(await session.editMany(() => null)).toBeNull();
     expect(await session.editMany(() => (d) => void d)).toBeNull();
     expect(log.filter((l) => l.startsWith("put"))).toEqual([]);
+  });
+
+  describe("bulk edit in the open page history", () => {
+    const align = () => (d: { text_boxes: { align: string }[] }) => {
+      for (const b of d.text_boxes) b.align = "left";
+    };
+    const applyBatch = async (t: ReturnType<typeof setup>) => {
+      await t.session.activate("A");
+      t.editor.getState().apply(moveBox("t0", 7, 7));
+      await t.session.editMany(() => align() as never);
+    };
+
+    it("undoing the bulk edit keeps the earlier history so the next Cmd+Z undoes the earlier edit", async () => {
+      const t = setup();
+      await applyBatch(t);
+      const { restored } = t.undoBatchServer();
+      expect(restored).toEqual(["A", "B"]);
+      const s = t.editor.getState();
+      expect(s.doc?.text_boxes[0]).toMatchObject({ x: 7, align: "center" });
+      // Mốc đã bị tiêu thụ: Cmd+Z kế tiếp là bước sửa trước lượt, không gọi lại lượt.
+      expect(batchOnTop(s.history)).toBeNull();
+      expect(s.history.past).toHaveLength(1);
+      s.undo();
+      expect(t.editor.getState().doc?.text_boxes[0]).toMatchObject({ x: 10 });
+      t.editor.getState().redo();
+      expect(t.editor.getState().doc?.text_boxes[0]).toMatchObject({ x: 7 });
+    });
+
+    it("keeps the earlier history when the cache update reloads the open page by itself (as the chapter screen does)", async () => {
+      const t = setup();
+      t.chapter.subscribe((s, prev) => s.cache !== prev.cache && t.session.syncActive());
+      await applyBatch(t);
+      expect(t.editor.getState().history.past).toHaveLength(2);
+      t.undoBatchServer();
+      t.editor.getState().undo();
+      expect(t.editor.getState().doc?.text_boxes[0]).toMatchObject({ x: 10 });
+    });
+
+    it("an edit after the bulk edit is undone first; the mark stays below it", async () => {
+      const t = setup();
+      await applyBatch(t);
+      t.editor.getState().apply(moveBox("t0", 40, 40));
+      expect(batchOnTop(t.editor.getState().history)).toBeNull();
+      t.editor.getState().undo();
+      expect(batchOnTop(t.editor.getState().history)).toMatchObject({ id: "batch-1" });
+    });
+
+    it("edit then Cmd+Z after the bulk edit: server skips the saved open page but it is restored in place", async () => {
+      const t = setup();
+      await applyBatch(t);
+      t.editor.getState().apply(moveBox("t0", 40, 40));
+      await t.saver.flush();
+      t.editor.getState().undo();
+      await t.saver.flush();
+      // Mỗi lần lưu tăng version nên server coi A là "đã sửa sau lượt" và bỏ qua.
+      const { restored, local } = t.undoBatchServer(["A"]);
+      expect(restored).toEqual(["B"]);
+      expect(local).toBe(true);
+      await t.saver.flush();
+      const s = t.editor.getState();
+      expect(s.doc?.text_boxes[0]).toMatchObject({ x: 7, align: "center" });
+      expect(t.srv.A?.state.text_boxes[0]).toMatchObject({ x: 7, align: "center" });
+      expect(s.save.status).toBe("saved");
+      s.undo();
+      expect(t.editor.getState().doc?.text_boxes[0]).toMatchObject({ x: 10 });
+    });
+
+    it("open page skipped because of a different edit keeps only the steps after the mark", async () => {
+      const t = setup();
+      await applyBatch(t);
+      t.editor.getState().apply(moveBox("t0", 40, 40));
+      await t.saver.flush();
+      const { local } = t.undoBatchServer(["A"]);
+      expect(local).toBe(false);
+      const s = t.editor.getState();
+      expect(s.doc?.text_boxes[0]).toMatchObject({ x: 40, align: "left" });
+      expect(s.history.past).toHaveLength(1);
+      s.undo();
+      expect(t.editor.getState().doc?.text_boxes[0]).toMatchObject({ x: 7, align: "left" });
+      expect(t.editor.getState().history.past).toHaveLength(0);
+    });
+
+    it("a batch that does not touch the open page only drops the mark", async () => {
+      const t = setup();
+      await t.session.activate("A");
+      t.editor.getState().apply(moveBox("t0", 7, 7));
+      await t.session.editMany((_st, id) => (id === "B" ? (align() as never) : null));
+      expect(batchOnTop(t.editor.getState().history)).toMatchObject({ id: "batch-1" });
+      t.undoBatchServer();
+      expect(t.editor.getState().history.past).toHaveLength(1);
+      expect(t.editor.getState().doc?.text_boxes[0]).toMatchObject({ x: 7 });
+    });
+
+    it("redo is cleared by the bulk edit, and a failed bulk write leaves the history untouched", async () => {
+      const t = setup();
+      await t.session.activate("A");
+      t.editor.getState().apply(moveBox("t0", 7, 7));
+      t.editor.getState().undo();
+      expect(t.editor.getState().history.future).toHaveLength(1);
+      t.srv.B = { state: doc(3), version: 9 };
+      t.chapter.getState().setCached("B", { state: doc(3), version: 1 });
+      await expect(t.session.editMany(() => align() as never)).rejects.toMatchObject({ status: 409 });
+      expect(t.editor.getState().history.future).toHaveLength(1);
+      expect(batchOnTop(t.editor.getState().history)).toBeNull();
+    });
+
+    it("the mark lives in the history of the page that was open: it is kept on return, absent on other pages", async () => {
+      const t = setup();
+      await applyBatch(t);
+      await t.session.activate("B");
+      expect(batchOnTop(t.editor.getState().history)).toBeNull();
+      await t.session.activate("A");
+      expect(batchOnTop(t.editor.getState().history)).toMatchObject({ id: "batch-1" });
+    });
+
+    it("undoing from another page (toast button) consumes the mark stored for the first page", async () => {
+      const t = setup();
+      await applyBatch(t);
+      await t.session.activate("B");
+      t.undoBatchServer();
+      await t.session.activate("A");
+      expect(batchOnTop(t.editor.getState().history)).toBeNull();
+    });
+
+    it("dropBatch (server refuses) removes the mark so Cmd+Z moves on", async () => {
+      const t = setup();
+      await applyBatch(t);
+      t.session.dropBatch("batch-1");
+      expect(batchOnTop(t.editor.getState().history)).toBeNull();
+    });
   });
 });

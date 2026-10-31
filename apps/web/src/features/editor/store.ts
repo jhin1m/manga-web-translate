@@ -8,7 +8,18 @@ import type { Draft } from "immer";
 import { useStore } from "zustand";
 import { createStore } from "zustand/vanilla";
 import type { Layout } from "./actions.ts";
-import { change, emptyHistory, type History, record, redo, undo } from "./history.ts";
+import {
+  type BatchMark,
+  change,
+  emptyHistory,
+  findBatch,
+  type History,
+  record,
+  recordBatch,
+  redo,
+  settleBatch,
+  undo,
+} from "./history.ts";
 import { type Conflict, restoreConflict, same } from "./rebase.ts";
 
 export type Tool = "select" | "text" | "brush" | "eraser" | "ocr";
@@ -67,6 +78,15 @@ export type EditorActions = {
   apply(recipe: Recipe, key?: string | null): void;
   undo(): void;
   redo(): void;
+  /** Cắm mốc lượt sửa nhiều trang vào lịch sử (bước cuối); Cmd+Z tới mốc thì gọi `undoBatch` thay vì `undo()`. */
+  markBatch(mark: BatchMark): void;
+  /**
+   * Lượt `id` đã hoàn tác xong, xử lý mốc trong lịch sử trang đang mở. "restored"/"orphaned": xem `settleBatch`;
+   * "local": server bỏ qua trang này (đã lưu thêm lần nữa) mà nội dung vẫn là state sau lượt → tự đưa về state trước lượt
+   * (như một bước undo thường, lưu qua autosave); "reload": trang sắp nạp lại bản đã hoàn tác → tạm không có lịch sử
+   * (phiên giữ lịch sử thật, nạp lại sẽ đặt vào).
+   */
+  finishBatch(id: string, how: "restored" | "orphaned" | "local" | "reload"): void;
   select(id: string | null): void;
   setTool(t: Tool): void;
   setShowOriginal(v: boolean): void;
@@ -155,6 +175,22 @@ export function createEditorStore() {
       if (!s.doc || s.readOnly) return;
       const r = redo(s.doc, s.history);
       if (r) set({ doc: r.state, history: r.history, save: { status: "dirty", error: null } });
+    },
+
+    markBatch: (mark) => set((s) => ({ history: recordBatch(s.history, mark) })),
+
+    finishBatch: (id, how) => {
+      const s = get();
+      if (how === "reload") return set({ history: emptyHistory() });
+      if (how !== "local") return set({ history: settleBatch(s.history, id, how) });
+      const before = findBatch(s.history, id)?.before as PageState | null | undefined;
+      if (!before) return set({ history: settleBatch(s.history, id, "orphaned") });
+      set({
+        doc: before,
+        history: settleBatch(s.history, id, "restored"),
+        selection: s.selection && before.text_boxes.some((b) => b.id === s.selection) ? s.selection : null,
+        save: { status: "dirty", error: null },
+      });
     },
 
     select: (selection) => set({ selection }),

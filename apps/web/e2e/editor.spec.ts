@@ -819,6 +819,56 @@ test("apply style to same-kind blocks writes every page in one batch; the toast'
   await expect(page.locator(".cw-toasts .notice", { hasText: "Không hoàn tác được" })).toHaveCount(0);
 });
 
+test("Cmd+Z right after apply style undoes the whole batch, then the next Cmd+Z steps back the earlier edit on the open page", async ({
+  page,
+}) => {
+  const { chapterId, aligns } = await seedStyleChapter(page);
+  const { toast, panel } = await applyStyleFromFirstBlock(page, chapterId);
+  expect(await aligns()).toEqual(["src:left:18", "same-page:left:18", "src:left:18"]);
+  // Phím không được rơi vào ô số đang giữ focus (khi đó là undo gốc của trình duyệt).
+  await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+
+  // Lượt là bước cuối → Cmd+Z = nút Hoàn tác của toast (cùng thông báo), khôi phục cả trang khác.
+  await page.keyboard.press("ControlOrMeta+z");
+  const done = page.locator(".cw-toasts .notice", { hasText: "Đã hoàn tác áp kiểu trên 2 trang" });
+  await expect(done).toBeVisible();
+  await expect(toast).toHaveCount(0);
+  expect(await aligns()).toEqual(["src:left:18", "same-page:center:22", "src:center:22"]);
+
+  // Cmd+Z tiếp theo hoàn tác sửa cỡ chữ (22 → 18) trước lượt, trên trang đang mở; lượt không bị hoàn tác lần 2.
+  const size = panel.getByLabel("Cỡ chữ (px)");
+  await expect(size).toHaveValue("18");
+  await page.keyboard.press("ControlOrMeta+z");
+  await expect(size).toHaveValue("22");
+  await expect.poll(async () => (await aligns())[0]).toBe("src:left:22");
+  expect(await aligns()).toEqual(["src:left:22", "same-page:center:22", "src:center:22"]);
+  await expect(page.locator(".cw-toasts .notice", { hasText: "Không hoàn tác được" })).toHaveCount(0);
+});
+
+test("apply style, edit the open page, Cmd+Z the edit, Cmd+Z again: the batch is undone and the toast button is gone", async ({
+  page,
+}) => {
+  const { chapterId, aligns } = await seedStyleChapter(page);
+  const { toast, panel } = await applyStyleFromFirstBlock(page, chapterId);
+  const size = panel.getByLabel("Cỡ chữ (px)");
+  await size.selectText();
+  await size.pressSequentially("20");
+  await size.press("Enter");
+  await expect.poll(async () => (await aligns())[0]).toBe("src:left:20");
+  await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+
+  // Cmd+Z đầu hoàn tác sửa mới (20 → 18), lượt áp kiểu vẫn đứng trước nó.
+  await page.keyboard.press("ControlOrMeta+z");
+  await expect(size).toHaveValue("18");
+  await expect(toast).toBeVisible();
+  // Cmd+Z thứ hai hoàn tác cả lượt, kể cả trang đang mở (đã lưu thêm 2 lần nên server bỏ qua → tự khôi phục tại chỗ).
+  await page.keyboard.press("ControlOrMeta+z");
+  await expect(page.locator(".cw-toasts .notice", { hasText: "Đã hoàn tác áp kiểu trên 2 trang" })).toBeVisible();
+  await expect(toast).toHaveCount(0);
+  await expect.poll(async () => await aligns()).toEqual(["src:left:18", "same-page:center:22", "src:center:22"]);
+  await expect(size).toHaveValue("18");
+});
+
 test("apply style then edit one page: Hoàn tác restores the other pages and names the skipped page", async ({
   page,
 }) => {

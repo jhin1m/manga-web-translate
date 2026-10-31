@@ -18,7 +18,7 @@ import { fetchFonts, fontKeys } from "../fonts/api.ts";
 import { fetchPageDetail, type PageDetail, putChapterStates, putPageState } from "./api.ts";
 import { type ChapterStore, chapterStore } from "./chapter-store.ts";
 import { type FontKit, loadFonts } from "./fonts.ts";
-import type { History } from "./history.ts";
+import { findBatch, type History, settleBatch } from "./history.ts";
 import { PendingQueue, type PendingRecord } from "./pending-queue.ts";
 import { diffStates, rebase, same } from "./rebase.ts";
 import { finalSave, isPageBusyError, Saver } from "./save.ts";
@@ -63,6 +63,11 @@ export class ChapterSession {
   private target: string | null = null;
   /** Page đang dịch / chờ lượt dịch (theo progress) → page active trong đó chỉ xem. */
   private busy: ReadonlySet<string> = new Set();
+  /**
+   * Lịch sử trước lượt sửa nhiều trang đã hoàn tác, chờ trang đang mở nạp lại bản đã khôi phục: nạp đúng state `expect`
+   * (nội dung trước lượt) thì patch cũ khớp nguyên vẹn → đặt lại. Một lần dùng; đổi trang thì bỏ.
+   */
+  private carry: { pageId: string; expect: object; history: History } | null = null;
 
   constructor(private readonly deps: SessionDeps) {}
 
@@ -141,6 +146,7 @@ export class ChapterSession {
       loaded = { ...loaded, state: latest.state, version: latest.version };
     }
     const st = this.stash.get(pageId);
+    this.carry = null;
     editor.getState().load({
       pageId,
       ...loaded,
@@ -180,11 +186,14 @@ export class ChapterSession {
     // Cùng page, bản mới hơn (áp kiểu / tìm & thay / AI): khối đang chọn còn thì giữ chọn ngay trong lần nạp — không
     // phát chọn rỗng rồi chọn lại (người nghe coi là chọn mới và mở panel công cụ người dùng đã đóng).
     const keep = s.selection && c.state.text_boxes.some((b) => b.id === s.selection) ? s.selection : null;
+    const carry = this.carry?.pageId === s.pageId && same(this.carry.expect, c.state) ? this.carry : null;
+    if (carry) this.carry = null;
     s.load({
       pageId: s.pageId,
       state: c.state,
       version: c.version,
       ai: { ...s.ai, available: c.ai_update_available },
+      history: carry?.history,
       selection: keep,
     });
     void this.refreshAi(s.pageId);
@@ -295,8 +304,8 @@ export class ChapterSession {
    * Sửa nhiều page trong 1 lượt ghi server (VD "Áp kiểu cho khối cùng loại" cả chương): lưu page đang sửa → áp
    * `recipeFor` lên state đã lưu của từng page (page active: `base` của editor; page khác: cache) → `putStates` ghi
    * mọi page đổi trong 1 transaction, chung `batch_id` (hoàn tác cả lượt bằng `undoBatch`). Page active nạp lại bản
-   * mới (lịch sử undo của nó bỏ — lượt này hoàn tác theo cả chương, không theo từng page). Page bận bỏ qua.
-   * Trả null khi không page nào đổi.
+   * mới nhưng giữ lịch sử undo trước lượt và cắm 1 mốc lượt vào cuối (Cmd+Z tới mốc → hoàn tác cả lượt bằng `undoBatch`, xem
+   * `afterBatchUndo`). Page bận bỏ qua. Trả null khi không page nào đổi.
    */
   async editMany(
     recipeFor: (state: PageState, pageId: string) => ((draft: Draft<PageState>) => void) | null,
@@ -320,12 +329,62 @@ export class ChapterSession {
     }
     if (!list.length) return null;
     const r = await this.deps.putStates(list);
+    const mine = list.find((p) => p.page_id === s.pageId);
+    // Cache đổi là màn chương nạp lại page đang mở ngay (đăng ký ở chapterStore) → để sẵn lịch sử trước lượt cho lần nạp đó.
+    if (mine) this.carry = { pageId: mine.page_id, expect: mine.state, history: s.history };
     for (const p of list) {
       const version = r.versions[p.page_id];
       if (version !== undefined) chapter.getState().setCached(p.page_id, { state: p.state, version });
     }
     this.syncActive();
+    const used = !this.carry;
+    this.carry = null;
+    const now = editor.getState();
+    // Page đang mở thuộc lượt mà chưa nạp được bản mới (chưa "saved"…) → không cắm mốc: lịch sử cũ sẽ bị bỏ khi nạp sau.
+    if (now.pageId && (!mine || used)) {
+      now.markBatch({ id: r.batch_id, before: mine ? s.base : null, after: mine ? mine.state : null });
+    }
     return { batchId: r.batch_id, pageIds: list.map((p) => p.page_id) };
+  }
+
+  /**
+   * Sau khi `undoBatch` (chế độ "skip") thành công: dọn mốc của lượt trong lịch sử trang đang mở và các lịch sử đã cất.
+   * Trang đang mở được khôi phục → nạp lại bản trước lượt, lịch sử trước lượt đặt lại nguyên vẹn (Cmd+Z tiếp theo hoàn tác
+   * các sửa trước đó). Bị bỏ qua vì đã lưu thêm lần nữa mà nội dung vẫn là state sau lượt (VD sửa rồi Cmd+Z) → tự đưa về
+   * state trước lượt tại chỗ. Bị bỏ qua vì còn sửa khác → giữ nguyên, chỉ giữ các bước sau mốc. Trả true khi tự khôi phục
+   * trang đang mở tại chỗ (server không đếm trang đó).
+   */
+  afterBatchUndo(batchId: string, skipped: readonly string[]): boolean {
+    const { editor } = this.deps;
+    for (const [id, st] of this.stash) {
+      if (findBatch(st.history, batchId))
+        this.stash.set(id, { ...st, history: settleBatch(st.history, batchId, "orphaned") });
+    }
+    const s = editor.getState();
+    const mark = findBatch(s.history, batchId);
+    if (!mark) return false;
+    if (!mark.before || !s.pageId) {
+      s.finishBatch(batchId, "restored");
+      return false;
+    }
+    if (!skipped.includes(s.pageId)) {
+      const history = settleBatch(s.history, batchId, "restored");
+      this.carry = { pageId: s.pageId, expect: mark.before, history };
+      s.finishBatch(batchId, "reload");
+      return false;
+    }
+    if (s.doc && mark.after && same(s.doc, mark.after)) {
+      s.finishBatch(batchId, "local");
+      void this.deps.saver.flush();
+      return true;
+    }
+    s.finishBatch(batchId, "orphaned");
+    return false;
+  }
+
+  /** Server từ chối hẳn hoàn tác lượt (không còn/xung đột): bỏ mốc để Cmd+Z đi tiếp được; lịch sử trước lượt không còn khớp. */
+  dropBatch(batchId: string) {
+    this.deps.editor.getState().finishBatch(batchId, "orphaned");
   }
 
   /** Khôi phục bản ghi của page active vào editor (rebase lên base hiện tại; xung đột liệt kê). */
