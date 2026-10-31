@@ -143,6 +143,33 @@ describe("stepFlip", () => {
     expect(after.locked).toBe(false);
   });
 
+  it("after the cap a continuous fling at a fit-page edge swallows nothing but cannot flip until a pause", () => {
+    let st = stepFlip(initialFlip, { ...base, t: 1000, deltaY: FLIP_THRESHOLD }).state;
+    let t = 1000;
+    for (; t < 1000 + FLIP_LOCK_MAX_MS + 1000; t += 50) {
+      const r = stepFlip(st, { ...base, t: t + 50, deltaY: FLIP_THRESHOLD });
+      expect(r.flip).toBe(0);
+      st = r.state;
+    }
+    t += 50;
+    // Ngắt > FLIP_PAUSE_MS → cử chỉ mới, lật được.
+    const after = stepFlip(st, { ...base, t: t + FLIP_PAUSE_MS + 1, deltaY: FLIP_THRESHOLD });
+    expect(after.flip).toBe(1);
+  });
+
+  it("the post-cap guard is dropped by a pause even if no flip follows", () => {
+    let st = stepFlip(initialFlip, { ...base, t: 1000, deltaY: FLIP_THRESHOLD }).state;
+    st = stepFlip(st, { ...base, t: 1000 + FLIP_PAUSE_MS + FLIP_COOLDOWN_MS + 1, deltaY: 10, atBottom: false }).state;
+    const t = 1000 + FLIP_PAUSE_MS + FLIP_COOLDOWN_MS + 1;
+    // Cuộn liên tục trong trang rồi chạm mép: không còn bị chặn bởi lần đổi cũ.
+    const flips = [t + 50, t + 100].map((tt) => {
+      const r = stepFlip(st, { ...base, t: tt, deltaY: FLIP_THRESHOLD });
+      st = r.state;
+      return r.flip;
+    });
+    expect(flips).toEqual([1, 0]);
+  });
+
   it("ignores horizontal-dominant wheel", () => {
     expect(run([{ deltaX: FLIP_THRESHOLD * 3, deltaY: 20 }]).flips).toEqual([0]);
   });

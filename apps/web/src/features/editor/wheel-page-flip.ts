@@ -5,6 +5,11 @@
  * Chỉ tính phần cuộn "thừa" khi khung nhìn đã ở mép theo hướng cuộn. Cộng dồn tới `FLIP_THRESHOLD` mới đổi (1 nấc
  * chuột = ~100px không đủ, 2 nấc hoặc 1 cú vuốt trackpad thì đủ). Sau khi đổi, bỏ qua sự kiện cho tới khi hết
  * `FLIP_COOLDOWN_MS` VÀ quán tính đã dứt (ngắt ≥ `FLIP_PAUSE_MS`) — vuốt trackpad không lật liền nhiều trang.
+ *
+ * Khoá: trong lúc khoá, wheel cùng hướng bị nuốt (`locked`) và mỗi sự kiện gia hạn khoá thêm `FLIP_PAUSE_MS`, tối đa tới
+ * `FLIP_LOCK_MAX_MS` kể từ lần đổi; wheel ngược hướng lần đổi vẫn cuộn page nhưng không đổi trang. Hết trần mà wheel
+ * vẫn đến liên tục thì thôi nuốt, nhưng chưa cho đổi trang cho tới khi ngắt ≥ `FLIP_PAUSE_MS` (cú vuốt dài trên page
+ * nằm trọn khung không lật thêm trang thứ hai).
  */
 
 /** Cuộn thừa cần cộng dồn để đổi trang (px đã chuẩn hoá). */
@@ -77,9 +82,13 @@ export function stepFlip(s: FlipState, i: WheelInput): { state: FlipState; flip:
       locked: true,
     };
   }
+  // Khoá đã hết (hết trần hoặc đã ngắt): wheel còn đến liên tục = vẫn là cú vuốt cũ → không nuốt nữa nhưng chưa cho đổi
+  // trang tới khi ngắt ≥ FLIP_PAUSE_MS (page nằm trọn khung thì lần vuốt dài không lật thêm trang thứ hai).
+  if (s.lockDir !== 0 && !idle) return { state: { ...s, acc: 0, last: i.t }, flip: 0, locked: false };
+  const lockDir = 0;
   const edge = dir > 0 ? i.atBottom : i.atTop;
   const neighbour = dir > 0 ? i.hasNext : i.hasPrev;
-  if (!edge || !neighbour) return { state: { ...s, acc: 0, last: i.t }, flip: 0, locked: false };
+  if (!edge || !neighbour) return { state: { ...s, acc: 0, last: i.t, lockDir }, flip: 0, locked: false };
 
   const acc = idle || Math.sign(s.acc) !== dir ? dy : s.acc + dy;
   if (Math.abs(acc) >= FLIP_THRESHOLD)
@@ -94,5 +103,5 @@ export function stepFlip(s: FlipState, i: WheelInput): { state: FlipState; flip:
       flip: dir,
       locked: true,
     };
-  return { state: { ...s, acc, last: i.t }, flip: 0, locked: false };
+  return { state: { ...s, acc, last: i.t, lockDir }, flip: 0, locked: false };
 }
