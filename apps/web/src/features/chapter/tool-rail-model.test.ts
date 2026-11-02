@@ -8,6 +8,11 @@ describe("railClick", () => {
   it("bấm lại công cụ đang mở thì thu panel, giữ công cụ", () => {
     expect(railClick({ panel: "tool", tool: "brush" }, "brush")).toEqual({ panel: null, tool: "brush" });
   });
+  it("Tẩy nét mask đứng chung nút Mask: bấm Mask mở/thu panel, giữ chế độ tẩy", () => {
+    expect(railClick({ panel: "tool", tool: "eraser" }, "brush")).toEqual({ panel: null, tool: "eraser" });
+    expect(railClick({ panel: null, tool: "eraser" }, "brush")).toEqual({ panel: "tool", tool: "eraser" });
+    expect(railClick({ panel: "table", tool: "eraser" }, "brush")).toEqual({ panel: "tool", tool: "eraser" });
+  });
   it("đổi công cụ khi panel công cụ đang mở", () => {
     expect(railClick({ panel: "tool", tool: "select" }, "ocr")).toEqual({ panel: "tool", tool: "ocr" });
   });

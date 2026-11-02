@@ -876,7 +876,7 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
   const readOnly = useEditor((s) => !!s.readOnly);
   const conflictCount = useEditor((s) => s.conflicts.length);
   const railDisabled: Partial<Record<RailTarget, string>> = {};
-  for (const t of ["text", "brush", "eraser", "ocr"] as const) {
+  for (const t of ["text", "brush", "ocr"] as const) {
     if (sourceMode) railDisabled[t] = "Dùng được khi chương đã cắt trang";
     else if (readOnly) railDisabled[t] = "Đang chỉ xem";
   }

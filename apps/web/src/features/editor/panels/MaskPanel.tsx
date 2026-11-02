@@ -79,6 +79,9 @@ export function MaskPanel(props: {
           Tẩy nét (E)
         </button>
       </fieldset>
+      {tool === "eraser" && !hasPaint && (
+        <p className="small muted">Chưa có nét tô nào để tẩy — chọn "Tô (B)" và tô lên chữ trước.</p>
+      )}
       <label htmlFor="ed-brush">Cỡ bút: {size}px</label>
       <input
         id="ed-brush"

@@ -1,6 +1,7 @@
 /**
- * Rail công cụ màn chương: mỗi icon mở đúng 1 panel ngữ cảnh. Icon công cụ (V/T/B/E/R) đặt công cụ + mở panel công cụ;
- * bấm lại icon đang mở thì thu panel (công cụ giữ nguyên). "Bản dịch" / "Tìm" chỉ mở/thu panel của nó, không đổi công cụ.
+ * Rail công cụ màn chương: mỗi icon mở đúng 1 panel ngữ cảnh. Icon công cụ (V/T/B/R) đặt công cụ + mở panel công cụ;
+ * bấm lại icon đang mở thì thu panel (công cụ giữ nguyên). Tẩy nét mask (E) không có icon riêng — nó là chế độ của Mask
+ * (đổi trong panel Mask hoặc phím E), nên trên rail đứng chung nút Mask. "Bản dịch" / "Tìm" chỉ mở/thu panel của nó, không đổi công cụ.
  */
 import type { Tool } from "../editor/store.ts";
 
@@ -11,9 +12,13 @@ const PANEL_ONLY: readonly RailTarget[] = ["table", "find", "proofread"];
 export const isPanelOnly = (t: RailTarget): t is "table" | "find" | "proofread" => PANEL_ONLY.includes(t);
 export type RailState = { panel: PanelId | null; tool: Tool };
 
+/** Nút rail của một công cụ: Tẩy nét mask dùng chung nút Mask. */
+export const railTool = (t: Tool): Tool => (t === "eraser" ? "brush" : t);
+
 export function railClick(cur: RailState, t: RailTarget): RailState {
   if (isPanelOnly(t)) return { panel: cur.panel === t ? null : t, tool: cur.tool };
-  if (cur.panel === "tool" && cur.tool === t) return { panel: null, tool: t };
+  // Bấm nút của công cụ đang dùng (Mask khi đang Tẩy nét cũng vậy) → giữ nguyên công cụ, chỉ mở/thu panel.
+  if (railTool(cur.tool) === t) return { panel: cur.panel === "tool" ? null : "tool", tool: cur.tool };
   return { panel: "tool", tool: t };
 }
 
@@ -22,7 +27,7 @@ export const PANEL_TITLE: Record<RailTarget, string> = {
   select: "Chọn & sửa",
   text: "Thêm chữ",
   brush: "Mask xoá chữ",
-  eraser: "Tẩy nét mask",
+  eraser: "Mask xoá chữ",
   ocr: "OCR vùng",
   table: "Bản dịch cả chương",
   find: "Tìm / Thay · Glossary",

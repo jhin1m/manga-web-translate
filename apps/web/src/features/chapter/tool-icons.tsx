@@ -39,12 +39,6 @@ export const MaskIcon = (p: P) => (
     <path d="M9 12l-3 3c-1 1-1 3-3 4 3 1 5 0 6-1l3-3" />
   </Icon>
 );
-export const EraserIcon = (p: P) => (
-  <Icon {...p}>
-    <path d="M15 4l5 5-10 10H6l-3-3z" />
-    <path d="M13 19h8" />
-  </Icon>
-);
 export const OcrIcon = (p: P) => (
   <Icon {...p}>
     <path d="M4 8V5h3" />
