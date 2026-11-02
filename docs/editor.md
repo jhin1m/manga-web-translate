@@ -199,7 +199,7 @@ icon đang mở → thu panel (công cụ giữ nguyên); "Bản dịch" / "Tìm
 thu → mở panel công cụ (thường là Chọn; đang ở Bản dịch / Tìm thì giữ; chọn bằng chuột thì mở sau khi nhả chuột để
 không làm lệch khối đang kéo). Lưu bị xung đột khi panel thu → mở panel;
 danh sách xung đột nằm ở đầu mọi panel; thu panel khi còn xung đột → băng cảnh báo báo số mục + nút "Xem". Panel đang mở nhớ theo trình duyệt (`localStorage mtl.layout =
-{ panel }`, `layout-prefs.ts`). Chỉ xem → mọi công cụ trừ Chọn tắt (cả phím T/B/E/R); chương chưa có page → Chữ / Mask / Tẩy / OCR tắt;
+{ panel }`, `layout-prefs.ts`). Chỉ xem → mọi công cụ trừ Chọn tắt (cả phím T/B/E/R); chương chưa có page → Chữ / Mask / OCR tắt;
 chương chưa dịch xong → Tìm, Hiệu đính tắt.
 
 - **Chọn** (`select-panel.tsx`): có khối — "Trang n · Khối i / tổng · Loại" (loại chỉ đọc), Gốc (OCR), Bản dịch
@@ -215,7 +215,7 @@ chương chưa dịch xong → Tìm, Hiệu đính tắt.
   bỏ, để không mất giá trị). Đổi = `setTextStyle`: đặt `region.style` và `font_family` của khối theo `fontForStyle` (slot của
   loại; trống → font theo kind như worker), **1 bước undo**. Chương dịch trước 0.8.0 không có `style` (= Thường); đổi tay bằng ô này.
 - **Chữ / OCR** (`tool-panels.tsx`): gợi ý cách dùng + font khối mới / ngôn ngữ gốc của series (đổi ở Cài đặt series).
-- **Mask / Tẩy** (`MaskPanel.tsx`): Tô ↔ Tẩy nét, cỡ bút, "Xoá chữ vùng đã tô", "Bỏ nét".
+- **Mask** (`MaskPanel.tsx`; rail không có nút Tẩy riêng — E / nút "Tẩy nét" là chế độ của Mask): Tô ↔ Tẩy nét, cỡ bút, "Xoá chữ vùng đã tô", "Bỏ nét".
 - **Bản dịch** (560px): bảng văn bản cả chương (xem dưới), lọc "Chỉ khối cần xem" / "Chỉ trang đang mở".
 - **Tìm** (560px): segmented "Tìm / Thay" | "Glossary" — xem [export-and-batch-edit.md](./export-and-batch-edit.md).
   Hai đoạn giữ trạng thái khi đổi qua lại / thu panel (kết quả xem trước không mất).
