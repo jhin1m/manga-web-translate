@@ -106,14 +106,9 @@ class LamaInpainter:
     def __init__(
         self, model_path: Path, threads: int = 0, output_scale: float = 1.0, group_side: int = LAMA_SIZE
     ):
-        import onnxruntime as ort
+        from .models import ort_session
 
-        from .models import ort_providers
-
-        so = ort.SessionOptions()
-        if threads:
-            so.intra_op_num_threads = threads
-        self.session = ort.InferenceSession(str(model_path), so, providers=ort_providers())
+        self.session = ort_session(model_path, threads)
         self.output_scale = output_scale
         self.group_side = group_side
 

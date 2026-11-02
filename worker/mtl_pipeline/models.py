@@ -77,6 +77,25 @@ def ort_providers() -> list[str]:
     return [*chosen, "CPUExecutionProvider"] if "CPUExecutionProvider" not in chosen else chosen
 
 
+def session_options(threads: int = 0):
+    """SessionOptions chung cho mọi model. Flush số denormal về 0: CPU x86 tính denormal rất chậm (comic-text-detector
+    chậm ~13× trên Intel so với Apple Silicon vốn tự flush); kết quả lệch không đáng kể. threads=0 → onnxruntime tự chọn."""
+    import onnxruntime as ort
+
+    so = ort.SessionOptions()
+    so.add_session_config_entry("session.set_denormal_as_zero", "1")
+    if threads:
+        so.intra_op_num_threads = threads
+    return so
+
+
+def ort_session(path: Path, threads: int = 0):
+    """InferenceSession với `session_options` + provider theo `ort_providers`."""
+    import onnxruntime as ort
+
+    return ort.InferenceSession(str(path), session_options(threads), providers=ort_providers())
+
+
 def verify_all(lock_path: Path = DEFAULT_LOCK, root: Path | None = None) -> dict[str, Path]:
     """Kiểm sha256 mọi model bắt buộc trong lock → {name: path}. Gọi một lần khi khởi động."""
     root = root or models_dir()

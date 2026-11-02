@@ -82,14 +82,9 @@ class CtdMasker:
     """Chạy comic-text-detector theo cùng tile với detect → bản đồ xác suất mask chữ cả page (uint8)."""
 
     def __init__(self, model_path: Path, threads: int = 0):
-        import onnxruntime as ort
+        from .models import ort_session
 
-        from .models import ort_providers
-
-        so = ort.SessionOptions()
-        if threads:
-            so.intra_op_num_threads = threads
-        self.session = ort.InferenceSession(str(model_path), so, providers=ort_providers())
+        self.session = ort_session(model_path, threads)
 
     def predict(self, img_rgb: np.ndarray) -> np.ndarray:
         return self.predict_with_blocks(img_rgb, None)[0]

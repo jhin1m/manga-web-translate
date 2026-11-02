@@ -21,14 +21,9 @@ BORDER = 8  # viền trắng quanh crop: det cần khoảng nền quanh chữ ch
 
 
 def _session(path: Path, threads: int):
-    import onnxruntime as ort
+    from ..models import ort_session
 
-    from ..models import ort_providers
-
-    so = ort.SessionOptions()
-    if threads:
-        so.intra_op_num_threads = threads
-    return ort.InferenceSession(str(path), so, providers=ort_providers())
+    return ort_session(path, threads)
 
 
 def det_resize(img: np.ndarray) -> tuple[np.ndarray, float, float]:

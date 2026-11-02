@@ -31,15 +31,10 @@ class MangaOcr:
     name = "manga_ocr"
 
     def __init__(self, encoder: Path, decoder: Path, vocab: Path, threads: int = 0):
-        import onnxruntime as ort
+        from ..models import ort_session
 
-        from ..models import ort_providers
-
-        so = ort.SessionOptions()
-        if threads:
-            so.intra_op_num_threads = threads
-        self.encoder = ort.InferenceSession(str(encoder), so, providers=ort_providers())
-        self.decoder = ort.InferenceSession(str(decoder), so, providers=ort_providers())
+        self.encoder = ort_session(encoder, threads)
+        self.decoder = ort_session(decoder, threads)
         self.vocab = vocab.read_text(encoding="utf-8").splitlines()
 
     @staticmethod

@@ -196,14 +196,9 @@ DEFAULT_SCORE_THRESH = 0.35
 
 class Detector:
     def __init__(self, model_path: Path, score_thresh: float = DEFAULT_SCORE_THRESH, threads: int = 0):
-        import onnxruntime as ort
+        from .models import ort_session
 
-        from .models import ort_providers
-
-        so = ort.SessionOptions()
-        if threads:
-            so.intra_op_num_threads = threads
-        self.session = ort.InferenceSession(str(model_path), so, providers=ort_providers())
+        self.session = ort_session(model_path, threads)
         self.score_thresh = score_thresh
 
     def _run_tile(self, tile: np.ndarray, score_thresh: float) -> list[tuple[int, np.ndarray, float]]:

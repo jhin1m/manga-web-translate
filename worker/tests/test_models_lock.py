@@ -81,3 +81,24 @@ def test_ensure_model_rejects_tampered_file(tmp_path):
     )
     with pytest.raises(ModelIntegrityError, match="sha256"):
         ensure_model("opt", lock, tmp_path)
+
+
+def test_session_options_flush_denormals_to_zero_and_set_threads():
+    # x86 CPU xử lý số denormal rất chậm (CTD chậm ~13× so với Apple Silicon vốn tự flush) → mọi session phải bật.
+    so = models.session_options(threads=3)
+    assert so.get_session_config_entry("session.set_denormal_as_zero") == "1"
+    assert so.intra_op_num_threads == 3
+    assert models.session_options().intra_op_num_threads == 0
+
+
+def test_every_onnx_loader_goes_through_ort_session():
+    # Không còn module nào tự tạo SessionOptions (dễ quên cờ denormal khi thêm model mới).
+    from pathlib import Path
+
+    src = Path(models.__file__).resolve().parent
+    offenders = [
+        str(p.relative_to(src))
+        for p in src.rglob("*.py")
+        if "vendor" not in p.parts and p.name != "models.py" and "SessionOptions(" in p.read_text()
+    ]
+    assert offenders == []
