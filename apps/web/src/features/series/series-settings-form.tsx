@@ -45,6 +45,8 @@ import {
 const FONT_SLOTS: { slot: FontSlot; label: string; empty: string; hint?: string }[] = [
   { slot: "dialogue", label: "Thoại", empty: "Mặc định hệ thống" },
   { slot: "narration", label: "Dẫn truyện", empty: "Giống font thoại", hint: "Áp dụng cho chữ ngoài bóng." },
+  { slot: "thought", label: "Suy nghĩ", empty: "Như thoại/dẫn truyện", hint: "Chữ trong ngoặc, độc thoại, nói thầm." },
+  { slot: "note", label: "Ghi chú", empty: "Như thoại/dẫn truyện", hint: "Chữ viết tay, chú thích nhỏ." },
 ];
 
 /** Giá trị option "Tải font lên…" — không phải font id (font của bạn là `custom-…`, font gói sẵn là tên file). */

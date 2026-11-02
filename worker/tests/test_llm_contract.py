@@ -459,3 +459,56 @@ def test_translate_error_mid_chapter_keeps_usage_of_done_batches():
     with pytest.raises(ProviderError) as ei:
         translate_chapter(prov, _pages(8, 2), SeriesSettings(), "rolling")
     assert sum(u.input_tokens for u in ei.value.usage) == 10
+
+
+def test_translate_item_style_defaults_and_unknown_becomes_normal():
+    assert TranslateItem.model_validate({"id": "x"}).style == "normal"
+    assert TranslateItem.model_validate({"id": "x", "style": "shout"}).style == "normal"
+    assert TranslateItem.model_validate({"id": "x", "style": None}).style == "normal"
+    assert TranslateItem.model_validate({"id": "x", "style": "thought"}).style == "thought"
+
+
+def test_translate_schema_style_enum_not_required():
+    item = TRANSLATE_SCHEMA["properties"]["items"]["items"]
+    assert item["properties"]["style"]["enum"] == ["normal", "thought", "note"]
+    assert "style" not in item["required"]
+
+
+def test_anthropic_translate_keeps_style():
+    data = {
+        "items": [
+            {"id": "p0.r1", "translation": "Chào", "speaker": "A", "style": "thought"},
+            {"id": "p0.r2", "translation": "Ừ", "speaker": "A", "style": "weird"},
+            {"id": "p0.r3", "translation": "Ờ", "speaker": "A"},
+        ],
+        "context_notes": "",
+    }
+    req = TranslateRequest(
+        pages=[
+            PageText(
+                ord=0,
+                regions=[
+                    RegionText(id=f"p0.r{i}", kind="text_bubble", bbox_norm=[0, 0, 1, 1], source="x")
+                    for i in (1, 2, 3)
+                ],
+            )
+        ]
+    )
+    res = AnthropicProvider("claude-haiku-5-5", client=FakeAnthropic([data])).translate_batch(req)
+    assert [i.style for i in res.items] == ["thought", "normal", "normal"]
+
+
+def test_unknown_style_does_not_trigger_retry():
+    def run(req):
+        return TranslateResult(
+            items=[
+                TranslateItem.model_validate({"id": r.id, "translation": "t", "style": "shout"})
+                for p in req.pages
+                for r in p.regions
+            ]
+        )
+
+    prov = ScriptedProvider(tr=[run])
+    out = translate_chapter(prov, _pages(1, 2), SeriesSettings(), "rolling")
+    assert len(prov.tr_reqs) == 1
+    assert all(not i.low_conf and i.style == "normal" for i in out.items["0"].values())

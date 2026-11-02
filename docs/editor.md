@@ -195,13 +195,17 @@ danh sách xung đột nằm ở đầu mọi panel; thu panel khi còn xung đ�
 chương chưa dịch xong → Tìm, Hiệu đính tắt.
 
 - **Chọn** (`select-panel.tsx`): có khối — "Trang n · Khối i / tổng · Loại" (loại chỉ đọc), Gốc (OCR), Bản dịch
-  (`#cw-translation`, cùng nguồn với bảng), cảnh báo tràn khung, font / cỡ / tự khớp, "Kiểu chữ nâng cao" (thu gọn:
+  (`#cw-translation`, cùng nguồn với bảng), cảnh báo tràn khung, font / cỡ / tự khớp, select "Loại chữ" dưới ô Font (xem dưới), "Kiểu chữ nâng cao" (thu gọn:
   giãn dòng, lề, căn lề, căn dọc (Trên / Giữa — khối mới mặc định Giữa, khối lưu từ trước giữ Trên; chữ ngắn lại thì nằm giữa khung thay vì dính mép trên; "Áp kiểu này" chép cả căn dọc), màu, viền, ẩn khi xuất, "Áp kiểu này cho khối <loại> trong chương" — mọi trang, kể cả trang
   đang mở, ghi trong 1 lượt `PUT /chapters/:id/states` chung `batch_id`; toast "Hoàn tác" khôi phục cả lượt qua
   `find-replace/undo` (`conflicts: "skip"`: trang đã sửa tiếp được giữ và nêu trong toast), lượt là 1 bước trong lịch sử undo của trang đang mở (mốc không có patch): Cmd+Z / nút Hoàn tác ở bước đó gọi đúng hoàn tác của toast, rồi Cmd+Z tiếp lùi các sửa trước lượt; mốc thuộc trang đang mở lúc áp (đổi trang thì Cmd+Z ở trang khác không thấy), không làm lại (redo) được lượt. Cùng cơ chế cho Tìm/Thay và Áp glossary (`apply` trả `versions` = version mới từng page; Cmd+Z hoàn tác với `conflicts: "skip"`, nút Hoàn tác của panel tự tắt; Cmd+Z trong ô nhập vẫn là undo của ô); chương đang xử lý → 409 `chapter_busy`), Dịch lại
   khối, Xoá khối, link Dịch trang này / Dịch lại trang này (không có khi trang bận). Chưa có khối — trang + trạng thái + cờ (AI có bản mới, tràn khung, cắt ở
   trần chiều cao, lỗi job + "Chi tiết kỹ thuật"), Dịch trang này / Dịch lại trang này · Ẩn trang này, "Bỏ chỉnh sửa tay, dùng lại bản
   AI" (khi trang khác bản AI). "AI có bản mới" và xung đột khi lưu luôn ở đầu panel.
+  **Loại chữ** (`TextStyleSelect` ở `panels/Properties.tsx`): chỉ hiện khi khối có vùng (`region_id`) **và** series đã chọn ≥ 1 slot
+  Suy nghĩ / Ghi chú (khối vẽ tay không vùng → không có ô). Option: Thường + loại có slot (+ loại hiện tại của vùng nếu slot đã bị
+  bỏ, để không mất giá trị). Đổi = `setTextStyle`: đặt `region.style` và `font_family` của khối theo `fontForStyle` (slot của
+  loại; trống → font theo kind như worker), **1 bước undo**. Chương dịch trước 0.8.0 không có `style` (= Thường); đổi tay bằng ô này.
 - **Chữ / OCR** (`tool-panels.tsx`): gợi ý cách dùng + font khối mới / ngôn ngữ gốc của series (đổi ở Cài đặt series).
 - **Mask / Tẩy** (`MaskPanel.tsx`): Tô ↔ Tẩy nét, cỡ bút, "Xoá chữ vùng đã tô", "Bỏ nét".
 - **Bản dịch** (560px): bảng văn bản cả chương (xem dưới), lọc "Chỉ khối cần xem" / "Chỉ trang đang mở".

@@ -98,6 +98,50 @@ def test_translate_payload_narration_font_is_optional():
     )
 
 
+def test_translate_payload_style_fonts_are_optional():
+    settings = {
+        "glossary": {},
+        "pronoun_rules": "",
+        "honorific_policy": "",
+        "style_prompt": "",
+        "font": "Bangers-Regular",
+    }
+    payload = {
+        "type": "chapter.translate",
+        "chapter_id": "0192a3b4-c5d6-7e8f-9a0b-1c2d3e4f5a6b",
+        "page_ids": ["0192a3b4-c5d6-7e8f-9a0b-1c2d3e4f5a6c"],
+        "context": "rolling",
+        "glossary_rev": 0,
+        "settings_rev": 0,
+        "settings": settings,
+    }
+    validate_contract("job-payload", payload)
+    validate_contract(
+        "job-payload",
+        {**payload, "settings": {**settings, "thought_font": "Bangers-Regular", "note_font": "custom-abcd1234"}},
+    )
+
+
+def _state_with_region_style(style: str | None) -> dict:
+    clean = np.full((600, 400, 3), 255, np.uint8)
+    regs = regions()
+    box = typeset_region(clean, regs[1], regs[0], "Chào", "PatrickHand-Regular")
+    items = {"t0": OcrItem(id="t0", source="안녕", confidence=0.9)}
+    state = build_page_state(400, 600, regs, items, {"t0": ("Chào", False)}, [box], META)
+    if style is not None:
+        state["regions"][1]["style"] = style
+    return state
+
+
+def test_page_state_region_style_is_optional_enum():
+    validate_contract("page-state", _state_with_region_style(None))
+    validate_contract("page-state", _state_with_region_style("thought"))
+    validate_contract("page-state", _state_with_region_style("note"))
+    validate_contract("page-state", _state_with_region_style("normal"))
+    with pytest.raises(ContractError):
+        validate_contract("page-state", _state_with_region_style("shout"))
+
+
 def test_contract_violation_raises():
     with pytest.raises(ContractError):
         validate_contract("job-result", {"type": "page.prepare", "clean_rev": -1})

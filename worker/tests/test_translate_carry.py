@@ -150,3 +150,51 @@ def test_carry_drops_lone_surrogates_instead_of_failing_the_batch():
     result = handle_translate(JobContext(FakeClient(), _job(None)), _Deps(prov))
     assert result["carry"] == {"notes": "abc", "characters": ["Minjun"]}
     validate_contract("job-result", result)
+
+
+def _styled(style: str):
+    def run(req):
+        return TranslateResult(
+            items=[
+                TranslateItem(id=r.id, translation=f"vi:{r.source}", speaker="A", style=style)
+                for p in req.pages
+                for r in p.regions
+            ],
+            usage=[TokenUsage(provider="f", model="m", input_tokens=1)],
+        )
+
+    return run
+
+
+def _box_font(result):
+    return result["pages"][0]["ai_state"]["text_boxes"][0]["font_family"]
+
+
+def _region_state(result):
+    return result["pages"][0]["ai_state"]["regions"][0]
+
+
+def test_old_payload_without_style_fonts_keeps_boxes():
+    base = handle_translate(JobContext(FakeClient(), _job(None)), _Deps(ScriptedProvider(tr=[_tr("")])))
+    styled = handle_translate(
+        JobContext(FakeClient(), _job(None)), _Deps(ScriptedProvider(tr=[_styled("thought")]))
+    )
+    assert _box_font(base) == "Bangers-Regular"
+    assert "style" not in _region_state(base)
+    # Slot trống → font không đổi, nhưng style vẫn được ghi.
+    assert _box_font(styled) == "Bangers-Regular"
+    assert _region_state(styled)["style"] == "thought"
+    validate_contract("job-result", styled)
+
+
+def test_style_font_slot_applies_and_normal_omits_key():
+    job = _job(None)
+    job["payload"]["settings"].update(thought_font="PatrickHand-Regular", note_font="Bangers-Regular")
+    thought = handle_translate(
+        JobContext(FakeClient(), job), _Deps(ScriptedProvider(tr=[_styled("thought")]))
+    )
+    assert _box_font(thought) == "PatrickHand-Regular"
+    normal = handle_translate(JobContext(FakeClient(), job), _Deps(ScriptedProvider(tr=[_styled("normal")])))
+    assert "style" not in _region_state(normal)
+    assert _box_font(normal) == "Bangers-Regular"
+    validate_contract("job-result", thought)

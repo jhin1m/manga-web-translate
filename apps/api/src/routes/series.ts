@@ -44,7 +44,9 @@ const Settings = z.object({
   pronoun_rules: z.array(PronounRule).max(200),
   style_prompt: z.string().max(1000),
   /** Id font gói sẵn hoặc font của người dùng — kiểm tồn tại ở `assertKnownFonts` (cần DB). */
-  default_fonts: z.object({ dialogue: FontId, narration: FontId, sfx: FontId }).partial(),
+  default_fonts: z
+    .object({ dialogue: FontId, narration: FontId, sfx: FontId, thought: FontId, note: FontId })
+    .partial(),
   llm_tier: z.enum(LLM_TIERS),
   /** Chữ bỏ qua (watermark): mục quá ngắn dễ nuốt cả thoại, regex lỗi / dễ treo → 400 kèm lý do. */
   ignore_text: z

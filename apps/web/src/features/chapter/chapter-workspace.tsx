@@ -1030,6 +1030,7 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
                 overflowCount={activeOverflow}
                 kit={kit}
                 targetLang={series.data?.target_lang}
+                defaultFonts={series.data?.default_fonts}
                 busy={{
                   retranslate: action.isPending,
                   ocr: ocr.pending.length > 0,

@@ -44,13 +44,14 @@ const exportJob = (ws: Seed) =>
     include_untranslated: true,
   });
 
-const settings = (font: string, narration?: string) => ({
+const settings = (font: string, narration?: string, extra: Record<string, string> = {}) => ({
   glossary: {},
   pronoun_rules: "",
   honorific_policy: "",
   style_prompt: "",
   font,
   narration_font: narration,
+  ...extra,
 });
 
 const translateJob = (ws: Seed, pageIds: string[], s: ReturnType<typeof settings>) =>
@@ -133,6 +134,24 @@ describe("translate inputs fonts", () => {
     const foreign = TranslateInputs.parse(await buildInputs(db, translateJob(A, [], settings(FONT_B, GONE))));
     expect(foreign.fonts).toEqual([]);
   });
+
+  it("covers thought and note slot fonts of the user, not those of another user", async () => {
+    const own = TranslateInputs.parse(
+      await buildInputs(db, translateJob(A, [], settings("Bangers-Regular", undefined, { note_font: FONT_A2 }))),
+    );
+    expect(own.fonts?.map((f) => f.id)).toEqual([FONT_A2]);
+    const both = TranslateInputs.parse(
+      await buildInputs(
+        db,
+        translateJob(A, [], settings("Bangers-Regular", undefined, { thought_font: FONT_A, note_font: FONT_A2 })),
+      ),
+    );
+    expect(both.fonts?.map((f) => f.id)).toEqual([FONT_A2, FONT_A]);
+    const foreign = TranslateInputs.parse(
+      await buildInputs(db, translateJob(A, [], settings("Bangers-Regular", undefined, { note_font: FONT_B }))),
+    );
+    expect(foreign.fonts).toEqual([]);
+  });
 });
 
 describe("export inputs fonts", () => {
@@ -147,6 +166,26 @@ describe("export inputs fonts", () => {
       [FONT_A2, sha("c")],
       [FONT_A, sha("a")],
     ]);
+  });
+
+  it("includes the thought and note slot fonts of series defaults", async () => {
+    // Own user + bundled-only boxes: each custom font can only come from the slot under test.
+    const C = await seedUser("cf-c");
+    const [T, N] = ["custom-c1c1c1c1", "custom-c2c2c2c2"];
+    await scoped(db, C.userId).insert(userFonts, font(T, C, "d"));
+    await scoped(db, C.userId).insert(userFonts, font(N, C, "e"));
+    await seedPage(C, ["Bangers-Regular"]);
+    for (const [slot, id] of [
+      ["thought", T],
+      ["note", N],
+    ] as const) {
+      await db
+        .update(series)
+        .set({ defaultFonts: { [slot]: id } })
+        .where(eq(series.id, C.seriesId));
+      const inputs = ExportInputs.parse(await buildInputs(db, exportJob(C)));
+      expect(inputs.fonts?.map((f) => f.id)).toEqual([id]);
+    }
   });
 
   it("is empty when nothing custom is used", async () => {

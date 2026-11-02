@@ -3,7 +3,7 @@ import type { PageFormat, SourceLang, TargetLang } from "@mtl/shared/series-lang
 import { api } from "../../lib/api.ts";
 
 export type PronounRule = { speaker: string; listener: string; address: string; note: string };
-export type FontSlot = "dialogue" | "narration" | "sfx";
+export type FontSlot = "dialogue" | "narration" | "thought" | "note" | "sfx";
 
 export type SeriesSettings = {
   source_lang: SourceLang;

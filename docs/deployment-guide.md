@@ -210,6 +210,12 @@ UPDATE page_state_history SET state = jsonb_set(state, '{text_boxes}', (
 WHERE state @? '$.text_boxes[*].valign';
 COMMIT;
 ```
+**Pipeline 0.8.0 (font theo loại chữ `Region.style`)**: thứ tự bắt buộc: (1) deploy worker 0.8.0 (Mac + Modal); (2) đặt
+`MIN_PIPELINE_VERSION=0.8.0` (mặc định trong `env.ts`); (3) rồi mới deploy API/web. Schema worker cũ có `additionalProperties: false`
+nên từ chối region có `style` và settings có `thought_font`/`note_font` (job fail hợp đồng); API từ chối worker < 0.8.0 bằng 426.
+Không có migration (`default_fonts` là jsonb, thêm khoá `thought`/`note`). Trang cũ không có `style` vẽ như trước. Rollback: **không**
+hạ worker dưới 0.8.0 sau khi đã có chương dịch bằng 0.8.0 (trang đã lưu mang `style`; export bằng worker cũ sẽ fail).
+
 Log: `journalctl -u mtl-api -o cat` (JSON mỗi request: method, path, status, ms — không query/header/body),
 `journalctl -u mtl-jobs`.
 

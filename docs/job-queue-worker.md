@@ -210,7 +210,8 @@ font, và worker cũ cũng không biết fallback font tuỳ chỉnh. API `PIPEL
 0.7.0 (`carry` ở payload + result `chapter.translate`, xem mục Luồng dịch chương) nâng `MIN_PIPELINE_VERSION = 0.7.0`: schema
 payload có `additionalProperties: false` nên worker 0.6.x từ chối job dịch có `carry` — worker Mac/Modal lên 0.7.0
 **trước** khi deploy API, không thì claim trả 426 và hàng đợi dừng (worker 0.7.0 vẫn đọc payload cũ không có `carry`).
-API `PIPELINE_VERSION` (muối input_rev) vẫn 0.4.0. Heartbeat `done/total` không cần nâng version (API cũ bỏ qua key lạ).
+API `PIPELINE_VERSION` (muối input_rev) vẫn 0.4.0. 0.8.0 (`Region.style` ở result, `settings.thought_font`/`note_font` ở payload
+`chapter.translate`) nâng `MIN_PIPELINE_VERSION = 0.8.0` cùng lý do; thứ tự deploy ở `docs/deployment-guide.md`. Heartbeat `done/total` không cần nâng version (API cũ bỏ qua key lạ).
 
 ## Font tuỳ chỉnh (pipeline 0.5.1)
 
@@ -218,7 +219,7 @@ API `PIPELINE_VERSION` (muối input_rev) vẫn 0.4.0. Heartbeat `done/total` kh
 của **người dùng sở hữu job** mà job dùng, dựng lúc claim (`fontInputs` ở `jobs/claim-inputs.ts`, URL presigned GET: translate
 10', export 15'):
 
-- translate: `settings.font` + `settings.narration_font` của payload (snapshot lúc enqueue);
+- translate: `settings.font` + `settings.narration_font` + `settings.thought_font` + `settings.note_font` của payload (snapshot lúc enqueue);
 - export: `font_family` của mọi box ở trang được vẽ chữ + font mặc định hiện tại của series.
 
 Id gói sẵn, của người dùng khác hoặc đã xoá (box cũ còn tham chiếu — xoá font chỉ bị chặn khi là mặc định series) bị

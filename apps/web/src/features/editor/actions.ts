@@ -3,7 +3,7 @@
  * Thao tác đổi chữ/khung/kiểu chữ chạy lại layout qua `Layout` tiêm vào (browser: measure.ts + canvas).
  * Box/region tra theo id; không thấy id → không làm gì.
  */
-import type { PageState, Region, TextBox } from "@mtl/shared";
+import type { PageState, Region, TextBox, TextStyle } from "@mtl/shared";
 import type { Draft } from "immer";
 import { LINE_HEIGHT, nfc, PAD } from "./measure.ts";
 
@@ -68,6 +68,20 @@ export const setStyle = (id: string, style: BoxStyle, layout: Layout) => (s: S) 
   // Box lưu từ trước không có valign (= "top"): ghi lại cùng giá trị chỉ làm đổi dữ liệu mà không đổi gì nhìn thấy.
   if (valign && (b.valign ?? "top") !== valign) b.valign = valign;
   if ((Object.keys(style) as (keyof BoxStyle)[]).some((k) => LAYOUT_FIELDS.has(k))) relayout(b, layout);
+};
+
+/**
+ * Đổi loại chữ (thường/suy nghĩ/ghi chú) của vùng: ghi `region.style` (`normal` → xoá khoá) và đặt font + ngắt dòng
+ * lại cho box, cùng 1 bước undo. Box không gắn vùng → không làm gì.
+ */
+export const setTextStyle = (boxId: string, style: TextStyle, font: string, layout: Layout) => (s: S) => {
+  const b = boxOf(s, boxId);
+  const r = b?.region_id ? regionOf(s, b.region_id) : undefined;
+  if (!b || !r) return;
+  if (style === "normal") delete r.style;
+  else r.style = style;
+  b.font_family = font;
+  relayout(b, layout);
 };
 
 /** Áp cùng kiểu chữ cho nhiều box (1 bước undo) — "Áp kiểu cho khối cùng loại". */

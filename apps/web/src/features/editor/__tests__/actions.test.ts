@@ -1,4 +1,5 @@
 import type { PageState } from "@mtl/shared";
+import { applyPatches } from "immer";
 import { describe, expect, it } from "vitest";
 import {
   addBox,
@@ -17,6 +18,7 @@ import {
   setRegionTranslation,
   setStyle,
   setStyleMany,
+  setTextStyle,
 } from "../actions.ts";
 import { change } from "../history.ts";
 import { box, doc, layout, region } from "./fixtures.ts";
@@ -181,5 +183,33 @@ describe("editor actions", () => {
     expect(s2.regions[0]).toMatchObject({ id: "r0", source_text: "새", translation: "Mới", flags: ["low_conf"] });
     expect(s2.text_boxes[0]).toMatchObject({ id: "t0", x: 10, text: "Mới", lines: ["Mới"] });
     expect(s2.regions[1]).toEqual(s0.regions[1]);
+  });
+});
+
+describe("setTextStyle", () => {
+  it("sets region.style and the box font together, undone as one step", () => {
+    const s0 = doc(2);
+    const r = change(s0, setTextStyle("t0", "thought", "Thought-Font", layout));
+    expect(r.state.regions[0]?.style).toBe("thought");
+    expect(r.state.text_boxes[0]?.font_family).toBe("Thought-Font");
+    expect(r.state.regions[1]?.style).toBeUndefined();
+    expect(r.state.text_boxes[1]?.font_family).toBe("F");
+    expect(r.state.text_boxes[0]?.lines.length).toBeGreaterThan(0);
+    const back = applyPatches(r.state, r.inverse);
+    expect(back).toEqual(s0);
+  });
+
+  it("normal removes the style key instead of storing it", () => {
+    const styled = run(doc(1), setTextStyle("t0", "note", "O", layout));
+    const normal = run(styled, setTextStyle("t0", "normal", "F", layout));
+    expect(normal.regions[0] && "style" in normal.regions[0]).toBe(false);
+    expect(normal.text_boxes[0]?.font_family).toBe("F");
+  });
+
+  it("is a no-op for a box without a region or an unknown box", () => {
+    const s0 = doc(1);
+    s0.text_boxes.push(box("free", null));
+    expect(change(s0, setTextStyle("free", "thought", "T", layout)).patches).toEqual([]);
+    expect(change(s0, setTextStyle("nope", "thought", "T", layout)).patches).toEqual([]);
   });
 });

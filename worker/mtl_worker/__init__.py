@@ -12,4 +12,6 @@
 # 0.7.0: chapter.translate theo lô — payload/result `carry` (notes + tên nhân vật chuyền giữa các job lô).
 # 0.7.1: TextBox.valign — export căn giữa dọc. Worker < 0.7.1 fail job export (schema input additionalProperties: false
 #        không nhận trường valign) → không rollback worker xuống dưới mốc này khi đã có box mới.
-PIPELINE_VERSION = "0.7.1"
+# 0.8.0: region.style (normal|thought|note) do LLM dịch gắn; settings.thought_font/note_font. Worker < 0.8.0 fail job
+#        đọc state có region style (schema strict) → không rollback worker xuống dưới mốc này sau khi đã dịch.
+PIPELINE_VERSION = "0.8.0"

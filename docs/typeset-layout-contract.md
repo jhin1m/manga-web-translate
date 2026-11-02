@@ -65,6 +65,20 @@ lệch bbox mực từng dòng ≤ 1px — xem `benchmarks/phase-01-results.md`)
   `additionalProperties: false` nên worker < 0.4.1 không đọc được payload mới → `MIN_PIPELINE_VERSION = 0.4.1` (426,
   worker cũ thoát rõ ràng); API `PIPELINE_VERSION` giữ 0.4.0 để không chạy lại job cũ. Box tạo tay trong editor (kể
   cả vùng OCR, luôn `text_free`) dùng font thoại — vùng OCR tay thường nằm trong bóng.
+- **Font theo loại chữ** (pipeline 0.8.0): `Region.style` optional (`normal | thought | note`, `TEXT_STYLES` ở
+  `packages/shared/src/page-state.ts`); thiếu = `normal`. AI dịch gắn từ text (prompt `translate_batch.md`; mơ hồ → `normal`).
+  Font chọn ở `font_for` (worker) / `fontForStyle` (editor `fonts.ts`), cùng quy tắc:
+
+  | style | Slot series (`default_fonts`) | Slot trống |
+  |---|---|---|
+  | `normal` | không có | theo kind: `text_free` → dẫn truyện (trống → thoại), còn lại → thoại |
+  | `thought` | `thought` | như `normal` |
+  | `note` | `note` | như `normal` |
+
+  API chỉ gửi `settings.thought_font` / `settings.note_font` khi series đã chọn slot; thiếu → worker theo kind. Font tuỳ chỉnh
+  ở hai slot này cũng vào `inputs.fonts`. Đổi slot series không cập nhật box đã có. Khác nhau khi slot có id nhưng font
+  không dùng được: editor (`isKnown` sai, vd font tuỳ chỉnh chưa nạp) rơi về font theo kind; worker vẫn ghi id slot vào
+  `font_family` và vẽ bằng font dự phòng.
 - **SFX**: không dịch, không đặt chữ (giữ nguyên chữ gốc), nên form series không có ô font SFX; khoá `sfx` cũ trong
   `default_fonts` được giữ nguyên nhưng không dùng.
 - **Đích không phải tiếng Việt** (`en | id | es | pt | fr`): cùng bộ font — mọi font trong `manifest.json` phải đủ glyph

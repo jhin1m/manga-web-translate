@@ -188,7 +188,12 @@ export async function buildInputs(tx: DbLike, job: Job): Promise<Record<string, 
         .where(and(eq(pages.chapterId, p.chapter_id), inArray(pages.id, p.page_ids)))
         .orderBy(asc(pages.ord));
       const isIgnored = await ignoreMatcherOf(tx, p.chapter_id);
-      const fonts = await fontInputs(tx, job.userId, [p.settings.font, p.settings.narration_font], INPUT_GET_TTL_S);
+      const fonts = await fontInputs(
+        tx,
+        job.userId,
+        [p.settings.font, p.settings.narration_font, p.settings.thought_font, p.settings.note_font],
+        INPUT_GET_TTL_S,
+      );
       return {
         pages: await Promise.all(
           rows.map(async (pg) => {
@@ -297,7 +302,12 @@ async function exportInputs(tx: DbLike, job: Job, p: Extract<JobPayload, { type:
     .from(chapters)
     .innerJoin(series, eq(series.id, chapters.seriesId))
     .where(eq(chapters.id, p.chapter_id));
-  const fontIds = new Set<string | undefined>([defaults?.fonts.dialogue, defaults?.fonts.narration]);
+  const fontIds = new Set<string | undefined>([
+    defaults?.fonts.dialogue,
+    defaults?.fonts.narration,
+    defaults?.fonts.thought,
+    defaults?.fonts.note,
+  ]);
   for (const { page: pg, state } of rows) {
     if (!pg.skipped && pg.status === "ready" && pg.cleanRev !== null) {
       for (const b of state?.text_boxes ?? []) fontIds.add(b.font_family);

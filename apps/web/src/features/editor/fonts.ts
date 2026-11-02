@@ -4,6 +4,7 @@
  * trình duyệt — hợp đồng layout quy tắc 2). `family` của FontFace = font_id nên canvas dùng `${size}px "${font_id}"`.
  * Font không biết (đã xoá, state cũ) → metric + nét vẽ đều theo font thoại mặc định.
  */
+import type { Region, TextStyle } from "@mtl/shared";
 import type { Layout } from "./actions.ts";
 import { type FontMetrics, layoutBox, type MeasureFn } from "./measure.ts";
 
@@ -66,6 +67,24 @@ export function dialogueFont(
 ): string {
   if (seriesFont && isKnown(seriesFont)) return seriesFont;
   return manifest.defaults[0] ?? Object.keys(manifest.fonts)[0] ?? "Bangers-Regular";
+}
+
+/**
+ * Font cho 1 kiểu chữ (cùng quy tắc worker `font_for`): slot của kiểu (thought/note) nếu còn dùng được; không thì
+ * chữ ngoài bóng (`text_free`) dùng font dẫn truyện (trống/không biết → font thoại), phần khác font thoại.
+ */
+export function fontForStyle(
+  manifest: FontManifest,
+  defaultFonts: Partial<Record<"dialogue" | "narration" | "thought" | "note", string>> | undefined,
+  style: TextStyle,
+  kind: Region["kind"],
+  isKnown: (id: string) => boolean = (id) => id in manifest.fonts,
+): string {
+  const slot = style === "normal" ? undefined : defaultFonts?.[style];
+  if (slot && isKnown(slot)) return slot;
+  const dialogue = dialogueFont(manifest, defaultFonts?.dialogue, isKnown);
+  const narration = defaultFonts?.narration;
+  return kind === "text_free" && narration && isKnown(narration) ? narration : dialogue;
 }
 
 /** Font mặc định khi `fontId` không có trong trình duyệt (trình duyệt tự dùng family thứ hai). */

@@ -234,6 +234,14 @@
                       "narration_font": {
                         "type": "string",
                         "minLength": 1
+                      },
+                      "thought_font": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "note_font": {
+                        "type": "string",
+                        "minLength": 1
                       }
                     },
                     "required": [
@@ -525,6 +533,14 @@
                         "minLength": 1
                       },
                       "narration_font": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "thought_font": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "note_font": {
                         "type": "string",
                         "minLength": 1
                       }

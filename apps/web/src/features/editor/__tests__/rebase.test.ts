@@ -1,6 +1,6 @@
 import type { PageState } from "@mtl/shared";
 import { describe, expect, it } from "vitest";
-import { addBox, deleteBox, editText, moveBox, setStyle } from "../actions.ts";
+import { addBox, deleteBox, editText, moveBox, setStyle, setTextStyle } from "../actions.ts";
 import { change } from "../history.ts";
 import { diffStates, rebase, restoreConflict } from "../rebase.ts";
 import { box, doc, layout } from "./fixtures.ts";
@@ -78,6 +78,20 @@ describe("rebase pending ops onto a newer server state", () => {
     const r = rebase(serverReplace(fresh, "t1", "của server"), diffStates(fresh, local));
     expect(r.state.text_boxes[1]).toMatchObject({ text: "của server", lines: [] });
     expect(r.conflicts.map((c) => c.key)).toContain("text_boxes:t1");
+  });
+
+  it("carries a region style (and clearing it) through rebase like other region fields", () => {
+    const local = run(base, setTextStyle("t1", "thought", "T", layout));
+    const server = run(base, moveBox("t2", 9, 9));
+    const r = rebase(server, diffStates(base, local));
+    expect(r.conflicts).toEqual([]);
+    expect(r.state.regions[1]?.style).toBe("thought");
+    expect(r.state.text_boxes[1]?.font_family).toBe("T");
+    const cleared = run(local, setTextStyle("t1", "normal", "F", layout));
+    const r2 = rebase(local, diffStates(local, cleared));
+    expect(r2.conflicts).toEqual([]);
+    // Khoá bị xoá có thể còn là `undefined` trong bộ nhớ; JSON gửi server thì không còn khoá.
+    expect(JSON.parse(JSON.stringify(r2.state.regions[1]))).not.toHaveProperty("style");
   });
 
   it("drops stale lines when my style change meets the server's text change", () => {

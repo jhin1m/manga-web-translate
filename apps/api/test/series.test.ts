@@ -1,6 +1,7 @@
 /** Cài đặt series: ngôn ngữ nguồn/đích, page_format (mặc định theo nguồn, commit dùng nó), payload job mang ngôn ngữ. */
 import { randomUUID } from "node:crypto";
 import { chapters, jobs, pages, scoped, series } from "@mtl/db";
+import { TranslateSettings } from "@mtl/shared";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { enqueueIngest, enqueueOcrRegion, enqueuePrepare, inJobTx, translateSettings } from "../src/jobs/enqueue.ts";
@@ -116,10 +117,29 @@ describe("series languages + page_format", () => {
     // Chưa chọn font dẫn truyện → giống font thoại.
     expect(settings.narration_font).toBe(settings.font);
 
+    // Series chưa chọn slot thought/note → payload không mang khoá (job cũ/mới đều gọn).
+    expect(settings).not.toHaveProperty("thought_font");
+    expect(settings).not.toHaveProperty("note_font");
+
     const [withFonts] = await sdb.update(series, eq(series.id, A.seriesId), {
       defaultFonts: { dialogue: "Bangers-Regular", narration: "BeVietnamPro-Regular" },
     });
     const fonts = await inJobTx((tx) => translateSettings(tx, withFonts as typeof series.$inferSelect));
     expect(fonts).toMatchObject({ font: "Bangers-Regular", narration_font: "BeVietnamPro-Regular" });
+    expect(fonts).not.toHaveProperty("thought_font");
+
+    const [withSlots] = await sdb.update(series, eq(series.id, A.seriesId), {
+      defaultFonts: { thought: "JimLeeThought-Regular", note: "Bangers-Regular" },
+    });
+    const slots = await inJobTx((tx) => translateSettings(tx, withSlots as typeof series.$inferSelect));
+    expect(slots).toMatchObject({ thought_font: "JimLeeThought-Regular", note_font: "Bangers-Regular" });
+    expect(TranslateSettings.parse(slots)).toEqual(slots);
+
+    const [onlyNote] = await sdb.update(series, eq(series.id, A.seriesId), {
+      defaultFonts: { note: "Bangers-Regular" },
+    });
+    const partial = await inJobTx((tx) => translateSettings(tx, onlyNote as typeof series.$inferSelect));
+    expect(partial).toMatchObject({ note_font: "Bangers-Regular" });
+    expect(partial).not.toHaveProperty("thought_font");
   });
 });

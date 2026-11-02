@@ -87,6 +87,14 @@
           "low_conf"
         ]
       }
+    },
+    "style": {
+      "type": "string",
+      "enum": [
+        "normal",
+        "thought",
+        "note"
+      ]
     }
   },
   "required": [

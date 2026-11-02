@@ -12,12 +12,13 @@
 import type { TextBox } from "@mtl/shared";
 import { useMemo, useState } from "react";
 import { deleteBox, resetToAI } from "../editor/actions.ts";
-import type { FontKit } from "../editor/fonts.ts";
+import { type FontKit, fontForStyle } from "../editor/fonts.ts";
 import { boxOverflow, MIN_SIZE } from "../editor/measure.ts";
 import { AiUpdatePanel } from "../editor/panels/AiUpdatePanel.tsx";
-import { AdvancedStyle, BasicStyle } from "../editor/panels/Properties.tsx";
+import { AdvancedStyle, BasicStyle, type TextStyleConfig } from "../editor/panels/Properties.tsx";
 import { TextField } from "../editor/panels/TextField.tsx";
 import { editorStore, useEditor } from "../editor/store.ts";
+import type { Series } from "../series/api.ts";
 import type { ProgressPage } from "./api.ts";
 import { describeJobError } from "./job-error.ts";
 import { selectablePage } from "./page-selection.ts";
@@ -26,6 +27,14 @@ import { type SourceItem, sourceLabel } from "./source-rail-model.ts";
 import { KIND_LABEL, type Row } from "./text-table/rows.ts";
 import { setRowTranslation } from "./text-table/text-table.tsx";
 import { OcrWait } from "./tool-panels.tsx";
+
+function textStyleConfig(kit: FontKit | null, fonts: SelectPanelProps["defaultFonts"]): TextStyleConfig | undefined {
+  if (!kit || !fonts) return undefined;
+  return {
+    slots: { thought: fonts.thought, note: fonts.note },
+    fontFor: (style, kind) => fontForStyle(kit.manifest, fonts, style, kind, kit.knows),
+  };
+}
 
 export type SelectPanelProps = {
   page: ProgressPage | undefined;
@@ -38,6 +47,8 @@ export type SelectPanelProps = {
   kit: FontKit | null;
   /** Ngôn ngữ đích của series — dropdown font chỉ gợi ý font vẽ đủ chữ ngôn ngữ này. */
   targetLang?: string;
+  /** `default_fonts` của series — slot Suy nghĩ/Ghi chú bật select "Loại chữ". */
+  defaultFonts?: Series["default_fonts"];
   busy: { retranslate: boolean; ocr: boolean; applyKind: boolean };
   /** Lần OCR lỗi gần nhất đang chờ thử lại + huỷ chờ. */
   ocrRetry: string | null;
@@ -156,6 +167,7 @@ function BlockView(props: SelectPanelProps & { page: ProgressPage; row: Row }) {
             fonts={props.kit?.idsFor(props.targetLang) ?? []}
             customFonts={props.kit?.custom ?? []}
             knows={props.kit?.knows}
+            textStyle={textStyleConfig(props.kit, props.defaultFonts)}
           />
           <details className="cw-adv">
             <summary>Kiểu chữ nâng cao</summary>

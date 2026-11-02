@@ -74,6 +74,7 @@ TRANSLATE_SCHEMA: dict[str, Any] = {
                     "id": {"type": "string"},
                     "translation": {"type": "string"},
                     "speaker": {"type": "string"},
+                    "style": {"type": "string", "enum": ["normal", "thought", "note"]},
                 },
                 "required": ["id", "translation", "speaker"],
                 "additionalProperties": False,

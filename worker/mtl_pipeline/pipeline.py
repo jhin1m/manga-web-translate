@@ -256,6 +256,8 @@ def translate_dir(
     font_id: str = DEFAULT_FONT,
     suffix: str = "",
     narration_font_id: str | None = None,
+    thought_font_id: str | None = None,
+    note_font_id: str | None = None,
 ) -> list[PageAiState]:
     """Dịch cả chương theo thứ tự trang, typeset, render final{suffix}.png + state{suffix}.json.
     Chữ ngoài bóng dùng narration_font_id (None → font_id), như server."""
@@ -301,7 +303,7 @@ def translate_dir(
                 continue
             translations.append(it.model_copy(update={"id": r.id}))
             bubble = by_id.get(r.bubble_id) if r.bubble_id else None
-            f = font_for(r, font_id, narration_font_id)
+            f = font_for(r, font_id, narration_font_id, it.style, thought_font_id, note_font_id)
             boxes.append(typeset_region(clean, r, bubble, it.translation, f, bubble_siblings(r, texted)))
         state = PageAiState(
             page_ord=meta["page_ord"],

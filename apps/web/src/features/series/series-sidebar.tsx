@@ -31,6 +31,18 @@ export function SeriesSidebar({ series }: { series: Series }) {
           <dd>
             {series.default_fonts.narration ? fontLabel(series.default_fonts.narration, custom) : "Giống font thoại"}
           </dd>
+          {series.default_fonts.thought && (
+            <>
+              <dt>Font suy nghĩ</dt>
+              <dd>{fontLabel(series.default_fonts.thought, custom)}</dd>
+            </>
+          )}
+          {series.default_fonts.note && (
+            <>
+              <dt>Font ghi chú</dt>
+              <dd>{fontLabel(series.default_fonts.note, custom)}</dd>
+            </>
+          )}
           <dt>Xưng hô chính</dt>
           <dd>{rule ? `${rule.speaker} → ${rule.listener}: ${rule.address}` : "Chưa đặt"}</dd>
           <dt>Giọng văn</dt>

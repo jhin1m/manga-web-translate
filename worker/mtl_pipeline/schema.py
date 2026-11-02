@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 from jsonschema import Draft202012Validator
-from pydantic import BaseModel, Field, PrivateAttr
+from pydantic import BaseModel, Field, PrivateAttr, field_validator
 
 # JSON Schema sinh từ zod ở packages/shared (`pnpm schema:emit`) — nguồn duy nhất cho hợp đồng worker ↔ API.
 # Triển khai tách khỏi monorepo (Modal) thì copy thư mục và trỏ MTL_SCHEMA_DIR.
@@ -181,6 +181,13 @@ class TranslateItem(BaseModel):
     translation: str = ""
     speaker: str = "?"
     low_conf: bool = False
+    #: Kiểu chữ LLM gán; giá trị lạ/thiếu → normal (không bao giờ làm hỏng lô).
+    style: Literal["normal", "thought", "note"] = "normal"
+
+    @field_validator("style", mode="before")
+    @classmethod
+    def _known_style(cls, v: object) -> object:
+        return v if v in ("normal", "thought", "note") else "normal"
 
 
 class TranslateResult(BaseModel):

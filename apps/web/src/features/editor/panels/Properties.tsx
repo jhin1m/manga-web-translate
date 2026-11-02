@@ -4,9 +4,9 @@
  * - `AdvancedStyle`: giãn dòng, lề, căn lề, màu chữ, màu viền, viền ngoài, ẩn khi xuất — trong "Kiểu chữ nâng cao".
  * Thay đổi liên tục cùng trường (gõ số, kéo màu) gộp 1 bước undo qua key `style:<field>:<id>`.
  */
-import type { TextBox } from "@mtl/shared";
+import type { Region, TextBox, TextStyle } from "@mtl/shared";
 import { type ReactNode, useState } from "react";
-import { type BoxStyle, setStyle } from "../actions.ts";
+import { type BoxStyle, setStyle, setTextStyle } from "../actions.ts";
 import { fontPreview } from "../fonts.ts";
 import { editorStore, useEditor } from "../store.ts";
 import { committedNumber, liveNumber } from "./number-input.ts";
@@ -80,16 +80,65 @@ function useBoxStyle() {
   return { box, readOnly, style };
 }
 
+const STYLE_LABEL: Record<TextStyle, string> = { normal: "Thường", thought: "Suy nghĩ", note: "Ghi chú" };
+
+/** Loại chữ có slot font ở series + hàm chọn font cho (loại chữ, kind vùng) — cùng quy tắc worker. */
+export type TextStyleConfig = {
+  slots: Partial<Record<Exclude<TextStyle, "normal">, string>>;
+  fontFor(style: TextStyle, kind: Region["kind"]): string;
+};
+
+/** Select "Loại chữ" chỉ hiện khi series đã chọn ít nhất 1 slot thought/note. */
+export const hasTextStyleSlot = (slots: TextStyleConfig["slots"]) => Boolean(slots.thought || slots.note);
+
+/** Option của select "Loại chữ": Thường + loại có slot (+ loại hiện tại của vùng nếu thiếu slot, để không mất giá trị). */
+export function textStyleOptions(slots: TextStyleConfig["slots"], current: TextStyle): TextStyle[] {
+  const options: TextStyle[] = ["normal", ...(["thought", "note"] as const).filter((k) => slots[k])];
+  if (!options.includes(current)) options.push(current);
+  return options;
+}
+
+/** Select "Loại chữ": chỉ khi box có vùng và series có ít nhất 1 slot thought/note. Đổi = 1 bước undo (region + font). */
+function TextStyleSelect({ box, config }: { box: TextBox; config: TextStyleConfig }) {
+  const region = useEditor((s) => s.doc?.regions.find((r) => r.id === box.region_id));
+  if (!region) return null;
+  const current: TextStyle = region.style ?? "normal";
+  const options = textStyleOptions(config.slots, current);
+  return (
+    <div>
+      <label htmlFor="ed-text-style">Loại chữ</label>
+      <select
+        id="ed-text-style"
+        value={current}
+        onChange={(e) => {
+          const next = e.target.value as TextStyle;
+          const st = editorStore.getState();
+          if (st.layout) st.apply(setTextStyle(box.id, next, config.fontFor(next, region.kind), st.layout));
+        }}
+      >
+        {options.map((o) => (
+          <option key={o} value={o}>
+            {STYLE_LABEL[o]}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
 /** `fonts`: font gói sẵn; `customFonts`: font của bạn (nhóm riêng trong select). Mỗi option vẽ bằng chính font đó. */
 export function BasicStyle({
   fonts,
   customFonts = [],
   knows = () => false,
+  textStyle,
 }: {
   fonts: string[];
   customFonts?: { id: string; name: string }[];
   /** Font có thật nhưng không nằm trong `fonts` (đã lọc theo ngôn ngữ đích) → ghi "không hợp ngôn ngữ", không phải "thiếu". */
   knows?: (id: string) => boolean;
+  /** Có slot font Suy nghĩ/Ghi chú ở series → hiện select "Loại chữ" dưới ô Font. */
+  textStyle?: TextStyleConfig;
 }) {
   const { box, readOnly, style } = useBoxStyle();
   if (!box) return null;
@@ -126,6 +175,7 @@ export function BasicStyle({
               </optgroup>
             )}
           </select>
+          {textStyle && hasTextStyleSlot(textStyle.slots) && <TextStyleSelect box={box} config={textStyle} />}
         </div>
         <div>
           <label htmlFor="ed-size">Cỡ chữ (px)</label>

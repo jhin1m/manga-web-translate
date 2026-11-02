@@ -193,24 +193,28 @@ def build_page_state(
     translations: dict[str, tuple[str, bool]],
     boxes: list[TextBox],
     meta: dict[str, Any],
+    styles: dict[str, str] | None = None,
 ) -> dict[str, Any]:
-    """PageState dùng chung (packages/shared/src/page-state.ts) từ kết quả pipeline."""
+    """PageState dùng chung (packages/shared/src/page-state.ts) từ kết quả pipeline.
+    `styles`: region id → thought|note; chỉ kiểu khác normal mới ghi khoá `style`."""
     out_regions = []
     for r in regions:
         it = items.get(r.id)
         text, low = translations.get(r.id, ("", False))
-        out_regions.append(
-            {
-                "id": r.id,
-                "kind": r.kind,
-                "bbox": [r.bbox.x, r.bbox.y, r.bbox.w, r.bbox.h],
-                "polarity": r.polarity,
-                "source_text": nfc(it.source) if it else "",
-                "translation": nfc(text),
-                "confidence": float(it.confidence) if it else 0.0,
-                "flags": _flags(it, low),
-            }
-        )
+        region = {
+            "id": r.id,
+            "kind": r.kind,
+            "bbox": [r.bbox.x, r.bbox.y, r.bbox.w, r.bbox.h],
+            "polarity": r.polarity,
+            "source_text": nfc(it.source) if it else "",
+            "translation": nfc(text),
+            "confidence": float(it.confidence) if it else 0.0,
+            "flags": _flags(it, low),
+        }
+        style = (styles or {}).get(r.id, "normal")
+        if style != "normal":
+            region["style"] = style
+        out_regions.append(region)
     return {
         "schema_version": 1,
         "size": {"w": w, "h": h},
@@ -268,6 +272,8 @@ def handle_translate(ctx: JobContext, deps: Deps) -> dict[str, Any]:
     font = p["settings"]["font"]
     # Job xếp hàng trước khi có narration_font → chữ ngoài bóng dùng font thoại như cũ.
     narration = p["settings"].get("narration_font") or font
+    thought_font = p["settings"].get("thought_font")
+    note_font = p["settings"].get("note_font")
     meta = {
         "pipeline_version": PIPELINE_VERSION,
         "model": deps.provider.model,
@@ -285,6 +291,7 @@ def handle_translate(ctx: JobContext, deps: Deps) -> dict[str, Any]:
         by_id = {r.id: r for r in regions}
         page_items = tr.items.get(str(pg["ord"]), {})
         translations: dict[str, tuple[str, bool]] = {}
+        styles: dict[str, str] = {}
         boxes: list[TextBox] = []
         clean = open_rgb(ctx.download(pg["clean"])) if page_items else None
         # Vùng chữ được đặt chữ: chỉ chúng chia nhau lòng bóng (vùng OCR rỗng không giữ chỗ).
@@ -298,11 +305,12 @@ def handle_translate(ctx: JobContext, deps: Deps) -> dict[str, Any]:
             if it is None:
                 continue
             translations[r.id] = (it.translation, it.low_conf)
+            styles[r.id] = it.style
             if clean is not None and it.translation.strip():
                 bubble = by_id.get(r.bubble_id) if r.bubble_id else None
-                f = font_for(r, font, narration)
+                f = font_for(r, font, narration, it.style, thought_font, note_font)
                 boxes.append(typeset_region(clean, r, bubble, it.translation, f, bubble_siblings(r, texted)))
-        state = build_page_state(pg["width"], pg["height"], regions, items, translations, boxes, meta)
+        state = build_page_state(pg["width"], pg["height"], regions, items, translations, boxes, meta, styles)
         out.append({"page_id": pg["page_id"], "ai_state": state})
     return {"type": "chapter.translate", "pages": out, "carry": _carry(tr.context)}
 

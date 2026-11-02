@@ -194,8 +194,19 @@ def hard_wrap(text: str, font_id: str, size: float, max_w: float) -> list[str]:
     return lines
 
 
-def font_for(region: Region, dialogue: str, narration: str) -> str:
-    """Chữ ngoài bóng (text_free) dùng font dẫn truyện; còn lại font thoại."""
+def font_for(
+    region: Region,
+    dialogue: str,
+    narration: str,
+    style: str = "normal",
+    thought: str | None = None,
+    note: str | None = None,
+) -> str:
+    """Kiểu chữ có font riêng (thought/note) thì dùng nó; còn lại chữ ngoài bóng (text_free) dùng font dẫn truyện,
+    phần khác font thoại."""
+    styled = {"thought": thought, "note": note}.get(style)
+    if styled:
+        return styled
     return narration if region.kind == "text_free" else dialogue
 
 

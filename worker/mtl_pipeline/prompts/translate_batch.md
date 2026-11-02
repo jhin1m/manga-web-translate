@@ -12,6 +12,7 @@ Yêu cầu:
 - Dịch MỌI id, giữ nguyên id; không gộp, không tách, không thêm id.
 - Xưng hô theo quan hệ, tuổi, mức thân thiết suy ra từ ngữ cảnh và `pronoun_rules`; giữ nhất quán qua các trang. Khi đích là tiếng Việt: chọn cặp xưng hô (anh/em, tôi/cậu, tao/mày, ta/ngươi…). Ngôn ngữ đích khác: dùng cách gọi tên/biệt danh/kính ngữ tự nhiên của ngôn ngữ đó.
 - `speaker`: tên nhân vật nói nếu suy ra được, không thì "?".
+- `style` (mặc định "normal"; hầu hết region là normal): "thought" khi toàn bộ nguồn nằm trong ngoặc （…）/(…)/‹…› hoặc rõ là độc thoại nội tâm/nói thầm. "note" CHỈ khi là ghi chú/chú thích nhỏ trong tranh (nhãn đồ vật, chú thích tên/địa điểm, dòng viết tay phụ). KHÔNG gắn "note" cho: lời thoại/la hét/rên ngoài bóng, lời dẫn, watermark/tên nhóm dịch/credit. Ngoài bóng (text_free) không có nghĩa là note. Không chắc → "normal".
 - Bản dịch ngắn gọn vừa bóng thoại; giữ "…", "!", "?" theo nguồn.
 - `context_notes`: tóm tắt ngắn (≤ 300 ký tự) nhân vật mới, xưng hô đã chốt, điều cần nhớ cho lô sau.
 

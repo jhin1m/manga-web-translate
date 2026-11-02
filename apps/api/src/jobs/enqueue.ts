@@ -272,6 +272,9 @@ export async function translateSettings(tx: DbLike, s: Series): Promise<Translat
     font,
     // Chưa chọn font dẫn truyện → giống font thoại (series cũ không đổi hành vi).
     narration_font: s.defaultFonts.narration ?? font,
+    // Chỉ gửi khi series đã chọn slot; thiếu → worker dùng font theo kind.
+    ...(s.defaultFonts.thought ? { thought_font: s.defaultFonts.thought } : {}),
+    ...(s.defaultFonts.note ? { note_font: s.defaultFonts.note } : {}),
   };
 }
 

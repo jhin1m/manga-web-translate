@@ -184,6 +184,25 @@ describe("series default fonts", () => {
     expect((await patch({ dialogue: font.id })).status).toBe(400);
   });
 
+  it("stores thought/note slots next to existing keys and rejects unknown fonts there", async () => {
+    const patch = (default_fonts: Record<string, string>) =>
+      api(`/series/${A.seriesId}`, { method: "PATCH", body: { default_fonts } });
+    const ok = await json<{ default_fonts: Record<string, string> }>(
+      await patch({ sfx: "Bangers-Regular", thought: "JimLeeThought-Regular", note: "Bangers-Regular" }),
+      200,
+    );
+    expect(ok.default_fonts).toEqual({
+      sfx: "Bangers-Regular",
+      thought: "JimLeeThought-Regular",
+      note: "Bangers-Regular",
+    });
+    const got = await json<{ default_fonts: Record<string, string> }>(await api(`/series/${A.seriesId}`), 200);
+    expect(got.default_fonts).toEqual(ok.default_fonts);
+    expect((await patch({ thought: "custom-deadbeef" })).status).toBe(400);
+    expect((await patch({ note: "Comic-Sans" })).status).toBe(400);
+    await json(await patch({}), 200);
+  });
+
   it("a font of another user is not accepted", async () => {
     const B = await seedUser("fontup-b");
     const res = await call(`/api/fonts`, { cookie: B.cookie });

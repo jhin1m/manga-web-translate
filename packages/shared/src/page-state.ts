@@ -25,6 +25,14 @@ export const RegionKind = z.enum(["bubble", "text_bubble", "text_free"]);
 export const Polarity = z.enum(["dark_on_light", "light_on_dark"]);
 export const RegionFlag = z.enum(["sfx", "empty", "low_conf"]);
 
+/**
+ * Kiểu chữ do AI dịch suy ra từ text: `thought` (ngoặc, độc thoại, nói thầm), `note` (ghi chú/viết tay ngoài bóng).
+ * Chọn font slot series tương ứng; slot trống → font theo kind như `normal`.
+ */
+export const TEXT_STYLES = ["normal", "thought", "note"] as const;
+export const TextStyle = z.enum(TEXT_STYLES);
+export type TextStyle = z.infer<typeof TextStyle>;
+
 /** Màu chữ/viền gốc do worker đo ở bước 1: #rrggbb. */
 const RegionColor = z.string().regex(/^#[0-9a-fA-F]{6}$/);
 
@@ -41,6 +49,8 @@ export const Region = z.object({
   translation: NfcText,
   confidence: z.number().min(0).max(1),
   flags: z.array(RegionFlag),
+  /** Thiếu = `normal` (trang dịch trước pipeline 0.8.0, hoặc AI không gắn kiểu). */
+  style: TextStyle.optional(),
 });
 export type Region = z.infer<typeof Region>;
 
@@ -106,7 +116,13 @@ export const PageState = z.object({
 export type PageState = z.infer<typeof PageState>;
 
 /** Kết quả OCR giai đoạn 1 (pages.ocr_result): chỉ chép chữ, chưa dịch. */
-export const OcrRegion = Region.omit({ source_text: true, translation: true, confidence: true, flags: true }).extend({
+export const OcrRegion = Region.omit({
+  source_text: true,
+  translation: true,
+  confidence: true,
+  flags: true,
+  style: true,
+}).extend({
   /** Bóng thoại chứa vùng chữ (chỉ text_bubble) — vùng typeset ở giai đoạn 2. */
   bubble_id: z.string().min(1).nullable(),
 });

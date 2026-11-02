@@ -236,6 +236,23 @@ def test_text_outside_bubble_uses_narration_font():
     assert font_for(bubble, "Bangers-Regular", "BeVietnamPro-Regular") == "Bangers-Regular"
 
 
+def test_font_for_style_slot_falls_back_to_kind():
+    b = BBox(x=0, y=0, w=10, h=10)
+    free = Region(id="f", kind="text_free", bbox=b, score=1.0)
+    bubble = Region(id="t", kind="text_bubble", bbox=b, score=1.0)
+    # style normal hoặc slot trống → y hệt hành vi theo kind
+    for style in ("normal", "thought", "note"):
+        assert font_for(free, "D", "N", style) == "N"
+        assert font_for(bubble, "D", "N", style) == "D"
+    assert font_for(bubble, "D", "N", "normal", thought="T", note="O") == "D"
+    # slot có → dùng bất kể kind
+    assert font_for(bubble, "D", "N", "thought", thought="T", note="O") == "T"
+    assert font_for(free, "D", "N", "thought", thought="T", note="O") == "T"
+    assert font_for(free, "D", "N", "note", thought="T", note="O") == "O"
+    # slot của style kia có nhưng slot này trống → theo kind
+    assert font_for(bubble, "D", "N", "note", thought="T") == "D"
+
+
 def test_light_text_gets_dark_stroke():
     clean = np.full((200, 300, 3), 20, np.uint8)
     r = Region(

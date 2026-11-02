@@ -114,6 +114,12 @@ export const TranslateSettings = z.object({
   font: z.string().min(1),
   /** font_id cho chữ ngoài bóng (text_free). Optional: job xếp hàng trước khi có trường này → worker dùng `font`. */
   narration_font: z.string().min(1).optional(),
+  /**
+   * font_id cho region `style: thought` / `note`. Chỉ có khi series đã chọn slot; thiếu (series chưa chọn, hoặc job
+   * xếp hàng trước pipeline 0.8.0) → worker dùng font theo kind.
+   */
+  thought_font: z.string().min(1).optional(),
+  note_font: z.string().min(1).optional(),
 });
 export type TranslateSettings = z.infer<typeof TranslateSettings>;
 
