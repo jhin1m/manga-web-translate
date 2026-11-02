@@ -14,4 +14,6 @@
 #        không nhận trường valign) → không rollback worker xuống dưới mốc này khi đã có box mới.
 # 0.8.0: region.style (normal|thought|note) do LLM dịch gắn; settings.thought_font/note_font. Worker < 0.8.0 fail job
 #        đọc state có region style (schema strict) → không rollback worker xuống dưới mốc này sau khi đã dịch.
-PIPELINE_VERSION = "0.8.0"
+# 0.9.0: page.reinpaint.auto_text_bbox — OCR vùng tự xoá chữ gốc (mask nét chữ trong khung tính ở worker); payload
+#        không còn user_mask_key/offset → worker < 0.9.0 fail schema.
+PIPELINE_VERSION = "0.9.0"

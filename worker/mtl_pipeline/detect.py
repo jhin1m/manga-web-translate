@@ -33,7 +33,13 @@ class Detection:
         return max(0.0, self.x2 - self.x1) * max(0.0, self.y2 - self.y1)
 
 
-def tile_spans(height: int, width: int, h_ratio: float = 1.25, overlap: float = 0.2) -> list[tuple[int, int]]:
+# Tile cao TILE_H_RATIO × bề ngang page (detect, CTD mask; textmask.bbox_text_mask dựng cửa sổ cùng tỉ lệ).
+TILE_H_RATIO = 1.25
+
+
+def tile_spans(
+    height: int, width: int, h_ratio: float = TILE_H_RATIO, overlap: float = 0.2
+) -> list[tuple[int, int]]:
     """Chia page cao thành các tile [y0, y1) cao h_ratio*width, chồng nhau overlap; tile cuối dồn về đáy."""
     tile_h = max(1, round(h_ratio * width))
     if height <= tile_h:

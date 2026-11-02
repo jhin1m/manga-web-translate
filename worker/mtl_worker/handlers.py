@@ -28,7 +28,7 @@ from mtl_pipeline.schema import (
     RollingContext,
     TextBox,
 )
-from mtl_pipeline.textmask import estimate_polarity
+from mtl_pipeline.textmask import bbox_text_mask, estimate_polarity
 from mtl_pipeline.translate import SeriesSettings, qualified_id, translate_chapter
 from mtl_pipeline.typeset import bubble_siblings, font_for, typeset_region
 
@@ -331,18 +331,42 @@ def _carry(c: RollingContext) -> dict[str, Any]:
 # ---- page.reinpaint ----
 
 
-def handle_reinpaint(ctx: JobContext, deps: Deps) -> dict[str, Any]:
-    clean = open_rgb(ctx.download(ctx.inputs["base_clean"]))
+def _user_mask(ctx: JobContext, h: int, w: int) -> np.ndarray:
+    """Mask người vẽ đặt tại offset trên page; phần ra ngoài page bị cắt."""
     user = open_gray(ctx.download(ctx.inputs["user_mask"]))
-    h, w = clean.shape[:2]
     ox, oy = ctx.payload["offset"]["x"], ctx.payload["offset"]["y"]
     mask = np.zeros((h, w), np.uint8)
-    # Mask người vẽ đặt tại offset trên page; phần ra ngoài page bị cắt.
     x0, y0 = max(0, ox), max(0, oy)
     x1, y1 = min(w, ox + user.shape[1]), min(h, oy + user.shape[0])
     if x1 > x0 and y1 > y0:
         mask[y0:y1, x0:x1] = user[y0 - oy : y1 - oy, x0 - ox : x1 - ox]
-    mask = np.where(mask > 0, 255, 0).astype(np.uint8)
+    return np.where(mask > 0, 255, 0).astype(np.uint8)
+
+
+def _auto_text_mask(ctx: JobContext, deps: Deps, clean: np.ndarray) -> np.ndarray:
+    """OCR vùng tự xoá chữ gốc: mask nét chữ trong khung người kéo, tính trên ảnh sạch hiện tại (chữ sót còn đó)."""
+    h, w = clean.shape[:2]
+    bx, by, bw, bh = (round(v) for v in ctx.payload["auto_text_bbox"])
+    x0, y0, x1, y1 = max(0, bx), max(0, by), min(w, bx + bw), min(h, by + bh)
+    if x1 - x0 < 4 or y1 - y0 < 4:
+        raise JobFailure("invalid_input", "khung xoá chữ nằm ngoài ảnh")
+    ctx.report("detect", 0.1)
+    mask = bbox_text_mask(clean, deps.pipeline.masker, BBox(x=x0, y=y0, w=x1 - x0, h=y1 - y0))
+    if not mask.any():
+        # Không tạo clean_rev thừa: báo rõ để editor hiển thị "không thấy chữ trong khung".
+        raise JobFailure(
+            "invalid_input", "Không thấy chữ trong khung để xoá — tô Mask (B) lên chữ để xoá tay."
+        )
+    return mask
+
+
+def handle_reinpaint(ctx: JobContext, deps: Deps) -> dict[str, Any]:
+    clean = open_rgb(ctx.download(ctx.inputs["base_clean"]))
+    h, w = clean.shape[:2]
+    if ctx.payload.get("auto_text_bbox") is not None:
+        mask = _auto_text_mask(ctx, deps, clean)
+    else:
+        mask = _user_mask(ctx, h, w)
     ctx.report("inpaint", 0.3)
     io = InpaintOptions.from_payload(ctx.payload.get("inpaint"))
     out, _ = (

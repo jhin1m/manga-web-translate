@@ -100,10 +100,19 @@ class FakeClient:
         return [c[0] for c in self.calls]
 
 
+class _InkMasker:
+    """CTD giả: chữ = pixel tối."""
+
+    def predict(self, img):
+        return np.where(img.mean(axis=2) < 60, 255, 0).astype(np.uint8)
+
+
 class FakePipeline:
     rtl: bool | None = None
     opts: Any = None
     inpaint_args: tuple[str, int | None] | None = None
+    inpaint_mask: np.ndarray | None = None
+    masker = _InkMasker()
 
     def prepare_image(self, img, rtl=False, opts=None, on_stage=None):
         self.rtl = rtl
@@ -132,6 +141,7 @@ class FakePipeline:
         class _Copy:
             def inpaint(self, img, mask):
                 pipe.inpainted = True
+                pipe.inpaint_mask = mask
                 return img.copy(), np.zeros_like(mask)
 
         return _Copy()
@@ -318,6 +328,36 @@ def test_reinpaint_uses_payload_inpainter():
     deps = Deps()
     assert run_job(MaskClient(), job, HANDLERS, deps) == "succeeded"
     assert deps.pipeline.inpaint_args == ("big_lama", 512)
+
+
+def _auto_bbox_job(bbox: list[int]) -> dict[str, Any]:
+    return {
+        **prepare_job(),
+        "type": "page.reinpaint",
+        "payload": {"type": "page.reinpaint", "page_id": PAGE, "base_clean_rev": 1, "auto_text_bbox": bbox},
+        "inputs": {"base_clean": "http://files/clean.png"},
+        "outputs": {"clean": {"key": "c", "rev": 8, "put": "http://files/clean", "expires_at": "x"}},
+    }
+
+
+def test_reinpaint_auto_text_bbox_masks_glyphs_inside_bbox_only():
+    c = FakeClient()
+    deps = Deps()
+    assert run_job(c, _auto_bbox_job([2, 2, 40, 20]), HANDLERS, deps) == "succeeded"
+    mask = deps.pipeline.inpaint_mask
+    assert mask is not None and mask.any()
+    # Nét chữ của _page() (hàng 6..16, cột 6..39) được phủ; ngoài khung + dilation thì không.
+    assert (mask[6:18:2, 6:40] > 0).all()
+    assert not mask[30:].any() and not mask[:, 46:].any()
+    assert c.calls[-1][0] == "complete"
+
+
+def test_reinpaint_auto_text_bbox_without_text_fails_invalid_input():
+    c = FakeClient()
+    deps = Deps()
+    assert run_job(c, _auto_bbox_job([4, 30, 30, 30]), HANDLERS, deps) == "failed"
+    assert c.calls[-1][1]["error_class"] == "invalid_input"
+    assert deps.pipeline.inpaint_mask is None
 
 
 class NoLlmProvider(FakeProvider):

@@ -11,7 +11,7 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-from .detect import tile_spans
+from .detect import TILE_H_RATIO, tile_spans
 from .schema import BBox, Polarity, Region
 from .textcolor import glyph_colors
 from .vendor.ctd_blocks import postprocess_yolo
@@ -184,3 +184,53 @@ def build_text_mask(
         canvas[b.y - y0 : b.y - y0 + local.shape[0], b.x - x0 : b.x - x0 + local.shape[1]] = local
         final[y0:y1, x0:x1] = np.maximum(final[y0:y1, x0:x1], cv2.dilate(canvas, kern))
     return final
+
+
+# Cửa sổ đưa vào CTD cao tối thiểu TILE_H_RATIO × bề ngang page = đúng tỉ lệ tile lúc prepare (detect.tile_spans):
+# cửa sổ nhỏ bị CTD phóng lên 1024 → xác suất mask yếu hẳn, sót nét (đo trên SFX thật: 6% so với 20% phủ khung).
+# Ngưỡng xác suất CTD lỏng trong khung người kéo: refine_mask bỏ nét model thấy mờ (đo trên SFX thật: vòng "ㅇ" pred
+# ~150 bị bỏ). Người dùng đã chỉ rõ chỗ có chữ → gộp thêm pixel pred > ngưỡng này trong khung (chỉ khi model đã
+# thấy chữ rõ trong khung — không thì mask rỗng).
+BBOX_LOOSE_PRED = 64
+
+
+def _grow_span(lo: int, hi: int, size: int, min_len: int) -> tuple[int, int]:
+    """Nới đoạn [lo, hi) đều hai phía tới min_len (không vượt [0, size))."""
+    need = min(size, max(min_len, hi - lo))
+    start = max(0, min(lo - (need - (hi - lo)) // 2, size - need))
+    return start, start + need
+
+
+def bbox_text_mask(
+    img_rgb: np.ndarray, masker: CtdMasker, bbox: BBox, dilation: int | None = None
+) -> np.ndarray:
+    """Mask nét chữ (uint8 0/255, cỡ page) trong một khung người dùng kéo — không phải cả khung, để không xoá hình vẽ.
+
+    CTD chạy trên dải ngang cả bề rộng page quanh khung (cùng tỉ lệ tile như prepare) rồi qua build_text_mask như
+    1 vùng chữ tự do, gộp thêm pred > BBOX_LOOSE_PRED trong khung. Kết quả chỉ nằm trong khung + dilation.
+
+    Không dùng fallback cực tính: khung người kéo hay đè lên hình vẽ, fallback bắt nhầm nét viền (đo trên khung chỉ
+    có tóc: 10% khung bị xoá) mà ảnh sạch không hoàn tác được. Model không thấy chữ → mask rỗng (người dùng tô Mask)."""
+    page_h, page_w = img_rgb.shape[:2]
+    margin = max(bbox.w, bbox.h)
+    wy0, wy1 = _grow_span(
+        max(0, bbox.y - margin), min(page_h, bbox.y2 + margin), page_h, round(TILE_H_RATIO * page_w)
+    )
+    window = np.ascontiguousarray(img_rgb[wy0:wy1])
+    pred = masker.predict(window)
+    local = BBox(x=bbox.x, y=bbox.y - wy0, w=bbox.w, h=bbox.h)
+    region = Region(id="auto", kind="text_free", bbox=local, score=1.0)
+    inner = (slice(local.y, local.y2), slice(local.x, local.x2))
+    model_sees_text = float((pred[inner] > 127).mean()) >= MIN_MODEL_COVERAGE
+    if not model_sees_text:
+        return np.zeros((page_h, page_w), dtype=np.uint8)
+    win_mask = build_text_mask(window, pred, [region], dilation)
+    d = dilation_px(local) if dilation is None else dilation
+    loose = np.zeros_like(win_mask)
+    loose[inner] = np.where(pred[inner] > BBOX_LOOSE_PRED, 255, 0).astype(np.uint8)
+    if loose.any():
+        kern = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2 * d + 1, 2 * d + 1))
+        win_mask = np.maximum(win_mask, cv2.dilate(loose, kern))
+    out = np.zeros((page_h, page_w), dtype=np.uint8)
+    out[wy0:wy1] = win_mask
+    return out
