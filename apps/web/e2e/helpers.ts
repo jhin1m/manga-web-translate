@@ -85,6 +85,7 @@ const PANELS = {
   table: ["Bản dịch cả chương", "Bản dịch cả chương"],
   find: ["Tìm / Thay · Glossary (Ctrl+F)", "Tìm / Thay · Glossary"],
   proofread: ["AI hiệu đính", "AI hiệu đính"],
+  ocr: ["OCR vùng (R)", "OCR vùng"],
 } as const;
 
 /** Nút trên rail công cụ màn chương. */

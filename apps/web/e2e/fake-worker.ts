@@ -7,7 +7,7 @@ import { zipSync } from "fflate";
 import { emptyPageState, type PageState } from "../../../packages/shared/src/index.ts";
 import { API_URL } from "./env.ts";
 
-const VERSION = "0.8.0";
+const VERSION = "0.9.0";
 const SHA = "ab".repeat(32);
 /** PNG 1×1 hợp lệ. */
 export const PNG_1PX = Buffer.from(
@@ -20,6 +20,7 @@ type Claimed = {
   type: string;
   attempt: number;
   lease_token: string;
+  payload: Record<string, unknown>;
   inputs: Record<string, unknown>;
   outputs: Record<string, { key: string; put: string; rev: number | null; headers?: Record<string, string> }>;
 };
@@ -142,6 +143,27 @@ async function handle(token: string, j: Claimed, opts: FakeWorkerOptions) {
         })),
       ),
     });
+  }
+  if (j.type === "page.ocr_region") {
+    const bbox = j.payload.bbox as [number, number, number, number];
+    return complete(token, j, {
+      type: "page.ocr_region",
+      region: {
+        id: "ocr",
+        kind: "text_free",
+        bbox,
+        polarity: "dark_on_light",
+        source_text: "쾅",
+        translation: "Rầm",
+        confidence: 0.9,
+        flags: [],
+      },
+    });
+  }
+  if (j.type === "page.reinpaint") {
+    // Cả hai nhánh (mask người vẽ / auto_text_bbox) chỉ cần ảnh sạch mới tại rev đã cấp.
+    await put(j.outputs.clean?.put ?? "");
+    return complete(token, j, { type: "page.reinpaint", clean_rev: j.outputs.clean?.rev ?? -1 });
   }
   throw new Error(`fake worker: unsupported ${j.type}`);
 }

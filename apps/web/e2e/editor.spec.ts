@@ -1159,3 +1159,93 @@ test("a page fitted with Vừa khung counts as fitting: one wheel notch does not
   await page.mouse.wheel(0, -100);
   await expect(foot).toContainText("Trang 1 / 3");
 });
+
+/** Kéo khung OCR vùng ở giữa canvas rồi bấm "Nhận dạng vùng này" → body POST /ocr-region. */
+async function confirmOcrBox(page: Page) {
+  const frame = await page.locator(".ed-canvas").boundingBox();
+  if (!frame) throw new Error("no canvas");
+  const cx = frame.x + frame.width / 2;
+  const cy = frame.y + frame.height / 2;
+  await page.mouse.move(cx - 60, cy - 30);
+  await page.mouse.down();
+  await page.mouse.move(cx + 60, cy + 30, { steps: 6 });
+  await page.mouse.up();
+  const ocrPost = page.waitForRequest((r) => r.url().includes("/ocr-region") && r.method() === "POST");
+  await page.getByRole("button", { name: "Nhận dạng vùng này" }).click();
+  return (await ocrPost).postDataJSON() as { bbox: number[] };
+}
+
+const cleanRevOf = async (page: Page, pageId: string) =>
+  ((await (await page.request.get(`/api/pages/${pageId}`)).json()) as { page: { clean_rev: number } }).page.clean_rev;
+
+/** Chạy worker giả nhận OCR vùng + xoá chữ tới khi `done()` đúng. */
+async function runRegionWorker(done: () => Promise<boolean>) {
+  let stop = false;
+  const worker = runFakeWorker(state.token, () => stop, 30_000, {
+    capabilities: ["page.ocr_region", "page.reinpaint"],
+  });
+  await expect.poll(done, { timeout: 30_000 }).toBe(true);
+  stop = true;
+  await worker;
+}
+
+test("region OCR erases the source text inside the box; unticking the option only translates", async ({ page }) => {
+  await login(page);
+  const { chapterId, pageId } = await readyChapter(page);
+  const rev0 = await cleanRevOf(page, pageId);
+  const reinpaints: { auto_text_bbox?: number[]; base_clean_rev: number }[] = [];
+  page.on("request", (r) => {
+    if (r.url().includes("/reinpaint") && r.method() === "POST") reinpaints.push(r.postDataJSON());
+  });
+  await page.goto(chapterUrl(chapterId));
+  const panel = await openPanel(page, "ocr");
+  const erase = panel.getByRole("checkbox", { name: "Xoá chữ gốc trong khung" });
+  await expect(erase).toBeChecked();
+
+  const { bbox } = await confirmOcrBox(page);
+  // Chỉ xoá khi OCR xong và khối dịch đã chèn → chưa có worker thì chưa có lần xoá nào.
+  await page.waitForTimeout(500);
+  expect(reinpaints).toHaveLength(0);
+  await runRegionWorker(async () => (await cleanRevOf(page, pageId)) > rev0);
+  expect(reinpaints).toEqual([{ auto_text_bbox: bbox, base_clean_rev: rev0 }]);
+  await expect(page.getByText(/Đang xoá chữ gốc/)).toHaveCount(0);
+  await expect(page.getByRole("alert")).toHaveCount(0);
+  // Khối chữ OCR đã chèn (kiểm qua state editor).
+  await expect
+    .poll(() =>
+      page.evaluate(async () => {
+        const m = await import(/* @vite-ignore */ "/src/features/editor/store.ts");
+        return m.editorStore.getState().doc?.regions.some((r: { translation: string }) => r.translation === "Rầm");
+      }),
+    )
+    .toBe(true);
+
+  // "Dịch lại khối" (khối vừa chèn đang chọn → panel Chọn) chỉ OCR + dịch lại, không xoá chữ.
+  const select = await openPanel(page, "select");
+  const reocr = page.waitForResponse((r) => r.url().includes("/ocr-region") && r.request().method() === "POST");
+  await select.getByRole("button", { name: "Dịch lại khối" }).click();
+  const reocrId = ((await (await reocr).json()) as { job: { id: string } }).job.id;
+  await runRegionWorker(
+    async () =>
+      ((await (await page.request.get(`/api/jobs/${reocrId}`)).json()) as { status: string }).status === "succeeded",
+  );
+  await expect(select.getByRole("button", { name: "Dịch lại khối" })).toBeVisible();
+  expect(reinpaints).toHaveLength(1);
+
+  // Tắt lựa chọn (nhớ qua reload) → chỉ OCR + dịch, ảnh sạch giữ nguyên.
+  const ocrPanel = await openPanel(page, "ocr");
+  await ocrPanel.getByRole("checkbox", { name: "Xoá chữ gốc trong khung" }).uncheck();
+  await page.reload();
+  const again = await openPanel(page, "ocr");
+  await expect(again.getByRole("checkbox", { name: "Xoá chữ gốc trong khung" })).not.toBeChecked();
+  const rev1 = await cleanRevOf(page, pageId);
+  const ocrJob = page.waitForResponse((r) => r.url().includes("/ocr-region") && r.request().method() === "POST");
+  await confirmOcrBox(page);
+  const jobId = ((await (await ocrJob).json()) as { job: { id: string } }).job.id;
+  await runRegionWorker(
+    async () =>
+      ((await (await page.request.get(`/api/jobs/${jobId}`)).json()) as { status: string }).status === "succeeded",
+  );
+  expect(reinpaints).toHaveLength(1);
+  expect(await cleanRevOf(page, pageId)).toBe(rev1);
+});

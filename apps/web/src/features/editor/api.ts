@@ -52,9 +52,12 @@ export const ackAiUpdate = (id: string, aiRev: number) =>
 export const requestMaskUpload = (id: string) =>
   api<{ key: string; url: string; fields: Record<string, string> }>(page(id, "/mask-upload"), { method: "POST" });
 
+/** Mask người vẽ (key + offset) hoặc khung OCR vùng (`auto_text_bbox`: worker tự tìm nét chữ trong khung). */
 export const startReinpaint = (
   id: string,
-  body: { user_mask_key: string; offset: [number, number]; base_clean_rev: number },
+  body:
+    | { user_mask_key: string; offset: [number, number]; base_clean_rev: number }
+    | { auto_text_bbox: [number, number, number, number]; base_clean_rev: number },
 ) => api<{ job: JobWithResult }>(page(id, "/reinpaint"), { method: "POST", body });
 
 export const startOcrRegion = (id: string, bbox: [number, number, number, number]) =>

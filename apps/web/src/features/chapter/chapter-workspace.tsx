@@ -29,6 +29,7 @@ import { ChapterCanvas } from "../editor/canvas/ChapterCanvas.tsx";
 import { type PageRect, useOcrRegion } from "../editor/canvas/OcrSelect.tsx";
 import type { SlotImages, SlotProcessing } from "../editor/canvas/PageSlot.tsx";
 import { chapterStore, revealRect } from "../editor/chapter-store.ts";
+import { readAutoErase, writeAutoErase } from "../editor/erase-queue.ts";
 import { dialogueFont } from "../editor/fonts.ts";
 import { batchOnTop } from "../editor/history.ts";
 import { ConflictList } from "../editor/panels/ConflictList.tsx";
@@ -830,7 +831,21 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
   const defaultFont = kit
     ? dialogueFont(kit.manifest, series.data?.default_fonts.dialogue, kit.knows)
     : "Bangers-Regular";
-  const ocr = useOcrRegion(activeId ?? "", defaultFont, { w: activeMeta?.width ?? 0, h: activeMeta?.height ?? 0 });
+  const [autoErase, setAutoErase] = useState(readAutoErase);
+  const toggleAutoErase = (on: boolean) => {
+    setAutoErase(on);
+    writeAutoErase(on);
+  };
+  const ocr = useOcrRegion(
+    activeId ?? "",
+    defaultFont,
+    { w: activeMeta?.width ?? 0, h: activeMeta?.height ?? 0 },
+    {
+      enabled: autoErase,
+      cleanRevOf: (id) => pages.find((p) => p.id === id)?.clean_rev ?? null,
+      onErased: data.refresh,
+    },
+  );
   const ocrStart = ocr.start;
   const onOcr = useCallback((r: PageRect) => void ocrStart(r), [ocrStart]);
   /** "Sửa chữ" ở thanh nổi: mở panel Chọn + focus ô Bản dịch. */
@@ -849,6 +864,7 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
     session.error,
     imageError,
     ocr.error,
+    ocr.eraseError,
     data.error ? errorMessage(data.error) : null,
   ];
   const isDraft = status === "draft";
@@ -1068,6 +1084,9 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
                 pending={ocr.pending.length}
                 retry={ocr.retry}
                 onCancel={ocr.cancel}
+                autoErase={autoErase}
+                onAutoErase={toggleAutoErase}
+                erasing={ocr.erasing}
               />
             ) : activeMeta ? (
               <MaskPanel

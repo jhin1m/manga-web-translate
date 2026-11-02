@@ -2,6 +2,10 @@
  * OCR vùng chọn: kéo khung (công cụ R) → xác nhận (thanh nổi cạnh khung / Enter) → POST /ocr-region → poll job →
  * chèn region + text box vào state như một thao tác editor (có undo, đi qua save). "Dịch lại khối" 1 vùng có sẵn (panel Chọn, thanh nổi): cùng job trên bbox của vùng,
  * kết quả thay chữ gốc + bản dịch của vùng đó. Khung đang chờ hiện viền đứt; lỗi báo trên panel.
+ * Khung mới (không phải "Dịch lại khối") + bật "Xoá chữ gốc": khối chữ chèn xong → khung vào hàng xoá chữ của page
+ * (erase-queue.ts), ảnh sạch cập nhật sau. Chỉ xoá khi đã có khối dịch (OCR lỗi / huỷ → chữ gốc giữ nguyên, vì xoá
+ * ảnh sạch không hoàn tác được). Hàng xoá mỗi page sống tới khi rời chương: đổi trang / "Huỷ OCR" không bỏ lần xoá
+ * của khối đã chèn.
  */
 import type { Region } from "@mtl/shared";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
@@ -9,7 +13,8 @@ import { Group, Layer, Rect } from "react-konva";
 import { errorMessage } from "../../../lib/api.ts";
 import { cancelJob } from "../../chapter/api.ts";
 import { insertOcrRegion, refreshRegionFromOcr } from "../actions.ts";
-import { type OcrRegionResult, startOcrRegion, waitJob } from "../api.ts";
+import { type OcrRegionResult, startOcrRegion, startReinpaint, waitJob } from "../api.ts";
+import { createEraseQueue, type EraseQueue } from "../erase-queue.ts";
 import { ocrRetryNote, ocrStallNote } from "../ocr-wait.ts";
 import { blockBarPos, type Size } from "../page-layout.ts";
 import { editorStore, type View } from "../store.ts";
@@ -18,13 +23,56 @@ import { SELECT_FILL, SELECT_STROKE } from "./colors.ts";
 export type PageRect = { x: number; y: number; w: number; h: number };
 type Pending = PageRect & { id: string };
 
-export function useOcrRegion(pageId: string, defaultFont: string, page: { w: number; h: number }) {
+/** Xoá chữ gốc trong khung OCR: bật/tắt, clean_rev đang biết của từng page, tải lại ảnh khi xoá xong. */
+export type OcrEraseOptions = { enabled: boolean; cleanRevOf(pageId: string): number | null; onErased(): void };
+
+export function useOcrRegion(
+  pageId: string,
+  defaultFont: string,
+  page: { w: number; h: number },
+  erase: OcrEraseOptions,
+) {
   const [pending, setPending] = useState<Pending[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [retry, setRetry] = useState<string | null>(null);
+  /** Số lần xoá đang chờ theo page (hàng xoá của page cũ vẫn chạy sau khi đổi trang). */
+  const [erasingBy, setErasingBy] = useState<Record<string, number>>({});
+  const [eraseError, setEraseError] = useState<string | null>(null);
   const abort = useRef(new AbortController());
   /** Mỗi lần OCR đang chờ: huỷ riêng (người dùng bấm Huỷ) + job id để báo server dừng. */
   const waits = useRef(new Map<string, { ctl: AbortController; jobId: string | null }>());
+  // Đọc qua ref: hàng xoá sống theo page, không dựng lại mỗi lần rev/callback đổi.
+  const eraseRef = useRef(erase);
+  eraseRef.current = erase;
+  const queues = useRef(new Map<string, EraseQueue>());
+
+  const queueFor = useCallback((pid: string) => {
+    let q = queues.current.get(pid);
+    if (!q) {
+      q = createEraseQueue(pid, {
+        start: startReinpaint,
+        wait: (id, signal) => waitJob(id, signal, 1000),
+        cleanRev: () => eraseRef.current.cleanRevOf(pid),
+        onErased: () => eraseRef.current.onErased(),
+        onState: (st) => {
+          setErasingBy((m) => ({ ...m, [pid]: st.pending }));
+          if (st.error || st.pending === 0) setEraseError(st.error);
+        },
+        errorText: errorMessage,
+      });
+      queues.current.set(pid, q);
+    }
+    return q;
+  }, []);
+
+  // Rời chương: thôi chờ mọi hàng xoá (job đã gửi vẫn chạy xong ở server và tự ghi ảnh sạch mới).
+  useEffect(() => {
+    const all = queues.current;
+    return () => {
+      for (const q of all.values()) q.dispose();
+      all.clear();
+    };
+  }, []);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: đổi page → huỷ OCR đang chờ của page cũ.
   useEffect(() => {
@@ -81,6 +129,7 @@ export function useOcrRegion(pageId: string, defaultFont: string, page: { w: num
         const rid = `r-${crypto.randomUUID().slice(0, 8)}`;
         s.apply(insertOcrRegion(region, { region: rid, box: `tb-${rid}` }, defaultFont, s.layout));
         s.select(`tb-${rid}`);
+        if (eraseRef.current.enabled) queueFor(pageId).push(bbox);
       } catch (e) {
         if (!signal.aborted) setError(errorMessage(e));
       } finally {
@@ -91,7 +140,7 @@ export function useOcrRegion(pageId: string, defaultFont: string, page: { w: num
         }
       }
     },
-    [pageId, defaultFont, page.w, page.h],
+    [pageId, defaultFont, page.w, page.h, queueFor],
   );
 
   /** Thôi chờ mọi OCR đang chạy ở page này (không áp kết quả) và báo server huỷ job (best-effort). */
@@ -102,7 +151,8 @@ export function useOcrRegion(pageId: string, defaultFont: string, page: { w: num
     }
   }, []);
 
-  return { pending, error, retry, start, cancel };
+  const erasing = Object.values(erasingBy).reduce((a, b) => a + b, 0);
+  return { pending, error, retry, erasing, eraseError, start, cancel };
 }
 
 /** PageRect dùng `w/h`; Konva Rect cần `width/height` (spread thẳng PageRect → khung 0×0, không thấy gì). */

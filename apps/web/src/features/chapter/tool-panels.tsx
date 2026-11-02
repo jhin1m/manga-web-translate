@@ -1,5 +1,6 @@
 /**
- * Panel ngữ cảnh của công cụ Chữ (T) và OCR vùng (R): chỉ gợi ý cách dùng + thiết lập đang áp (đổi ở Cài đặt series).
+ * Panel ngữ cảnh của công cụ Chữ (T) và OCR vùng (R): gợi ý cách dùng + thiết lập đang áp (đổi ở Cài đặt series);
+ * OCR vùng có thêm lựa chọn xoá chữ gốc trong khung (nhớ theo trình duyệt).
  * Mask / Tẩy dùng `MaskPanel`, Chọn dùng `SelectPanel`.
  */
 import { LANG_NAMES, type SourceLang } from "../series/lang-labels.ts";
@@ -34,19 +35,32 @@ export function OcrToolView({
   pending,
   retry,
   onCancel,
+  autoErase,
+  onAutoErase,
+  erasing,
 }: {
   lang: string | undefined;
   pending: number;
   retry: string | null;
   onCancel(): void;
+  autoErase: boolean;
+  onAutoErase(on: boolean): void;
+  erasing: number;
 }) {
   return (
     <section className="cw-block">
       <ol className="muted small ed-steps">
         <li>Kéo khung quanh chữ AI bỏ sót.</li>
         <li>Bấm "Nhận dạng vùng này" cạnh khung (hoặc Enter). Esc hoặc kéo lại để bỏ khung.</li>
-        <li>Chữ đọc được thành khối mới và được dịch luôn.</li>
+        <li>
+          Chữ đọc được thành khối mới và được dịch luôn
+          {autoErase ? "; chữ gốc trong khung được xoá khỏi ảnh." : "."}
+        </li>
       </ol>
+      <label className="cw-check">
+        <input type="checkbox" checked={autoErase} onChange={(e) => onAutoErase(e.target.checked)} />
+        Xoá chữ gốc trong khung
+      </label>
       <div className="cw-field">
         <span className="cw-field-head">Ngôn ngữ gốc</span>
         <div className="cw-src-box">{lang ? (LANG_NAMES[lang as SourceLang] ?? lang) : "—"}</div>
@@ -60,6 +74,13 @@ export function OcrToolView({
         </p>
       )}
       {pending > 0 && <OcrWait retry={retry} onCancel={onCancel} />}
+      {erasing > 0 && (
+        <p role="status">
+          <span className="status" data-tone="busy">
+            Đang xoá chữ gốc… ({erasing})
+          </span>
+        </p>
+      )}
     </section>
   );
 }

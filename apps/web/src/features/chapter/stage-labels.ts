@@ -34,7 +34,7 @@ export const STAGE_LABELS: Record<string, Record<string, StageEntry>> = {
     render: { label: "Vẽ chữ" },
     upload: { label: "Đóng gói" },
   },
-  "page.reinpaint": { inpaint: { label: "Xoá chữ lại" } },
+  "page.reinpaint": { detect: { label: "Tìm nét chữ" }, inpaint: { label: "Xoá chữ lại" } },
   "page.ocr_region": { ocr: { label: "Đọc chữ" }, translate: { label: "Dịch" } },
   "chapter.proofread": { proofread: { label: "Hiệu đính" } },
 };
