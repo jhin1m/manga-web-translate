@@ -10,7 +10,7 @@ import { errorMessage } from "../../../lib/api.ts";
 import { cancelJob } from "../../chapter/api.ts";
 import { insertOcrRegion, refreshRegionFromOcr } from "../actions.ts";
 import { type OcrRegionResult, startOcrRegion, waitJob } from "../api.ts";
-import { ocrRetryNote } from "../ocr-wait.ts";
+import { ocrRetryNote, ocrStallNote } from "../ocr-wait.ts";
 import { blockBarPos, type Size } from "../page-layout.ts";
 import { editorStore, type View } from "../store.ts";
 import { SELECT_FILL, SELECT_STROKE } from "./colors.ts";
@@ -65,8 +65,9 @@ export function useOcrRegion(pageId: string, defaultFont: string, page: { w: num
         wait.jobId = job.id;
         // Đã huỷ từ lúc POST còn bay (chưa có job id để báo server) → huỷ ngay khi có id.
         if (signal.aborted) void cancelJob(job.id).catch(() => undefined);
+        const sentAt = Date.now();
         const done = await waitJob(job.id, signal, undefined, (j) => {
-          if (!signal.aborted) setRetry(ocrRetryNote(j));
+          if (!signal.aborted) setRetry(ocrRetryNote(j) ?? ocrStallNote(j, Date.now() - sentAt));
         });
         if (done.status !== "succeeded") throw new Error(done.error ?? "OCR vùng thất bại");
         const region = (done.result as OcrRegionResult | null)?.region as Region | undefined;

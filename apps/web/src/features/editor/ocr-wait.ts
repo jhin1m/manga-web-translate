@@ -16,3 +16,16 @@ export function ocrRetryNote(j: RetryJob, now = Date.now()): string | null {
   const when = new Date(j.run_after).getTime() > now ? `lúc ${clock(j.run_after)}` : "sắp tới";
   return `Lần OCR vừa rồi lỗi (${why}) — tự thử lại ${when}${retries}. Có thể huỷ nếu không muốn chờ.`;
 }
+
+/** Job OCR nằm `queued` (chưa ai nhận, chưa lỗi) lâu hơn mức này → báo người dùng thay vì "Đang OCR…" im lặng. */
+export const OCR_STALL_MS = 30_000;
+
+/**
+ * Job chưa được máy xử lý nào nhận sau `OCR_STALL_MS` (đo từ lúc gửi, theo đồng hồ trình duyệt — không so giờ server):
+ * hàng đợi bận hoặc không có worker sống. Không có tín hiệu này, OCR trông như treo vô thời hạn. null = chưa tới mức.
+ */
+export function ocrStallNote(j: Pick<JobView, "status" | "error">, waitedMs: number): string | null {
+  if (j.status !== "queued" || j.error || waitedMs < OCR_STALL_MS) return null;
+  const s = Math.floor(waitedMs / 1000);
+  return `Chưa có máy xử lý nhận OCR sau ${s} giây — hàng đợi đang bận hoặc máy xử lý đang tắt. Vẫn đang chờ; có thể huỷ.`;
+}
