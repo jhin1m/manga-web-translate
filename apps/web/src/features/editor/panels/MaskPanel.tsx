@@ -19,6 +19,8 @@ export function MaskPanel(props: {
   const size = useEditor((s) => s.mask.size);
   const readOnly = useEditor((s) => !!s.readOnly);
   const tool = useEditor((s) => s.tool);
+  /** Chỉ có nét tẩy thì chưa có gì để gửi (renderMaskPng sẽ báo lỗi). */
+  const hasPaint = strokes.some((st) => st.mode === "paint");
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const abort = useRef<AbortController | null>(null);
@@ -54,7 +56,11 @@ export function MaskPanel(props: {
 
   return (
     <section className="ed-mask">
-      <p className="small muted">Tô lên chữ còn sót, rồi bấm "Xoá chữ vùng đã tô". Chỉ vùng tô được gửi đi.</p>
+      <ol className="small muted ed-steps">
+        <li>Tô (đỏ) lên chữ còn sót trên ảnh. Vòng tròn theo chuột là cỡ bút.</li>
+        <li>Tô lố thì chọn "Tẩy nét" và kéo qua phần đỏ thừa — chỉ xoá nét tô, không đụng ảnh.</li>
+        <li>Bấm "Xoá chữ vùng đã tô" — AI xoá chữ trong vùng đỏ.</li>
+      </ol>
       <fieldset className="ed-seg" aria-label="Chế độ bút">
         <button
           type="button"
@@ -86,7 +92,8 @@ export function MaskPanel(props: {
         <button
           type="button"
           className="btn-primary"
-          disabled={!!busy || readOnly || strokes.length === 0}
+          disabled={!!busy || readOnly || !hasPaint}
+          title={hasPaint ? undefined : "Tô lên ảnh trước"}
           onClick={() => void run()}
         >
           Xoá chữ vùng đã tô

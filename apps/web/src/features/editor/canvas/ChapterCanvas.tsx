@@ -32,8 +32,8 @@ import {
 } from "../page-layout.ts";
 import { editorStore, useEditor, type View } from "../store.ts";
 import { type FlipState, initialFlip, stepFlip } from "../wheel-page-flip.ts";
-import { MaskLayer } from "./MaskLayer.tsx";
-import { OcrOverlay, type PageRect } from "./OcrSelect.tsx";
+import { BrushCursor, MaskLayer } from "./MaskLayer.tsx";
+import { OcrConfirmBar, OcrOverlay, type PageRect } from "./OcrSelect.tsx";
 import { PageSlot, type SlotImages, type SlotProcessing } from "./PageSlot.tsx";
 import { drawnBox } from "./TextBoxNode.tsx";
 import { TextLayer } from "./TextLayer.tsx";
@@ -77,6 +77,8 @@ export const ChapterCanvas = memo(function ChapterCanvas(props: {
   const split = useChapterStore((s) => s.viewMode === "split");
   const activeId = useEditor((s) => s.pageId);
   const [draft, setDraft] = useState<PageRect | null>(null);
+  /** Khung OCR đã kéo xong, chờ người dùng xác nhận (thanh nổi / Enter) hoặc huỷ (Esc) — chưa gửi gì lên server. */
+  const [proposal, setProposal] = useState<PageRect | null>(null);
   const [space, setSpace] = useState(false);
   const gesture = useRef<{
     kind: "pan" | "rect" | "paint";
@@ -171,6 +173,34 @@ export const ChapterCanvas = memo(function ChapterCanvas(props: {
       removeEventListener("keyup", up);
     };
   }, []);
+
+  // Đổi công cụ / đổi trang → bỏ khung OCR chờ xác nhận (toạ độ thuộc page cũ).
+  // biome-ignore lint/correctness/useExhaustiveDependencies: chỉ chạy lại khi tool/page đổi.
+  useEffect(() => setProposal(null), [tool, activeId]);
+
+  const confirmOcr = () => {
+    if (!proposal) return;
+    setProposal(null);
+    props.onOcr(proposal);
+  };
+
+  // Enter = OCR khung đang chờ, Esc = bỏ khung. Bắt ở pha capture để đi trước bảng phím tắt chung (Esc = bỏ chọn khối).
+  useEffect(() => {
+    if (!proposal) return;
+    const on = (e: KeyboardEvent) => {
+      const t = e.target;
+      if (t instanceof HTMLElement && t.closest("input, textarea, select, [contenteditable]")) return;
+      if (e.key === "Escape") setProposal(null);
+      else if (e.key === "Enter" && !(t instanceof HTMLElement && t.closest("button, a"))) {
+        setProposal(null);
+        props.onOcr(proposal);
+      } else return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+    };
+    addEventListener("keydown", on, true);
+    return () => removeEventListener("keydown", on, true);
+  }, [proposal, props.onOcr]);
 
   const setView = (v: View) => editorStore.getState().setView(clampView(v, content, size, content.x));
   /** Toạ độ màn hình → toạ độ trong page active. */
@@ -279,6 +309,7 @@ export const ChapterCanvas = memo(function ChapterCanvas(props: {
       return;
     }
     gesture.current = { kind: "rect", ...base };
+    setProposal(null);
     setDraft({ ...base.from, w: 0, h: 0 });
   };
 
@@ -305,7 +336,8 @@ export const ChapterCanvas = memo(function ChapterCanvas(props: {
     const s = editorStore.getState();
     const page = { w: active.width, h: active.height };
     if (tool === "ocr") {
-      if (draft.w >= 8 && draft.h >= 8) props.onOcr(clipRect(draft, page));
+      const r = clipRect(draft, page);
+      if (r.w >= 8 && r.h >= 8) setProposal(r);
       return;
     }
     if (tool === "text" && s.layout) {
@@ -373,8 +405,18 @@ export const ChapterCanvas = memo(function ChapterCanvas(props: {
           )}
           {!showOriginal && active && !props.processing.has(active.id) && <TextLayer kit={kit} viewport={viewport} />}
           <MaskLayer />
-          <OcrOverlay draft={draft} pending={props.ocrPending} />
+          {(tool === "brush" || tool === "eraser") && !space && <BrushCursor mode={tool} />}
+          <OcrOverlay draft={draft} proposal={proposal} pending={props.ocrPending} />
         </KStage>
+      )}
+      {proposal && (
+        <OcrConfirmBar
+          rect={proposal}
+          view={view}
+          frame={size}
+          onConfirm={confirmOcr}
+          onCancel={() => setProposal(null)}
+        />
       )}
       <TextEditOverlay kit={kit} />
     </div>

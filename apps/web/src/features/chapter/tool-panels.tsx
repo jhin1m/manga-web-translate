@@ -42,7 +42,11 @@ export function OcrToolView({
 }) {
   return (
     <section className="cw-block">
-      <p className="muted small">Kéo khung quanh chữ AI bỏ sót. Chữ đọc được thành khối mới và được dịch luôn.</p>
+      <ol className="muted small ed-steps">
+        <li>Kéo khung quanh chữ AI bỏ sót.</li>
+        <li>Bấm "Nhận dạng vùng này" cạnh khung (hoặc Enter). Esc hoặc kéo lại để bỏ khung.</li>
+        <li>Chữ đọc được thành khối mới và được dịch luôn.</li>
+      </ol>
       <div className="cw-field">
         <span className="cw-field-head">Ngôn ngữ gốc</span>
         <div className="cw-src-box">{lang ? (LANG_NAMES[lang as SourceLang] ?? lang) : "—"}</div>

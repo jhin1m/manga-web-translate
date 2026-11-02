@@ -3,7 +3,9 @@
  * đỏ mờ. Khi gửi: dựng PNG chỉ phủ vùng có nét (offscreen canvas ≤ 4096px/cạnh, không toDataURL cả page),
  * nền đen, nét vẽ trắng, nét tẩy đen → worker lấy pixel > 0 làm mask tại `offset`.
  */
-import { Group, Layer, Line } from "react-konva";
+import type Konva from "konva";
+import { useEffect, useRef } from "react";
+import { Circle, Group, Layer, Line } from "react-konva";
 import { type MaskStroke, useEditor } from "../store.ts";
 
 export const MAX_MASK_SIDE = 4096;
@@ -27,6 +29,53 @@ export function MaskLayer({ offset = 0 }: { offset?: number }) {
             globalCompositeOperation={st.mode === "erase" ? "destination-out" : "source-over"}
           />
         ))}
+      </Group>
+    </Layer>
+  );
+}
+
+/**
+ * Vòng tròn cỡ bút theo con trỏ (công cụ Mask / Tẩy): thấy trước nét sẽ phủ tới đâu — nét tẩy không để lại màu nên
+ * thiếu vòng này thì kéo tẩy trông như không có gì xảy ra. Cập nhật thẳng node Konva (không render React mỗi lần
+ * di chuột); rời canvas thì ẩn.
+ */
+export function BrushCursor({ mode, offset = 0 }: { mode: "brush" | "eraser"; offset?: number }) {
+  const size = useEditor((s) => s.mask.size);
+  const ref = useRef<Konva.Circle>(null);
+  useEffect(() => {
+    const c = ref.current;
+    const stage = c?.getStage();
+    if (!c || !stage) return;
+    const move = () => {
+      const p = c.getParent()?.getRelativePointerPosition();
+      if (!p) return;
+      c.position(p);
+      c.visible(true);
+      c.getLayer()?.batchDraw();
+    };
+    const hide = () => {
+      c.visible(false);
+      c.getLayer()?.batchDraw();
+    };
+    stage.on("pointermove.brushcursor", move);
+    stage.on("pointerleave.brushcursor", hide);
+    return () => {
+      stage.off(".brushcursor");
+    };
+  }, []);
+  return (
+    <Layer listening={false}>
+      <Group y={offset}>
+        <Circle
+          ref={ref}
+          visible={false}
+          radius={size / 2}
+          stroke={mode === "brush" ? "#dc2626" : "#1f2937"}
+          strokeWidth={1.5}
+          strokeScaleEnabled={false}
+          dash={mode === "eraser" ? [4, 3] : undefined}
+          fill={mode === "eraser" ? "rgba(255,255,255,0.35)" : undefined}
+        />
       </Group>
     </Layer>
   );

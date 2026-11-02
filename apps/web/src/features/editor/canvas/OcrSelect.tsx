@@ -1,17 +1,18 @@
 /**
- * OCR vùng chọn: kéo khung (công cụ O) → POST /ocr-region → poll job → chèn region + text box vào state như
- * một thao tác editor (có undo, đi qua save). "Dịch lại khối" 1 vùng có sẵn (panel Chọn, thanh nổi): cùng job trên bbox của vùng,
+ * OCR vùng chọn: kéo khung (công cụ R) → xác nhận (thanh nổi cạnh khung / Enter) → POST /ocr-region → poll job →
+ * chèn region + text box vào state như một thao tác editor (có undo, đi qua save). "Dịch lại khối" 1 vùng có sẵn (panel Chọn, thanh nổi): cùng job trên bbox của vùng,
  * kết quả thay chữ gốc + bản dịch của vùng đó. Khung đang chờ hiện viền đứt; lỗi báo trên panel.
  */
 import type { Region } from "@mtl/shared";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Group, Layer, Rect } from "react-konva";
 import { errorMessage } from "../../../lib/api.ts";
 import { cancelJob } from "../../chapter/api.ts";
 import { insertOcrRegion, refreshRegionFromOcr } from "../actions.ts";
 import { type OcrRegionResult, startOcrRegion, waitJob } from "../api.ts";
 import { ocrRetryNote } from "../ocr-wait.ts";
-import { editorStore } from "../store.ts";
+import { blockBarPos, type Size } from "../page-layout.ts";
+import { editorStore, type View } from "../store.ts";
 import { SELECT_FILL, SELECT_STROKE } from "./colors.ts";
 
 export type PageRect = { x: number; y: number; w: number; h: number };
@@ -103,13 +104,21 @@ export function useOcrRegion(pageId: string, defaultFont: string, page: { w: num
   return { pending, error, retry, start, cancel };
 }
 
-/** Khung đang kéo + khung đang chờ OCR (toạ độ page đang sửa, đặt tại `offset` trên strip chương). */
+/** PageRect dùng `w/h`; Konva Rect cần `width/height` (spread thẳng PageRect → khung 0×0, không thấy gì). */
+const konvaRect = (r: PageRect) => ({ x: r.x, y: r.y, width: r.w, height: r.h });
+
+/**
+ * Khung đang kéo, khung chờ xác nhận (`proposal`, viền đậm + nền nhạt) và khung đang chờ OCR (viền đứt) — toạ độ
+ * page đang sửa, đặt tại `offset` trên strip chương.
+ */
 export function OcrOverlay({
   draft,
+  proposal = null,
   pending,
   offset = 0,
 }: {
   draft: PageRect | null;
+  proposal?: PageRect | null;
   pending: PageRect[];
   offset?: number;
 }) {
@@ -119,17 +128,70 @@ export function OcrOverlay({
         {pending.map((r) => (
           <Rect
             key={`${r.x}:${r.y}:${r.w}`}
-            {...r}
+            {...konvaRect(r)}
             stroke={SELECT_STROKE}
             strokeWidth={1.5}
             strokeScaleEnabled={false}
             dash={[6, 4]}
           />
         ))}
+        {proposal && (
+          <Rect
+            {...konvaRect(proposal)}
+            stroke={SELECT_STROKE}
+            strokeWidth={2}
+            strokeScaleEnabled={false}
+            fill={SELECT_FILL}
+          />
+        )}
         {draft && (
-          <Rect {...draft} stroke={SELECT_STROKE} strokeWidth={1.5} strokeScaleEnabled={false} fill={SELECT_FILL} />
+          <Rect
+            {...konvaRect(draft)}
+            stroke={SELECT_STROKE}
+            strokeWidth={1.5}
+            strokeScaleEnabled={false}
+            fill={SELECT_FILL}
+          />
         )}
       </Group>
     </Layer>
+  );
+}
+
+/**
+ * Thanh nổi cạnh khung OCR chờ xác nhận (trên khung; sát mép trên → dưới khung): "Nhận dạng vùng này" · "Huỷ".
+ * Chỉ khi bấm (hoặc Enter) mới gửi OCR — kéo nhầm không tốn lượt AI. HTML phủ lên canvas, toạ độ khung nhìn.
+ */
+export function OcrConfirmBar(props: { rect: PageRect; view: View; frame: Size; onConfirm(): void; onCancel(): void }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [bar, setBar] = useState<Size>({ w: 230, h: 38 });
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (el && (el.offsetWidth !== bar.w || el.offsetHeight !== bar.h))
+      setBar({ w: el.offsetWidth, h: el.offsetHeight });
+  });
+  const pos = blockBarPos(props.rect, props.view, props.frame, bar);
+  return (
+    <div
+      ref={ref}
+      className="ed-ocrbar"
+      role="toolbar"
+      aria-label="Xác nhận OCR vùng"
+      style={{ left: pos.left, top: pos.top }}
+      // Không để pointerdown lọt xuống Stage (bắt đầu kéo khung mới).
+      onPointerDown={(e) => e.stopPropagation()}
+    >
+      <button
+        type="button"
+        className="btn-primary"
+        onClick={props.onConfirm}
+        title="Nhận dạng + dịch chữ trong khung (Enter)"
+      >
+        Nhận dạng vùng này
+      </button>
+      <button type="button" onClick={props.onCancel} title="Bỏ khung (Esc)">
+        Huỷ
+      </button>
+    </div>
   );
 }
