@@ -1,6 +1,6 @@
 /**
  * Mask người vẽ (brush B / tẩy E) để xoá chữ sót bằng reinpaint. Nét lưu ở store (toạ độ page), hiển thị
- * đỏ mờ. Khi gửi: dựng PNG chỉ phủ vùng có nét (offscreen canvas ≤ 4096px/cạnh, không toDataURL cả page),
+ * đỏ mờ (độ mờ của cả lớp). Khi gửi: dựng PNG chỉ phủ vùng có nét (offscreen canvas ≤ 4096px/cạnh, không toDataURL cả page),
  * nền đen, nét vẽ trắng, nét tẩy đen → worker lấy pixel > 0 làm mask tại `offset`.
  */
 import type Konva from "konva";
@@ -10,11 +10,23 @@ import { type MaskStroke, useEditor } from "../store.ts";
 
 export const MAX_MASK_SIDE = 4096;
 
-/** Nét mask của page đang sửa, đặt tại `offset` trên strip chương. */
+/** Độ mờ hiển thị của lớp mask (cả lớp, không phải từng nét). */
+const MASK_OPACITY = "0.45";
+
+/**
+ * Nét mask của page đang sửa, đặt tại `offset` trên strip chương. Độ mờ đặt bằng CSS trên canvas của layer chứ không
+ * qua prop `opacity` của Konva: prop đó nhân vào globalAlpha từng nét, nên nét tẩy (destination-out) chỉ gỡ 45% màu
+ * mỗi lần kéo — vùng đã tẩy vẫn hồng dù PNG gửi đi đã sạch. Vẽ nét ở alpha 1 → tẩy là sạch hẳn, nét chồng không đậm dần.
+ */
 export function MaskLayer({ offset = 0 }: { offset?: number }) {
   const strokes = useEditor((s) => s.mask.strokes);
+  const ref = useRef<Konva.Layer>(null);
+  useEffect(() => {
+    const canvas = ref.current?.getNativeCanvasElement();
+    if (canvas) canvas.style.opacity = MASK_OPACITY;
+  }, []);
   return (
-    <Layer listening={false} opacity={0.45}>
+    <Layer ref={ref} listening={false}>
       <Group y={offset}>
         {strokes.map((st, i) => (
           <Line
