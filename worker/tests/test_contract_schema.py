@@ -118,7 +118,10 @@ def test_translate_payload_style_fonts_are_optional():
     validate_contract("job-payload", payload)
     validate_contract(
         "job-payload",
-        {**payload, "settings": {**settings, "thought_font": "Bangers-Regular", "note_font": "custom-abcd1234"}},
+        {
+            **payload,
+            "settings": {**settings, "thought_font": "Bangers-Regular", "note_font": "custom-abcd1234"},
+        },
     )
 
 
