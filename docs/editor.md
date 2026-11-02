@@ -175,6 +175,14 @@ thoại) vẫn trong state nhưng không thành dòng (`text-table/rows.ts`).
   PNG ≤ 5MB, key `user-mask/{uuid}.png`) → `POST /pages/:id/reinpaint {user_mask_key, offset, base_clean_rev}`
   (cần khoá; rev cũ → 409) → poll `/jobs/:id` → tải lại page lấy `clean_rev` mới.
 - OCR vùng (R): kéo khung → `POST /pages/:id/ocr-region {bbox}` → poll → chèn region + box (thao tác có undo).
+  Checkbox "Xoá chữ gốc trong khung" (mặc định bật, nhớ ở localStorage `mtl.ocr.autoErase`): khối dịch chèn xong →
+  khung vào hàng xoá của page (`editor/erase-queue.ts`) → `POST /pages/:id/reinpaint {auto_text_bbox, base_clean_rev}`,
+  **tuần tự** giữa các khung (mỗi lần dựng trên `clean_rev` job trước trả; 409 `clean_rev_changed` → thử lại 1 lần với
+  rev server báo) → tải lại page. Chỉ xoá khi đã có khối dịch: OCR lỗi / "Huỷ OCR" → chữ gốc giữ nguyên. Hàng xoá mỗi
+  page sống tới khi rời chương (đổi trang không bỏ lần xoá của khối đã chèn). Worker chỉ xoá nét chữ CTD thấy trong khung
+  (kể cả SFX), không xoá cả khung; không thấy chữ → job fail "Không thấy chữ trong khung…" (dùng Mask). Xoá ảnh sạch
+  không hoàn tác được (như Mask). "Dịch lại khối" không xoá. Lần xoá lỗi chỉ báo trong editor, không thành "trang lỗi"
+  ở tiến độ chương (`routes/progress.ts` bỏ job thao tác editor đã kết thúc).
   "Dịch lại khối" (panel Chọn, thanh nổi) = cùng job trên bbox vùng OCR của khối, thay chữ gốc + bản dịch; khối tự
   thêm (không có vùng OCR) thì nút tắt.
 

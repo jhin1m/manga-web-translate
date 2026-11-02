@@ -216,6 +216,12 @@ nên từ chối region có `style` và settings có `thought_font`/`note_font` 
 Không có migration (`default_fonts` là jsonb, thêm khoá `thought`/`note`). Trang cũ không có `style` vẽ như trước. Rollback: **không**
 hạ worker dưới 0.8.0 sau khi đã có chương dịch bằng 0.8.0 (trang đã lưu mang `style`; export bằng worker cũ sẽ fail).
 
+**Pipeline 0.9.0 (OCR vùng tự xoá chữ gốc, `page.reinpaint.auto_text_bbox`)**: thứ tự như 0.8.0: (1) deploy worker 0.9.0
+(Mac + Modal); (2) `MIN_PIPELINE_VERSION=0.9.0` (mặc định trong `env.ts`); (3) deploy API/web. Worker cũ đòi `user_mask_key`
+nên fail job xoá chữ theo khung; API từ chối worker < 0.9.0 bằng 426. Không migration, `PIPELINE_VERSION` API giữ 0.4.0.
+Rollback: hạ `MIN_PIPELINE_VERSION` về 0.8.0 + quay web/API về bản trước (không còn ai gửi `auto_text_bbox`) rồi mới hạ
+worker; job `auto_text_bbox` còn xếp hàng lúc đó sẽ fail hợp đồng (huỷ được, không mất dữ liệu).
+
 Log: `journalctl -u mtl-api -o cat` (JSON mỗi request: method, path, status, ms — không query/header/body),
 `journalctl -u mtl-jobs`.
 

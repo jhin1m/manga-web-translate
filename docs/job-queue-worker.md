@@ -212,6 +212,27 @@ payload có `additionalProperties: false` nên worker 0.6.x từ chối job dị
 **trước** khi deploy API, không thì claim trả 426 và hàng đợi dừng (worker 0.7.0 vẫn đọc payload cũ không có `carry`).
 API `PIPELINE_VERSION` (muối input_rev) vẫn 0.4.0. 0.8.0 (`Region.style` ở result, `settings.thought_font`/`note_font` ở payload
 `chapter.translate`) nâng `MIN_PIPELINE_VERSION = 0.8.0` cùng lý do; thứ tự deploy ở `docs/deployment-guide.md`. Heartbeat `done/total` không cần nâng version (API cũ bỏ qua key lạ).
+0.9.0 (`page.reinpaint.auto_text_bbox`, xem mục dưới) nâng `MIN_PIPELINE_VERSION = 0.9.0`: worker cũ đòi `user_mask_key`
++ input `user_mask` nên fail job xoá chữ theo khung. API `PIPELINE_VERSION` (muối input_rev) vẫn 0.4.0.
+
+## Xoá chữ lại (`page.reinpaint`, pipeline 0.9.0)
+
+Payload có **đúng một** nguồn mask (zod `.refine` ở `packages/shared/src/job.ts`, route kiểm lại):
+
+- Mask người vẽ (Mask B): `user_mask_key` + `offset` → inputs `{base_clean, user_mask}`.
+- Khung OCR vùng: `auto_text_bbox: [x, y, w, h]` (toạ độ page, trong page, cạnh ≥ 4) → inputs chỉ `{base_clean}`.
+  Worker (`textmask.bbox_text_mask`) chạy CTD trên dải cả bề ngang page quanh khung (cao 1.25 × ngang = đúng tỉ lệ tile
+  lúc prepare; cửa sổ nhỏ bị phóng lên 1024 → mask yếu, sót nét), `build_text_mask` như 1 vùng `text_free` +
+  gộp `pred > 64` trong khung (nét CTD thấy mờ mà refine bỏ; chỉ khi model đã thấy chữ rõ ≥ 1% khung), cắt trong khung +
+  dilation. **Không** fallback cực tính: khung hay đè
+  hình vẽ, fallback bắt nhầm nét viền mà ảnh sạch không hoàn tác được → model không thấy chữ = fail `invalid_input`
+  "Không thấy chữ trong khung…" (không tạo `clean_rev` thừa). SFX cũng xoá (người dùng kéo khung = ý định rõ). Bước
+  heartbeat: `detect` → `inpaint`.
+
+Cả hai cần khoá chương và `base_clean_rev` = rev hiện tại (409 `clean_rev_changed` kèm `clean_rev`). Lúc complete,
+`pages.clean_rev` chỉ đổi khi vẫn bằng `base_clean_rev`: 2 lần xoá chạy cùng lúc (khung OCR + Mask) thì lần xong sau bị
+từ chối (job `failed`, lỗi `clean_rev_changed: …`, worker nhận 409) thay vì ghi đè mất kết quả lần trước. Không gọi LLM
+→ không kiểm hạn mức.
 
 ## Font tuỳ chỉnh (pipeline 0.5.1)
 
@@ -240,7 +261,7 @@ chụp vào payload lúc enqueue:
 | Job | Field | Nội dung |
 |---|---|---|
 | `page.prepare` | `pipeline` | `detector`, `detection_threshold`, `ocr_engine` (đã chọn theo `source_lang` của series), `inpainter`, `mask_dilation` (`null` = tự động 2–6px), `inpaint_size` |
-| `page.reinpaint` | `inpaint` | `inpainter`, `inpaint_size` |
+| `page.reinpaint` | `inpaint` | `inpainter`, `inpaint_size` (cả mask người vẽ lẫn `auto_text_bbox`) |
 | `page.ocr_region` | `ocr_engine`, `reading_order` | OCR vùng tự vẽ theo engine; dịch vẫn qua LLM |
 | `chapter.proofread` | `model_tier` | `standard` / `premium` |
 
