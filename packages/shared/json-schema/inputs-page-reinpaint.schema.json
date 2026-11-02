@@ -13,8 +13,7 @@
     }
   },
   "required": [
-    "base_clean",
-    "user_mask"
+    "base_clean"
   ],
   "additionalProperties": false
 }

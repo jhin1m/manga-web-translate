@@ -126,7 +126,8 @@ export const TranslateInputs = z.object({
   context_lines: z.array(ContextLine),
   fonts: JobFonts.optional(),
 });
-export const ReinpaintInputs = z.object({ base_clean: Url, user_mask: Url });
+/** `user_mask` chỉ có khi payload dùng mask người vẽ; nhánh `auto_text_bbox` chỉ cần ảnh sạch. */
+export const ReinpaintInputs = z.object({ base_clean: Url, user_mask: Url.optional() });
 export const OcrRegionInputs = z.object({ original: Url, context_lines: z.array(ContextLine) });
 /**
  * chapter.export: state chốt lúc claim (đổi sau đó không ảnh hưởng file đang xuất). `translated` = page đã qua

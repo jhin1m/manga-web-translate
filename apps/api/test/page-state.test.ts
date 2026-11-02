@@ -5,7 +5,7 @@ import { eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { HISTORY_KEEP } from "../src/jobs/page-state-writer.ts";
 import { call, db, seedUser } from "./helpers.ts";
-import { aiState, PNG_1PX, SHA } from "./worker-helpers.ts";
+import { aiState, claimJobs, complete, PNG_1PX, putPng, SHA, workerToken } from "./worker-helpers.ts";
 
 type Seed = Awaited<ReturnType<typeof seedUser>>;
 let A: Seed;
@@ -244,6 +244,77 @@ describe("mask upload → reinpaint", () => {
     expect((await reinpaint(id, { user_mask_key: foreign, offset: [0, 0], base_clean_rev: 5 })).status).toBe(400);
     await unlock();
     expect((await reinpaint(id, { user_mask_key: post.key, offset: [0, 0], base_clean_rev: 5 })).status).toBe(423);
+  });
+
+  it("auto_text_bbox: enqueues without a mask; claim hands out only base_clean", async () => {
+    await lock();
+    const id = await newPage(6);
+    const res = await reinpaint(id, { auto_text_bbox: [10, 20, 80, 40], base_clean_rev: 6 });
+    expect(res.status, await res.clone().text()).toBe(202);
+    const { job } = (await res.json()) as { job: { id: string } };
+    const [row] = await db.select().from(jobs).where(eq(jobs.id, job.id));
+    expect(row?.payload).toEqual({
+      type: "page.reinpaint",
+      page_id: id,
+      base_clean_rev: 6,
+      auto_text_bbox: [10, 20, 80, 40],
+      inpaint: { inpainter: "big_lama", inpaint_size: 512 },
+    });
+    const { token } = await workerToken("mac");
+    const claimed = (await claimJobs(token, { caps: ["page.reinpaint"], max: 8 })).find((j) => j.id === job.id);
+    expect(Object.keys(claimed?.inputs ?? {})).toEqual(["base_clean"]);
+    expect(claimed?.outputs.clean).toBeDefined();
+  });
+
+  it("two erases started on the same clean rev: the later completion is rejected, not overwriting the first", async () => {
+    await lock();
+    const id = await newPage(8);
+    const ids: string[] = [];
+    for (const bbox of [
+      [10, 20, 80, 40],
+      [100, 200, 80, 40],
+    ]) {
+      const res = await reinpaint(id, { auto_text_bbox: bbox, base_clean_rev: 8 });
+      expect(res.status).toBe(202);
+      ids.push(((await res.json()) as { job: { id: string } }).job.id);
+    }
+    const { token } = await workerToken("mac");
+    const claimed = await claimJobs(token, { caps: ["page.reinpaint"], max: 8 });
+    const [first, second] = ids.map((jid) => claimed.find((j) => j.id === jid));
+    if (!first || !second) throw new Error("both jobs must be claimed");
+    const done = async (j: typeof first) => {
+      const out = j.outputs.clean;
+      if (!out?.rev) throw new Error("no clean output");
+      await putPng(out.put);
+      return { res: await complete(token, j, { type: "page.reinpaint", clean_rev: out.rev }), rev: out.rev };
+    };
+    const a = await done(first);
+    expect(a.res.status).toBe(200);
+    const b = await done(second);
+    expect(b.res.status).toBe(409);
+    const [pg] = await db.select().from(pages).where(eq(pages.id, id));
+    expect(pg?.cleanRev).toBe(a.rev);
+    const [row] = await db.select().from(jobs).where(eq(jobs.id, second.id));
+    expect(row?.status).toBe("failed");
+    expect(row?.error).toMatch(/^clean_rev_changed/);
+    // Lần xoá lỗi là thao tác editor (đã báo trong editor) → không thành "trang lỗi" ở tiến độ chương.
+    const prog = await call(`/api/chapters/${A.chapterId}/progress`, { cookie: A.cookie });
+    const { pages: list } = (await prog.json()) as { pages: { id: string; job: { id: string } | null }[] };
+    expect(list.find((x) => x.id === id)?.job?.id).not.toBe(second.id);
+  });
+
+  it("auto_text_bbox: rejects bbox outside page / too small, both or neither mask source (400), stale rev (409)", async () => {
+    await lock();
+    const id = await newPage(7);
+    const post = await maskUpload(id);
+    const status = async (body: unknown) => (await reinpaint(id, body)).status;
+    expect(await status({ auto_text_bbox: [700, 0, 50, 50], base_clean_rev: 7 })).toBe(400);
+    expect(await status({ auto_text_bbox: [10, 10, 3, 50], base_clean_rev: 7 })).toBe(400);
+    expect(await status({ auto_text_bbox: [10, 10, 50, 50], user_mask_key: post.key, base_clean_rev: 7 })).toBe(400);
+    expect(await status({ auto_text_bbox: [10, 10, 50, 50], offset: [0, 0], base_clean_rev: 7 })).toBe(400);
+    expect(await status({ base_clean_rev: 7 })).toBe(400);
+    expect(await status({ user_mask_key: post.key, base_clean_rev: 7 })).toBe(400);
+    expect(await status({ auto_text_bbox: [10, 10, 50, 50], base_clean_rev: 6 })).toBe(409);
   });
 });
 

@@ -326,7 +326,7 @@ export async function enqueueTranslate(
   });
 }
 
-/** Re-inpaint theo mask người vẽ (Phase 5) — chỉ đổi pages.clean_rev khi complete. */
+/** Re-inpaint theo mask người vẽ hoặc khung OCR vùng — chỉ đổi pages.clean_rev khi complete. */
 export async function enqueueReinpaint(
   tx: DbLike,
   userId: string,
@@ -334,10 +334,12 @@ export async function enqueueReinpaint(
 ) {
   const page = await pageIn(tx, userId, input.page_id);
   const payload = { ...input, inpaint: inpaintOptions(await pipelineSettingsOf(tx, userId)) };
-  if (
-    !payload.user_mask_key.startsWith(`${userPrefix(userId)}pg/${page.id}/user-mask/`) ||
-    payload.user_mask_key.includes("..")
-  ) {
+  const key = payload.user_mask_key;
+  // Đúng một nguồn mask (cùng luật zod refine của JobPayload — insert không parse lại payload).
+  if ((payload.auto_text_bbox === undefined) === (key === undefined || payload.offset === undefined)) {
+    throw new HTTPException(400, { message: "page.reinpaint cần user_mask_key + offset, hoặc auto_text_bbox" });
+  }
+  if (key !== undefined && (!key.startsWith(`${userPrefix(userId)}pg/${page.id}/user-mask/`) || key.includes(".."))) {
     throw new HTTPException(400, { message: "user_mask_key không thuộc page này" });
   }
   return insertJob(tx, {

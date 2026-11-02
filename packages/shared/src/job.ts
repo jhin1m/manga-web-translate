@@ -154,15 +154,25 @@ export const JobPayload = z.discriminatedUnion("type", [
     settings: TranslateSettings,
     carry: TranslateCarry.optional(),
   }),
-  z.object({
-    type: z.literal("page.reinpaint"),
-    page_id: Uuid,
-    base_clean_rev: Rev,
-    user_mask_key: z.string().min(1),
-    offset: z.object({ x: z.number().int(), y: z.number().int() }),
-    /** Inpainter của người dùng lúc enqueue (0.6.0). Thiếu → big_lama 512. */
-    inpaint: InpaintOptions.optional(),
-  }),
+  z
+    .object({
+      type: z.literal("page.reinpaint"),
+      page_id: Uuid,
+      base_clean_rev: Rev,
+      /** Mask người vẽ (Mask B): có cả key + offset. */
+      user_mask_key: z.string().min(1).optional(),
+      offset: z.object({ x: z.number().int(), y: z.number().int() }).optional(),
+      /**
+       * OCR vùng tự xoá chữ gốc (0.9.0): worker tự dựng mask nét chữ trong khung này (toạ độ page) trên ảnh sạch
+       * hiện tại. Loại trừ với `user_mask_key`/`offset`.
+       */
+      auto_text_bbox: BBox.optional(),
+      /** Inpainter của người dùng lúc enqueue (0.6.0). Thiếu → big_lama 512. */
+      inpaint: InpaintOptions.optional(),
+    })
+    .refine((p) => (p.auto_text_bbox ? !p.user_mask_key && !p.offset : !!p.user_mask_key && !!p.offset), {
+      message: "page.reinpaint cần đúng một nguồn mask: user_mask_key + offset, hoặc auto_text_bbox",
+    }),
   z.object({
     type: z.literal("page.ocr_region"),
     page_id: Uuid,

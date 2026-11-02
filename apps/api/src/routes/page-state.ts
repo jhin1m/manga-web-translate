@@ -35,12 +35,25 @@ const PutStatesBody = z.object({
     .max(1000),
 });
 const AckBody = z.object({ ai_rev: z.number().int().nonnegative() });
-const ReinpaintBody = z.object({
-  user_mask_key: z.string().min(1).max(512),
-  offset: z.tuple([z.number().int(), z.number().int()]),
-  base_clean_rev: z.number().int().nonnegative(),
-});
+/** Đúng một nguồn mask: mask người vẽ (key + offset) hoặc khung OCR vùng để worker tự tìm nét chữ. */
+const ReinpaintBody = z
+  .object({
+    user_mask_key: z.string().min(1).max(512).optional(),
+    offset: z.tuple([z.number().int(), z.number().int()]).optional(),
+    auto_text_bbox: BBox.optional(),
+    base_clean_rev: z.number().int().nonnegative(),
+  })
+  .refine((b) => (b.auto_text_bbox ? !b.user_mask_key && !b.offset : !!b.user_mask_key && !!b.offset), {
+    message: "cần user_mask_key + offset, hoặc auto_text_bbox",
+  });
 const OcrRegionBody = z.object({ bbox: BBox });
+
+/** Khung người kéo phải nằm trong page và đủ lớn (chung cho OCR vùng và xoá chữ theo khung). */
+function assertBBoxInPage([x, y, w, h]: BBox, page: { width: number; height: number }) {
+  if (w < 4 || h < 4 || x < 0 || y < 0 || x + w > page.width || y + h > page.height) {
+    throw httpError(400, { error: "bbox_out_of_page" });
+  }
+}
 
 const httpError = (status: 409 | 412 | 428 | 400 | 404, body: Record<string, unknown>) =>
   new HTTPException(status, { res: Response.json(body, { status }) });
@@ -272,8 +285,9 @@ pageStateRoutes.post("/pages/:pageId/mask-upload", async (c) => {
 });
 
 /**
- * Re-inpaint theo mask đã upload. Cần khoá chương; `base_clean_rev` phải là rev ảnh sạch hiện tại (người khác
- * vừa reinpaint → 409, tránh dựng trên ảnh cũ). Mask phải tồn tại, là PNG, ≤ 5MB.
+ * Re-inpaint theo mask đã upload, hoặc theo khung OCR vùng (`auto_text_bbox`: worker tự tìm nét chữ trong khung).
+ * Cần khoá chương; `base_clean_rev` phải là rev ảnh sạch hiện tại (người khác vừa reinpaint → 409, tránh dựng trên
+ * ảnh cũ). Mask phải tồn tại, là PNG, ≤ 5MB. Không gọi LLM → không kiểm hạn mức.
  */
 pageStateRoutes.post("/pages/:pageId/reinpaint", async (c) => {
   const body = await parseJson(c, ReinpaintBody);
@@ -284,27 +298,27 @@ pageStateRoutes.post("/pages/:pageId/reinpaint", async (c) => {
   if (page.cleanRev !== body.base_clean_rev) {
     throw httpError(409, { error: "clean_rev_changed", clean_rev: page.cleanRev });
   }
-  if (
-    !body.user_mask_key.startsWith(`${userPrefix(userId)}pg/${page.id}/user-mask/`) ||
-    body.user_mask_key.includes("..")
-  ) {
+  const base = { type: "page.reinpaint", page_id: page.id, base_clean_rev: body.base_clean_rev } as const;
+  if (body.auto_text_bbox) {
+    assertBBoxInPage(body.auto_text_bbox, page);
+    const { job, created } = await inJobTx((tx) =>
+      enqueueReinpaint(tx, userId, { ...base, auto_text_bbox: body.auto_text_bbox }),
+    );
+    return c.json({ job: jobView(job), created }, 202);
+  }
+  const maskKey = body.user_mask_key as string;
+  if (!maskKey.startsWith(`${userPrefix(userId)}pg/${page.id}/user-mask/`) || maskKey.includes("..")) {
     throw httpError(400, { error: "invalid_mask_key" });
   }
-  const h = await head(body.user_mask_key);
+  const h = await head(maskKey);
   if (!h) throw httpError(400, { error: "mask_missing" });
-  const prefix = await readPrefix(body.user_mask_key, PNG_MAGIC.length);
+  const prefix = await readPrefix(maskKey, PNG_MAGIC.length);
   if (h.bytes > MAX_USER_MASK_BYTES || !PNG_MAGIC.every((b, i) => prefix[i] === b)) {
     throw httpError(400, { error: "invalid_mask" });
   }
-  const [x, y] = body.offset;
+  const [x, y] = body.offset as [number, number];
   const { job, created } = await inJobTx((tx) =>
-    enqueueReinpaint(tx, userId, {
-      type: "page.reinpaint",
-      page_id: page.id,
-      base_clean_rev: body.base_clean_rev,
-      user_mask_key: body.user_mask_key,
-      offset: { x, y },
-    }),
+    enqueueReinpaint(tx, userId, { ...base, user_mask_key: maskKey, offset: { x, y } }),
   );
   return c.json({ job: jobView(job), created }, 202);
 });
@@ -314,10 +328,7 @@ pageStateRoutes.post("/pages/:pageId/ocr-region", async (c) => {
   const body = await parseJson(c, OcrRegionBody);
   const sdb = c.get("sdb");
   const page = await sdb.byId(pages, c.req.param("pageId"), "page");
-  const [x, y, w, h] = body.bbox;
-  if (w < 4 || h < 4 || x < 0 || y < 0 || x + w > page.width || y + h > page.height) {
-    throw httpError(400, { error: "bbox_out_of_page" });
-  }
+  assertBBoxInPage(body.bbox, page);
   // OCR vùng (engine theo cài đặt) + dịch bằng LLM → luôn tốn tiền: kiểm hạn mức.
   const { job, created } = await inJobTx(async (tx) => {
     await assertQuota(tx, c.get("userId"));

@@ -213,11 +213,11 @@ export async function buildInputs(tx: DbLike, job: Job): Promise<Record<string, 
       };
     }
     case "page.reinpaint": {
+      const base_clean = await get(storageKeys.clean(job.userId, p.page_id, p.base_clean_rev));
+      // Nhánh auto_text_bbox: worker tự dựng mask từ ảnh sạch, không có mask người vẽ.
+      if (p.user_mask_key === undefined) return { base_clean };
       if (!keyBelongsToUser(p.user_mask_key, job.userId)) throw new Error("user mask key outside user data");
-      return {
-        base_clean: await get(storageKeys.clean(job.userId, p.page_id, p.base_clean_rev)),
-        user_mask: await get(p.user_mask_key),
-      };
+      return { base_clean, user_mask: await get(p.user_mask_key) };
     }
     case "page.ocr_region": {
       const page = await pageById(tx, p.page_id);

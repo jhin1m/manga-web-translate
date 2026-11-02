@@ -293,6 +293,28 @@
           ],
           "additionalProperties": false
         },
+        "auto_text_bbox": {
+          "type": "array",
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "number",
+              "minimum": 0
+            },
+            {
+              "type": "number",
+              "minimum": 0
+            }
+          ],
+          "items": false,
+          "minItems": 4,
+          "maxItems": 4
+        },
         "inpaint": {
           "type": "object",
           "properties": {
@@ -319,9 +341,7 @@
       "required": [
         "type",
         "page_id",
-        "base_clean_rev",
-        "user_mask_key",
-        "offset"
+        "base_clean_rev"
       ],
       "additionalProperties": false
     },

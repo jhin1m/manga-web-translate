@@ -376,7 +376,25 @@ async function applyResult(t: DbLike, job: Job, attempt: number, result: JobResu
       if (!job.pageId) throw new Error("page.reinpaint without page_id");
       requireRev(job, result.clean_rev, "clean");
       await requireObjects([storageKeys.clean(owner, job.pageId, result.clean_rev)]);
-      await t.update(pages).set({ cleanRev: result.clean_rev }).where(eq(pages.id, job.pageId));
+      const p = job.payload;
+      if (p.type !== "page.reinpaint") throw new Error("payload mismatch");
+      // Chỉ nhận khi ảnh sạch vẫn là ảnh job dựng lên: 2 lần xoá chạy cùng lúc (khung OCR + Mask) thì lần xong sau
+      // không được ghi đè mất kết quả lần trước. Route chỉ kiểm rev lúc enqueue (job đang chạy chưa đổi rev).
+      const moved = await t
+        .update(pages)
+        .set({ cleanRev: result.clean_rev })
+        .where(and(eq(pages.id, job.pageId), eq(pages.cleanRev, p.base_clean_rev)))
+        .returning({ id: pages.id });
+      if (!moved.length) {
+        await terminal(
+          t,
+          job,
+          "failed",
+          "invalid_input",
+          "clean_rev_changed: ảnh đã được xoá chữ ở lần khác trong lúc chạy — làm lại thao tác này",
+        );
+        return "clean_rev_changed";
+      }
       return undefined;
     }
     case "chapter.export": {

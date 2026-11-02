@@ -10,6 +10,9 @@ import { planBatches, regionCount } from "../jobs/translate-chain.ts";
 import type { AppEnv } from "../middleware/user.ts";
 import { jobView } from "./jobs.ts";
 
+/** Thao tác editor trên 1 page — không quyết định trạng thái / lỗi của trang khi đã kết thúc. */
+const EDITOR_OP_JOBS = new Set(["page.reinpaint", "page.ocr_region"]);
+
 const RECENT_MS = 24 * 60 * 60 * 1000;
 
 export const progressRoutes = new Hono<AppEnv>();
@@ -44,6 +47,9 @@ progressRoutes.get("/chapters/:chapterId/progress", async (c) => {
   const active = (s: string) => (ACTIVE_JOB_STATUSES as readonly string[]).includes(s);
   const latestByPage = new Map<string, (typeof jobRows)[number]>();
   for (const j of sorted) {
+    // Thao tác editor (xoá chữ theo mask/khung, OCR vùng) xong rồi thì không phải trạng thái trang: lỗi của chúng
+    // (VD "không thấy chữ trong khung") đã báo ngay trong editor, không được hiện thành "trang lỗi, dịch lại".
+    if (EDITOR_OP_JOBS.has(j.type) && !active(j.status)) continue;
     const ids = j.pageId ? [j.pageId] : j.payload.type === "chapter.translate" ? j.payload.page_ids : [];
     for (const id of ids) {
       const cur = latestByPage.get(id);

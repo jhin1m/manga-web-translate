@@ -38,11 +38,12 @@ const Env = z.object({
    * 0.7.0: chapter.translate theo lô — payload/result `carry` (ngữ cảnh chuyền giữa các job lô).
    * 0.7.1: TextBox.valign — schema input export của worker cũ (additionalProperties: false) từ chối state có valign → job export fail.
    * 0.8.0: Region.style + settings.thought_font/note_font — schema input/output của worker cũ (additionalProperties: false) từ chối.
+   * 0.9.0: page.reinpaint.auto_text_bbox (OCR vùng tự xoá chữ gốc) — worker cũ đòi user_mask_key/user_mask → fail.
    */
   MIN_PIPELINE_VERSION: z
     .string()
     .regex(/^\d+\.\d+\.\d+$/)
-    .default("0.8.0"),
+    .default("0.9.0"),
   /**
    * Kill-switch ngân sách toàn cục (USD, cộng usage_ledger.cost_usd mọi người dùng + chi phí nền tảng, ngày/tháng
    * theo UTC). Bắt buộc ở production; 0 = chặn mọi job tốn tiền. Không đặt (dev/test) = không giới hạn.
