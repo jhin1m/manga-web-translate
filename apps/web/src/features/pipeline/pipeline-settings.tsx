@@ -1,5 +1,5 @@
 /**
- * Cài đặt admin → Pipeline (chung toàn hệ thống): detector, OCR engine theo ngôn ngữ nguồn, inpainter, model hiệu đính; ngưỡng / nới
+ * Cài đặt admin → Pipeline (chung toàn hệ thống): detector, OCR engine theo ngôn ngữ nguồn, inpainter (model AI theo tác vụ ở mục Model tác vụ); ngưỡng / nới
  * mask / cỡ vùng xoá chữ gom ở "Nâng cao". Mỗi option: nhãn tiếng Việt + thuật ngữ gốc + tooltip (dấu ?).
  * Có hiệu lực từ lần chạy sau (Xoá chữ + OCR, xoá chữ lại, OCR vùng, AI hiệu đính); job đang chờ giữ cài đặt cũ.
  */
@@ -27,9 +27,9 @@ const DETECTOR_LABEL: Record<(typeof TEXT_DETECTORS)[number], string> = {
   comic_text_detector: "Comic Text Detector (CTD) — khối chữ",
 };
 const OCR_LABEL: Record<OcrEngine, string> = {
-  llm: "AI (LLM vision) — mặc định, tính token",
-  manga_ocr: "MangaOCR — chạy local, chỉ tiếng Nhật",
-  paddle_ocr: "PaddleOCR — chạy local",
+  llm: "AI (LLM vision) — tính token, gửi ảnh vùng chữ lên AI",
+  manga_ocr: "MangaOCR — chạy local, chỉ tiếng Nhật (mặc định tiếng Nhật)",
+  paddle_ocr: "PaddleOCR — chạy local (mặc định Hàn / Trung / Anh)",
 };
 const INPAINTER_LABEL: Record<(typeof INPAINTERS)[number], string> = {
   big_lama: "Big LaMa — tổng quát (mặc định)",

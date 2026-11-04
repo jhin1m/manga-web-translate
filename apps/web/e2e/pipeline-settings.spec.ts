@@ -1,5 +1,6 @@
 /**
- * Cài đặt admin → Pipeline: admin đổi OCR engine tiếng Nhật + nới mask (Nâng cao), lưu, tải lại vẫn giữ; về mặc định.
+ * Cài đặt admin → Pipeline: admin đổi OCR engine tiếng Nhật (mặc định MangaOCR local → LLM) + nới mask (Nâng cao),
+ * lưu, tải lại vẫn giữ; về mặc định.
  * Pipeline là mục mặc định của trang.
  */
 import { expect, test } from "@playwright/test";
@@ -11,13 +12,14 @@ test("owner edits pipeline settings and they persist", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "Cài đặt", exact: true })).toBeVisible();
 
   const ja = page.getByLabel(/Tiếng Nhật OCR engine/);
-  await expect(ja).toHaveValue("llm");
+  await expect(ja).toHaveValue("manga_ocr");
+  await expect(page.getByLabel(/Tiếng Hàn OCR engine/)).toHaveValue("paddle_ocr");
   // Tiếng Hàn không có MangaOCR (chỉ tiếng Nhật).
   await expect(page.getByLabel(/Tiếng Hàn OCR engine/).locator("option")).toHaveText([
     /AI \(LLM vision\)/,
     /PaddleOCR/,
   ]);
-  await ja.selectOption("manga_ocr");
+  await ja.selectOption("llm");
   await page.getByText("Nâng cao").click();
   await page.getByLabel(/Nới mask/).fill("4");
   await page.getByLabel(/Model xoá chữ/).selectOption("lama_manga");
@@ -25,7 +27,7 @@ test("owner edits pipeline settings and they persist", async ({ page }) => {
   await expect(page.getByRole("status").filter({ hasText: "Đã lưu." })).toBeVisible();
 
   await page.reload();
-  await expect(page.getByLabel(/Tiếng Nhật OCR engine/)).toHaveValue("manga_ocr");
+  await expect(page.getByLabel(/Tiếng Nhật OCR engine/)).toHaveValue("llm");
   await expect(page.getByLabel(/Model xoá chữ/)).toHaveValue("lama_manga");
   await expect(page.getByLabel(/Nới mask/)).toHaveValue("4");
 
@@ -34,5 +36,5 @@ test("owner edits pipeline settings and they persist", async ({ page }) => {
   await page.getByRole("button", { name: "Lưu cài đặt pipeline" }).click();
   await expect(page.getByRole("status").filter({ hasText: "Đã lưu." })).toBeVisible();
   await page.reload();
-  await expect(page.getByLabel(/Tiếng Nhật OCR engine/)).toHaveValue("llm");
+  await expect(page.getByLabel(/Tiếng Nhật OCR engine/)).toHaveValue("manga_ocr");
 });

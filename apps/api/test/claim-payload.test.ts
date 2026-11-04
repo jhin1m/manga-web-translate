@@ -16,9 +16,12 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { env } from "../src/env.ts";
 import { enqueueOcrRegion, enqueuePrepare, enqueueProofread, enqueueTranslate, inJobTx } from "../src/jobs/enqueue.ts";
 import { db, seedUser } from "./helpers.ts";
-import { cancelActiveJobs } from "./isolate-queue.ts";
+import { cancelActiveJobs, LLM_OCR_ENGINES, useLlmOcr } from "./isolate-queue.ts";
 import { chapterAndSeries, insertPage as insertPageFor, jobById } from "./llm-helpers.ts";
 import { claimJobs, OCR, VERSION, wcall, workerToken } from "./worker-helpers.ts";
+
+// Các ca ở đây cần page.prepare là job gọi LLM (mặc định OCR là local).
+beforeEach(useLlmOcr);
 
 type Seed = Awaited<ReturnType<typeof seedUser>>;
 
@@ -48,7 +51,7 @@ describe("claim shape + idempotency key without ai providers", () => {
     expect(Object.keys(claimed ?? {}).sort()).toEqual(CLAIM_KEYS);
     expect(claimed?.payload).not.toHaveProperty("llm");
 
-    const options = prepareOptions(resolvePipelineSettings({}), s.sourceLang);
+    const options = prepareOptions(resolvePipelineSettings({ ocr_engines: LLM_OCR_ENGINES }), s.sourceLang);
     const rev = prepareInputRev(page.originalSha256, s.settingsRev, env.PIPELINE_VERSION, options);
     expect((await jobOf(job.id)).idempotencyKey).toBe(idempotencyKey("page.prepare", page.id, rev));
   });

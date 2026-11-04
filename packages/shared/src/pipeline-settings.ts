@@ -1,14 +1,15 @@
 /**
  * Cài đặt pipeline của người dùng (Cài đặt chung → Pipeline). Worker không đọc DB: API snapshot phần cần thiết vào
  * payload job lúc enqueue (`page.prepare.pipeline`, `page.reinpaint.inpaint`, `page.ocr_region.ocr_engine`).
- * Mặc định = hành vi trước khi có cài đặt → người dùng chưa cấu hình chạy y hệt.
+ * Mặc định: OCR local (MangaOCR / PaddleOCR), còn lại như trước khi có cài đặt. input_rev của page.prepare so với mốc
+ * cố định `PREPARE_REV_BASELINE` (OCR LLM), không theo mặc định.
  */
 import { z } from "zod";
 import { SOURCE_LANGS, type SourceLang } from "./series-lang.ts";
 
 /** rtdetr_v2_comic = bóng + chữ (mặc định); comic_text_detector = khối chữ CTD, bóng vẫn lấy từ RT-DETR. */
 export const TEXT_DETECTORS = ["rtdetr_v2_comic", "comic_text_detector"] as const;
-/** llm = OCR bằng LLM vision (mặc định, tính tiền); manga_ocr / paddle_ocr chạy local (ONNX, không token). */
+/** llm = OCR bằng LLM vision (tính tiền, gửi ảnh vùng chữ lên provider); manga_ocr / paddle_ocr chạy local (ONNX, không token). */
 export const OCR_ENGINES = ["llm", "manga_ocr", "paddle_ocr"] as const;
 /** big_lama = LaMa tổng quát (mặc định); lama_manga = LaMa huấn luyện cho manga/anime. */
 export const INPAINTERS = ["big_lama", "lama_manga"] as const;
@@ -74,7 +75,8 @@ export type PipelineSettings = z.infer<typeof PipelineSettings>;
 export const DEFAULT_PIPELINE_SETTINGS: PipelineSettings = {
   detector: "rtdetr_v2_comic",
   detection_threshold: DETECTION_THRESHOLD.default,
-  ocr_engines: { ko: "llm", ja: "llm", zh: "llm", en: "llm" },
+  // OCR local mặc định: không tốn token, ảnh không rời worker. Admin đổi về LLM theo từng ngôn ngữ ở Cài đặt → Pipeline.
+  ocr_engines: { ko: "paddle_ocr", ja: "manga_ocr", zh: "paddle_ocr", en: "paddle_ocr" },
   inpainter: "big_lama",
   mask_dilation: null,
   inpaint_size: INPAINT_SIZE.default,
@@ -142,8 +144,22 @@ export const inpaintOptions = (s: PipelineSettings): InpaintOptions => ({
   inpaint_size: s.inpaint_size,
 });
 
-/** Tuỳ chọn giai đoạn 1 có khác hành vi mặc định không (khác → trộn vào input_rev của page.prepare). */
-export function isDefaultPrepareOptions(o: PrepareOptions): boolean {
-  const d = prepareOptions(DEFAULT_PIPELINE_SETTINGS, "ko");
+/**
+ * Mốc input_rev của page.prepare: hành vi trước khi có cài đặt pipeline (OCR LLM). Cố định, KHÔNG theo
+ * DEFAULT_PIPELINE_SETTINGS — đổi mặc định không được làm trùng input_rev giữa trang OCR bằng LLM và trang OCR local
+ * (idempotency sẽ trả kết quả OCR cũ), cũng không đổi rev của trang/job đã có.
+ */
+const PREPARE_REV_BASELINE: PrepareOptions = {
+  detector: "rtdetr_v2_comic",
+  detection_threshold: 0.35,
+  ocr_engine: "llm",
+  inpainter: "big_lama",
+  mask_dilation: null,
+  inpaint_size: 512,
+};
+
+/** Tuỳ chọn giai đoạn 1 có khác mốc input_rev không (khác → trộn vào input_rev của page.prepare). */
+export function isBaselinePrepareOptions(o: PrepareOptions): boolean {
+  const d = PREPARE_REV_BASELINE;
   return (Object.keys(d) as (keyof PrepareOptions)[]).every((k) => o[k] === d[k]);
 }

@@ -1,4 +1,4 @@
-/** Cài đặt pipeline chung của hệ thống (admin sửa): lưu, validate, snapshot vào payload job của mọi user, input_rev giữ nguyên khi mặc định. */
+/** Cài đặt pipeline chung của hệ thống (admin sửa): lưu, validate, snapshot vào payload job của mọi user, input_rev giữ nguyên với bộ tuỳ chọn OCR LLM cũ (mốc), khác đi khi OCR local. */
 import { randomUUID } from "node:crypto";
 import { chapters, jobs, pages, runtimeFlags, scoped, series } from "@mtl/db";
 import { DEFAULT_PIPELINE_SETTINGS, type PipelineSettings, prepareInputRev } from "@mtl/shared";
@@ -7,6 +7,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { env } from "../src/env.ts";
 import { enqueueOcrRegion, enqueuePrepare, enqueueReinpaint, inJobTx } from "../src/jobs/enqueue.ts";
 import { call, db, seedAdmin, seedUser } from "./helpers.ts";
+import { cancelActiveJobs, LLM_OCR_ENGINES } from "./isolate-queue.ts";
 import { claimJobs, workerToken } from "./worker-helpers.ts";
 
 type Seed = Awaited<ReturnType<typeof seedUser>>;
@@ -114,11 +115,23 @@ describe("pipeline settings", () => {
     expect((await bad({ inpaint_size: 100 })).status).toBe(400);
   });
 
-  it("mặc định: payload mang pipeline mặc định, input_rev y như trước khi có cài đặt", async () => {
+  it("mặc định: OCR local, không mang model OCR; input_rev khác trang OCR bằng LLM", async () => {
     await put(DEFAULT_PIPELINE_SETTINGS);
+    await scoped(db, A.userId).update(series, eq(series.id, A.seriesId), { sourceLang: "ko" });
     const page = await newPage();
     const job = await prepare(page);
-    expect(job.payload).toMatchObject({ pipeline: { detector: "rtdetr_v2_comic", ocr_engine: "llm" } });
+    expect(job.payload).toMatchObject({ pipeline: { detector: "rtdetr_v2_comic", ocr_engine: "paddle_ocr" } });
+    expect(job.payload).not.toHaveProperty("llm");
+    const [s] = await scoped(db, A.userId).select(series, eq(series.id, A.seriesId));
+    const legacy = prepareInputRev(page.originalSha256, s?.settingsRev ?? 0, env.PIPELINE_VERSION);
+    expect(job.inputRev).not.toBe(legacy);
+  });
+
+  it("OCR LLM với các tuỳ chọn còn lại mặc định: input_rev y như trước khi có cài đặt", async () => {
+    await put({ ...DEFAULT_PIPELINE_SETTINGS, ocr_engines: LLM_OCR_ENGINES });
+    const page = await newPage();
+    const job = await prepare(page);
+    expect(job.payload).toMatchObject({ pipeline: { ocr_engine: "llm" } });
     const [s] = await scoped(db, A.userId).select(series, eq(series.id, A.seriesId));
     expect(job.inputRev).toBe(prepareInputRev(page.originalSha256, s?.settingsRev ?? 0, env.PIPELINE_VERSION));
   });
@@ -156,6 +169,8 @@ describe("pipeline settings", () => {
   it("LLM tạm dừng: page.prepare OCR local vẫn được claim, prepare LLM thì không", async () => {
     const sdb = scoped(db, A.userId);
     await sdb.delete(jobs, eq(jobs.userId, A.userId));
+    // Job prepare còn sót của user khác giờ là OCR local (mặc định) → cũng claim được; huỷ để chỉ thấy job của ca này.
+    await cancelActiveJobs();
     const local = await newPage();
     const llm = await newPage();
     await put({
@@ -163,7 +178,7 @@ describe("pipeline settings", () => {
       ocr_engines: { ...DEFAULT_PIPELINE_SETTINGS.ocr_engines, ko: "paddle_ocr" },
     });
     await prepare(local);
-    await put(DEFAULT_PIPELINE_SETTINGS);
+    await put({ ...DEFAULT_PIPELINE_SETTINGS, ocr_engines: LLM_OCR_ENGINES });
     await prepare(llm);
     const until = new Date(Date.now() + 60_000);
     await db

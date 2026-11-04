@@ -5,12 +5,13 @@
  */
 import { chapters, jobs, pages, runtimeFlags, usageLedger } from "@mtl/db";
 import { and, eq, like, sql } from "drizzle-orm";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { MAX_OUTPUT_TOKENS_PER_CALL } from "../src/billing/prices.ts";
 import { BREAKER_THRESHOLD } from "../src/jobs/breaker.ts";
 import { enqueueIngest, inJobTx } from "../src/jobs/enqueue.ts";
 import { MAX_PROVIDER_RETRIES } from "../src/jobs/errors.ts";
 import { call, db, seedUser } from "./helpers.ts";
+import { useLlmOcr } from "./isolate-queue.ts";
 import {
   addSources,
   type Claimed,
@@ -29,6 +30,9 @@ import {
   wcall,
   workerToken,
 } from "./worker-helpers.ts";
+
+// Các ca ở đây cần page.prepare là job gọi LLM (mặc định OCR là local).
+beforeEach(useLlmOcr);
 
 type Seed = Awaited<ReturnType<typeof seedUser>>;
 

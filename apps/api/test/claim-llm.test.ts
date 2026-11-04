@@ -10,7 +10,7 @@ import { env } from "../src/env.ts";
 import { BREAKER_THRESHOLD } from "../src/jobs/breaker.ts";
 import { enqueueOcrRegion, enqueuePrepare, enqueueProofread, enqueueTranslate, inJobTx } from "../src/jobs/enqueue.ts";
 import { db, seedUser } from "./helpers.ts";
-import { cancelActiveJobs } from "./isolate-queue.ts";
+import { cancelActiveJobs, LLM_OCR_ENGINES } from "./isolate-queue.ts";
 import {
   adminApi,
   chapterAndSeries,
@@ -38,9 +38,12 @@ let B: TestProvider;
 
 beforeEach(async () => {
   await cancelActiveJobs();
-  await db
-    .update(systemSettings)
-    .set({ pipeline: {}, ocrModelId: null, translateModelId: null, proofreadModelId: null });
+  await db.update(systemSettings).set({
+    pipeline: { ocr_engines: LLM_OCR_ENGINES },
+    ocrModelId: null,
+    translateModelId: null,
+    proofreadModelId: null,
+  });
   S = await seedUser("claim-llm");
   token = (await workerToken("mac", "claim-llm")).token;
   A = await createProvider(KEY_A, [MINI, BIG]);

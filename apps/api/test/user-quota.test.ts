@@ -11,7 +11,7 @@ import { env } from "../src/env.ts";
 import { enqueueIngest, inJobTx, insertJob } from "../src/jobs/enqueue.ts";
 import { failOverQuotaQueued } from "../src/jobs/queue.ts";
 import { call, db, seedUser } from "./helpers.ts";
-import { cancelActiveJobs } from "./isolate-queue.ts";
+import { cancelActiveJobs, useLlmOcr } from "./isolate-queue.ts";
 import {
   addSources,
   type Claimed,
@@ -23,6 +23,9 @@ import {
   wcall,
   workerToken,
 } from "./worker-helpers.ts";
+
+// Các ca ở đây cần page.prepare là job gọi LLM (mặc định OCR là local).
+beforeEach(useLlmOcr);
 
 /** Chi phí GPU giả của người dùng hôm nay (không gắn job). */
 const spend = (userId: string, usd: number) =>

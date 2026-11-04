@@ -41,7 +41,9 @@ describe("pipeline settings", () => {
     });
     expect(s.inpainter).toBe("lama_manga");
     expect(s.detection_threshold).toBe(DEFAULT_PIPELINE_SETTINGS.detection_threshold);
-    expect(s.ocr_engines).toEqual({ ko: "llm", ja: "manga_ocr", zh: "paddle_ocr", en: "llm" });
+    expect(s.ocr_engines).toEqual({ ko: "paddle_ocr", ja: "manga_ocr", zh: "paddle_ocr", en: "paddle_ocr" });
+    const llm = resolvePipelineSettings({ ocr_engines: { ko: "llm", ja: "llm", zh: "llm", en: "llm" } });
+    expect(llm.ocr_engines).toEqual({ ko: "llm", ja: "llm", zh: "llm", en: "llm" });
   });
 
   it("rejects engine that cannot read the language", () => {
@@ -52,17 +54,25 @@ describe("pipeline settings", () => {
     expect(PipelineSettings.safeParse(bad).success).toBe(false);
   });
 
-  it("prepare input_rev unchanged for default options, changes otherwise", () => {
+  it("prepare input_rev omits options only for the LLM-OCR baseline, changes otherwise", () => {
     const base = prepareInputRev(SHA, 1, "0.4.0");
-    expect(prepareInputRev(SHA, 1, "0.4.0", prepareOptions(DEFAULT_PIPELINE_SETTINGS, "ja"))).toBe(base);
-    const custom = prepareOptions({ ...DEFAULT_PIPELINE_SETTINGS, inpainter: "lama_manga" }, "ko");
+    const allLlm = {
+      ...DEFAULT_PIPELINE_SETTINGS,
+      ocr_engines: { ko: "llm", ja: "llm", zh: "llm", en: "llm" },
+    } as const;
+    expect(prepareInputRev(SHA, 1, "0.4.0", prepareOptions(allLlm, "ja"))).toBe(base);
+    // Mặc định OCR local ≠ mốc LLM: không được trùng rev với trang đã OCR bằng LLM.
+    const local = prepareInputRev(SHA, 1, "0.4.0", prepareOptions(DEFAULT_PIPELINE_SETTINGS, "ko"));
+    expect(local).not.toBe(base);
+    const custom = prepareOptions({ ...allLlm, inpainter: "lama_manga" }, "ko");
     expect(prepareInputRev(SHA, 1, "0.4.0", custom)).not.toBe(base);
   });
 
   it("local OCR prepare is not an LLM job", () => {
-    const llm = prepareOptions(DEFAULT_PIPELINE_SETTINGS, "ja");
-    const local = { ...llm, ocr_engine: "manga_ocr" as const };
-    const p = (pipeline?: typeof llm) =>
+    const local = prepareOptions(DEFAULT_PIPELINE_SETTINGS, "ja");
+    expect(local.ocr_engine).toBe("manga_ocr");
+    const llm = { ...local, ocr_engine: "llm" as const };
+    const p = (pipeline?: typeof local) =>
       JobPayload.parse({ type: "page.prepare", page_id: PAGE, source_lang: "ja", pipeline });
     expect(isLlmPayload(p())).toBe(true);
     expect(isLlmPayload(p(llm))).toBe(true);

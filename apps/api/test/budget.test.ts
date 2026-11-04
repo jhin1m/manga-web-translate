@@ -11,7 +11,7 @@ import { env } from "../src/env.ts";
 import { enqueueIngest, inJobTx } from "../src/jobs/enqueue.ts";
 import { maintainBudget } from "../src/jobs/runner.ts";
 import { db, seedUser } from "./helpers.ts";
-import { cancelActiveJobs } from "./isolate-queue.ts";
+import { cancelActiveJobs, useLlmOcr } from "./isolate-queue.ts";
 import {
   addSources,
   type Claimed,
@@ -24,6 +24,9 @@ import {
   wcall,
   workerToken,
 } from "./worker-helpers.ts";
+
+// Các ca ở đây cần page.prepare là job gọi LLM (mặc định OCR là local).
+beforeEach(useLlmOcr);
 
 const setLimits = (daily?: number, monthly?: number) => {
   env.GLOBAL_DAILY_USD = daily;

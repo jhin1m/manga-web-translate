@@ -1,7 +1,8 @@
 """Đọc models.lock.json, kiểm sha256 trước khi nạp, từ chối định dạng có thể chứa pickle.
 
-Model `optional` (chỉ dùng khi cài đặt pipeline của người dùng chọn: LaMa manga, OCR local) không bắt buộc lúc khởi
-động; `ensure_model` tải lazy đúng URL/revision trong lock (kiểm sha256) lần đầu job cần."""
+Model `optional` (LaMa manga khi cài đặt chọn; OCR local — MangaOCR / PaddleOCR — là mặc định của pipeline) không bắt
+buộc lúc khởi động; `ensure_model` tải lazy đúng URL/revision trong lock (kiểm sha256) lần đầu job cần. Production nên
+nạp sẵn (`scripts/fetch_models.py` không `--required`) để container Modal không tải giữa job."""
 
 from __future__ import annotations
 

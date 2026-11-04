@@ -5,7 +5,7 @@ import { z } from "zod";
 import { BBox, OcrRegion, OcrResult, PageState, Region } from "./page-state.ts";
 import {
   InpaintOptions,
-  isDefaultPrepareOptions,
+  isBaselinePrepareOptions,
   LOCAL_OCR_ENGINES,
   type OcrEngine,
   OcrEngineSchema,
@@ -293,7 +293,7 @@ export function prepareInputRev(
   options?: PrepareOptions,
 ): string {
   const parts: unknown[] = [originalSha256, settingsRev, pipelineVersion];
-  if (options && !isDefaultPrepareOptions(options)) parts.push(stableStringify(options));
+  if (options && !isBaselinePrepareOptions(options)) parts.push(stableStringify(options));
   return hex(parts.join("|"));
 }
 

@@ -4,7 +4,7 @@
  */
 import { aiProviders, jobs, systemFonts, systemSettings } from "@mtl/db";
 import { ACTIVE_JOB_STATUSES } from "@mtl/shared";
-import { inArray } from "drizzle-orm";
+import { inArray, sql } from "drizzle-orm";
 import { afterEach, beforeAll } from "vitest";
 import { db } from "../src/db.ts";
 import { env } from "../src/env.ts";
@@ -15,6 +15,21 @@ export async function cancelActiveJobs() {
     .update(jobs)
     .set({ status: "cancelled", leaseOwner: null, leaseToken: null, leaseExpiresAt: null })
     .where(inArray(jobs.status, [...ACTIVE_JOB_STATUSES]));
+}
+
+/** OCR LLM cho mọi ngôn ngữ (mặc định là OCR local) — file test cần page.prepare là job gọi LLM. */
+export const LLM_OCR_ENGINES = { ko: "llm", ja: "llm", zh: "llm", en: "llm" } as const;
+
+/** Bật OCR LLM ở cài đặt hệ thống (giữ các key pipeline khác). Gọi trong `beforeEach` của file cần. */
+export async function useLlmOcr() {
+  const patch = { ocr_engines: LLM_OCR_ENGINES };
+  await db
+    .insert(systemSettings)
+    .values({ id: 1, pipeline: patch })
+    .onConflictDoUpdate({
+      target: systemSettings.id,
+      set: { pipeline: sql`${systemSettings.pipeline} || ${JSON.stringify(patch)}::jsonb` },
+    });
 }
 
 const initialAdminEmails = [...env.ADMIN_EMAILS];
