@@ -211,3 +211,18 @@ security-adversary) · 36 finding gốc gộp thành 15 nhóm · **14 nhận / 1
 
 Mâu thuẫn còn lại: không. Điểm cần kiểm lúc implement (không phải mâu thuẫn): thứ tự validate mật khẩu/email trong
 `better-auth/dist/api/routes/sign-up.mjs` cho `smoke.sh` (phase 5); `useSession` có refetch khi `$sessionSignal` (phase 6).
+
+## Quyết định cho câu hỏi còn mở (2026-11-04, user uỷ quyền)
+
+User giao quyết hộ. Mọi lựa chọn dưới đây giữ nguyên code đã triển khai (ưu tiên ổn định, YAGNI), đảo lại được khi cần.
+
+| Câu hỏi | Quyết định | Lý do |
+|---|---|---|
+| Env 0 có luôn thắng giá trị UI (công tắc khẩn cấp) không? | **Không** — giữ DB thắng env (D7/T17) | Đặt 0 / tắt đăng ký trên UI có hiệu lực ngay, không restart → nhanh hơn sửa env. Runbook đã ghi cách UI + SQL. Hai nguồn sự thật dễ gây nhầm hơn |
+| Nút xoá cưỡng bức font hệ thống đang làm mặc định series | **Không làm** | Hiếm (chủ yếu khi gỡ vì bản quyền); runbook SQL đã kiểm trên DB thử. Nút cưỡng bức đổi font của user khác một cách âm thầm |
+| Q3: DB `null` = theo env, admin không đặt "không giới hạn" đè env được | **Chấp nhận** | Muốn không giới hạn thì bỏ biến env. Tránh thêm trạng thái thứ 3 trên UI |
+| Q4: `GLOBAL_MONTHLY_USD` chỉ env | **Giữ chỉ env** | Là trần an toàn cứng cuối cùng; UI không nên gỡ được nó |
+| Q5: Audit log thao tác admin | **YAGNI** | Hiện 1 admin. Làm khi có ≥2 admin |
+| Q6: Token worker riêng để nhận key (`worker_tokens.llm_keys`) | **Chưa làm** | Worker chỉ chạy trên Mac/Modal của chủ hệ thống; token đã là bí mật. Làm khi có worker bên thứ ba |
+| Q7: Khoá user có huỷ job đang chờ không | **Không huỷ** | Job không được claim → không tốn tiền; mở khoá là chạy tiếp (đảo được). Rủi ro khi rollback API đã ghi trong deployment-guide |
+| `SECRETS_KEY` cho `.env` local | **Đã tạo** (`openssl rand -base64 32`) | Cần để lưu key provider trên UI khi dev |
