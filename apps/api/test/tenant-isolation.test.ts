@@ -260,6 +260,7 @@ const RESOURCE_CASES: Record<string, (b: Seed) => Record<string, string>> = {
   "DELETE /api/fonts/:fontId": (b) => ({ fontId: fontOf[b.userId] ?? "" }),
   "POST /api/chapters/:chapterId/proofread": (b) => ({ chapterId: b.chapterId }),
   "GET /api/chapters/:chapterId/proofread": (b) => ({ chapterId: b.chapterId }),
+  "GET /api/chapters/:chapterId/proofread/estimate": (b) => ({ chapterId: b.chapterId }),
   "PATCH /api/proofread-suggestions/:suggestionId": (b) => ({ suggestionId: suggestionOf[b.userId] ?? "" }),
   "DELETE /api/chapters/:chapterId": (b) => ({ chapterId: spareChapterOf[b.userId] ?? "" }),
   "DELETE /api/series/:seriesId": (b) => ({ seriesId: spareSeriesOf[b.userId] ?? "" }),

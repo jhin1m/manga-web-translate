@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { sortSuggestions, suggestionState } from "./proofread-model.ts";
+import {
+  estimateLines,
+  fmtDurationRange,
+  fmtUsdRange,
+  type ProofreadEstimate,
+  sortSuggestions,
+  suggestionState,
+} from "./proofread-model.ts";
 
 const s = { old: "Xin chao", suggestion: "Xin chào" };
 
@@ -36,5 +43,42 @@ describe("sortSuggestions", () => {
       ["b:r0", 0],
     ]);
     expect(sortSuggestions(list, ord, idx).map((x) => `${x.page_id}:${x.region_id}`)).toEqual(["a:r1", "a:r2", "b:r0"]);
+  });
+});
+
+describe("proofread estimate text", () => {
+  it("USD range: small values keep 3 decimals, tiny shows a floor", () => {
+    expect(fmtUsdRange({ low: 0.012, high: 0.05 })).toBe("$0.012 – $0.050");
+    expect(fmtUsdRange({ low: 0.4, high: 1.234 })).toBe("$0.40 – $1.23");
+    expect(fmtUsdRange({ low: 0, high: 0.004 })).toBe("dưới $0.01");
+  });
+  it("duration in minutes, short runs under a minute", () => {
+    expect(fmtDurationRange({ low: 10, high: 40 })).toBe("dưới 1 phút");
+    expect(fmtDurationRange({ low: 100, high: 400 })).toBe("khoảng 2–7 phút");
+    expect(fmtDurationRange({ low: 170, high: 190 })).toBe("khoảng 3 phút");
+  });
+  it("lists pages, model and unknown price (image notice is shown separately, always)", () => {
+    const e: ProofreadEstimate = {
+      pages: 12,
+      provider: null,
+      model: null,
+      price_known: false,
+      usd: { low: 0.1, high: 0.5 },
+      seconds: { low: 60, high: 240 },
+      basis: "default",
+    };
+    const lines = estimateLines(e).join("\n");
+    expect(lines).toContain("12 trang");
+    expect(lines).toContain("giá cao nhất");
+    expect(lines).toContain("sơ bộ");
+    const known = estimateLines({
+      ...e,
+      provider: "DeepSeek",
+      model: "deepseek-flash",
+      price_known: true,
+      basis: "history",
+    });
+    expect(known[0]).toBe("12 trang · DeepSeek · deepseek-flash");
+    expect(known.join("\n")).not.toContain("giá cao nhất");
   });
 });

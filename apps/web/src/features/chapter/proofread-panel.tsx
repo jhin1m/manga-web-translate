@@ -9,13 +9,22 @@
 import type { PageState } from "@mtl/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Draft } from "immer";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { errorMessage } from "../../lib/api.ts";
 import { setRegionTranslation } from "../editor/actions.ts";
 import { editorStore, useEditor } from "../editor/store.ts";
-import { dismissSuggestion, fetchProofread, type JobView, proofreadKey, runProofread } from "./api.ts";
+import {
+  dismissSuggestion,
+  fetchProofread,
+  fetchProofreadEstimate,
+  type JobView,
+  proofreadKey,
+  runProofread,
+} from "./api.ts";
 import { describeJobError, ERROR_CLASS } from "./job-error.ts";
 import {
+  estimateLines,
+  PROOFREAD_DATA_NOTICE,
   STATE_LABEL,
   type Suggestion,
   type SuggestionState,
@@ -75,6 +84,25 @@ export function ProofreadPanel(props: {
     },
     onSettled: refresh,
   });
+  // Bấm chạy → hỏi xác nhận kèm ước tính (giá, thời gian, dữ liệu gửi AI) rồi mới tạo job.
+  const [confirming, setConfirming] = useState(false);
+  const estimate = useQuery({
+    queryKey: [...proofreadKey(chapterId), "estimate"],
+    queryFn: () => fetchProofreadEstimate(chapterId),
+    enabled: confirming,
+    staleTime: 0,
+    gcTime: 0,
+  });
+  const confirmRef = useRef<HTMLElement>(null);
+  // Mở hộp: lấy ước tính mới (dữ liệu cũ không hiện lại) + đưa focus vào hộp cho người dùng bàn phím / screen reader.
+  useEffect(() => {
+    if (!confirming) return;
+    confirmRef.current?.focus();
+  }, [confirming]);
+  const openConfirm = () => {
+    qc.removeQueries({ queryKey: [...proofreadKey(chapterId), "estimate"] });
+    setConfirming(true);
+  };
   const dismiss = useMutation({ mutationFn: (id: string) => dismissSuggestion(id), onSettled: refresh });
   const [acceptError, setAcceptError] = useState<string | null>(null);
 
@@ -130,9 +158,9 @@ export function ProofreadPanel(props: {
         <button
           type="button"
           className={items.length ? undefined : "btn-primary"}
-          disabled={!canRun || run.isPending}
+          disabled={!canRun || run.isPending || confirming}
           title={TRANSLATED.has(props.status ?? "") ? undefined : "Dùng được khi chương đã dịch"}
-          onClick={() => run.mutate()}
+          onClick={openConfirm}
         >
           {running ? "Đang hiệu đính…" : items.length || job ? "Hiệu đính lại cả chương" : "Chạy AI hiệu đính"}
         </button>
@@ -150,6 +178,44 @@ export function ProofreadPanel(props: {
           </span>
         )}
       </div>
+      {confirming && (
+        <section
+          ref={confirmRef}
+          tabIndex={-1}
+          className="notice info cw-pad cw-proofread-confirm"
+          aria-label="Xác nhận chạy AI hiệu đính"
+        >
+          <strong>Trước khi chạy AI hiệu đính</strong>
+          {estimate.isPending ? (
+            <p className="muted small">Đang ước tính…</p>
+          ) : estimate.isError ? (
+            <p className="small">Chưa ước tính được ({errorMessage(estimate.error)}). Vẫn có thể chạy.</p>
+          ) : (
+            <ul className="small">
+              {estimateLines(estimate.data).map((line) => (
+                <li key={line}>{line}</li>
+              ))}
+            </ul>
+          )}
+          <p className="small">{PROOFREAD_DATA_NOTICE}</p>
+          <div className="row">
+            <button
+              type="button"
+              className="btn-primary"
+              disabled={!canRun || run.isPending || estimate.isPending || estimate.data?.pages === 0}
+              onClick={() => {
+                setConfirming(false);
+                run.mutate();
+              }}
+            >
+              Chạy hiệu đính
+            </button>
+            <button type="button" className="btn-ghost" onClick={() => setConfirming(false)}>
+              Huỷ
+            </button>
+          </div>
+        </section>
+      )}
       {[run.error, dismiss.error, q.error].filter(Boolean).map((e) => (
         <p key={String(e)} className="notice danger cw-pad" role="alert">
           {errorMessage(e)}

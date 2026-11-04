@@ -127,4 +127,31 @@ describe("chapter.proofread", () => {
     expect(view.job.id).toBe(newer.id);
     expect(view.suggestions.map((s) => s.suggestion)).toEqual(["Bản của lượt mới"]);
   });
+
+  it("ước tính: user mới dùng hằng số mặc định; sau lượt thành công dùng token trung bình theo trang của chính user", async () => {
+    type Est = {
+      pages: number;
+      model: string | null;
+      price_known: boolean;
+      usd: { low: number; high: number };
+      seconds: { low: number; high: number };
+      basis: string;
+    };
+    const B = await seedUser("proofread-estimate");
+    const asB = (path: string) => call(`/api${path}`, { cookie: B.cookie });
+    // Chương của user khác → 404 (không lộ số trang).
+    expect((await asB(`/chapters/${A.chapterId}/proofread/estimate`)).status).toBe(404);
+
+    const fresh = (await (await asB(`/chapters/${B.chapterId}/proofread/estimate`)).json()) as Est;
+    expect(fresh).toMatchObject({ pages: 0, model: null, price_known: false, basis: "default" });
+    expect(fresh.usd).toEqual({ low: 0, high: 0 });
+
+    // A đã có lượt thành công (usage 1000 vào / 200 ra mỗi lượt) → theo lịch sử, khoảng > 0 và low < high.
+    const est = (await (await api(`/chapters/${A.chapterId}/proofread/estimate`)).json()) as Est;
+    expect(est.basis).toBe("history");
+    expect(est.pages).toBe(2);
+    expect(est.usd.low).toBeGreaterThan(0);
+    expect(est.usd.low).toBeLessThan(est.usd.high);
+    expect(est.seconds.low).toBeLessThanOrEqual(est.seconds.high);
+  });
 });

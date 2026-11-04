@@ -1005,6 +1005,15 @@ label.cw-field-head {
   display: flex;
   flex-direction: column;
 }
+.cw-proofread-confirm {
+  display: grid;
+  gap: 6px;
+}
+.cw-proofread-confirm ul {
+  margin: 0;
+  padding-left: 18px;
+}
+
 .cw-proofread-list {
   list-style: none;
   margin: 0;

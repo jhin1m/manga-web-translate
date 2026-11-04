@@ -2,7 +2,7 @@
 import type { PageState, SourceSkipReason } from "@mtl/shared";
 import { api } from "../../lib/api.ts";
 import type { ChapterStatus, ChapterSummary } from "../series/api.ts";
-import type { Suggestion } from "./proofread-model.ts";
+import type { ProofreadEstimate, Suggestion } from "./proofread-model.ts";
 import type { PageStatus } from "./status.ts";
 
 export type JobView = {
@@ -164,6 +164,7 @@ export const retranslate = (ch: string, pageIds?: string[]) =>
 export type ProofreadView = { job: JobView | null; suggestions: Suggestion[] };
 export const proofreadKey = (ch: string) => ["chapter", ch, "proofread"] as const;
 export const fetchProofread = (ch: string) => api<ProofreadView>(base(ch, "/proofread"));
+export const fetchProofreadEstimate = (ch: string) => api<ProofreadEstimate>(base(ch, "/proofread/estimate"));
 export const runProofread = (ch: string) =>
   api<{ job: JobView; created: boolean }>(base(ch, "/proofread"), { method: "POST" });
 export const dismissSuggestion = (id: string, dismissed = true) =>

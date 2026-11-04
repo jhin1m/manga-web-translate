@@ -6,6 +6,7 @@ import { chapters, jobs, proofreadSuggestions } from "@mtl/db";
 import { and, eq, isNull, type SQL, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { z } from "zod";
+import { estimateProofread } from "../billing/proofread-estimate.ts";
 import { assertQuota } from "../billing/user-quota.ts";
 import { enqueueProofread, inJobTx } from "../jobs/enqueue.ts";
 import { parseJson } from "../lib/validate.ts";
@@ -21,6 +22,12 @@ proofreadRoutes.post("/chapters/:chapterId/proofread", async (c) => {
     return enqueueProofread(tx, c.get("userId"), ch.id);
   });
   return c.json({ job: jobView(job), created }, 202);
+});
+
+/** Ước tính trước khi chạy: số trang, model, khoảng USD + thời gian (người dùng xác nhận rồi mới POST). */
+proofreadRoutes.get("/chapters/:chapterId/proofread/estimate", async (c) => {
+  const ch = await c.get("sdb").byId(chapters, c.req.param("chapterId"), "chapter");
+  return c.json(await inJobTx((tx) => estimateProofread(tx, c.get("userId"), ch.id)));
 });
 
 /** Lần hiệu đính gần nhất của chương (null = chưa chạy) + gợi ý chưa bỏ. */

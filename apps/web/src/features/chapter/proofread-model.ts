@@ -59,3 +59,47 @@ export function sortSuggestions<T extends Pick<Suggestion, "page_id" | "region_i
     return pa - pb || ra - rb;
   });
 }
+
+/** Ước tính trước khi chạy (GET /chapters/:id/proofread/estimate). */
+export type ProofreadEstimate = {
+  pages: number;
+  provider: string | null;
+  model: string | null;
+  price_known: boolean;
+  usd: { low: number; high: number };
+  seconds: { low: number; high: number };
+  basis: "history" | "default";
+};
+
+const usd = (v: number) => `$${v < 0.1 ? v.toFixed(3) : v.toFixed(2)}`;
+
+/** "$0.012 – $0.050"; quá nhỏ → "dưới $0.01". */
+export function fmtUsdRange(r: { low: number; high: number }): string {
+  if (r.high < 0.01) return "dưới $0.01";
+  return `${usd(r.low)} – ${usd(r.high)}`;
+}
+
+/** "khoảng 2–7 phút"; ngắn → "dưới 1 phút". */
+export function fmtDurationRange(r: { low: number; high: number }): string {
+  const lo = Math.max(1, Math.round(r.low / 60));
+  const hi = Math.max(1, Math.round(r.high / 60));
+  if (r.high < 60) return "dưới 1 phút";
+  return lo === hi ? `khoảng ${hi} phút` : `khoảng ${lo}–${hi} phút`;
+}
+
+/** Luôn hiện trong hộp xác nhận (kể cả khi ước tính đang tải / lỗi): dữ liệu gửi lên nhà cung cấp AI. */
+export const PROOFREAD_DATA_NOTICE =
+  "Gửi lên nhà cung cấp AI: ảnh từng trang (thu nhỏ) + chữ gốc, bản dịch, glossary, quy tắc xưng hô.";
+
+/** Các dòng ước tính trước khi chạy hiệu đính (trang, model, giá, thời gian, cơ sở ước tính). */
+export function estimateLines(e: ProofreadEstimate): string[] {
+  const model = e.model ? `${e.provider ?? "?"} · ${e.model}` : "model mặc định của worker (chưa gán slot Hiệu đính)";
+  return [
+    `${e.pages} trang · ${model}`,
+    `Chi phí ước tính: ${fmtUsdRange(e.usd)}${e.price_known ? "" : " (tính theo giá cao nhất vì chưa gán model)"}`,
+    `Thời gian ước tính: ${fmtDurationRange(e.seconds)}, chưa tính thời gian chờ hàng đợi`,
+    e.basis === "history"
+      ? "Ước tính theo các lượt hiệu đính gần đây của bạn."
+      : "Ước tính sơ bộ (chưa có lượt hiệu đính nào để so) — chi phí thật có thể khác.",
+  ];
+}

@@ -26,6 +26,11 @@ test("run AI proofread, accept a suggestion through the normal edit path, undo, 
   await expect(page.locator(".ed-canvas canvas").first()).toBeVisible();
   const panel = await openPanel(page, "proofread");
   await panel.getByRole("button", { name: "Chạy AI hiệu đính" }).click();
+  // Xác nhận trước khi chạy: thấy ước tính trang / chi phí / ảnh gửi lên AI.
+  const confirm = panel.getByRole("region", { name: "Xác nhận chạy AI hiệu đính" });
+  await expect(confirm).toContainText("Chi phí ước tính");
+  await expect(confirm).toContainText("ảnh từng trang");
+  await confirm.getByRole("button", { name: "Chạy hiệu đính" }).click();
 
   let stop = false;
   const worker = runFakeWorker(state.token, () => stop, 30_000, { capabilities: ["chapter.proofread"] });
