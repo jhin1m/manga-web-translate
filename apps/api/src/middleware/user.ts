@@ -25,6 +25,10 @@ export type AppEnv = { Variables: UserVars };
 export const requireUser = createMiddleware<AppEnv>(async (c, next) => {
   const s = await auth.api.getSession({ headers: c.req.raw.headers });
   if (!s) throw new HTTPException(401, { message: "unauthenticated" });
+  // Phiên còn sót sau khi khoá (race giữa đặt cờ và xoá phiên).
+  if (s.user.disabledAt) {
+    throw new HTTPException(403, { res: Response.json({ error: "user_disabled" }, { status: 403 }) });
+  }
   const tab = c.req.header(TAB_ID_HEADER);
   c.set("user", s.user);
   c.set("session", s.session);

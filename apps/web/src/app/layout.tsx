@@ -13,6 +13,11 @@ export function AuthGate() {
   const path = useRouterState({ select: (s) => s.location.href });
   const [devTried, setDevTried] = useState(!import.meta.env.DEV);
 
+  // Đã có phiên rồi mất giữa chừng (hết hạn, bị khoá) → màn đăng nhập, không tự đăng nhập lại bằng tài khoản dev.
+  useEffect(() => {
+    if (session) setDevTried(true);
+  }, [session]);
+
   useEffect(() => {
     if (!import.meta.env.DEV || isPending || session || devTried) return;
     let alive = true;

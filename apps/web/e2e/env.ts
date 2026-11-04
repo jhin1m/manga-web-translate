@@ -15,6 +15,12 @@ export const E2E_DATABASE_URL = process.env.E2E_DATABASE_URL ?? "postgres://mtl:
 /** Người dùng seed (seed.ts) — cũng là tài khoản dev auto-login của API e2e. */
 export const E2E_OWNER = { email: "owner-e2e@example.com", password: "e2e-password-123" };
 
+/** Người dùng thường (không thuộc ADMIN_EMAILS) — kiểm quyền admin. Seed trực tiếp, không đăng ký qua UI. */
+export const E2E_PLAIN = { email: "plain-e2e@example.com", password: "e2e-password-123" };
+
+/** Người dùng thường để admin khoá / mở trong e2e (không dùng chung với spec khác). */
+export const E2E_VICTIM = { email: "victim-e2e@example.com", password: "e2e-password-123" };
+
 export const E2E_ENV = {
   DATABASE_URL: E2E_DATABASE_URL,
   API_PORT: String(API_PORT),
@@ -23,6 +29,10 @@ export const E2E_ENV = {
   // Dev auto-login = owner seed (ghi đè DEV_AUTO_LOGIN_* của .env dev; loadRootEnv chỉ nạp biến chưa đặt).
   DEV_AUTO_LOGIN_EMAIL: E2E_OWNER.email,
   DEV_AUTO_LOGIN_PASSWORD: E2E_OWNER.password,
+  // Owner seed là admin duy nhất.
+  ADMIN_EMAILS: E2E_OWNER.email,
+  // Khoá mã hoá key provider AI (cố định cho e2e, không lấy từ .env dev).
+  SECRETS_KEY: "CQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQk=",
   // Mở đăng ký cho signup.spec (bật thì bắt buộc 2 hạn mức; đặt cao để không chặn job của worker giả).
   SIGNUP_ENABLED: "true",
   GLOBAL_DAILY_USD: "1000",
@@ -31,4 +41,11 @@ export const E2E_ENV = {
 
 export const STATE_FILE = fileURLToPath(new URL("./.state.json", import.meta.url));
 
-export type E2EState = { userId: string; seriesId: string; email: string; password: string; token: string };
+export type E2EState = {
+  userId: string;
+  seriesId: string;
+  email: string;
+  password: string;
+  token: string;
+  plain: { email: string; password: string };
+};

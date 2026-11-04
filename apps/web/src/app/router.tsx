@@ -3,7 +3,7 @@
  * props — không import ngược router.
  *
  * Đích: `/` (home), `/s/$seriesId[?tab]`, `/s/$seriesId/c/$chapterId[?page&drawer]`, `/glossary[?src&tgt]`,
- * `/settings[?tab]`, `/login`. Mỗi người một tài khoản → không có id tài khoản trên URL.
+ * `/settings[?section]` (admin), `/fonts`, `/login`. Mỗi người một tài khoản → không có id tài khoản trên URL.
  *
  * Màn chương (= editor gộp, `chapterRoute`) nằm dưới `authedRoute` nhưng NGOÀI `shellRoute` → chiếm toàn màn hình,
  * không có thanh trên của app shell.
@@ -11,10 +11,12 @@
 import { QueryClient } from "@tanstack/react-query";
 import { createRootRouteWithContext, createRoute, createRouter, Link, Outlet } from "@tanstack/react-router";
 import { lazy, Suspense } from "react";
+import { type AdminSection, parseSection, validSection } from "../features/admin/admin-sections.ts";
 import { GlossaryPage } from "../features/glossary/glossary-editor.tsx";
 import { HomePage } from "../features/home/home-page.tsx";
 import { SOURCE_LANGS, type SourceLang, TARGET_LANGS, type TargetLang } from "../features/series/lang-labels.ts";
 import { SeriesPage } from "../features/series/series-page.tsx";
+import { FontsPage } from "../routes/fonts.tsx";
 import { LoginPage } from "../routes/login.tsx";
 import { SettingsPage } from "../routes/settings.tsx";
 import { AppShell } from "./app-shell.tsx";
@@ -41,7 +43,14 @@ export const rootRoute = createRootRouteWithContext<RouterContext>()({
   ),
 });
 
-const loginRoute = createRoute({ getParentRoute: () => rootRoute, path: "login", component: () => <LoginPage /> });
+const loginRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "login",
+  // `reason=disabled`: vừa bị đăng xuất vì tài khoản bị khoá (xem `api()`).
+  validateSearch: (search: Record<string, unknown>): { reason?: "disabled" } =>
+    search.reason === "disabled" ? { reason: "disabled" } : {},
+  component: () => <LoginPage reason={loginRoute.useSearch().reason} />,
+});
 
 /** Mọi route cần đăng nhập. */
 export const authedRoute = createRoute({ getParentRoute: () => rootRoute, id: "authed", component: AuthGate });
@@ -117,19 +126,24 @@ const glossaryRoute = createRoute({
 export const settingsRoute = createRoute({
   getParentRoute: () => shellRoute,
   path: "settings",
-  // `tab=pipeline`: tab Pipeline; không có = tab Font.
-  validateSearch: (search: Record<string, unknown>): { tab?: "pipeline" } =>
-    search.tab === "pipeline" ? { tab: "pipeline" } : {},
+  // `section`: mục Cài đặt admin; thiếu/lạ = mục đầu.
+  validateSearch: (search: Record<string, unknown>): { section?: AdminSection } => {
+    const section = validSection(search.section);
+    return section ? { section } : {};
+  },
   component: function SettingsRoute() {
-    const { tab } = settingsRoute.useSearch();
-    return <SettingsPage tab={tab ?? "fonts"} />;
+    const { section } = settingsRoute.useSearch();
+    return <SettingsPage section={parseSection(section)} />;
   },
 });
+
+/** Font của tôi (font tuỳ chỉnh cá nhân). */
+const fontsRoute = createRoute({ getParentRoute: () => shellRoute, path: "fonts", component: FontsPage });
 
 export const routeTree = rootRoute.addChildren([
   loginRoute,
   authedRoute.addChildren([
-    shellRoute.addChildren([homeRoute, seriesRoute, glossaryRoute, settingsRoute]),
+    shellRoute.addChildren([homeRoute, seriesRoute, glossaryRoute, settingsRoute, fontsRoute]),
     chapterRoute,
   ]),
 ]);

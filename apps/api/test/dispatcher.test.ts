@@ -4,7 +4,7 @@
  * no_claim + backoff, scale-up khi hàng đợi cũ, dừng khi hết ngân sách; sessions/end → gpu_idle_seconds
  * (chi phí nền tảng, khử trùng theo dispatch); reaper ước lượng container bị kill; /healthz.
  */
-import { dispatches, jobs, runtimeFlags, usageLedger, workerTokens } from "@mtl/db";
+import { dispatches, jobs, runtimeFlags, usageLedger, user, workerTokens } from "@mtl/db";
 import { and, eq, isNotNull, sql } from "drizzle-orm";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { GPU_USD_PER_S } from "../src/billing/prices.ts";
@@ -87,6 +87,15 @@ describe("dispatch decisions", () => {
     expect((await dispatchTick(fakeDrain)).reason).toBe("idle");
     expect(calls).toEqual([]);
     env.USER_DAILY_USD = undefined;
+    expect((await dispatchTick(fakeDrain)).reason).toBe("first");
+  });
+
+  it("jobs of a disabled user do not start Modal; enabling the user lets them run", async () => {
+    const S = await queuedUser("ddisabled");
+    await db.update(user).set({ disabledAt: new Date() }).where(eq(user.id, S.userId));
+    expect((await dispatchTick(fakeDrain)).reason).toBe("idle");
+    expect(calls).toEqual([]);
+    await db.update(user).set({ disabledAt: null }).where(eq(user.id, S.userId));
     expect((await dispatchTick(fakeDrain)).reason).toBe("first");
   });
 
@@ -304,5 +313,16 @@ describe("HMAC + healthz", () => {
       .set({ updatedAt: sql`now() - interval '5 minutes'` })
       .where(eq(runtimeFlags.key, "runner_heartbeat"));
     expect((await app.request("/healthz")).status).toBe(503);
+  });
+
+  it("/healthz: queued jobs of a disabled user do not count as an old queue", async () => {
+    await db.insert(runtimeFlags).values({ key: "runner_heartbeat", value: { pid: 1 } });
+    const S = await queuedUser("hdisabled");
+    await ageJobs(2000);
+    const age = async () =>
+      ((await (await app.request("/healthz")).json()) as { oldest_queued_age_s: number | null }).oldest_queued_age_s;
+    expect(await age()).toBeGreaterThanOrEqual(2000);
+    await db.update(user).set({ disabledAt: new Date() }).where(eq(user.id, S.userId));
+    expect(await age()).toBeNull();
   });
 });

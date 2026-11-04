@@ -21,6 +21,7 @@ export const user = pgTable("user", {
     .defaultNow()
     .$onUpdate(() => /* @__PURE__ */ new Date())
     .notNull(),
+  disabledAt: timestamp("disabled_at"),
 });
 
 export const session = pgTable(

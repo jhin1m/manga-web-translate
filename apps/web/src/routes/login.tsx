@@ -10,23 +10,26 @@ import { authClient } from "../lib/api.ts";
 type Mode = "signin" | "signup";
 type AuthError = { status?: number; code?: string; message?: string } | null;
 
+const DISABLED_TEXT = "Tài khoản đã bị khoá.";
+
 /** Lỗi better-auth → câu cho người dùng. */
 function describe(err: NonNullable<AuthError>, mode: Mode): string {
   if (err.status === 429) return "Thử lại sau ít phút.";
   if (err.code === "EMAIL_PASSWORD_SIGN_UP_DISABLED") return "Hiện chưa mở đăng ký.";
+  if (err.code === "USER_DISABLED") return DISABLED_TEXT;
   if (err.code === "PASSWORD_TOO_SHORT") return "Mật khẩu cần ít nhất 10 ký tự.";
   if (mode === "signin") return "Sai email hoặc mật khẩu.";
   return err.message || "Không đăng ký được.";
 }
 
-export function LoginPage({ next = "/" }: { next?: string }) {
+export function LoginPage({ next = "/", reason }: { next?: string; reason?: "disabled" }) {
   const router = useRouter();
   const queryClient = useQueryClient();
   const [mode, setMode] = useState<Mode>("signin");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(reason === "disabled" ? DISABLED_TEXT : null);
   const [busy, setBusy] = useState(false);
   const signup = mode === "signup";
 

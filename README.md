@@ -1,9 +1,9 @@
 # Manga Web Translate
 
-Web app dịch manga/manhwa, mỗi người một tài khoản riêng (đăng ký mở được bằng `SIGNUP_ENABLED`, mặc định tắt): thả ảnh hoặc ZIP một chương → hệ thống ghép/cắt trang, xoá chữ +
+Web app dịch manga/manhwa, mỗi người một tài khoản riêng (đăng ký mở được bằng `SIGNUP_ENABLED` hoặc công tắc trong Cài đặt admin — giá trị trên UI thắng env —, mặc định tắt): thả ảnh hoặc ZIP một chương → hệ thống ghép/cắt trang, xoá chữ +
 OCR, dịch theo lô trang (giữ ngữ cảnh giữa các lô) + tự chèn chữ → sửa tay trong editor → xuất ZIP/CBZ.
 
-> Trạng thái: **MVP nội bộ** (Phase 1–7 xong). Production chưa mở đăng ký công khai (`SIGNUP_ENABLED=false`), chưa đo chất lượng/chi phí trên dữ liệu thật
+> Trạng thái: **MVP nội bộ** (Phase 1–7 xong). Production chưa mở đăng ký công khai (`SIGNUP_ENABLED=false`, và admin chưa bật trên UI), chưa đo chất lượng/chi phí trên dữ liệu thật
 > — xem [Việc còn lại](#việc-còn-lại).
 
 ## Tính năng hiện có
@@ -27,7 +27,7 @@ OCR, dịch theo lô trang (giữ ngữ cảnh giữa các lô) + tự chèn ch�
 - **Series**: ngôn ngữ nguồn `ko | ja | zh | en` → đích `vi | en | id | es | pt | fr`, định dạng strip / từng trang,
   kính ngữ, quy tắc xưng hô, giọng văn, font mặc định theo loại chữ (dropdown xem trước bằng chính font đó),
   model Standard / Premium.
-- **Cài đặt pipeline** (Cài đặt chung → Pipeline; nhãn tiếng Việt + thuật ngữ gốc + tooltip): detector
+- **Cài đặt pipeline** (`/settings` → Pipeline chung, chỉ admin; áp cho cả hệ thống; nhãn tiếng Việt + thuật ngữ gốc + tooltip): detector
   (RT-DETR v2 comic / Comic Text Detector), OCR engine theo ngôn ngữ nguồn (AI LLM / **MangaOCR** cho tiếng Nhật /
   **PaddleOCR** cho Hàn–Trung–Nhật–Anh, cả hai chạy local bằng ONNX, không tốn token, không tính ngân sách), model xoá
   chữ (Big LaMa / **LaMa manga**), model AI hiệu đính (Standard / Premium); "Nâng cao": ngưỡng tin cậy, nới mask, cỡ
@@ -36,9 +36,13 @@ OCR, dịch theo lô trang (giữ ngữ cảnh giữa các lô) + tự chèn ch�
   giọng văn của series + ảnh trang) → gợi ý theo khối (cũ → mới, lý do), Nhận / Bỏ từng cái, "Nhận tất cả" ở trang
   đang mở. Không tự ghi đè: Nhận = sửa bản dịch thường (hoàn tác, autosave, version); khối đã sửa khác → "Lỗi thời".
 - **Tài khoản**: một người = một tài khoản, dữ liệu (series, glossary, font, cài đặt) riêng từng người. Đăng ký email /
-  mật khẩu ở `/login` khi `SIGNUP_ENABLED=true`; tắt thì tạo tài khoản bằng `pnpm create-user`. Hạn mức chi phí AI mỗi
-  người mỗi ngày (`USER_DAILY_USD`, hiện ở Cài đặt chung). Font tuỳ chỉnh TTF/OTF upload ở Cài đặt chung hoặc ngay
-  trong dropdown font mặc định của series, dùng trong editor, font mặc định series, auto-typeset và bản xuất.
+  mật khẩu ở `/login` khi đăng ký đang mở (`SIGNUP_ENABLED` hoặc admin bật ở Cài đặt › Hạn mức & đăng ký); tắt thì tạo tài khoản bằng `pnpm create-user`. Hạn mức chi phí AI mỗi
+  người mỗi ngày (`USER_DAILY_USD` là mặc định, admin đổi trên UI; hiện ở menu tài khoản). Font tuỳ chỉnh TTF/OTF của riêng mình upload ở `/fonts` hoặc ngay
+  trong dropdown font mặc định của series (font hệ thống do admin tải lên cho mọi người dùng), dùng trong editor, font mặc định series, auto-typeset và bản xuất.
+- **Admin** (email trong `ADMIN_EMAILS`; người khác vào `/settings` bị đưa về `/`): `/settings` có Pipeline chung, Nhà cung cấp AI
+  (Anthropic / Gemini / OpenAI / OpenAI-compatible; key mã hoá AES-256-GCM bằng `SECRETS_KEY`), Model tác vụ (gán model cho
+  dịch / OCR / hiệu đính, chụp vào job lúc claim), Hạn mức & đăng ký, Người dùng (khoá / mở tài khoản), Font hệ thống —
+  vận hành xem [deployment-guide.md](./docs/deployment-guide.md), giao thức claim ở [job-queue-worker.md](./docs/job-queue-worker.md).
 - **Glossary**: chung theo cặp ngôn ngữ + riêng series, CSV, áp glossary hàng loạt; tìm & thay có hoàn tác.
 - **Xuất**: drawer một nút "Tải chương" (xong tự tải): ảnh trong .zip để đăng web hoặc .cbz (chất lượng Gốc / Cao / Nhẹ),
   chia ảnh như lúc tải lên hoặc theo trang đã cắt; cảnh báo trước khi xuất nói rõ hậu quả (trang chưa dịch không có trong
@@ -50,7 +54,7 @@ OCR, dịch theo lô trang (giữ ngữ cảnh giữa các lô) + tự chèn ch�
 
 | Thư mục | Vai trò |
 |---|---|
-| `apps/api` | Hono (Node 24), better-auth, route người dùng `/api/*` (`requireUser`, dữ liệu lọc theo `user_id`), API worker `/worker/v1/*` |
+| `apps/api` | Hono (Node 24), better-auth, route người dùng `/api/*` (`requireUser`, dữ liệu lọc theo `user_id`), route admin `/api/admin/*` (`requireAdmin`, `ADMIN_EMAILS`), API worker `/worker/v1/*` |
 | `apps/web` | Vite + React SPA, TanStack Router/Query, zustand, react-konva |
 | `packages/db` | Drizzle schema + migration (có down viết tay), `scoped(db, userId)` cô lập dữ liệu theo người dùng |
 | `packages/shared` | Hợp đồng zod dùng chung (page state, job, giao thức worker) → JSON Schema cho worker |
@@ -136,18 +140,17 @@ Mọi test tự động hiện dùng worker giả lập; chưa có số đo vớ
 - [ ] **Deploy**: chạy migration mới (`0009_series_skip_images`, `0010_series_ignore_text`,
       `0011_pages_skip_changed_at`, `0012_workspace_fonts`, `0013_workspace_pipeline_settings`,
       `0014_proofread_suggestions`, `0015_single_user_guard_worker_kind`, `0016_drop_workspaces`,
-      `0017_user_ownership`, `0018_auth_error_class`, `0019_jobs_progress_counts`, `0020_translate_chain`) — 0015 từ chối chạy nếu còn dữ liệu workspace nên **bắt buộc reset DB + MinIO và tạo lại
-      token worker** theo "Checklist release single-user-accounts" ở `docs/deployment-guide.md`; worker Mac/Modal phải lên pipeline **0.7.1** (căn giữa dọc `valign`; gồm dịch theo lô `carry` của 0.7.0, cài đặt pipeline,
-      OCR local, AI hiệu đính của 0.6.0) **trước** khi deploy API (`MIN_PIPELINE_VERSION` 0.7.1, worker cũ nhận 426), không thì
-      hàng đợi dừng; rollback về 0.6.0 phải huỷ job dịch còn chờ có `carry` trước; chương manga đang cắt trang / xoá chữ lúc
+      `0017_user_ownership`, `0018_auth_error_class`, `0019_jobs_progress_counts`, `0020_translate_chain`, `0021_system_settings`, `0022_ai_providers`, `0023_drop_series_llm_tier`, `0024_user_disabled_at`, `0025_system_fonts`) — 0015 từ chối chạy nếu còn dữ liệu workspace nên **bắt buộc reset DB + MinIO và tạo lại
+      token worker** theo "Checklist release single-user-accounts" ở `docs/deployment-guide.md`; worker Mac/Modal phải lên pipeline **0.10.0** (key AI theo job qua claim, provider OpenAI / OpenAI-compatible; gồm mọi bản 0.6–0.9) **trước** khi deploy API (`MIN_PIPELINE_VERSION` 0.10.0, worker cũ nhận 426); `.env` API cần `SECRETS_KEY` + `ADMIN_EMAILS` — xem "Checklist nâng cấp lên pipeline 0.10.0" ở `docs/deployment-guide.md`, không thì
+      hàng đợi dừng; chương manga đang cắt trang / xoá chữ lúc
       deploy sẽ dừng ở "Chờ dịch" (bấm "Dịch chương" để tiếp) — xem "Checklist nâng cấp lên pipeline 0.7.0" ở `docs/deployment-guide.md` (API deploy trước hoặc cùng web: web mới cần `ocr_ready` trong `/progress`); tải model optional mới
       (`fetch_models.py`) vào volume Modal; VPS cần dựng được addon `re2` — xem checklist ở
       `docs/deployment-guide.md` mục 4.
 - [ ] **Rà giấy phép** trước khi thương mại hoá / công khai rộng: MVP được dùng code + model + font mở bất kể license
       (GPL/AGPL…); repo chưa có file `LICENSE`.
-- [ ] **Phase 8 — trước khi mở đăng ký công khai ở production** (`SIGNUP_ENABLED` giữ `false` tới lúc này): xác thực
-      email, hạn mức dung lượng lưu trữ mỗi người, BYOK, admin nền tảng, takedown, ToS. (Hạn mức chi phí AI mỗi người
-      `USER_DAILY_USD` → 402 đã có.)
+- [ ] **Phase 8 — trước khi mở đăng ký công khai ở production** (`SIGNUP_ENABLED` giữ `false` và admin không bật trên UI tới lúc này): xác thực
+      email, hạn mức dung lượng lưu trữ mỗi người, BYOK, takedown, ToS. (Hạn mức chi phí AI mỗi người
+      `USER_DAILY_USD` → 402 và admin nền tảng một phần — Cài đặt, danh sách người dùng, khoá / mở tài khoản — đã có.)
 - [ ] **Phase 9 — Chrome extension** (phác thảo, sau MVP).
 
 ### Chức năng còn thiếu
@@ -170,5 +173,5 @@ Mọi test tự động hiện dùng worker giả lập; chưa có số đo vớ
 - PaddleOCR với chữ dọc (ja/zh) tách cột theo hình chiếu mực — cột sát nhau / chữ nhỏ trên nền art có thể đọc sai
   hoặc rỗng (→ "Cần soát"); manga tiếng Nhật nên dùng MangaOCR.
 - Bóng thoại bán trong suốt / chữ có viền trắng dày: nới mask mặc định (2–6px) còn để vệt viền — tăng "Nới mask" ở
-  Cài đặt chung → Pipeline → Nâng cao (VD 10–12px).
+  Cài đặt → Pipeline chung → Nâng cao (VD 10–12px).
 - Free-tier Gemini hết hạn mức → job tự thử lại tới ~4 giờ trước khi báo lỗi.

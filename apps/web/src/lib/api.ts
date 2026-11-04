@@ -1,4 +1,4 @@
-import { type PipelineSettings, QUOTA_EXCEEDED } from "@mtl/shared";
+import { QUOTA_EXCEEDED } from "@mtl/shared";
 import { createAuthClient } from "better-auth/react";
 
 export const authClient = createAuthClient({ basePath: "/api/auth" });
@@ -34,6 +34,27 @@ export class ApiError extends Error {
   }
 }
 
+/** Đường về màn đăng nhập kèm lý do khi tài khoản bị khoá giữa chừng. */
+export const DISABLED_LOGIN_PATH = "/login?reason=disabled";
+
+/** Tác động lên phiên khi API báo phiên không dùng được (tách ra để test thay được). */
+export const sessionEffects = {
+  refetchSession: () => authClient.$store.notify("$sessionSignal"),
+  signOut: () => authClient.signOut(),
+  goto: (path: string) => window.location.assign(path),
+};
+
+/**
+ * Phản hồi cho phiên không còn dùng được: 401 → báo better-auth lấy lại phiên (AuthGate hiện màn đăng nhập ngay, không
+ * cần reload / focus); 403 `user_disabled` (phiên sót lại sau khi khoá) → đăng xuất rồi về màn đăng nhập kèm lý do.
+ */
+function onSessionLost(status: number, data: Record<string, unknown>) {
+  if (status === 401) sessionEffects.refetchSession();
+  else if (status === 403 && data.error === "user_disabled") {
+    void sessionEffects.signOut().finally(() => sessionEffects.goto(DISABLED_LOGIN_PATH));
+  }
+}
+
 /** Gọi API JSON cùng origin; lỗi HTTP → ApiError. 204 → undefined. */
 export async function api<T>(path: string, init: Omit<RequestInit, "body"> & { body?: unknown } = {}): Promise<T> {
   const { body, ...rest } = init;
@@ -50,6 +71,7 @@ export async function api<T>(path: string, init: Omit<RequestInit, "body"> & { b
   if (res.status === 204) return undefined as T;
   const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
   if (!res.ok) {
+    onSessionLost(res.status, data);
     const msg = typeof data.message === "string" ? data.message : typeof data.error === "string" ? data.error : "";
     throw new ApiError(res.status, msg || res.statusText, data);
   }
@@ -59,12 +81,12 @@ export async function api<T>(path: string, init: Omit<RequestInit, "body"> & { b
 /** Hạn mức chi phí hôm nay (`limit_usd` null = không giới hạn). */
 export type Quota = { spent_usd: number; limit_usd: number | null; resets_at: string };
 
-/** `GET /api/me`: người đang đăng nhập + cài đặt chung + hạn mức hôm nay. */
+/** `GET /api/me`: người đang đăng nhập + quyền admin + hạn mức hôm nay. */
 export type Me = {
   id: string;
   email: string;
   name: string;
-  settings: { pipeline: PipelineSettings };
+  is_admin: boolean;
   quota: Quota;
 };
 
