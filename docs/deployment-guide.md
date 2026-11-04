@@ -249,6 +249,18 @@ worker; job `auto_text_bbox` còn xếp hàng lúc đó sẽ fail hợp đồng 
    (`pnpm worker-token revoke`) và đổi key ở provider; bật giới hạn chi tiêu phía provider cho mọi key nhập vào.
 7. Sau một phiên bản ổn định: bỏ `model_tier` / `proofread_tier` legacy (cấp hiệu đính cũ chỉ còn dùng khi chưa gán slot Hiệu đính).
 
+### Checklist OCR local mặc định (MangaOCR / PaddleOCR)
+
+1. **Model OCR local giờ nằm trên đường mặc định** (`ja` → MangaOCR ~460MB, `ko`/`zh`/`en` → PaddleOCR ~45MB). Trước khi
+   deploy API: `uv run python scripts/fetch_models.py` (KHÔNG `--required`) → `modal volume put mtl-models models/ /`
+   và kiểm worker Mac có đủ file trong `worker/models/`. Thiếu trên volume → mỗi container Modal lạnh tự tải giữa job.
+2. Cài đặt pipeline đã lưu (`system_settings.pipeline.ocr_engines`) thắng mặc định: hệ thống từng bấm Lưu ở mục
+   Pipeline sẽ giữ engine đã lưu — đổi trên UI nếu muốn OCR local.
+3. "Chạy lại trang lỗi" với trang lỗi bước 1 (hoặc rev OCR khác cài đặt hiện tại) chạy lại `page.prepare` theo cài đặt
+   **hiện tại** — trang OCR bằng LLM trước đây sẽ được OCR lại bằng engine local (như mọi lần đổi cài đặt pipeline).
+   Trang dịch xong không bị đụng.
+4. Kill-switch ngân sách / LLM tạm dừng không chặn `page.prepare` OCR local (không tốn token) — GPU vẫn chạy.
+
 Log: `journalctl -u mtl-api -o cat` (JSON mỗi request: method, path, status, ms — không query/header/body),
 `journalctl -u mtl-jobs`.
 

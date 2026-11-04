@@ -1,6 +1,6 @@
 /**
- * Form cài đặt dịch của series (chia nhóm Chung / Dịch / Font / Xưng hô): ngôn ngữ, định dạng truyện, kính ngữ, tier
- * model, giọng văn, chữ bỏ qua (watermark),
+ * Form cài đặt dịch của series (chia nhóm Chung / Dịch / Font / Xưng hô): ngôn ngữ, định dạng truyện, kính ngữ,
+ * giọng văn, chữ bỏ qua (watermark),
  * font mặc định (tải font của bạn ngay trong dropdown), quy tắc xưng hô theo cặp nhân vật. Server tăng settings_rev khi trường ảnh hưởng dịch đổi. Kèm vùng
  * xoá series. Dùng ở `?tab=settings` của màn series.
  */

@@ -11,8 +11,8 @@ OCR, dịch theo lô trang (giữ ngữ cảnh giữa các lô) + tự chèn ch�
 - **Upload**: thả ảnh lẻ / ZIP ở home hoặc màn series → tự đoán series + số chương, upload nền (song song, thử lại, tải
   tiếp sau khi đóng tab). Cột ảnh gốc hiện ngay khi đang tải; xoá / khôi phục và sắp lại thứ tự ảnh trước khi cắt trang
   (kéo-thả, menu chuột phải, Alt+↑/↓, có hoàn tác).
-- **Dịch chương một nút** ("Dịch chương"): ghép slice → cắt trang theo detector → xoá chữ (inpaint) + OCR (LLM hoặc
-  local, song song theo trang) → dịch theo chuỗi job lô (≤ 4 trang / 40 khối, tuần tự, ngữ cảnh + tên nhân vật chuyền giữa
+- **Dịch chương một nút** ("Dịch chương"): ghép slice → cắt trang theo detector → xoá chữ (inpaint) + OCR (mặc định
+  local, tuỳ chọn LLM; song song theo trang) → dịch theo chuỗi job lô (≤ 4 trang / 40 khối, tuần tự, ngữ cảnh + tên nhân vật chuyền giữa
   các lô) + auto-typeset theo hợp đồng layout dùng chung web ↔ server. Lô đầu chạy ngay khi có trang đã OCR nên trang đầu
   xong và sửa được trong khi các lô sau còn chạy; menu ⋯ "Chỉ xoá chữ + OCR (soát trước)" dừng ở "Chờ dịch". Chọn vài
   trang (⌘/Ctrl-click, Shift-click) để dịch riêng. Tiến độ từng trang bằng tiếng Việt (bước + số đếm, cập nhật vài giây).
@@ -25,22 +25,26 @@ OCR, dịch theo lô trang (giữ ngữ cảnh giữa các lô) + tự chèn ch�
   qua theo series (không gửi LLM, không chèn chữ; khớp bỏ qua dấu cách, mục `/regex/` chạy RE2 ở API); áp ngược danh
   sách cho chương đã dịch (xem trước → ẩn box → hoàn tác).
 - **Series**: ngôn ngữ nguồn `ko | ja | zh | en` → đích `vi | en | id | es | pt | fr`, định dạng strip / từng trang,
-  kính ngữ, quy tắc xưng hô, giọng văn, font mặc định theo loại chữ (dropdown xem trước bằng chính font đó),
-  model Standard / Premium.
+  kính ngữ, quy tắc xưng hô, giọng văn, font mặc định theo loại chữ (dropdown xem trước bằng chính font đó). Model AI
+  không chọn theo series — admin gán chung ở Cài đặt → Model tác vụ.
 - **Cài đặt pipeline** (`/settings` → Pipeline chung, chỉ admin; áp cho cả hệ thống; nhãn tiếng Việt + thuật ngữ gốc + tooltip): detector
   (RT-DETR v2 comic / Comic Text Detector), OCR engine theo ngôn ngữ nguồn (AI LLM / **MangaOCR** cho tiếng Nhật /
   **PaddleOCR** cho Hàn–Trung–Nhật–Anh, cả hai chạy local bằng ONNX, không tốn token, không tính ngân sách), model xoá
-  chữ (Big LaMa / **LaMa manga**), model AI hiệu đính (Standard / Premium); "Nâng cao": ngưỡng tin cậy, nới mask, cỡ
-  vùng xoá chữ. Mặc định = hành vi cũ; cài đặt được chụp vào job lúc chạy (xoá chữ + OCR, xoá chữ lại, OCR vùng tự vẽ).
+  chữ (Big LaMa / **LaMa manga**); "Nâng cao": ngưỡng tin cậy, nới mask, cỡ vùng xoá chữ. OCR mặc định chạy local
+  (MangaOCR cho tiếng Nhật, PaddleOCR cho Hàn / Trung / Anh — ảnh không rời worker); admin đổi về AI LLM theo từng ngôn
+  ngữ. Cài đặt được chụp vào job lúc chạy (xoá chữ + OCR, xoá chữ lại, OCR vùng tự vẽ).
 - **AI hiệu đính**: rail công cụ → "Hiệu đính" chạy cho cả chương đã dịch (bản dịch hiện tại + glossary + xưng hô /
   giọng văn của series + ảnh trang) → gợi ý theo khối (cũ → mới, lý do), Nhận / Bỏ từng cái, "Nhận tất cả" ở trang
   đang mở. Không tự ghi đè: Nhận = sửa bản dịch thường (hoàn tác, autosave, version); khối đã sửa khác → "Lỗi thời".
+  Trước khi chạy hiện hộp xác nhận: số trang, model, khoảng chi phí USD + thời gian (theo các lượt hiệu đính gần đây
+  của chính người dùng, chưa có thì số sơ bộ) và báo rõ ảnh trang + bản dịch được gửi lên nhà cung cấp AI.
 - **Tài khoản**: một người = một tài khoản, dữ liệu (series, glossary, font, cài đặt) riêng từng người. Đăng ký email /
   mật khẩu ở `/login` khi đăng ký đang mở (`SIGNUP_ENABLED` hoặc admin bật ở Cài đặt › Hạn mức & đăng ký); tắt thì tạo tài khoản bằng `pnpm create-user`. Hạn mức chi phí AI mỗi
   người mỗi ngày (`USER_DAILY_USD` là mặc định, admin đổi trên UI; hiện ở menu tài khoản). Font tuỳ chỉnh TTF/OTF của riêng mình upload ở `/fonts` hoặc ngay
   trong dropdown font mặc định của series (font hệ thống do admin tải lên cho mọi người dùng), dùng trong editor, font mặc định series, auto-typeset và bản xuất.
 - **Admin** (email trong `ADMIN_EMAILS`; người khác vào `/settings` bị đưa về `/`): `/settings` có Pipeline chung, Nhà cung cấp AI
-  (Anthropic / Gemini / OpenAI / OpenAI-compatible; key mã hoá AES-256-GCM bằng `SECRETS_KEY`), Model tác vụ (gán model cho
+  (Anthropic / Gemini / OpenAI / OpenAI-compatible, kèm mẫu **DeepSeek** tự điền base URL + gợi ý giá; key mã hoá
+  AES-256-GCM bằng `SECRETS_KEY`), Model tác vụ (gán model cho
   dịch / OCR / hiệu đính, chụp vào job lúc claim), Hạn mức & đăng ký, Người dùng (khoá / mở tài khoản), Font hệ thống —
   vận hành xem [deployment-guide.md](./docs/deployment-guide.md), giao thức claim ở [job-queue-worker.md](./docs/job-queue-worker.md).
 - **Glossary**: chung theo cặp ngôn ngữ + riêng series, CSV, áp glossary hàng loạt; tìm & thay có hoàn tác.
@@ -127,11 +131,13 @@ Mọi test tự động hiện dùng worker giả lập; chưa có số đo vớ
       so với dịch cả chương không tăng quá ~10% (`usage_ledger`); tên nhân vật nhất quán giữa các lô (`carry`).
 - [ ] **Luồng dịch với worker LLM thật**: watermark trong danh sách bỏ qua không vào prompt và không có box; trang ẩn
       không bị dịch; xuất `original_slices` khi có trang ẩn (mở zip kiểm số file / thứ tự).
-- [ ] **OCR local + LaMa manga + AI hiệu đính** (đã đo smoke trên 2 trang manga mẫu, xem
+- [ ] **OCR local (giờ là mặc định) + LaMa manga + AI hiệu đính** (đã đo smoke trên 2 trang manga mẫu, xem
       `plans/reports/overnight-261024-0028-local-ocr-manga-lama-proofread-report.md`): CER MangaOCR / PaddleOCR trên
-      golden set thật (KO strip cho PaddleOCR tiếng Hàn, JA trang cho MangaOCR); AI hiệu đính với LLM thật (chất lượng
-      gợi ý, chi phí/chương Standard vs Premium, giá Premium trong bảng giá); LaMa manga vs Big LaMa trên nền
-      screentone thật; tải lazy model trên Modal.
+      golden set thật (KO strip cho PaddleOCR tiếng Hàn, JA trang cho MangaOCR) — chất lượng thấp thì đổi ngôn ngữ đó về
+      AI LLM; AI hiệu đính với LLM thật (chất lượng gợi ý, chi phí/chương so với khoảng ước tính ở hộp xác nhận); LaMa
+      manga vs Big LaMa trên nền screentone thật; model OCR local đã nạp sẵn trong volume Modal (không tải giữa job).
+- [ ] **DeepSeek với key thật**: `json_object` + ảnh (OCR / hiệu đính bằng `deepseek-flash`), worker tắt chế độ suy
+      luận (`thinking: disabled`) đúng như docs DeepSeek; `deepseek-v4-pro` (không vision) chỉ gán slot Dịch.
 - [ ] **Đợt tính năng nhỏ (kiểm tay)**: soi ≥ 3 trang thật có chữ màu (màu chữ dịch khớp tông gốc, đọc rõ); parity
       chữ Konva ↔ render.py với font tuỳ chỉnh; đăng ký / đăng nhập thật qua `/login` với `SIGNUP_ENABLED=true` trên môi trường thử; kéo-thả sắp ảnh trên Safari; màn series hiện "Xuất lại" sau khi ẩn trang ở chương đã xuất.
 
@@ -143,8 +149,10 @@ Mọi test tự động hiện dùng worker giả lập; chưa có số đo vớ
       `0017_user_ownership`, `0018_auth_error_class`, `0019_jobs_progress_counts`, `0020_translate_chain`, `0021_system_settings`, `0022_ai_providers`, `0023_drop_series_llm_tier`, `0024_user_disabled_at`, `0025_system_fonts`) — 0015 từ chối chạy nếu còn dữ liệu workspace nên **bắt buộc reset DB + MinIO và tạo lại
       token worker** theo "Checklist release single-user-accounts" ở `docs/deployment-guide.md`; worker Mac/Modal phải lên pipeline **0.10.0** (key AI theo job qua claim, provider OpenAI / OpenAI-compatible; gồm mọi bản 0.6–0.9) **trước** khi deploy API (`MIN_PIPELINE_VERSION` 0.10.0, worker cũ nhận 426); `.env` API cần `SECRETS_KEY` + `ADMIN_EMAILS` — xem "Checklist nâng cấp lên pipeline 0.10.0" ở `docs/deployment-guide.md`, không thì
       hàng đợi dừng; chương manga đang cắt trang / xoá chữ lúc
-      deploy sẽ dừng ở "Chờ dịch" (bấm "Dịch chương" để tiếp) — xem "Checklist nâng cấp lên pipeline 0.7.0" ở `docs/deployment-guide.md` (API deploy trước hoặc cùng web: web mới cần `ocr_ready` trong `/progress`); tải model optional mới
-      (`fetch_models.py`) vào volume Modal; VPS cần dựng được addon `re2` — xem checklist ở
+      deploy sẽ dừng ở "Chờ dịch" (bấm "Dịch chương" để tiếp) — xem "Checklist nâng cấp lên pipeline 0.7.0" ở `docs/deployment-guide.md` (API deploy trước hoặc cùng web: web mới cần `ocr_ready` trong `/progress`); nạp model
+      OCR local + LaMa manga (`fetch_models.py`) vào volume Modal **trước** khi deploy — OCR local giờ là mặc định, xem
+      "Checklist OCR local mặc định"; production từng bấm Lưu ở Pipeline chung thì cài đặt đã lưu (OCR = LLM) thắng mặc
+      định mới → đổi tay trên UI; VPS cần dựng được addon `re2` — xem checklist ở
       `docs/deployment-guide.md` mục 4.
 - [ ] **Rà giấy phép** trước khi thương mại hoá / công khai rộng: MVP được dùng code + model + font mở bất kể license
       (GPL/AGPL…); repo chưa có file `LICENSE`.
@@ -156,7 +164,8 @@ Mọi test tự động hiện dùng worker giả lập; chưa có số đo vớ
 ### Chức năng còn thiếu
 
 - [ ] Đích CJK / Thái, chữ dọc khi typeset; dịch SFX + font SFX; phân loại thoại theo nghĩa (suy nghĩ, hét, khung dẫn).
-- [ ] OCR local chưa nhận SFX (mọi vùng coi là chữ thường → bị xoá + dịch).
+- [ ] OCR local chưa nhận SFX (mọi vùng coi là chữ thường → bị xoá + dịch). OCR local giờ là mặc định nên SFX bị xoá
+      + dịch theo mặc định; cần giữ SFX thì đổi ngôn ngữ đó về AI LLM.
 - [ ] Thumbnail do server sinh (thứ tự ảnh trước khi cắt trang đã sắp tay được: kéo-thả / menu / Alt+↑↓).
 - [ ] Glossary: chuyển / sao chép entry giữa các cặp ngôn ngữ, cột cặp ngôn ngữ trong CSV.
 - [ ] Chống phát lại dispatch Modal triệt để (lưu `dispatch_id` đã nhận).
@@ -175,3 +184,5 @@ Mọi test tự động hiện dùng worker giả lập; chưa có số đo vớ
 - Bóng thoại bán trong suốt / chữ có viền trắng dày: nới mask mặc định (2–6px) còn để vệt viền — tăng "Nới mask" ở
   Cài đặt → Pipeline chung → Nâng cao (VD 10–12px).
 - Free-tier Gemini hết hạn mức → job tự thử lại tới ~4 giờ trước khi báo lỗi.
+- Giá DeepSeek nhập theo giờ cao điểm (thấp điểm rẻ ½) → chi phí hệ thống ghi nhận ≥ thực tế. Ước tính hiệu đính lấy
+  trung bình 20 lượt gần nhất, không tách theo model — vừa đổi model thì khoảng ước tính lệch tới khi có lượt mới.

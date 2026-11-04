@@ -42,7 +42,7 @@ MTL_TOKEN_FILE=~/.config/mtl/worker.token uv run mtl-worker --api http://localho
 "Dịch chương" = POST /chapters/:id/commit {target?} → enqueueIngest: chapter → ingesting, mở lượt run_target + run_started_at
   → chapter.ingest; complete [tx]: pages (uuid v5) + page_states rỗng + page.prepare × N, chapter → processing,
   run_total = N, pages.translate_queued = (run_target='translated')
-page.prepare (song song): detect → mask → inpaint → OCR LLM (cuối cùng) → clean/{rev}, mask/{rev}, ocr_result
+page.prepare (song song): detect → mask → inpaint → OCR (local mặc định / LLM, cuối cùng) → clean/{rev}, mask/{rev}, ocr_result
   complete/fail [tx, khoá dòng chapter]: ghi page → refreshChapter → advanceTranslateChain
 chapter.translate (tuần tự, mỗi job 1 lô): dịch + typeset → ai_state theo luật AI ghi → page ready/failed
   complete/fail [tx, khoá dòng chapter]: xoá translate_queued của lô → refreshChapter → advanceTranslateChain
@@ -326,6 +326,18 @@ Cài đặt admin → AI (`/settings?section=providers|tasks`; `/api/admin/provi
 `PUT /api/admin/settings/slots`): provider (`anthropic`, `gemini`, `openai`, `openai_compatible` + `base_url` https) kèm model
 và giá USD/1M token do admin nhập (`ai_providers`, `ai_models`), và 3 slot OCR / Dịch / Hiệu đính (cột FK
 `ocr_model_id`, `translate_model_id`, `proofread_model_id` trên `system_settings`; `null` = mặc định theo env worker).
+Mẫu "DeepSeek" ở form chỉ là `openai_compatible` điền sẵn (`https://api.deepseek.com`, `json_object`, gợi ý giá
+`deepseek-flash` / `deepseek-v4-pro` theo giờ cao điểm) — không có loại riêng ở DB. Worker nhận ra host
+`api.deepseek.com` và gửi `thinking: disabled` (DeepSeek bật suy luận mặc định, token suy luận ăn hết trần token ra),
+trừ khi model được đánh dấu reasoning.
+
+OCR engine mặc định (cài đặt pipeline chưa lưu): `manga_ocr` cho `ja`, `paddle_ocr` cho `ko`/`zh`/`en`. Mốc input_rev
+của `page.prepare` vẫn là bộ tuỳ chọn OCR LLM cũ (`PREPARE_REV_BASELINE` ở `packages/shared/src/pipeline-settings.ts`):
+rev trang/job cũ không đổi, trang OCR local luôn có rev khác trang OCR LLM.
+
+AI hiệu đính hỏi xác nhận trước khi chạy: `GET /api/chapters/:id/proofread/estimate` → số trang, provider/model của
+slot Hiệu đính, khoảng USD và thời gian (trung bình token + giây/trang của ≤ 20 lượt thành công gần nhất của user;
+chưa có → hằng số trong `apps/api/src/billing/proofread-estimate.ts`), và báo rõ ảnh trang được gửi lên provider.
 
 - Key mã hoá AES-256-GCM bằng `SECRETS_KEY` (blob `base64(version|iv|tag|ct)`, AAD `ai_provider:<id>`); API chỉ trả
   `key_last4`, không bao giờ trả / log key. Đổi `SECRETS_KEY` = nhập lại key từng provider.
