@@ -1,0 +1,126 @@
+/* Trang Cài đặt admin: nav trái + panel phải. */
+.admin-page {
+  max-width: 1080px;
+}
+.admin-body {
+  display: grid;
+  grid-template-columns: 180px minmax(0, 1fr);
+  gap: var(--sp-6);
+  align-items: start;
+}
+.admin-nav {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+.admin-nav-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+}
+.admin-nav-title {
+  padding: 0 var(--sp-3);
+  font-size: var(--fs-xs);
+  color: var(--c-fg-subtle);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.admin-nav a {
+  padding: var(--sp-2) var(--sp-3);
+  border-radius: var(--radius);
+  color: var(--c-fg-muted);
+  font-weight: 500;
+}
+.admin-nav a:hover {
+  color: var(--c-fg);
+  text-decoration: none;
+}
+.admin-nav a[aria-current="page"] {
+  color: var(--c-accent-hover);
+  background: var(--c-accent-weak);
+}
+.admin-panel {
+  min-width: 0;
+  max-width: 880px;
+}
+@media (max-width: 720px) {
+  .admin-body {
+    grid-template-columns: 1fr;
+  }
+  .admin-nav {
+    flex-direction: row;
+    overflow-x: auto;
+  }
+}
+
+/* AI › Nhà cung cấp / Model tác vụ. */
+.section-plain h2 {
+  margin: 0 0 var(--sp-2);
+  font-size: var(--fs-lg, 16px);
+}
+.prov-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  padding: var(--sp-3);
+  margin-bottom: var(--sp-4);
+  border: 1px solid var(--c-line);
+  border-radius: var(--radius);
+  background: var(--c-surface);
+}
+.prov-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: var(--sp-3);
+}
+.prov-grid > div {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+}
+.prov-wide {
+  grid-column: 1 / -1;
+}
+.prov-models {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+.prov-models legend {
+  padding: 0;
+  margin-bottom: var(--sp-1);
+  font-weight: 600;
+}
+.prov-model {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+}
+.prov-model-row {
+  display: grid;
+  grid-template-columns: minmax(140px, 2fr) minmax(70px, 1fr) minmax(70px, 1fr) auto auto auto;
+  gap: var(--sp-2);
+  align-items: center;
+}
+.prov-check {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  margin: 0;
+  font-size: var(--fs-sm);
+  white-space: nowrap;
+}
+.prov-actions {
+  display: flex;
+  gap: var(--sp-1);
+  justify-content: flex-end;
+  align-items: center;
+}
+.prov-result {
+  padding-top: 0;
+  font-size: var(--fs-sm);
+}
