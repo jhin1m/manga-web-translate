@@ -28,6 +28,9 @@ PRICES_PER_MTOK: dict[str, tuple[float, float]] = {
     # Premium (AI hiệu đính) — khớp apps/api/src/billing/prices.ts.
     "gemini-2.5-pro": (1.25, 10.0),
     "claude-sonnet-5-5": (3.0, 15.0),
+    # OpenAI (env) — khớp apps/api/src/billing/prices.ts.
+    "gpt-4.1-mini": (0.40, 1.60),
+    "gpt-4.1": (2.0, 8.0),
 }
 
 OCR_MAX_OUTPUT_TOKENS = 2048
@@ -122,12 +125,22 @@ class ProviderError(RuntimeError):
         retry_after: float | None = None,
         retryable: bool = True,
         usage: list[TokenUsage] | None = None,
+        provider: str | None = None,
+        status: int | None = None,
     ):
         super().__init__(message)
+        self.provider = provider
+        self.status = status
         self.error_class = error_class
         self.retry_after = retry_after
         self.retryable = retryable
         self.usage: list[TokenUsage] = list(usage or [])
+
+    def public_message(self) -> str:
+        """Câu chung an toàn gửi lên `jobs.error`: chỉ tên provider, HTTP status và lớp lỗi. Text thô của
+        provider (có thể chứa key, nội dung prompt) chỉ nằm ở log cục bộ đã redact."""
+        http = f" HTTP {self.status}" if self.status is not None else ""
+        return f"{self.provider or 'llm'}{http} {self.error_class}"
 
     #: False → ocr/translate không gọi lại provider trong cùng job (lặp lại chỉ tốn thêm token).
     retry_in_job = True

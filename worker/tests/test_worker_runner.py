@@ -76,6 +76,7 @@ class FakeClient:
                 "fail",
                 {
                     "error_class": error_class,
+                    "message": message,
                     "retry_after_s": retry_after_s,
                     "usage": usage,
                     "partial": partial,
@@ -569,3 +570,41 @@ def test_stop_arriving_just_before_wake_clear_is_not_lost():
     ctx.report("detect", 0.05)
     hb._t.join(timeout=1)
     assert not hb._t.is_alive()
+
+
+@pytest.mark.parametrize(
+    ("err", "error_class", "retry_after"),
+    [
+        (ProviderError("rate_limit", "x", retry_after=9, provider="openai", status=429), "rate_limited", 9),
+        (ProviderError("provider", "x", provider="openai", status=503), "provider", None),
+        (ProviderError("auth", "x", retryable=False, provider="openai", status=429), "auth", None),
+        (ProviderError("provider", "x", retryable=False, provider="openai", status=400), "internal", None),
+    ],
+)
+def test_provider_error_class_and_usage_do_not_depend_on_message(err, error_class, retry_after):
+    err.usage = [TokenUsage(provider="f", model="m", input_tokens=4)]
+    c = FakeClient()
+    run_job(c, prepare_job(), HANDLERS, Deps(FakeProvider(err)))
+    body = c.calls[-1][1]
+    assert body["error_class"] == error_class and body["retry_after_s"] == retry_after
+    assert body["usage"]["llm_in"] == 4
+
+
+def test_fail_message_is_generic_without_provider_text():
+    err = ProviderError(
+        "auth",
+        "401 Incorrect API key sk-proj-abcdef1234567890",
+        retryable=False,
+        provider="openai",
+        status=401,
+    )
+    c = FakeClient()
+    run_job(c, prepare_job(), HANDLERS, Deps(FakeProvider(err)))
+    message = c.calls[-1][1]["message"]
+    assert message == "openai HTTP 401 auth" and "sk-proj" not in message
+
+
+def test_unexpected_error_reports_only_exception_name():
+    c = FakeClient()
+    run_job(c, prepare_job(), HANDLERS, Deps(FakeProvider(ValueError("secret sk-ant-abcdef123456"))))
+    assert c.calls[-1][1]["message"] == "internal: ValueError"

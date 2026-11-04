@@ -66,15 +66,23 @@ class AnthropicProvider:
             resp = self.client.messages.create(**params)
         except anthropic.RateLimitError as e:
             raise ProviderError(
-                "rate_limit", str(e), parse_retry_after(e.response.headers.get("retry-after"))
+                "rate_limit",
+                str(e),
+                parse_retry_after(e.response.headers.get("retry-after")),
+                provider=self.name,
+                status=429,
             ) from e
         except anthropic.APIStatusError as e:
             error_class, retryable = classify_status(e.status_code)
             raise ProviderError(
-                error_class, f"anthropic {e.status_code}: {e.message}", retryable=retryable
+                error_class,
+                f"anthropic {e.status_code}: {e.message}",
+                retryable=retryable,
+                provider=self.name,
+                status=e.status_code,
             ) from e
         except anthropic.APIConnectionError as e:
-            raise ProviderError("provider", f"anthropic transport: {e}") from e
+            raise ProviderError("provider", f"anthropic transport: {e}", provider=self.name) from e
         usage = TokenUsage(
             provider=self.name,
             model=self.model,
@@ -83,7 +91,9 @@ class AnthropicProvider:
         )
         guard_output_tokens(usage, guard)
         if resp.stop_reason in ("refusal", "max_tokens"):
-            raise ProviderError("schema", f"anthropic dừng với {resp.stop_reason}", usage=[usage])
+            raise ProviderError(
+                "schema", f"anthropic dừng với {resp.stop_reason}", usage=[usage], provider=self.name
+            )
         text = next((b.text for b in resp.content if b.type == "text"), "")
         return text, usage
 

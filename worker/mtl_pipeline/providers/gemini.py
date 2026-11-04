@@ -82,9 +82,11 @@ class GeminiProvider:
                 f"gemini {e.code}: {e}",
                 parse_retry_after(headers.get("retry-after")),
                 retryable=retryable,
+                provider=self.name,
+                status=e.code,
             ) from e
         except (httpx.HTTPError, OSError, TimeoutError) as e:  # lỗi mạng/timeout của transport
-            raise ProviderError("provider", f"gemini transport: {e}") from e
+            raise ProviderError("provider", f"gemini transport: {e}", provider=self.name) from e
         um = resp.usage_metadata
         usage = TokenUsage(
             provider=self.name,
@@ -95,7 +97,7 @@ class GeminiProvider:
         )
         guard_output_tokens(usage, guard)
         if not resp.text:
-            raise ProviderError("schema", "gemini trả rỗng", usage=[usage])
+            raise ProviderError("schema", "gemini trả rỗng", usage=[usage], provider=self.name)
         return resp.text, usage
 
     def ocr_page(self, req: OcrRequest) -> OcrResult:

@@ -129,6 +129,7 @@ def test_anthropic_rate_limit_classified_with_retry_after():
     with pytest.raises(ProviderError) as ei:
         AnthropicProvider("claude-haiku-5-5", client=fake).ocr_page(_ocr_req())
     assert ei.value.error_class == "rate_limit" and ei.value.retry_after == 7
+    assert ei.value.public_message() == "anthropic HTTP 429 rate_limit"
 
 
 def test_anthropic_server_error_is_provider_class():
@@ -137,6 +138,7 @@ def test_anthropic_server_error_is_provider_class():
     with pytest.raises(ProviderError) as ei:
         AnthropicProvider("claude-haiku-5-5", client=fake).ocr_page(_ocr_req())
     assert ei.value.error_class == "provider"
+    assert (ei.value.provider, ei.value.status) == ("anthropic", 529)
 
 
 def test_schema_violation_is_schema_class():
@@ -191,6 +193,7 @@ def test_gemini_429_rate_limit():
     with pytest.raises(ProviderError) as ei:
         GeminiProvider("gemini-2.5-flash", client=FakeGemini([err])).ocr_page(_ocr_req())
     assert ei.value.error_class == "rate_limit"
+    assert ei.value.public_message() == "gemini HTTP 429 rate_limit"
 
 
 def test_cost_uses_price_table():

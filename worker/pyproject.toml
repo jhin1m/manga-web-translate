@@ -14,6 +14,7 @@ dependencies = [
     "anthropic>=0.40",
     "fonttools>=4.55",
     "jsonschema>=4.23",
+    "openai>=3.45,<4",
 ]
 
 [project.scripts]
