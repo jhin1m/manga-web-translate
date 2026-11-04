@@ -4,10 +4,12 @@ import { useId, useState } from "react";
 import { api } from "../../lib/api.ts";
 import { TrashIcon } from "../home/row-icons.tsx";
 import { adminSettingsKey, type ProvidersResponse, providerError, providersKey } from "./api.ts";
-import { OPENAI_SUGGESTIONS, REASONING_WARNING, UNSUPPORTED_MODELS_NOTE } from "./price-suggestions.ts";
+import { REASONING_WARNING, suggestionsFor, UNSUPPORTED_MODELS_NOTE } from "./price-suggestions.ts";
 import {
-  AI_PROVIDER_TYPES,
+  applyChoice,
   applySuggestion,
+  CHOICE_LABEL,
+  choiceOf,
   type DraftErrors,
   diffModels,
   draftOf,
@@ -17,7 +19,8 @@ import {
   modelFromSuggestion,
   type ProviderDraft,
   type SavedProvider,
-  TYPE_LABEL,
+  TYPE_CHOICES,
+  type TypeChoice,
   toCreateBody,
   toPatchBody,
   validateDraft,
@@ -62,6 +65,8 @@ export function ProviderForm(props: { saved?: SavedProvider; secretsConfigured: 
   });
 
   const compat = d.type === "openai_compatible";
+  const deepseek = choiceOf(d) === "deepseek";
+  const suggestions = suggestionsFor(d.type, d.base_url);
   const field = (name: string) => `${uid}-${name}`;
 
   return (
@@ -81,16 +86,21 @@ export function ProviderForm(props: { saved?: SavedProvider; secretsConfigured: 
             <label htmlFor={field("type")}>Loại</label>
             <select
               id={field("type")}
-              value={d.type}
+              value={choiceOf(d)}
               disabled={!!saved}
-              onChange={(e) => set("type", e.target.value as ProviderDraft["type"])}
+              onChange={(e) => setD((s) => applyChoice(s, e.target.value as TypeChoice))}
             >
-              {AI_PROVIDER_TYPES.map((t) => (
+              {TYPE_CHOICES.map((t) => (
                 <option key={t} value={t}>
-                  {TYPE_LABEL[t]}
+                  {CHOICE_LABEL[t]}
                 </option>
               ))}
             </select>
+            {deepseek && (
+              <span className="hint small">
+                Lưu dạng OpenAI-compatible (base URL DeepSeek, JSON kiểu json_object). Giá gợi ý là giá giờ cao điểm.
+              </span>
+            )}
           </div>
           <div>
             <label htmlFor={field("name")}>Tên hiển thị</label>
@@ -156,7 +166,10 @@ export function ProviderForm(props: { saved?: SavedProvider; secretsConfigured: 
                   readOnly={!!m.id}
                   onChange={(e) => setModel(i, { model_id: e.target.value })}
                   onBlur={() =>
-                    setD((s) => ({ ...s, models: s.models.map((x, j) => (j === i ? applySuggestion(s.type, x) : x)) }))
+                    setD((s) => ({
+                      ...s,
+                      models: s.models.map((x, j) => (j === i ? applySuggestion(s.type, x, s.base_url) : x)),
+                    }))
                   }
                 />
                 <input
@@ -208,13 +221,14 @@ export function ProviderForm(props: { saved?: SavedProvider; secretsConfigured: 
             <button type="button" onClick={() => set("models", [...d.models, emptyModel()])}>
               + Thêm model
             </button>
-            {d.type === "openai" &&
-              OPENAI_SUGGESTIONS.filter((s) => !d.models.some((m) => m.model_id.trim() === s.model_id)).map((s) => (
+            {suggestions
+              .filter((s) => !d.models.some((m) => m.model_id.trim() === s.model_id))
+              .map((s) => (
                 <button
                   key={s.model_id}
                   type="button"
                   className="btn-ghost"
-                  title={`Gợi ý giá ${s.price_in} / ${s.price_out} USD mỗi 1M token (xác nhận lại với trang giá của OpenAI)`}
+                  title={`Gợi ý giá ${s.price_in} / ${s.price_out} USD mỗi 1M token (xác nhận lại với trang giá của ${deepseek ? "DeepSeek" : "OpenAI"})`}
                   onClick={() => set("models", [...d.models, modelFromSuggestion(s)])}
                 >
                   + {s.model_id}

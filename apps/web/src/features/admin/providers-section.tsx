@@ -5,7 +5,7 @@ import { api } from "../../lib/api.ts";
 import { PencilIcon, TrashIcon } from "../home/row-icons.tsx";
 import { adminSettingsKey, type ProbeResult, probeText, providerError, providersKey, useProviders } from "./api.ts";
 import { ProviderForm } from "./provider-form.tsx";
-import { type SavedProvider, TYPE_LABEL } from "./provider-form-model.ts";
+import { providerTypeLabel, type SavedProvider } from "./provider-form-model.ts";
 
 function ProviderRow(props: { p: SavedProvider; editing: boolean; onEdit(): void }) {
   const { p } = props;
@@ -32,7 +32,7 @@ function ProviderRow(props: { p: SavedProvider; editing: boolean; onEdit(): void
     <>
       <tr>
         <td>{p.name}</td>
-        <td className="muted">{TYPE_LABEL[p.type]}</td>
+        <td className="muted">{providerTypeLabel(p)}</td>
         <td className="mono">••••{p.key_last4}</td>
         <td className="num">{p.models.length}</td>
         <td className="prov-actions">

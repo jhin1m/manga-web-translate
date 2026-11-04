@@ -10,6 +10,7 @@ import copy
 import json
 import re
 from typing import Any
+from urllib.parse import urlparse
 
 import openai
 
@@ -101,6 +102,9 @@ class OpenAIProvider:
         self.official = name == "openai"
         self.structured_output = structured_output
         self.reasoning = reasoning
+        # DeepSeek bật "thinking" mặc định: token suy luận ăn hết trần token ra (2048/3072/4096) → job fail mà vẫn tính
+        # tiền. Tắt trừ khi admin đánh dấu model là reasoning.
+        self.disable_thinking = urlparse(base_url or "").hostname == "api.deepseek.com" and not reasoning
         # api_key/base_url luôn tường minh: SDK không được tự đọc OPENAI_API_KEY / OPENAI_BASE_URL từ env.
         self.client = (
             client
@@ -132,6 +136,8 @@ class OpenAIProvider:
         kw["max_completion_tokens" if self.official else "max_tokens"] = max_tokens
         if self.official and self.reasoning:
             kw["reasoning_effort"] = "low"
+        if self.disable_thinking:
+            kw["extra_body"] = {"thinking": {"type": "disabled"}}
         return kw
 
     def _should_downgrade(self, e: openai.APIStatusError) -> bool:

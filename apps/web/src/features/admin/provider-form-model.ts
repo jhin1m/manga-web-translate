@@ -12,7 +12,7 @@ import {
   normalizeBaseUrl,
   type StructuredOutput,
 } from "@mtl/shared";
-import { type PriceSuggestion, suggestionFor } from "./price-suggestions.ts";
+import { DEEPSEEK_BASE_URL, isDeepSeek, type PriceSuggestion, suggestionFor } from "./price-suggestions.ts";
 
 export const TYPE_LABEL: Record<AiProviderType, string> = {
   anthropic: "Anthropic",
@@ -21,6 +21,41 @@ export const TYPE_LABEL: Record<AiProviderType, string> = {
   openai_compatible: "OpenAI-compatible (base URL tuỳ chỉnh)",
 };
 export { AI_PROVIDER_TYPES };
+
+/**
+ * Lựa chọn ở ô "Loại": 4 loại thật + mẫu `deepseek` (lưu thành `openai_compatible` với base URL DeepSeek, json_object —
+ * không thêm loại mới ở DB/worker).
+ */
+export const TYPE_CHOICES = [...AI_PROVIDER_TYPES, "deepseek"] as const;
+export type TypeChoice = (typeof TYPE_CHOICES)[number];
+export const CHOICE_LABEL: Record<TypeChoice, string> = { ...TYPE_LABEL, deepseek: "DeepSeek" };
+
+export const choiceOf = (d: { type: AiProviderType; base_url: string | null }): TypeChoice =>
+  d.type === "openai_compatible" && isDeepSeek(d.base_url) ? "deepseek" : d.type;
+
+/** Nhãn loại trong danh sách provider ("DeepSeek" cho endpoint tương thích trỏ về DeepSeek). */
+export const providerTypeLabel = (p: { type: AiProviderType; base_url: string | null }) => CHOICE_LABEL[choiceOf(p)];
+
+/** Đổi ô "Loại" (chỉ khi tạo mới): chọn DeepSeek điền sẵn base URL + json_object (+ tên nếu trống); rời DeepSeek bỏ URL đó. */
+export function applyChoice(d: ProviderDraft, choice: TypeChoice): ProviderDraft {
+  if (choice === "deepseek") {
+    return {
+      ...d,
+      type: "openai_compatible",
+      name: d.name.trim() ? d.name : "DeepSeek",
+      base_url: DEEPSEEK_BASE_URL,
+      structured_output: "json_object",
+    };
+  }
+  const wasDeepSeek = choiceOf(d) === "deepseek";
+  return {
+    ...d,
+    type: choice,
+    base_url: wasDeepSeek ? "" : d.base_url,
+    name: wasDeepSeek && d.name === "DeepSeek" ? "" : d.name,
+    structured_output: wasDeepSeek ? "json_schema" : d.structured_output,
+  };
+}
 
 export type ModelDraft = {
   /** Có = model đã lưu (model_id bất biến). */
@@ -99,8 +134,8 @@ export const draftOf = (p: SavedProvider): ProviderDraft => ({
  * Gợi ý giá cho model có id khớp: chỉ điền ô giá còn TRỐNG (không đè giá admin đã gõ); cờ vision / reasoning lấy
  * theo gợi ý khi cả 2 ô giá đang trống (model mới chọn).
  */
-export function applySuggestion(type: string, m: ModelDraft): ModelDraft {
-  const s = suggestionFor(type, m.model_id);
+export function applySuggestion(type: string, m: ModelDraft, baseUrl?: string): ModelDraft {
+  const s = suggestionFor(type, m.model_id, baseUrl);
   if (!s || m.id) return m;
   const fresh = m.price_in.trim() === "" && m.price_out.trim() === "";
   return {

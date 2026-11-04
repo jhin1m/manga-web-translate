@@ -1,11 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
+  applyChoice,
   applySuggestion,
+  choiceOf,
   diffModels,
   draftOf,
   emptyDraft,
   emptyModel,
   type ProviderDraft,
+  providerTypeLabel,
   type SavedProvider,
   toCreateBody,
   toPatchBody,
@@ -187,5 +190,40 @@ describe("diffModels converges after a partial save", () => {
     expect(diff.remove).toEqual([]);
     expect(diff.add).toEqual([]);
     expect(diff.patch).toEqual([{ id: "m2", body: { price_in: 5, vision: false } }]);
+  });
+});
+
+describe("DeepSeek preset", () => {
+  it("chọn DeepSeek → openai_compatible + base URL DeepSeek + json_object; tạo body hợp lệ", () => {
+    const d = applyChoice(draft({ name: "", models: [] }), "deepseek");
+    expect(d).toMatchObject({
+      type: "openai_compatible",
+      name: "DeepSeek",
+      base_url: "https://api.deepseek.com",
+      structured_output: "json_object",
+    });
+    expect(choiceOf(d)).toBe("deepseek");
+    const m = applySuggestion(d.type, { ...emptyModel(), model_id: "deepseek-flash" }, d.base_url);
+    expect(m).toMatchObject({ price_in: "0.3", price_out: "1.2", vision: true, reasoning: false });
+    const full = { ...d, models: [m] };
+    expect(validateDraft(full)).toBeNull();
+    expect(toCreateBody(full)).toMatchObject({ type: "openai_compatible", base_url: "https://api.deepseek.com" });
+  });
+
+  it("giữ tên đã gõ; rời DeepSeek bỏ base URL / tên mặc định và về json_schema", () => {
+    expect(applyChoice(draft({ name: "DS chính" }), "deepseek").name).toBe("DS chính");
+    const back = applyChoice(applyChoice(draft({ name: "" }), "deepseek"), "openai_compatible");
+    expect(back).toMatchObject({ type: "openai_compatible", base_url: "", name: "", structured_output: "json_schema" });
+    expect(choiceOf(back)).toBe("openai_compatible");
+  });
+
+  it("gợi ý giá DeepSeek chỉ áp cho endpoint DeepSeek; nhãn danh sách theo host", () => {
+    const m = { ...emptyModel(), model_id: "deepseek-flash" };
+    expect(applySuggestion("openai_compatible", m, "https://openrouter.ai/api/v1").price_in).toBe("");
+    expect(providerTypeLabel({ type: "openai_compatible", base_url: "https://api.deepseek.com" })).toBe("DeepSeek");
+    expect(providerTypeLabel({ type: "openai_compatible", base_url: "https://openrouter.ai/api/v1" })).toContain(
+      "OpenAI-compatible",
+    );
+    expect(providerTypeLabel({ type: "openai", base_url: null })).toBe("OpenAI");
   });
 });

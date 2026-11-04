@@ -81,6 +81,21 @@ test("admin adds a provider (key shown only as last4), assigns the translate slo
   await expect(table.getByRole("row", { name: /OpenAI e2e/ })).toHaveCount(0);
 });
 
+test("admin picks the DeepSeek preset: base URL, json_object and price suggestions are filled in", async ({ page }) => {
+  await login(page);
+  await page.goto("/settings?section=providers");
+  await page.getByRole("button", { name: "Thêm nhà cung cấp" }).click();
+  const form = page.getByRole("form", { name: "Thêm nhà cung cấp" });
+  await form.getByLabel("Loại").selectOption("deepseek");
+  await expect(form.getByLabel("Tên hiển thị")).toHaveValue("DeepSeek");
+  await expect(form.getByLabel("Base URL")).toHaveValue("https://api.deepseek.com");
+  await expect(form.getByLabel("Kiểu JSON")).toHaveValue("json_object");
+  await form.getByRole("button", { name: "+ deepseek-flash" }).click();
+  await expect(form.getByLabel("Model 1: giá vào")).toHaveValue("0.3");
+  await expect(form.getByLabel("Model 1: giá ra")).toHaveValue("1.2");
+  await form.getByRole("button", { name: "Huỷ" }).click();
+});
+
 test("admin edits the limits: needs both to allow sign-up, confirms before lowering under today's spend", async ({
   page,
 }) => {

@@ -142,6 +142,25 @@ def test_compatible_request_shape_json_object_instruction_and_fence():
     assert res.items[0].source == "안녕"
 
 
+def deepseek(client, **kw):
+    return OpenAIProvider(
+        "openai_compatible", "deepseek-flash", "k", base_url="https://api.deepseek.com", client=client, **kw
+    )
+
+
+def test_deepseek_disables_thinking_unless_model_is_marked_reasoning():
+    fake = FakeOpenAI(reply(OCR_JSON))
+    deepseek(fake, structured_output="json_object").ocr_page(ocr_req())
+    assert fake.calls[0]["extra_body"] == {"thinking": {"type": "disabled"}}
+    fake = FakeOpenAI(reply(OCR_JSON))
+    deepseek(fake, structured_output="json_object", reasoning=True).ocr_page(ocr_req())
+    assert "extra_body" not in fake.calls[0]
+    # Endpoint tương thích khác: không gửi tham số riêng của DeepSeek.
+    fake = FakeOpenAI(reply(OCR_JSON))
+    compat(fake, structured_output="json_object").ocr_page(ocr_req())
+    assert "extra_body" not in fake.calls[0]
+
+
 def test_compatible_json_schema_sends_original_schema():
     fake = FakeOpenAI(reply(TR_JSON))
     compat(fake).translate_batch(tr_req())
