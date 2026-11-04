@@ -1,6 +1,6 @@
 /**
  * Tạo tài khoản phía server (script `pnpm create-user`, test) — không qua HTTP sign-up nên không bị
- * `disableSignUp` chặn. Mật khẩu băm bằng đúng hàm của better-auth.
+ * hook chặn đăng ký (`hooks.before` ở `auth.ts`) chặn. Mật khẩu băm bằng đúng hàm của better-auth.
  */
 import { user as userTable } from "@mtl/db";
 import { eq } from "drizzle-orm";

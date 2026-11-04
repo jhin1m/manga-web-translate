@@ -6,6 +6,7 @@
 import { chapters, jobs, pages, usageLedger } from "@mtl/db";
 import { and, eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { quotaFailMessage } from "../src/billing/user-quota.ts";
 import { env } from "../src/env.ts";
 import { enqueueIngest, inJobTx, insertJob } from "../src/jobs/enqueue.ts";
 import { failOverQuotaQueued } from "../src/jobs/queue.ts";
@@ -111,6 +112,15 @@ describe("user daily quota — API", () => {
       body: {},
     });
     expect(again.status).toBe(202);
+  });
+});
+
+describe("quota failure message", () => {
+  it("names the effective per-day limit (env when the database has none; 0 when unset)", async () => {
+    env.USER_DAILY_USD = 2.5;
+    await expect(inJobTx((tx) => quotaFailMessage(tx))).resolves.toBe("quota_exceeded: vượt hạn mức $2.5/ngày");
+    env.USER_DAILY_USD = undefined;
+    await expect(inJobTx((tx) => quotaFailMessage(tx))).resolves.toBe("quota_exceeded: vượt hạn mức $0/ngày");
   });
 });
 

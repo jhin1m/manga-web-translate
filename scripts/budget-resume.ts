@@ -2,7 +2,8 @@
  * Owner mở lại job `paused_budget` → `queued` ngay (không chờ sang ngày/tháng mới).
  *   pnpm budget-resume              # in trạng thái ngân sách; chỉ mở lại khi đã hết vượt ngưỡng
  *   pnpm budget-resume --force      # mở lại kể cả khi còn vượt (claim kế tiếp sẽ dừng lại ngay — dùng sau khi
- *                                   # đã nâng GLOBAL_DAILY_USD/GLOBAL_MONTHLY_USD và restart mtl-api + mtl-jobs)
+ *                                   # đã nâng ngưỡng ngày trên UI admin (tự mở lại, thường không cần lệnh này; giá trị
+ *                                   # UI thắng env) hoặc GLOBAL_MONTHLY_USD trong env rồi restart mtl-api + mtl-jobs)
  */
 import { parseArgs } from "node:util";
 import { type BudgetWindow, budgetStatus, resumeBudgetPaused } from "../apps/api/src/billing/budget.ts";

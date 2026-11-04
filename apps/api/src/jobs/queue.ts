@@ -9,7 +9,14 @@
  */
 import { randomBytes } from "node:crypto";
 import { chapters, type DbLike, jobs, pageStates, pages, proofreadSuggestions, sourceFiles } from "@mtl/db";
-import type { ClaimRequest, CompleteRequest, FailRequest, HeartbeatRequest, WorkerUsage } from "@mtl/shared";
+import type {
+  ClaimRequest,
+  CompleteRequest,
+  FailRequest,
+  HeartbeatRequest,
+  LlmConfigs,
+  WorkerUsage,
+} from "@mtl/shared";
 import {
   pageId as derivePageId,
   type ErrorClass,
@@ -21,6 +28,7 @@ import {
 } from "@mtl/shared";
 import { and, asc, eq, gt, inArray, lte, ne, not, sql } from "drizzle-orm";
 import type { z } from "zod";
+import { LlmConfigError, resolveLlmConfigs } from "../ai/llm-config.ts";
 import { budgetStatus, pauseQueuedPaidJobs } from "../billing/budget.ts";
 import { recordServerUsage, recordUsage } from "../billing/ledger.ts";
 import { claimableSql, lockQueuedOverQuotaLlmJobs, quotaFailMessage, userQuotaStatus } from "../billing/user-quota.ts";
@@ -28,7 +36,7 @@ import { db } from "../db.ts";
 import { env } from "../env.ts";
 import type { WorkerIdentity } from "../lib/worker-token.ts";
 import { head } from "../storage.ts";
-import { isLlmPaused, recordProviderError } from "./breaker.ts";
+import { breakerBlockedSql, breakerKeysOf, pausedBreakerKeys, recordProviderError } from "./breaker.ts";
 import { buildInputs, claimOutputNames, outputKey, type PresignedOutput, presignOutputs } from "./claim-inputs.ts";
 import { markDispatchClaimed } from "./dispatcher.ts";
 import { chapterHasUserEdits, createIngestedPages, lockChapter, refreshChapter } from "./enqueue.ts";
@@ -60,7 +68,9 @@ export function compareVersion(a: string, b: string): number {
 /** Job LLM đang chờ của người vượt hạn mức → failed `quota_exceeded` (claim + runner gọi). Trả số job. */
 export async function failOverQuotaQueued(t: DbLike): Promise<number> {
   const rows = await lockQueuedOverQuotaLlmJobs(t);
-  for (const job of rows) await terminal(t, job, "failed", "internal", quotaFailMessage());
+  if (rows.length === 0) return 0;
+  const message = await quotaFailMessage(t);
+  for (const job of rows) await terminal(t, job, "failed", "internal", message);
   return rows.length;
 }
 
@@ -73,6 +83,8 @@ export type ClaimedJobOut = {
   payload: Job["payload"];
   inputs: Record<string, unknown>;
   outputs: Record<string, PresignedOutput>;
+  /** Cấu hình AI theo slot (key đã giải mã) — chỉ trong response claim, không ghi DB. */
+  llm?: LlmConfigs;
 };
 
 export async function claim(w: WorkerIdentity, req: z.infer<typeof ClaimRequest>): Promise<ClaimedJobOut[]> {
@@ -86,9 +98,10 @@ export async function claim(w: WorkerIdentity, req: z.infer<typeof ClaimRequest>
   }
   return tx(async (t) => {
     // Breaker LLM / kill-switch ngân sách chặn job gọi LLM (`llmJobSql`); job OCR local cùng loại vẫn claim được.
-    let blockLlm = await isLlmPaused(t);
+    const paused = await pausedBreakerKeys(t);
+    let blockLlm = false;
     // Kill-switch ngân sách: kiểm tại claim cho mọi worker (Mac lẫn Modal) — job tốn tiền chuyển paused_budget.
-    if (!blockLlm && caps.some((c) => LLM_JOB_TYPES.includes(c)) && (await budgetStatus(t)).exceeded) {
+    if (caps.some((c) => LLM_JOB_TYPES.includes(c)) && (await budgetStatus(t)).exceeded) {
       await pauseQueuedPaidJobs(t);
       blockLlm = true;
     }
@@ -110,6 +123,7 @@ export async function claim(w: WorkerIdentity, req: z.infer<typeof ClaimRequest>
           lte(jobs.runAfter, sql`now()`),
           inArray(jobs.type, caps),
           blockLlm ? not(llmJobSql) : undefined,
+          paused.length ? not(breakerBlockedSql(paused)) : undefined,
           claimableSql(w.kind),
         ),
       )
@@ -157,10 +171,18 @@ export async function claim(w: WorkerIdentity, req: z.infer<typeof ClaimRequest>
       await markClaimed(t, job);
       let inputs: Record<string, unknown>;
       let outputs: Record<string, PresignedOutput>;
+      let llm: LlmConfigs | undefined;
       try {
         inputs = await buildInputs(t, job);
         outputs = await presignOutputs(job, claimOutputNames(job.payload));
+        llm = await resolveLlmConfigs(t, "llm" in job.payload ? job.payload.llm : undefined);
       } catch (err) {
+        // Key không giải mã được / provider mất: lỗi cấu hình, không retry (admin sửa rồi chạy lại trang lỗi).
+        if (err instanceof LlmConfigError) {
+          console.warn(`[claim] job ${job.id} cấu hình AI lỗi`);
+          await terminal(t, job, "failed", "auth", err.message);
+          continue;
+        }
         // Input không dựng được (page mất, key ngoài dữ liệu người dùng…) → fail job này thay vì 500 cả claim:
         // để nguyên thì job kẹt đầu hàng đợi và chặn mọi lần claim sau.
         console.warn(`[claim] job ${job.id} input không hợp lệ: ${(err as Error).message}`);
@@ -176,6 +198,7 @@ export async function claim(w: WorkerIdentity, req: z.infer<typeof ClaimRequest>
         payload: job.payload,
         inputs,
         outputs,
+        ...(llm ? { llm } : {}),
       });
     }
     return out;
@@ -226,12 +249,8 @@ export async function heartbeat(w: WorkerIdentity, jobId: string, req: z.infer<t
     }
     // Hạn mức người dùng (sau khi ghi usage của nhịp này): vượt → dừng job LLM + failed. Vượt tối đa ≈ chi phí tới
     // nhịp heartbeat kế của các job đang chạy của người đó.
-    if (
-      env.USER_DAILY_USD !== undefined &&
-      isLlmPayload(job.payload) &&
-      (await userQuotaStatus(t, job.userId)).exceeded
-    ) {
-      await terminal(t, job, "failed", "internal", quotaFailMessage());
+    if (isLlmPayload(job.payload) && (await userQuotaStatus(t, job.userId)).exceeded) {
+      await terminal(t, job, "failed", "internal", await quotaFailMessage(t));
       return { lease_expires_at: new Date().toISOString(), stop: "cancel" as const };
     }
     const [u] = await t
@@ -681,7 +700,9 @@ export async function fail(w: WorkerIdentity, jobId: string, req: z.infer<typeof
     await usage(t, w, job, req.attempt, req.usage);
     if (job.status === "cancelled") return { ok: true, status: "cancelled" as const };
     if (req.partial) await savePartial(t, job, req.partial);
-    if (req.error_class === "provider" || req.error_class === "rate_limited") await recordProviderError(t);
+    if (req.error_class === "provider" || req.error_class === "rate_limited") {
+      for (const key of breakerKeysOf(job.payload)) await recordProviderError(t, key);
+    }
     const d = decideFailure(req.error_class, job, req.retry_after_s);
     if (d.kind === "failed") {
       await terminal(t, job, "failed", req.error_class, req.message);

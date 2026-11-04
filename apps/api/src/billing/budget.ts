@@ -10,6 +10,8 @@ import { and, eq, gte, inArray, sql } from "drizzle-orm";
 import { env } from "../env.ts";
 import { llmJobSql } from "../jobs/llm-job-filter.ts";
 import { sendAlert } from "../lib/alert.ts";
+import { effectiveLimits } from "../lib/system-settings.ts";
+import { dayStart } from "./user-quota.ts";
 
 export type BudgetWindow = { spentUsd: number; limitUsd: number | null; ratio: number; period: string };
 export type BudgetStatus = { daily: BudgetWindow; monthly: BudgetWindow; exceeded: boolean };
@@ -26,7 +28,6 @@ function budgetWindow(spentUsd: number, limitUsd: number | undefined, period: st
 
 export async function budgetStatus(t: DbLike): Promise<BudgetStatus> {
   const monthStart = sql`date_trunc('month', now() at time zone 'utc') at time zone 'utc'`;
-  const dayStart = sql`date_trunc('day', now() at time zone 'utc') at time zone 'utc'`;
   const [row] = await t
     .select({
       day: sql<string>`coalesce(sum(${usageLedger.costUsd}) filter (where ${usageLedger.createdAt} >= ${dayStart}), 0)`,
@@ -36,7 +37,11 @@ export async function budgetStatus(t: DbLike): Promise<BudgetStatus> {
     })
     .from(usageLedger)
     .where(gte(usageLedger.createdAt, monthStart));
-  const daily = budgetWindow(Number(row?.day ?? 0), env.GLOBAL_DAILY_USD, row?.dayKey ?? "");
+  const daily = budgetWindow(
+    Number(row?.day ?? 0),
+    (await effectiveLimits(t)).globalDailyUsd ?? undefined,
+    row?.dayKey ?? "",
+  );
   const monthly = budgetWindow(Number(row?.month ?? 0), env.GLOBAL_MONTHLY_USD, row?.monthKey ?? "");
   return { daily, monthly, exceeded: daily.ratio >= 1 || monthly.ratio >= 1 };
 }
