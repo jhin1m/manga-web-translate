@@ -4,8 +4,8 @@
  * Cần MinIO dev (pnpm infra:up).
  */
 import { readFileSync } from "node:fs";
-import { scoped, userFonts } from "@mtl/db";
-import { beforeAll, describe, expect, it } from "vitest";
+import { scoped, systemFonts, userFonts } from "@mtl/db";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { MAX_FONT_BYTES } from "../src/lib/font-metrics.ts";
 import { MAX_USER_FONTS } from "../src/routes/fonts.ts";
 import { head, presignPut } from "../src/storage.ts";
@@ -43,9 +43,9 @@ async function json<T>(res: Response, status: number): Promise<T> {
 }
 
 /** upload-url → POST file lên storage → trả key (chưa commit). */
-async function putFile(bytes: Uint8Array): Promise<string> {
+async function putFile(bytes: Uint8Array, cookie = A.cookie): Promise<string> {
   const u = await json<UploadUrl>(
-    await api("/fonts/upload-url", { method: "POST", body: { bytes: bytes.length } }),
+    await api("/fonts/upload-url", { method: "POST", body: { bytes: bytes.length }, cookie }),
     201,
   );
   const form = new FormData();
@@ -56,7 +56,7 @@ async function putFile(bytes: Uint8Array): Promise<string> {
 }
 
 const commit = (key: string, cookie = A.cookie) => api("/fonts", { method: "POST", body: { key }, cookie });
-const upload = async (bytes: Uint8Array) => commit(await putFile(bytes));
+const upload = async (bytes: Uint8Array, cookie = A.cookie) => commit(await putFile(bytes, cookie), cookie);
 
 /** Bản font khác sha256 nhưng vẫn parse được (byte thừa cuối file sfnt). */
 const variant = (n: number) => Buffer.concat([ITIM, Buffer.from([n])]);
@@ -251,5 +251,51 @@ describe("font limit", () => {
     const res = await call(`/api/fonts`, { method: "POST", cookie: C.cookie, body: { key: u.key } });
     expect(await json<{ error: string }>(res, 409)).toMatchObject({ error: "limit" });
     expect(await head(u.key)).toBeNull();
+  });
+
+  describe("with system fonts present", () => {
+    afterAll(async () => {
+      await db.delete(systemFonts);
+    });
+
+    it("does not count system fonts: a user with 20 of them can still upload a first own font, and lists both", async () => {
+      await db.delete(systemFonts);
+      await db.insert(systemFonts).values(
+        Array.from({ length: 20 }, (_, i) => ({
+          fontId: `custom-${(i + 0x100).toString(16).padStart(8, "0")}`,
+          name: `S${i}`,
+          fileKey: `system/fonts/seed-${i}`,
+          sha256: (i + 0x100).toString(16).padStart(64, "0"),
+          bytes: 1,
+          unitsPerEm: 1000,
+          ascent: 900,
+          descent: 200,
+          metricsSource: "hhea",
+          viComplete: true,
+          missing: [],
+        })),
+      );
+      const D = await seedUser("fontup-sys");
+      const own = await json<FontView & { system: boolean }>(await upload(variant(9), D.cookie), 201);
+      expect(own.system).toBe(false);
+      const { fonts } = await json<{ fonts: (FontView & { system: boolean })[] }>(
+        await call("/api/fonts", { cookie: D.cookie }),
+        200,
+      );
+      expect(fonts).toHaveLength(21);
+      expect(fonts.filter((f) => f.system)).toHaveLength(20);
+      // Font hệ thống đứng trước font riêng.
+      expect(fonts.map((f) => f.system)).toEqual([...Array(20).fill(true), false]);
+      // Series chọn được font hệ thống làm mặc định.
+      const sys = fonts[0]?.id ?? "";
+      const patched = await call(`/api/series/${D.seriesId}`, {
+        method: "PATCH",
+        cookie: D.cookie,
+        body: { default_fonts: { dialogue: sys } },
+      });
+      expect((await json<{ default_fonts: Record<string, string> }>(patched, 200)).default_fonts.dialogue).toBe(sys);
+      // Font hệ thống không xoá được qua route của người dùng.
+      expect((await call(`/api/fonts/${fonts[0]?.id}`, { method: "DELETE", cookie: D.cookie })).status).toBe(404);
+    });
   });
 });

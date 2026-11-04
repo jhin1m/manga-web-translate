@@ -30,6 +30,8 @@ export type CustomFont = {
   ascent: number;
   descent: number;
   url: string;
+  /** Font hệ thống (nhóm "Font hệ thống" trong ô chọn font). */
+  system?: boolean;
 };
 
 export type FontKit = {
@@ -38,8 +40,8 @@ export type FontKit = {
   ids: string[];
   /** Id font gói sẵn vẽ đủ chữ ngôn ngữ đích `lang`. */
   idsFor(lang: string | undefined): string[];
-  /** Font tuỳ chỉnh đã nạp được (chọn được trong panel; nhóm "Font của bạn"). */
-  custom: { id: string; name: string }[];
+  /** Font tuỳ chỉnh đã nạp được (chọn được trong panel; nhóm "Font hệ thống" / "Font của bạn"). */
+  custom: { id: string; name: string; system?: boolean }[];
   /** Id có font thật (gói sẵn hoặc tuỳ chỉnh đã nạp) — không thì metric/nét vẽ rơi về font mặc định. */
   knows(fontId: string): boolean;
   metrics(fontId: string): FontMetrics;
@@ -187,7 +189,7 @@ export async function loadFonts(fetchCustom?: () => Promise<CustomFont[]>): Prom
     manifest,
     ids: bundledFontIds(manifest.fonts),
     idsFor: (lang) => bundledFontIds(manifest.fonts, lang),
-    custom: [...loadedCustom.values()].map((f) => ({ id: f.id, name: f.name })),
+    custom: [...loadedCustom.values()].map((f) => ({ id: f.id, name: f.name, system: f.system })),
     knows: (id) => id in manifest.fonts || custom.has(id),
     metrics,
     measure,

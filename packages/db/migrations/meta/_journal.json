@@ -148,6 +148,41 @@
       "when": 1793288964720,
       "tag": "0020_translate_chain",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1793774410614,
+      "tag": "0021_system_settings",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1793775562220,
+      "tag": "0022_ai_providers",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1793776980974,
+      "tag": "0023_drop_series_llm_tier",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1793779652082,
+      "tag": "0024_user_disabled_at",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1793780673823,
+      "tag": "0025_system_fonts",
+      "breakpoints": true
     }
   ]
 }

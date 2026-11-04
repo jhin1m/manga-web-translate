@@ -126,7 +126,30 @@ function TextStyleSelect({ box, config }: { box: TextBox; config: TextStyleConfi
   );
 }
 
-/** `fonts`: font gói sẵn; `customFonts`: font của bạn (nhóm riêng trong select). Mỗi option vẽ bằng chính font đó. */
+/** 2 nhóm option font tuỳ chỉnh: hệ thống trước, của bạn sau; nhóm rỗng không hiện. */
+function CustomFontGroups({ fonts }: { fonts: { id: string; name: string; system?: boolean }[] }) {
+  return (
+    <>
+      {[
+        { label: "Font hệ thống", list: fonts.filter((f) => f.system) },
+        { label: "Font của bạn", list: fonts.filter((f) => !f.system) },
+      ].map(
+        ({ label, list }) =>
+          list.length > 0 && (
+            <optgroup key={label} label={label}>
+              {list.map((f) => (
+                <option key={f.id} value={f.id} style={fontPreview(f.id)}>
+                  {f.name}
+                </option>
+              ))}
+            </optgroup>
+          ),
+      )}
+    </>
+  );
+}
+
+/** `fonts`: font gói sẵn; `customFonts`: font hệ thống + font của bạn (2 nhóm riêng trong select). Mỗi option vẽ bằng chính font đó. */
 export function BasicStyle({
   fonts,
   customFonts = [],
@@ -134,7 +157,7 @@ export function BasicStyle({
   textStyle,
 }: {
   fonts: string[];
-  customFonts?: { id: string; name: string }[];
+  customFonts?: { id: string; name: string; system?: boolean }[];
   /** Font có thật nhưng không nằm trong `fonts` (đã lọc theo ngôn ngữ đích) → ghi "không hợp ngôn ngữ", không phải "thiếu". */
   knows?: (id: string) => boolean;
   /** Có slot font Suy nghĩ/Ghi chú ở series → hiện select "Loại chữ" dưới ô Font. */
@@ -165,15 +188,7 @@ export function BasicStyle({
                 {f}
               </option>
             ))}
-            {customFonts.length > 0 && (
-              <optgroup label="Font của bạn">
-                {customFonts.map((f) => (
-                  <option key={f.id} value={f.id} style={fontPreview(f.id)}>
-                    {f.name}
-                  </option>
-                ))}
-              </optgroup>
-            )}
+            <CustomFontGroups fonts={customFonts} />
           </select>
           {textStyle && hasTextStyleSlot(textStyle.slots) && <TextStyleSelect box={box} config={textStyle} />}
         </div>

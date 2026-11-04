@@ -25,7 +25,6 @@ import type { AppEnv } from "../middleware/user.ts";
 import { deletePrefix } from "../storage.ts";
 
 export const HONORIFIC_POLICIES = ["translate", "keep"] as const;
-export const LLM_TIERS = ["standard", "premium"] as const;
 const PronounRule = z.object({
   speaker: z.string().trim().min(1).max(80),
   listener: z.string().trim().min(1).max(80),
@@ -47,7 +46,6 @@ const Settings = z.object({
   default_fonts: z
     .object({ dialogue: FontId, narration: FontId, sfx: FontId, thought: FontId, note: FontId })
     .partial(),
-  llm_tier: z.enum(LLM_TIERS),
   /** Chữ bỏ qua (watermark): mục quá ngắn dễ nuốt cả thoại, regex lỗi / dễ treo → 400 kèm lý do. */
   ignore_text: z
     .array(
@@ -82,8 +80,6 @@ export const seriesView = (s: SeriesRow) => ({
   pronoun_rules: s.pronounRules,
   style_prompt: s.stylePrompt,
   default_fonts: s.defaultFonts,
-  // Cột DB mặc định "default" từ trước khi có tier → coi là standard.
-  llm_tier: s.llmTier === "premium" ? "premium" : "standard",
   glossary_rev: s.glossaryRev,
   settings_rev: s.settingsRev,
   ignore_text: s.ignoreText,
@@ -205,7 +201,7 @@ export async function chapterStats(sdb: Scoped, chs: ChapterRow[]) {
 const nextNumber = (chs: ChapterRow[]) =>
   String(chs.reduce((m, c) => Math.max(m, Math.floor(Number(c.number) || 0)), 0) + 1);
 
-/** Font mặc định phải là font gói sẵn hoặc font của người dùng → không thì 400 `unknown_font`. */
+/** Font mặc định phải là font gói sẵn, font hệ thống hoặc font của người dùng → không thì 400 `unknown_font`. */
 async function assertKnownFonts(sdb: Scoped, fonts: Record<string, string | undefined> | undefined) {
   const unknown = await unknownFonts(
     sdb,
@@ -229,7 +225,6 @@ function toColumns(body: z.infer<typeof SeriesPatch>) {
   if (body.pronoun_rules !== undefined) set.pronounRules = body.pronoun_rules;
   if (body.style_prompt !== undefined) set.stylePrompt = body.style_prompt;
   if (body.default_fonts !== undefined) set.defaultFonts = body.default_fonts;
-  if (body.llm_tier !== undefined) set.llmTier = body.llm_tier;
   if (body.ignore_text !== undefined) set.ignoreText = body.ignore_text;
   return set;
 }
@@ -244,7 +239,6 @@ function translationChanged(cur: SeriesRow, set: Partial<typeof series.$inferIns
     [set.pronounRules, cur.pronounRules],
     [set.stylePrompt, cur.stylePrompt],
     [set.defaultFonts, cur.defaultFonts],
-    [set.llmTier, cur.llmTier === "premium" ? "premium" : "standard"],
   ];
   return pairs.some(([next, prev]) => next !== undefined && !same(next, prev));
 }
@@ -303,9 +297,7 @@ seriesRoutes.post("/series", async (c) => {
   await assertKnownFonts(c.get("sdb"), body.default_fonts);
   // Không gửi page_format → theo ngôn ngữ nguồn (ja → từng trang, còn lại → strip).
   const pageFormat = body.page_format ?? defaultPageFormat(body.source_lang ?? "ko");
-  const s = await c
-    .get("sdb")
-    .insert(series, { llmTier: "standard", ...toColumns(body), pageFormat, title: body.title });
+  const s = await c.get("sdb").insert(series, { ...toColumns(body), pageFormat, title: body.title });
   return c.json(seriesView(s), 201);
 });
 

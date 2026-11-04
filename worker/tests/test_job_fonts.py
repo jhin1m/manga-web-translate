@@ -74,6 +74,22 @@ def test_fetch_downloads_once_per_sha_and_caches(tmp_path: Path):
     assert (tmp_path / SHA).read_bytes() == DATA
 
 
+def test_system_font_url_registers_under_its_id_like_a_user_font(tmp_path: Path):
+    # Font hệ thống đến worker y hệt font riêng ({id, url, sha256}); worker chỉ dùng id + sha, không xem đường dẫn key.
+    urls: list[str] = []
+
+    def download(url: str) -> bytes:
+        urls.append(url)
+        return DATA
+
+    sys_url = f"https://files/system/fonts/{CUSTOM}?X-Amz-Signature=x"
+    with job_fonts([entry(url=sys_url)], download, tmp_path):
+        assert font_path(CUSTOM) == tmp_path / SHA
+        assert np.array_equal(render(CUSTOM), render("PatrickHand-Regular"))
+    assert urls == [sys_url]
+    assert font_path(CUSTOM) == font_path(DEFAULT_FONT)
+
+
 def test_fetch_rejects_sha_mismatch_and_corrupt_font(tmp_path: Path):
     assert fetch_fonts([entry()], lambda _: DATA + b"x", tmp_path) == {}
     assert list(tmp_path.iterdir()) == []

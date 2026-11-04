@@ -1,8 +1,9 @@
 /**
- * Cài đặt chung → tab Font: upload TTF/OTF, danh sách font của bạn kèm cảnh báo thiếu dấu tiếng Việt (vẫn dùng
+ * Font của tôi (`/fonts`): upload TTF/OTF, danh sách font của bạn kèm cảnh báo thiếu dấu tiếng Việt (vẫn dùng
  * được), xoá (bị chặn khi series còn dùng làm font mặc định).
  */
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
 import { ApiError, errorMessage } from "../../lib/api.ts";
 import { TrashIcon } from "../home/row-icons.tsx";
 import {
@@ -10,6 +11,7 @@ import {
   FONT_ACCEPT,
   fontKeys,
   MAX_USER_FONTS,
+  ownFonts,
   type UserFont,
   uploadCheckedFont,
   useUserFonts,
@@ -32,7 +34,7 @@ export function FontSettings() {
   const qc = useQueryClient();
   const q = useUserFonts();
   const refresh = () => qc.invalidateQueries({ queryKey: fontKeys.list() });
-  const fonts = q.data ?? [];
+  const fonts = ownFonts(q.data);
 
   const upload = useMutation({
     mutationFn: (file: File) => uploadCheckedFont(file, fonts.length),
@@ -100,7 +102,19 @@ export function FontSettings() {
   );
 }
 
-function FontRow({ font, busy, onDelete }: { font: UserFont; busy: boolean; onDelete(): void }) {
+/** `confirm`: icon Xoá chỉ hỏi lại tại chỗ (Xoá? / Huỷ), bấm "Xoá?" mới gọi `onDelete` — cho thao tác ảnh hưởng mọi người dùng. */
+export function FontRow({
+  font,
+  busy,
+  onDelete,
+  confirm = false,
+}: {
+  font: UserFont;
+  busy: boolean;
+  onDelete(): void;
+  confirm?: boolean;
+}) {
+  const [confirming, setConfirming] = useState(false);
   const shown = font.missing.slice(0, MISSING_SHOWN).join(" ");
   const more = font.missing.length - MISSING_SHOWN;
   return (
@@ -118,17 +132,37 @@ function FontRow({ font, busy, onDelete }: { font: UserFont; busy: boolean; onDe
         )}
       </td>
       <td>
-        <button
-          type="button"
-          className="icon-btn"
-          data-danger
-          aria-label={`Xoá font ${font.name}`}
-          title="Xoá font"
-          disabled={busy}
-          onClick={onDelete}
-        >
-          <TrashIcon />
-        </button>
+        {confirming ? (
+          <>
+            <button
+              type="button"
+              className="btn-danger"
+              disabled={busy}
+              aria-label={`Xác nhận xoá font ${font.name}`}
+              onClick={() => {
+                setConfirming(false);
+                onDelete();
+              }}
+            >
+              Xoá?
+            </button>
+            <button type="button" onClick={() => setConfirming(false)}>
+              Huỷ
+            </button>
+          </>
+        ) : (
+          <button
+            type="button"
+            className="icon-btn"
+            data-danger
+            aria-label={`Xoá font ${font.name}`}
+            title="Xoá font"
+            disabled={busy}
+            onClick={confirm ? () => setConfirming(true) : onDelete}
+          >
+            <TrashIcon />
+          </button>
+        )}
       </td>
     </tr>
   );

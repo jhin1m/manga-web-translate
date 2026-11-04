@@ -1,12 +1,16 @@
 import { and, eq, type SQL, sql } from "drizzle-orm";
 import type { PgColumn, PgTable } from "drizzle-orm/pg-core";
 import type { DbLike } from "./client.ts";
+import type { systemFonts } from "./schema/app.ts";
 
 /** Bảng nghiệp vụ: có cột user_id. */
 export type OwnedTable = PgTable & { userId: PgColumn };
 export type OwnedTableWithId = OwnedTable & { id: PgColumn };
 type Row<T extends PgTable> = T["$inferSelect"];
 type Values<T extends PgTable> = Omit<T["$inferInsert"], "userId">;
+
+/** Bảng dùng chung cho mọi người dùng mà `selectShared` được đọc (danh sách tường minh; thêm bảng mới ở đây). */
+export type SharedTable = typeof systemFonts;
 
 /** Không thấy trong dữ liệu của người dùng hiện tại — kể cả khi id thuộc người khác. Route map sang 404. */
 export class NotFoundError extends Error {
@@ -30,6 +34,8 @@ export interface Scoped {
   readonly userId: string;
   select<T extends OwnedTable>(table: T, where?: SQL): Promise<Row<T>[]>;
   find<T extends OwnedTable>(table: T, where?: SQL): Promise<Row<T> | undefined>;
+  /** Đọc bảng dùng chung cho mọi người dùng (font hệ thống); chỉ nhận bảng trong `SharedTable`, bảng khác bị kiểu chặn. */
+  selectShared<T extends SharedTable>(table: T, where?: SQL): Promise<Row<T>[]>;
   /** Đếm dòng theo nhóm cột (GROUP BY trong SQL) — không kéo cả dòng về khi chỉ cần số lượng. */
   countBy<T extends OwnedTable, C extends Record<string, PgColumn>>(
     table: T,
@@ -75,6 +81,13 @@ export function scoped(db: DbLike, userId: string): Scoped {
         .where(own(table, where))
         .limit(1)) as Row<T>[];
       return rows[0];
+    },
+
+    selectShared<T extends SharedTable>(table: T, where?: SQL): Promise<Row<T>[]> {
+      return db
+        .select()
+        .from(table as PgTable)
+        .where(where) as unknown as Promise<Row<T>[]>;
     },
 
     countBy<T extends OwnedTable, C extends Record<string, PgColumn>>(table: T, by: C, where?: SQL) {

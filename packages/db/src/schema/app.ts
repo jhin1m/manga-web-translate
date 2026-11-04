@@ -75,7 +75,6 @@ export const series = pgTable(
     pronounRules: jsonb("pronoun_rules").$type<Record<string, unknown>[]>().notNull().default([]),
     stylePrompt: text("style_prompt").notNull().default(""),
     defaultFonts: jsonb("default_fonts").$type<Record<string, string>>().notNull().default({}),
-    llmTier: text("llm_tier").notNull().default("default"),
     /** Cách commit chương: strip (manhwa/manhua) hoặc pages (manga) — xem PAGE_FORMATS. */
     pageFormat: text("page_format").$type<PageFormat>().notNull().default("strip"),
     /** Tăng khi sửa glossary của series (sửa entry chung → tăng mọi series của người dùng cùng transaction). */
@@ -205,6 +204,28 @@ export const userFonts = pgTable(
   },
   (t) => [unique("user_fonts_user_sha_uq").on(t.userId, t.sha256)],
 );
+
+/**
+ * Font hệ thống (admin upload, mọi người dùng thấy): cùng cột và cùng dạng id `custom-<8 hex>` với `user_fonts`
+ * (trừ chủ sở hữu) nên series, text box và hợp đồng job dùng chung một cách tham chiếu font. Không có `user_id`.
+ */
+export const systemFonts = pgTable("system_fonts", {
+  id: idPk(),
+  fontId: text("font_id").notNull().unique(),
+  name: text("name").notNull(),
+  fileKey: text("file_key").notNull(),
+  sha256: text("sha256").notNull().unique(),
+  bytes: integer("bytes").notNull(),
+  unitsPerEm: integer("units_per_em").notNull(),
+  ascent: integer("ascent").notNull(),
+  descent: integer("descent").notNull(),
+  metricsSource: text("metrics_source").notNull(),
+  viComplete: boolean("vi_complete").notNull(),
+  /** Chữ Việt font không có (rỗng khi viComplete). */
+  missing: text("missing").array().notNull().default(sql`'{}'::text[]`),
+  createdBy: text("created_by"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
 
 export const pages = pgTable(
   "pages",

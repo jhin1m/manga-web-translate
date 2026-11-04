@@ -19,6 +19,12 @@ export GEMINI_API_KEY=…                       # không commit
 MTL_TOKEN_FILE=~/.config/mtl/worker.token uv run mtl-worker --api http://localhost:8787
 ```
 
+- Provider khác: `--provider openai` (cần `OPENAI_API_KEY`; model `MTL_OPENAI_MODEL` mặc định `gpt-4.1-mini`, premium
+  `MTL_OPENAI_PREMIUM_MODEL` mặc định `gpt-4.1`) và `--provider openai_compatible` (cần `MTL_OPENAI_COMPAT_BASE_URL`,
+  `MTL_OPENAI_COMPAT_API_KEY`, `MTL_OPENAI_COMPAT_MODEL`; `MTL_OPENAI_COMPAT_JSON` = `json_schema` | `json_object`). Model
+  compatible không có giá tĩnh → billing tính giá đắt nhất. DeepSeek (text-only) không chạy OCR/proofread.
+- Log worker: formatter redact key (`sk-…`, `sk-ant-…`, `sk-or-…`, `AIza…`, `Bearer …`); `-v` chỉ bật DEBUG cho
+  `mtl_worker`/`mtl_pipeline`, logger `anthropic`/`google_genai`/`openai`/`httpx`/`httpcore` ghim WARNING.
 - Không có key LLM: `--no-llm` (chỉ nhận `chapter.ingest`, `page.reinpaint`).
 - Token qua Keychain thay file: `security add-generic-password -s mtl-worker -a default -w` (để trống
   `MTL_TOKEN_FILE`; đổi account bằng `MTL_KEYCHAIN_ACCOUNT`).
@@ -101,7 +107,7 @@ page state từ người dùng: giữ khoá chương qua `apps/api/src/lib/chapt
 
 | Lệnh | Body chính | Ghi chú |
 |---|---|---|
-| `POST /claim` | `worker_id, capabilities, max ≤ 8, pipeline_version, dispatch_id` | 426 khi `< MIN_PIPELINE_VERSION`; 400 capability lạ/không được cấp. Token `mac` và `modal` cùng thấy job của mọi người dùng; token `modal` không nhận job nào của người đã vượt hạn mức, token `mac` không nhận job LLM của họ (xem [hạn mức](#hạn-mức-mỗi-người-user_daily_usd)). Breaker bật → bỏ qua loại job cần LLM |
+| `POST /claim` | `worker_id, capabilities, max ≤ 8, pipeline_version, dispatch_id` | 426 khi `< MIN_PIPELINE_VERSION`; 400 capability lạ/không được cấp. Token `mac` và `modal` cùng thấy job của mọi người dùng; token `modal` không nhận job nào của người đã vượt hạn mức, token `mac` không nhận job LLM của họ (xem [hạn mức](#hạn-mức-mỗi-người-user_daily_usd)). Breaker của provider job đó dùng đang bật → bỏ qua job (xem [breaker theo provider](#circuit-breaker-theo-provider)). Response mang `jobs[].llm` (key AI đã giải mã) nên luôn `Cache-Control: no-store` — xem [Provider AI từ DB](#provider-ai-từ-db-pipeline-0100) |
 | `POST /jobs/:id/heartbeat` | `lease_token, attempt, progress, stage, usage, done?, total?` | gia hạn lease 120s; ghi `jobs.progress_done/progress_total` (số ảnh/trang/đoạn đã xong / tổng của bước `stage`; thiếu = bước không đếm, worker cũ không gửi); `stop: "cancel"` khi người dùng huỷ, `stop: "paused_budget"` khi vượt ngân sách (job tốn tiền, không tính attempt) |
 | `POST /jobs/:id/presign-outputs` | `names: ["clean"\|"mask"\|"page:<ord>"]` | URL PUT mới, cùng rev, TTL ≤ lease còn lại |
 | `POST /jobs/:id/complete` | `result, usage, pipeline_version` | lặp với cùng lease → no-op |
@@ -132,8 +138,20 @@ từng trang, `chapter.run` (`target`, `total`, `remaining`, `batch`, `batches`)
 | `schema` (JSON LLM sai sau 1 retry), `internal` | có (`max_attempts=3`) | `30s·2^n` |
 | `invalid_input` (ảnh hỏng, vượt 16384px/60MP) | — | `failed` ngay |
 
-Circuit breaker: ≥ 5 lỗi provider/rate_limited trong 5' → `runtime_flags.llm_paused.until = now+2'`. Lỗi provider ở
-`page.prepare` gửi kèm `partial {clean_rev, mask_rev, regions}` → lần sau bỏ qua detect/inpaint. Lease hết hạn → reaper
+OpenAI/compatible: HTTP 402 và 429 hết hạn mức (`insufficient_quota`, `credit_balance_exhausted`, `*_spend_limit_exceeded`,
+`*_usage_limit_exceeded`) → `auth` (không retry). `jobs.error`/`fail.message` chỉ là câu chung `"<provider> HTTP <status> <error_class>"`
+hoặc `"internal: <TênException>"`; chi tiết chỉ nằm ở log worker đã redact.
+
+`auth` còn là lớp của job fail ngay lúc claim vì cấu hình AI lỗi (key không giải mã được / provider hoặc model đã mất):
+`jobs.error` = "Cấu hình AI lỗi: …" — xem mục Provider AI từ DB.
+
+### Circuit breaker theo provider
+
+≥ 5 lỗi provider/rate_limited trong 5' của **một** provider → `runtime_flags.llm_paused:<provider_id>.until = now+2'`, chỉ
+job dùng provider đó bị bỏ qua khi claim (và khi dispatcher tính job Modal cần chạy); job dùng provider khác hoặc env vẫn
+chạy. Job không có `payload.llm` (chạy bằng key env của worker) dùng khoá `env` = hàng `llm_errors` / `llm_paused` có từ
+trước (không đổi tên). Lỗi của job ghi vào mọi provider khác nhau trong `payload.llm`; job 1 slot DB + 1 slot env tính theo
+provider DB. Lỗi provider ở `page.prepare` gửi kèm `partial {clean_rev, mask_rev, regions}` → lần sau bỏ qua detect/inpaint. Lease hết hạn → reaper
 trả `queued` (giữ attempts) hoặc `failed` khi hết lượt.
 
 ## Ảnh / trang bỏ qua, chữ bỏ qua
@@ -243,6 +261,24 @@ của **người dùng sở hữu job** mà job dùng, dựng lúc claim (`fontI
 - translate: `settings.font` + `settings.narration_font` + `settings.thought_font` + `settings.note_font` của payload (snapshot lúc enqueue);
 - export: `font_family` của mọi box ở trang được vẽ chữ + font mặc định hiện tại của series.
 
+**Font hệ thống** (admin upload ở Cài đặt › Font hệ thống, bảng `system_fonts`, object `system/fonts/<font_id>`) dùng cùng
+dạng id `custom-<8 hex>` (id không trùng `user_fonts`) nên `resolveCustomFonts` trả chúng cho mọi người dùng cạnh font
+riêng, ở cùng danh sách `inputs.fonts` — hợp đồng và worker không đổi. Trần 20 font hoặc tổng 100MB. Xoá font hệ thống bị
+chặn (409 `in_use`, kèm số series) khi series của bất kỳ ai còn dùng làm mặc định; box cũ còn tham chiếu thì fallback như font riêng đã xoá.
+Rollback code về bản trước: series đã trỏ font hệ thống bị từ chối khi lưu lại (`unknownFonts` cũ) và job fallback font mặc định;
+bảng và object giữ lại vô hại (down: `migrations-down/0025_system_fonts.down.sql`). Backup `infra/backup.sh` mirror cả bucket nên gồm
+`system/`; lifecycle MinIO chỉ áp tag export.
+
+Runbook gỡ font hệ thống đang được series dùng làm mặc định (vd. gỡ vì bản quyền): admin không sửa được series của người
+dùng khác nên phải chạy SQL. Slot thiếu trong `series.default_fonts` nghĩa là dùng font mặc định, nên chỉ cần bỏ các khoá
+đang trỏ tới font (thay `<font_id>` bằng id thật, dạng `custom-<8hex>`) rồi xoá bình thường ở Cài đặt › Font hệ thống:
+
+```sql
+UPDATE series
+SET default_fonts = COALESCE((SELECT jsonb_object_agg(key, value) FROM jsonb_each_text(default_fonts) WHERE value <> '<font_id>'), '{}'::jsonb)
+WHERE EXISTS (SELECT 1 FROM jsonb_each_text(default_fonts) WHERE value = '<font_id>');
+```
+
 Id gói sẵn, của người dùng khác hoặc đã xoá (box cũ còn tham chiếu — xoá font chỉ bị chặn khi là mặc định series) bị
 bỏ khỏi danh sách. Worker (`mtl_worker/job_fonts.py`) tải mỗi font vào cache `~/.cache/mtl-worker/fonts/<sha256>`
 (`MTL_FONT_CACHE_DIR` để đổi), kiểm sha256 và đọc thử bằng fontTools, rồi đăng ký `id → file` trong suốt job
@@ -253,8 +289,9 @@ Worker chỉ tải URL có trong inputs.
 
 ## Cài đặt pipeline (pipeline 0.6.0)
 
-Cài đặt chung → Pipeline (`PUT /api/settings/pipeline`; `GET /api/me` trả `settings.pipeline`) lưu theo từng người
-dùng (jsonb, `{}` = mặc định). Hợp đồng: `packages/shared/src/pipeline-settings.ts`
+Cài đặt admin → Pipeline (`/settings`; `GET /api/admin/settings` và `PUT /api/admin/settings/pipeline`, chỉ email thuộc
+`ADMIN_EMAILS`) là cài đặt **toàn hệ thống**, một bộ chung cho mọi người dùng (bảng `system_settings`; thiếu hàng/key = mặc
+định). Đổi có hiệu lực từ job enqueue sau, job đang chờ giữ snapshot cũ. Hợp đồng: `packages/shared/src/pipeline-settings.ts`
 (`PipelineSettings`, `resolvePipelineSettings` đọc từng key hợp lệ, key lỗi → mặc định). Worker không đọc DB — API
 chụp vào payload lúc enqueue:
 
@@ -263,7 +300,7 @@ chụp vào payload lúc enqueue:
 | `page.prepare` | `pipeline` | `detector`, `detection_threshold`, `ocr_engine` (đã chọn theo `source_lang` của series), `inpainter`, `mask_dilation` (`null` = tự động 2–6px), `inpaint_size` |
 | `page.reinpaint` | `inpaint` | `inpainter`, `inpaint_size` (cả mask người vẽ lẫn `auto_text_bbox`) |
 | `page.ocr_region` | `ocr_engine`, `reading_order` | OCR vùng tự vẽ theo engine; dịch vẫn qua LLM |
-| `chapter.proofread` | `model_tier` | `standard` / `premium` |
+| `chapter.proofread` | `model_tier` | `standard` / `premium` — chỉ khi chưa gán slot Hiệu đính (0.10.0: thay bằng `llm.proofread`) |
 
 - Mặc định (`rtdetr_v2_comic`, 0.35, `llm`, `big_lama`, tự động, 512) = hành vi trước 0.6.0. Field optional: job xếp
   hàng trước đó thiếu → worker dùng mặc định. `prepareInputRev` chỉ trộn hash tuỳ chọn khi **khác** mặc định → page /
@@ -283,11 +320,61 @@ chụp vào payload lúc enqueue:
   det/rec, PP-OCRv5 rec tiếng Hàn): không kiểm lúc khởi động; lần đầu job cần → `ensure_model` tải đúng URL/revision,
   kiểm sha256 (lỗi → job `internal`, thử lại). `scripts/fetch_models.py` mặc định tải cả model optional.
 
+## Nhà cung cấp AI do admin cấu hình
+
+Cài đặt admin → AI (`/settings?section=providers|tasks`; `/api/admin/providers*`, `/api/admin/models/:id`,
+`PUT /api/admin/settings/slots`): provider (`anthropic`, `gemini`, `openai`, `openai_compatible` + `base_url` https) kèm model
+và giá USD/1M token do admin nhập (`ai_providers`, `ai_models`), và 3 slot OCR / Dịch / Hiệu đính (cột FK
+`ocr_model_id`, `translate_model_id`, `proofread_model_id` trên `system_settings`; `null` = mặc định theo env worker).
+
+- Key mã hoá AES-256-GCM bằng `SECRETS_KEY` (blob `base64(version|iv|tag|ct)`, AAD `ai_provider:<id>`); API chỉ trả
+  `key_last4`, không bao giờ trả / log key. Đổi `SECRETS_KEY` = nhập lại key từng provider.
+- `model_id` bất biến (xoá rồi thêm). Đổi `base_url` bắt buộc kèm key mới (409 `key_required`). Xoá provider / model, hoặc
+  tắt `vision` của model đang gán OCR / Hiệu đính: 409 `in_use` (còn gán slot) hoặc `in_use_by_jobs` (còn job
+  `queued|running|paused_budget` có `payload.llm` tham chiếu).
+- `POST /api/admin/providers/:id/test`: giải mã key trong RAM, gọi endpoint liệt kê model (Anthropic `x-api-key`, Gemini
+  `x-goog-api-key`, OpenAI/compatible Bearer; OpenRouter dùng `/key`); không theo redirect, timeout 10s; chỉ trả
+  `{ok, reason, http_status}`.
+- Slot được job dùng từ pipeline 0.10.0, xem mục dưới.
+
+## Provider AI từ DB (pipeline 0.10.0)
+
+Hợp đồng: `packages/shared/src/job.ts` (`LlmRef`, `LlmRefs`), `worker-protocol.ts` (`LlmConfig`, `ClaimedJob.llm`).
+
+- **Enqueue** (`apps/api/src/ai/llm-refs.ts`): đọc 3 slot dưới `FOR SHARE` và chụp `payload.llm = {ocr?, translate?,
+  proofread?}`, mỗi ref `{provider_id, model}` (không key). Slot theo loại job: `page.prepare` → `ocr` (chỉ khi OCR engine là
+  `llm`); `chapter.translate` → `translate`; `page.ocr_region` → `ocr` (engine `llm`) + `translate`; `chapter.proofread` →
+  `proofread`. Slot chưa gán → không có trong `llm` (không slot nào → không có `llm`) → worker dùng env cho tác vụ đó.
+- **Claim** (`apps/api/src/ai/llm-config.ts`): giải mã key trong RAM và trả thêm `jobs[].llm = {ocr?, translate?,
+  proofread?}`, mỗi phần `{type, model, api_key, base_url, structured_output, reasoning}`. Chỉ nằm trong response
+  (`no-store`), không ghi `jobs.payload/result/error`, event hay log. Đổi key trên UI → job claim kế tiếp dùng key mới.
+  Key không giải mã được (đổi / mất `SECRETS_KEY`) hoặc provider / model đã mất → job `failed`, lớp `auth`, không retry,
+  `error` = "Cấu hình AI lỗi: <không giải mã được key | model «…» không còn> của provider «tên» —
+  admin nhập lại key ở Cài đặt › AI" (provider đã bị xoá: câu chung "nhà cung cấp AI của tác vụ đã bị xoá", không nêu
+  id); job khác trong lô claim vẫn chạy.
+- **Worker** (`worker/mtl_worker/llm_cache.py`, `handlers.llm_provider`): mỗi call LLM lấy provider theo slot — có
+  `claim.llm.<slot>` → `provider_for_config` (cache tối đa 8 theo type / model / base_url / structured_output / reasoning /
+  hash key; bị đẩy ra thì đóng client; đổi key → client mới); không có → provider env như cũ (`model_tier` cho hiệu đính).
+  Payload có `llm.<slot>` mà claim thiếu cấu hình → `auth` (không âm thầm chạy bằng key env). Không slot DB và không key
+  env của `--provider` → `auth` "chưa cấu hình provider AI (slot DB hoặc env worker)"; worker không nạp sớm provider env nếu
+  thiếu key. Key cấp job được đăng ký vào `log_redact` suốt job và bỏ khi xong (key env đăng ký lúc khởi động giữ nguyên);
+  `fail.message` cũng qua redact. `usage.model` = model của cấu hình thực dùng.
+- **Idempotency**: `llm` chỉ vào khoá idempotency (không vào `input_rev` của prepare / translate → đổi model không làm
+  trang đã xử lý thành lỗi thời). Hiệu đính chưa gán slot giữ khoá `{tier}` và `model_tier` như trước (tier đọc từ
+  `proofread_tier` còn lưu trong jsonb cài đặt chung, mặc định `standard`; lưu pipeline trên UI gộp vào jsonb nên không mất
+  key này); có slot → khoá `{llm}`, không `model_tier`.
+- **Giá** (`llmPriceFor`): job có `payload.llm` → giá admin nhập của ref khớp `usage.model`; nhiều ref khác model
+  (`page.ocr_region`) → max từng chiều; không có `llm` hoặc `usage.model` không khớp ref → bảng tĩnh `LLM_PRICES_PER_MTOK`.
+- Worker 0.10.0 đọc được payload / claim cũ (trường mới optional); API `MIN_PIPELINE_VERSION = 0.10.0` trả 426 cho worker
+  cũ vì schema của chúng (`additionalProperties: false`) từ chối `llm`.
+- Rủi ro còn lại: token worker (Mac / Modal) bị lộ → kẻ giữ token claim được job và lấy mọi key đang gán slot, dùng ngoài
+  ledger. Xem [deployment-guide](./deployment-guide.md) (checklist 0.10.0) về biện pháp.
+
 ## AI hiệu đính (`chapter.proofread`)
 
 `POST /api/chapters/:id/proofread` (chương `review` / `done` / `partial_failed`, khác → 409
-`chapter_not_translated`) → job cho mọi trang hiện, `ready`; payload chụp `TranslateSettings` của series + `model_tier`.
-Idempotency theo version page_state + glossary/settings rev + tier. Job chỉ đọc: không đổi trạng thái chương/trang, không
+`chapter_not_translated`) → job cho mọi trang hiện, `ready`; payload chụp `TranslateSettings` của series + `model_tier` (chưa gán slot Hiệu đính) hoặc `llm.proofread` (đã gán).
+Idempotency theo version page_state + glossary/settings rev + tier (hoặc `llm`). Job chỉ đọc: không đổi trạng thái chương/trang, không
 khoá chương. Inputs lúc claim (`ProofreadInputs`): bản dịch hiện tại (gồm sửa tay) của vùng chữ có bản dịch, bỏ vùng
 khớp chữ bỏ qua, + URL ảnh gốc. Worker (`mtl_pipeline/proofread.py`, prompt `prompts/proofread_page.md`) tải + thu nhỏ
 ảnh mọi trang ngay sau claim (URL ký 10', chương dài gọi LLM lâu hơn), rồi mỗi trang 1 call (JSON khối + ảnh gốc thu
@@ -316,8 +403,17 @@ dispatch (GPU Modal là chi phí thật).
 Tách khỏi kill-switch toàn cục (`GLOBAL_DAILY_USD`, `paused_budget`, `pnpm budget-resume` — không đổi): một tài khoản
 dùng quá tay không làm cạn ngân sách chung. Code: `apps/api/src/billing/user-quota.ts`.
 
+**Chỉnh trên UI**: admin đặt hạn mức mỗi người, ngân sách ngày toàn hệ thống và bật/tắt đăng ký ở Cài đặt › Hệ thống › Hạn
+mức & đăng ký (`PUT /api/admin/settings/limits`, cột trong `system_settings`). Hạn mức hiệu lực = giá trị DB, trống (`null`)
+thì rơi về env (`USER_DAILY_USD`, `GLOBAL_DAILY_USD`, `SIGNUP_ENABLED`); đọc mỗi lần đánh giá nên có hiệu lực ngay, không
+restart `mtl-api` / `mtl-jobs`. Không có cách đặt "không giới hạn" khi env có ngưỡng; ngân sách tháng
+(`GLOBAL_MONTHLY_USD`) chỉ đặt bằng env. Hạ hạn mức xuống dưới số đã chi hôm nay (người chi nhiều nhất / tổng toàn hệ
+thống) cần `confirm: true` (UI hỏi, API 409 `confirm_required` kèm số liệu và số job bị ảnh hưởng): job LLM đang chờ của
+người vượt bị `failed` `quota_exceeded`, nâng lại không tự chạy lại; ngân sách ngày thấp hơn tổng đã chi làm mọi job AI
+`paused_budget` tới ngày UTC mới hoặc khi nâng ngưỡng.
+
 - Cửa sổ = ngày **UTC** (cùng `billing/budget.ts`), tính **mọi** chi phí của người dùng trong `usage_ledger` (token LLM
-  + GPU). `0` = chặn mọi job LLM; không đặt = không giới hạn. `SIGNUP_ENABLED=true` bắt buộc phải đặt biến này.
+  + GPU). `0` = chặn mọi job LLM; không đặt (cả DB lẫn env) = không giới hạn. Bật đăng ký (env hoặc UI) bắt buộc đủ cả 2 hạn mức.
 - Endpoint tạo job LLM → 402 `{error:"quota_exceeded", spent_usd, limit_usd, resets_at}`: commit (khi OCR là LLM hoặc đích
   `translated` tường minh), dịch, `translate-prepared`, chạy lại trang lỗi, `ocr-region`, hiệu đính. Job không-LLM (xoá chữ
   lại, xuất…) vẫn tạo được. Hết hạn mức **giữa** chuỗi lô → đóng lượt, trang chưa tới lượt giữ `prepared` / `ready`.
@@ -326,7 +422,7 @@ dùng quá tay không làm cạn ngân sách chung. Code: `apps/api/src/billing/
   chạy: heartbeat trả `stop: "cancel"` rồi job `failed` như trên.
 - Token `modal` không bao giờ claim job nào của người vượt (kể cả không-LLM): job không-LLM của họ chỉ chạy trên worker
   Mac ($0) hoặc chờ sang ngày mới. Dispatcher bỏ qua các job đó khi quyết định bật Modal.
-- `GET /api/me` trả `quota {spent_usd, limit_usd|null, resets_at}`; web hiện "Hạn mức AI hôm nay" ở Cài đặt chung.
+- `GET /api/me` trả `quota {spent_usd, limit_usd|null, resets_at}`; web hiện "Hạn mức AI hôm nay" trong menu tài khoản.
 - Người dùng khác không bị ảnh hưởng.
 
 ## Mac ưu tiên, Modal bù (grace)

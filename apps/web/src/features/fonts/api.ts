@@ -18,6 +18,8 @@ export type UserFont = {
   vi_complete: boolean;
   /** Chữ Việt font không có. */
   missing: string[];
+  /** Font hệ thống (admin upload, mọi người dùng thấy) — không tính vào giới hạn font riêng. */
+  system: boolean;
   /** Presigned GET ngắn hạn; hết hạn lúc `url_expires_at`. */
   url: string;
   url_expires_at: string;
@@ -32,22 +34,25 @@ export const deleteFont = (id: string) => api<void>(`/api/fonts/${id}`, { method
 
 type UploadSlot = { key: string; url: string; fields: Record<string, string> };
 
-/** Xin URL upload → POST thẳng lên storage → xác nhận với API (kiểm TTF/OTF, đọc metrics). */
-export async function uploadFont(file: File): Promise<UserFont> {
-  const slot = await api<UploadSlot>("/api/fonts/upload-url", { method: "POST", body: { bytes: file.size } });
+/** Font riêng (bỏ font hệ thống): danh sách "Font của tôi" và số font tính vào giới hạn. */
+export const ownFonts = (fonts: readonly UserFont[] = []) => fonts.filter((f) => !f.system);
+
+/** Xin URL upload → POST thẳng lên storage → xác nhận với API (kiểm TTF/OTF, đọc metrics). `base`: `/api/fonts` hoặc `/api/admin/fonts`. */
+export async function uploadFont(file: File, base = "/api/fonts"): Promise<UserFont> {
+  const slot = await api<UploadSlot>(`${base}/upload-url`, { method: "POST", body: { bytes: file.size } });
   const form = new FormData();
   for (const [k, v] of Object.entries(slot.fields)) form.append(k, v);
   form.append("file", file);
   const res = await fetch(slot.url, { method: "POST", body: form });
   if (!res.ok) throw new Error(`upload font thất bại (${res.status})`);
-  return api<UserFont>("/api/fonts", { method: "POST", body: { key: slot.key } });
+  return api<UserFont>(base, { method: "POST", body: { key: slot.key } });
 }
 
 const FONT_EXT = /\.(ttf|otf)$/i;
 /** `accept` cho input file font. */
 export const FONT_ACCEPT = ".ttf,.otf,font/ttf,font/otf";
 
-/** Lỗi trước khi gửi: đuôi file, dung lượng, số font (`count` = số font đang có). */
+/** Lỗi trước khi gửi: đuôi file, dung lượng, số font (`count` = số font riêng đang có, không tính font hệ thống). */
 export function fontUploadError(file: File, count: number): string | null {
   if (!FONT_EXT.test(file.name)) return "Chỉ nhận font .ttf hoặc .otf (không nhận WOFF/WOFF2).";
   if (file.size > MAX_FONT_BYTES) return "Font tối đa 10MB.";

@@ -1,8 +1,8 @@
 /** `fonts` trong inputs translate/export: chỉ font tuỳ chỉnh có thật của người dùng, font đã xoá bị bỏ. */
-import { type jobs, pageStates, pages, scoped, series, userFonts } from "@mtl/db";
+import { type jobs, pageStates, pages, scoped, series, systemFonts, userFonts } from "@mtl/db";
 import { ExportInputs, emptyPageState, pageId, storageKeys, TranslateInputs } from "@mtl/shared";
 import { eq } from "drizzle-orm";
-import { beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildInputs } from "../src/jobs/claim-inputs.ts";
 import { db, seedUser } from "./helpers.ts";
 import { aiState, SHA } from "./worker-helpers.ts";
@@ -192,5 +192,34 @@ describe("export inputs fonts", () => {
     await seedPage(B, ["Bangers-Regular"]);
     const inputs = ExportInputs.parse(await buildInputs(db, exportJob(B)));
     expect(inputs.fonts).toEqual([]);
+  });
+});
+
+describe("system fonts in inputs", () => {
+  const SYS = "custom-5a5a5a5a";
+  const SYS_SHA = sha("5");
+  beforeAll(async () => {
+    await db.insert(systemFonts).values({ ...font(SYS, A, "5"), fileKey: `system/fonts/${SYS}`, sha256: SYS_SHA });
+  });
+  afterAll(async () => {
+    await db.delete(systemFonts).where(eq(systemFonts.fontId, SYS));
+  });
+
+  it("translate of another user lists the system font with a signed url under system/fonts", async () => {
+    const inputs = TranslateInputs.parse(await buildInputs(db, translateJob(B, [], settings(SYS, FONT_B))));
+    expect(inputs.fonts?.map((f) => [f.id, f.sha256])).toEqual([
+      [SYS, SYS_SHA],
+      [FONT_B, sha("b")],
+    ]);
+    const url = inputs.fonts?.find((f) => f.id === SYS)?.url ?? "";
+    expect(url).toContain(`system/fonts/${SYS}`);
+    expect(url).toContain("X-Amz-Signature");
+  });
+
+  it("export lists a system font used by a page box or the series default", async () => {
+    const D = await seedUser("cf-sys");
+    await seedPage(D, [SYS]);
+    const inputs = ExportInputs.parse(await buildInputs(db, exportJob(D)));
+    expect(inputs.fonts?.map((f) => f.id)).toEqual([SYS]);
   });
 });

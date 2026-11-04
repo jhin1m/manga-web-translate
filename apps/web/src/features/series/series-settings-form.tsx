@@ -12,6 +12,7 @@ import { fontPreview, loadFonts } from "../editor/fonts.ts";
 import {
   FONT_ACCEPT,
   fontKeys,
+  ownFonts,
   type UserFont,
   uploadCheckedFont,
   useBundledFonts,
@@ -64,7 +65,6 @@ const toForm = (s: Series): Form => ({
   pronoun_rules: s.pronoun_rules,
   style_prompt: s.style_prompt,
   default_fonts: s.default_fonts,
-  llm_tier: s.llm_tier,
 });
 
 export function SeriesSettingsForm({ series }: { series: Series }) {
@@ -116,7 +116,7 @@ export function SeriesSettingsForm({ series }: { series: Series }) {
   const fileInput = useRef<HTMLInputElement>(null);
   const uploadSlot = useRef<FontSlot>("dialogue");
   const upload = useMutation({
-    mutationFn: ({ file }: { file: File; slot: FontSlot }) => uploadCheckedFont(file, custom.data?.length ?? 0),
+    mutationFn: ({ file }: { file: File; slot: FontSlot }) => uploadCheckedFont(file, ownFonts(custom.data).length),
     onSuccess: (font, { slot }) => {
       // Thêm ngay vào danh sách để select có option khớp giá trị mới trước khi refetch xong.
       qc.setQueryData<UserFont[]>(fontKeys.list(), (cur) => [...(cur ?? []), font]);
@@ -205,17 +205,6 @@ export function SeriesSettingsForm({ series }: { series: Series }) {
               <option value="keep">Giữ nguyên kính ngữ (phiên âm)</option>
             </select>
           </div>
-          <div>
-            <label htmlFor="s-tier">Model dịch</label>
-            <select
-              id="s-tier"
-              value={f.llm_tier}
-              onChange={(e) => set("llm_tier", e.target.value as Form["llm_tier"])}
-            >
-              <option value="standard">Standard (rẻ, nhanh)</option>
-              <option value="premium">Premium (chất lượng cao hơn)</option>
-            </select>
-          </div>
         </div>
         <label htmlFor="s-style">Giọng văn</label>
         <textarea
@@ -287,14 +276,20 @@ export function SeriesSettingsForm({ series }: { series: Series }) {
                     {id}
                   </option>
                 ))}
-                {(custom.data ?? []).length > 0 && (
-                  <optgroup label="Font của bạn">
-                    {(custom.data ?? []).map((font) => (
-                      <option key={font.id} value={font.id} style={fontPreview(font.id)}>
-                        {font.name}
-                      </option>
-                    ))}
-                  </optgroup>
+                {[
+                  { label: "Font hệ thống", list: (custom.data ?? []).filter((font) => font.system) },
+                  { label: "Font của bạn", list: ownFonts(custom.data) },
+                ].map(
+                  ({ label, list }) =>
+                    list.length > 0 && (
+                      <optgroup key={label} label={label}>
+                        {list.map((font) => (
+                          <option key={font.id} value={font.id} style={fontPreview(font.id)}>
+                            {font.name}
+                          </option>
+                        ))}
+                      </optgroup>
+                    ),
                 )}
                 <option value={UPLOAD_OPTION}>+ Tải font lên…</option>
               </select>

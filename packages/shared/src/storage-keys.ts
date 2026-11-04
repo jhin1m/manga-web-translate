@@ -18,6 +18,9 @@ export const storageKeys = {
   seriesSkip: (user: string, series: string, id: string, ext: string) => `u/${user}/series/${series}/skip/${id}.${ext}`,
   /** Font tuỳ chỉnh của người dùng (TTF/OTF): presigned POST ghi thẳng vào đây, API kiểm rồi giữ nguyên key. */
   font: (user: string, uploadId: string) => `u/${user}/fonts/${uploadId}`,
+  /** Font hệ thống (admin): upload tạm rồi chép sang key theo font_id. Prefix `system/` không thuộc người dùng nào. */
+  systemFontUpload: (uploadId: string) => `system/fonts/uploads/${uploadId}`,
+  systemFont: (fontId: string) => `system/fonts/${fontId}`,
 } as const;
 
 /** Prefix mọi object của một người dùng. */

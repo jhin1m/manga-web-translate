@@ -116,6 +116,13 @@ Toàn màn hình (ngoài app shell), `chapter-workspace.css`. Nguyên tắc (own
 - **Tiến độ**: `.bar > span` cao 3px.
 - **Bố cục**: `.page` (+ `.page-narrow` 880px cho form), `.page-head` (tiêu đề + spacer + nút), `.crumbs`, `.grid-2`, `.section`.
 
+## Cài đặt admin (`/settings`)
+
+- Chỉ admin (`ADMIN_EMAILS`). Bố cục: thanh mục trái (nhóm "AI", "Hệ thống"; mục = link `?section=`) + 1 panel phải, tối đa 880px. Mục đang chọn = chữ `--c-accent-hover` + nền `--c-accent-weak`; không gradient, bo ≤ 4px, 1 màu nhấn.
+- Mục AI: **Pipeline**, **Nhà cung cấp** (bảng: tên · loại · `••••last4` · số model · Kiểm tra · icon Sửa / Xoá có xác nhận tại chỗ; form thêm / sửa nằm trên bảng, model + giá USD/1M token, model reasoning có cảnh báo màu `--c-warn`), **Model tác vụ** (3 select OCR / Dịch / Hiệu đính, OCR + Hiệu đính chỉ model có vision).
+- Mục Hệ thống: **Hạn mức & đăng ký**, **Người dùng**, **Font hệ thống** (bảng tên · dung lượng · đủ/thiếu dấu · icon Xoá, nút chọn file ở trên; trần 20 font / 100MB). Font hệ thống hiện thành nhóm "Font hệ thống" (trước "Font của bạn") ở picker font series và ô Font của editor; `/fonts` chỉ liệt kê font riêng và giới hạn 20 font không đếm font hệ thống.
+- Thêm mục: khai báo trong `features/admin/admin-sections.ts` + panel trong `admin-layout.tsx`. Font cá nhân không nằm ở đây (`/fonts`, menu tài khoản).
+
 ## Ngôn ngữ
 
 - Giao diện tiếng Việt, có dấu đầy đủ. Thuật ngữ kỹ thuật giữ nguyên khi người dùng quen (ZIP, CSV, glossary, SFX).
