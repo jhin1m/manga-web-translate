@@ -16,13 +16,13 @@ import { chapters, type DbLike, jobs, NotFoundError, pages } from "@mtl/db";
 import { type OcrResult, prepareOptions, type TranslateCarry } from "@mtl/shared";
 import { and, asc, desc, eq, gte, inArray, sql } from "drizzle-orm";
 import { userQuotaStatus } from "../billing/user-quota.ts";
+import { systemPipeline } from "../lib/system-settings.ts";
 import {
   activeJobOf,
   conflict,
   enqueuePrepare,
   enqueueTranslate,
   lockChapter,
-  pipelineSettingsOf,
   type RunTarget,
   refreshChapter,
   seriesOf,
@@ -310,7 +310,7 @@ export async function retryFailedPages(tx: DbLike, userId: string, chapterId: st
     .where(and(eq(pages.chapterId, ch.id), eq(pages.skipped, false)))
     .orderBy(asc(pages.ord));
   const failed = visible.filter((p) => p.status === "failed");
-  const pipeline = await pipelineSettingsOf(tx, userId);
+  const pipeline = await systemPipeline(tx);
   const options = prepareOptions(pipeline, s.sourceLang);
   const stage1 = failed.filter(
     (p) => !p.ocrResult || p.prepareInputRev !== prepareKey(p.id, p.originalSha256, s.settingsRev, options).inputRev,

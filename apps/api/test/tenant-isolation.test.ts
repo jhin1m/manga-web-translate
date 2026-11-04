@@ -18,7 +18,7 @@ import {
   sourceFiles,
   userFonts,
 } from "@mtl/db";
-import { DEFAULT_PIPELINE_SETTINGS, emptyPageState, pageId } from "@mtl/shared";
+import { emptyPageState, pageId } from "@mtl/shared";
 import { eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { app, call, db, seedUser } from "./helpers.ts";
@@ -141,7 +141,6 @@ beforeAll(async () => {
 
 /** Body hợp lệ tối thiểu cho từng route (để 404 đến từ tra cứu id chứ không phải validate body). */
 const BODIES: Record<string, unknown> = {
-  "PUT /api/settings/pipeline": { pipeline: DEFAULT_PIPELINE_SETTINGS },
   "POST /api/chapters/:chapterId/uploads": { filename: "001.png", content_type: "image/png", bytes: 1024 },
   "POST /api/series": { title: "Series mới" },
   "PATCH /api/series/:seriesId": { style_prompt: "ngắn gọn" },
@@ -272,6 +271,8 @@ const userRoutes = () => {
   for (const r of app.routes) {
     if (r.method === "ALL" || !r.path.startsWith("/api/")) continue;
     if (r.path.startsWith("/api/auth/") || r.path.startsWith("/api/dev/")) continue;
+    // Route admin xuyên người dùng có chủ đích (cài đặt hệ thống) — kiểm ở admin-access.test.ts.
+    if (r.path.startsWith("/api/admin/")) continue;
     seen.add(`${r.method} ${r.path}`);
   }
   return [...seen].sort();
@@ -282,9 +283,9 @@ function fill(path: string, params: Record<string, string>) {
 }
 
 describe("tenant isolation", () => {
-  it("discovers user routes (incl. /api/me and /api/settings/pipeline)", () => {
+  it("discovers user routes (incl. /api/me)", () => {
     const routes = userRoutes();
-    expect(routes).toEqual(expect.arrayContaining(["GET /api/me", "PUT /api/settings/pipeline"]));
+    expect(routes).toEqual(expect.arrayContaining(["GET /api/me"]));
     expect(routes.length).toBeGreaterThan(50);
   });
 

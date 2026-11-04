@@ -79,3 +79,8 @@
   border-bottom: 1px solid var(--c-line);
   margin-bottom: var(--sp-1);
 }
+.shell-menu-quota {
+  padding: var(--sp-2) var(--sp-3);
+  border-top: 1px solid var(--c-line);
+  margin-top: var(--sp-1);
+}

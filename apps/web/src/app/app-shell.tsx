@@ -7,7 +7,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link, Outlet } from "@tanstack/react-router";
 import { createContext, type ReactNode, useContext, useEffect, useRef } from "react";
 import { ShellActivity } from "../features/chapter/activity-drawer.tsx";
-import { api, authClient, errorMessage, type Me } from "../lib/api.ts";
+import { api, authClient, errorMessage, type Me, usd } from "../lib/api.ts";
 import { markDevSignedOut } from "../lib/dev-login.ts";
 import "./app-shell.css";
 
@@ -21,7 +21,7 @@ export function signOut() {
 
 const MeCtx = createContext<Me | null>(null);
 
-/** Người dùng hiện tại + cài đặt chung — chỉ dùng bên trong AppShell. */
+/** Người dùng hiện tại + quyền admin + hạn mức — chỉ dùng bên trong AppShell. */
 export function useMe(): Me {
   const me = useContext(MeCtx);
   if (!me) throw new Error("useMe outside AppShell");
@@ -91,7 +91,13 @@ function AccountMenu() {
       <div className="shell-menu-list" onClick={() => closeMenu(ref.current)}>
         <span className="shell-menu-email muted small">{me.email}</span>
         <Link to="/glossary">Glossary chung</Link>
-        <Link to="/settings">Cài đặt chung</Link>
+        <Link to="/fonts">Font của tôi</Link>
+        {me.is_admin && <Link to="/settings">Cài đặt</Link>}
+        {me.quota.limit_usd !== null && (
+          <span className="shell-menu-quota muted small" data-testid="quota-line">
+            Hạn mức AI hôm nay: {usd(me.quota.spent_usd)} / {usd(me.quota.limit_usd)}
+          </span>
+        )}
         <button type="button" onClick={() => void signOut()}>
           Đăng xuất
         </button>

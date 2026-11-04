@@ -52,3 +52,10 @@ export async function seedUser(label: string) {
 }
 
 export { auth, db };
+
+/** Người dùng như `seedUser` nhưng email thuộc `ADMIN_EMAILS` (isolate-queue khôi phục env sau mỗi ca). */
+export async function seedAdmin(label: string) {
+  const u = await seedUser(label);
+  env.ADMIN_EMAILS.push(u.email);
+  return u;
+}

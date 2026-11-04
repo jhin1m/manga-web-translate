@@ -1,4 +1,4 @@
-/** Cài đặt pipeline của người dùng: lưu, validate, snapshot vào payload job, input_rev giữ nguyên khi mặc định. */
+/** Cài đặt pipeline chung của hệ thống (admin sửa): lưu, validate, snapshot vào payload job của mọi user, input_rev giữ nguyên khi mặc định. */
 import { randomUUID } from "node:crypto";
 import { chapters, jobs, pages, runtimeFlags, scoped, series } from "@mtl/db";
 import { DEFAULT_PIPELINE_SETTINGS, type PipelineSettings, prepareInputRev } from "@mtl/shared";
@@ -6,14 +6,21 @@ import { eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { env } from "../src/env.ts";
 import { enqueueOcrRegion, enqueuePrepare, enqueueReinpaint, inJobTx } from "../src/jobs/enqueue.ts";
-import { call, db, seedUser } from "./helpers.ts";
+import { call, db, seedAdmin, seedUser } from "./helpers.ts";
 import { claimJobs, workerToken } from "./worker-helpers.ts";
 
 type Seed = Awaited<ReturnType<typeof seedUser>>;
 let A: Seed;
+let adminCookie: string;
 
+/** `seedAdmin` chỉ có hiệu lực trong ca tạo ra nó → mỗi lần gọi admin API phải đăng ký lại email. */
+let adminEmail: string;
+const asAdmin = () => {
+  if (!env.ADMIN_EMAILS.includes(adminEmail)) env.ADMIN_EMAILS.push(adminEmail);
+  return adminCookie;
+};
 const put = (pipeline: unknown) =>
-  call("/api/settings/pipeline", { method: "PUT", cookie: A.cookie, body: { pipeline } });
+  call("/api/admin/settings/pipeline", { method: "PUT", cookie: asAdmin(), body: { pipeline } });
 
 async function newPage() {
   return scoped(db, A.userId).insert(pages, {
@@ -37,14 +44,18 @@ async function prepare(page: typeof pages.$inferSelect) {
 
 beforeAll(async () => {
   A = await seedUser("pipeline");
+  const admin = await seedAdmin("pipeline-admin");
+  adminCookie = admin.cookie;
+  adminEmail = admin.email;
 });
 
 describe("pipeline settings", () => {
-  it("GET /api/me trả mặc định khi chưa cấu hình; lưu được và đọc lại", async () => {
-    const me = await call("/api/me", { cookie: A.cookie });
-    expect(((await me.json()) as { settings: { pipeline: PipelineSettings } }).settings.pipeline).toEqual(
-      DEFAULT_PIPELINE_SETTINGS,
-    );
+  const read = async () =>
+    ((await (await call("/api/admin/settings", { cookie: asAdmin() })).json()) as { pipeline: PipelineSettings })
+      .pipeline;
+
+  it("GET /api/admin/settings trả mặc định khi chưa cấu hình; lưu được và đọc lại", async () => {
+    expect(await read()).toEqual(DEFAULT_PIPELINE_SETTINGS);
     const custom: PipelineSettings = {
       ...DEFAULT_PIPELINE_SETTINGS,
       inpainter: "lama_manga",
@@ -54,8 +65,43 @@ describe("pipeline settings", () => {
     const res = await put(custom);
     expect(res.status, await res.clone().text()).toBe(200);
     expect(((await res.json()) as { pipeline: PipelineSettings }).pipeline).toEqual(custom);
-    const again = await call("/api/me", { cookie: A.cookie });
-    expect(((await again.json()) as { settings: { pipeline: PipelineSettings } }).settings.pipeline).toEqual(custom);
+    expect(await read()).toEqual(custom);
+    await put(DEFAULT_PIPELINE_SETTINGS);
+  });
+
+  it("route cũ PUT /api/settings/pipeline đã bỏ; user thường không sửa được cài đặt chung", async () => {
+    const old = await call("/api/settings/pipeline", {
+      method: "PUT",
+      cookie: A.cookie,
+      body: { pipeline: DEFAULT_PIPELINE_SETTINGS },
+    });
+    expect(old.status).toBe(404);
+    const denied = await call("/api/admin/settings/pipeline", {
+      method: "PUT",
+      cookie: A.cookie,
+      body: { pipeline: { ...DEFAULT_PIPELINE_SETTINGS, mask_dilation: 9 } },
+    });
+    expect(denied.status).toBe(403);
+    expect(await read()).toEqual(DEFAULT_PIPELINE_SETTINGS);
+  });
+
+  it("cài đặt do admin lưu áp cho job của user khác", async () => {
+    await put({ ...DEFAULT_PIPELINE_SETTINGS, inpainter: "lama_manga" });
+    const B = await seedUser("pipeline-b");
+    const sdb = scoped(db, B.userId);
+    const page = await sdb.insert(pages, {
+      id: randomUUID(),
+      chapterId: B.chapterId,
+      ord: 0,
+      width: 800,
+      height: 1200,
+      originalKey: `u/${B.userId}/x.png`,
+      originalSha256: "ef".repeat(32),
+    });
+    const [s] = await sdb.select(series, eq(series.id, B.seriesId));
+    const [ch] = await sdb.select(chapters, eq(chapters.id, B.chapterId));
+    const { job } = await inJobTx((tx) => enqueuePrepare(tx, page, s as never, ch as never));
+    expect(job.payload).toMatchObject({ pipeline: { inpainter: "lama_manga" } });
     await put(DEFAULT_PIPELINE_SETTINGS);
   });
 

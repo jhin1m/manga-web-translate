@@ -1,15 +1,14 @@
 /**
- * Cài đặt chung → Pipeline: người dùng đổi OCR engine tiếng Nhật + nới mask (Nâng cao), lưu, tải lại vẫn giữ; về mặc định.
- * Tab Font vẫn là mặc định của trang.
+ * Cài đặt admin → Pipeline: admin đổi OCR engine tiếng Nhật + nới mask (Nâng cao), lưu, tải lại vẫn giữ; về mặc định.
+ * Pipeline là mục mặc định của trang.
  */
 import { expect, test } from "@playwright/test";
 import { login } from "./helpers.ts";
 
 test("owner edits pipeline settings and they persist", async ({ page }) => {
   await login(page);
-  await page.goto(`/settings`);
-  await page.getByRole("link", { name: "Pipeline" }).click();
-  await expect(page).toHaveURL(/tab=pipeline/);
+  await page.goto(`/settings?section=pipeline`);
+  await expect(page.getByRole("heading", { name: "Cài đặt", exact: true })).toBeVisible();
 
   const ja = page.getByLabel(/Tiếng Nhật OCR engine/);
   await expect(ja).toHaveValue("llm");

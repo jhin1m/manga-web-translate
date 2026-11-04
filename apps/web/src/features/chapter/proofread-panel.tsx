@@ -1,5 +1,5 @@
 /**
- * Panel "AI hiệu đính" (rail công cụ): chạy hiệu đính cả chương (job chapter.proofread, model theo Cài đặt chung →
+ * Panel "AI hiệu đính" (rail công cụ): chạy hiệu đính cả chương (job chapter.proofread, model theo Cài đặt admin →
  * Pipeline), xem gợi ý theo trang (bản hiện tại → đề xuất + lý do), Nhận / Bỏ từng gợi ý, "Nhận tất cả" ở trang đang
  * mở. Nhận = sửa bản dịch như gõ tay (`setRegionTranslation` qua editorStore: undo/redo, autosave, version, khoá
  * chương, ngắt dòng lại box) — gợi ý không bao giờ tự ghi đè. Trạng thái gợi ý suy từ bản dịch hiện tại
@@ -175,7 +175,7 @@ export function ProofreadPanel(props: {
         <p className="muted small cw-pad">
           {job?.status === "succeeded"
             ? "AI không thấy khối nào cần sửa (hoặc mọi gợi ý đã được bỏ)."
-            : "AI đọc bản dịch cả chương (kèm ảnh trang, glossary, quy tắc xưng hô, giọng văn của series) và đề xuất sửa từng khối. Gợi ý không tự ghi đè bản dịch — bạn Nhận hoặc Bỏ từng cái. Model chọn ở Cài đặt chung → Pipeline."}
+            : "AI đọc bản dịch cả chương (kèm ảnh trang, glossary, quy tắc xưng hô, giọng văn của series) và đề xuất sửa từng khối. Gợi ý không tự ghi đè bản dịch — bạn Nhận hoặc Bỏ từng cái. Model do quản trị viên chọn."}
         </p>
       )}
       <ol className="cw-proofread-list" aria-label="Gợi ý hiệu đính">

@@ -6,6 +6,7 @@ import { auth } from "./auth.ts";
 import { devAutoLoginEnabled, env } from "./env.ts";
 import { requestLog } from "./lib/request-log.ts";
 import { type AppEnv, requireUser } from "./middleware/user.ts";
+import { adminApi } from "./routes/admin.ts";
 import { chapterRoutes } from "./routes/chapters.ts";
 import { type DevLogin, devAuthRoutes } from "./routes/dev-auth.ts";
 import { exportRoutes } from "./routes/export.ts";
@@ -40,6 +41,9 @@ export function createApp({ devAutoLogin = envDevLogin() }: { devAutoLogin?: Dev
 
   app.on(["GET", "POST"], "/api/auth/*", (c) => auth.handler(c.req.raw));
   if (devAutoLogin) app.route("/api", devAuthRoutes(devAutoLogin));
+
+  // Route quản trị: đặt trước userApi để `/api/admin/*` đi qua requireAdmin.
+  app.route("/api/admin", adminApi());
 
   // Route người dùng: mọi đường dưới /api còn lại bắt buộc đăng nhập (requireUser gắn một lần ở đây, sau
   // auth/dev/health) — dữ liệu luôn của người đang đăng nhập.

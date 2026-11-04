@@ -11,7 +11,7 @@ import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { env } from "../src/env.ts";
 import { enqueueIngest, inJobTx } from "../src/jobs/enqueue.ts";
 import { advanceTranslateChain, planBatches, type RunTarget, regionCount } from "../src/jobs/translate-chain.ts";
-import { call, db, seedUser } from "./helpers.ts";
+import { call, db, seedAdmin, seedUser } from "./helpers.ts";
 import { cancelActiveJobs } from "./isolate-queue.ts";
 import {
   addSources,
@@ -116,9 +116,10 @@ async function uploadedMangaChapter(label: string) {
   const S = await seedUser(label);
   await db.update(series).set({ pageFormat: "pages" }).where(eq(series.id, S.seriesId));
   const ocr = { ...DEFAULT_PIPELINE_SETTINGS.ocr_engines, ko: "paddle_ocr" };
-  const put = await call("/api/settings/pipeline", {
+  const admin = await seedAdmin(`${label}-admin`);
+  const put = await call("/api/admin/settings/pipeline", {
     method: "PUT",
-    cookie: S.cookie,
+    cookie: admin.cookie,
     body: { pipeline: { ...DEFAULT_PIPELINE_SETTINGS, ocr_engines: ocr } },
   });
   expect(put.status, await put.clone().text()).toBe(200);
