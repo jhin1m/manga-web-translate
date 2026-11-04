@@ -22,9 +22,8 @@ import { claimableSql } from "../billing/user-quota.ts";
 import { db } from "../db.ts";
 import { env } from "../env.ts";
 import { sendAlert } from "../lib/alert.ts";
-import { isLlmPaused } from "./breaker.ts";
+import { breakerBlockedSql, pausedBreakerKeys } from "./breaker.ts";
 import { JobHttpError } from "./errors.ts";
-import { llmJobSql } from "./llm-job-filter.ts";
 
 export const DISPATCH_INTERVAL_MS = 5_000;
 export const DISPATCH_PENDING_S = 120;
@@ -151,9 +150,9 @@ async function decide(t: DbLike): Promise<Decision> {
 
   // Cùng điều kiện với claim của token Modal: breaker LLM bật → chỉ job không gọi LLM (gồm page.prepare OCR local);
   // không tính job của người vượt hạn mức.
-  const breaker = await isLlmPaused(t);
+  const paused = await pausedBreakerKeys(t);
   const age = await oldestQueuedAgeS(t, {
-    where: and(breaker ? not(llmJobSql) : undefined, claimableSql("modal")),
+    where: and(paused.length ? not(breakerBlockedSql(paused)) : undefined, claimableSql("modal")),
     olderThanS: (await macAlive(t)) ? MAC_GRACE_S : 0,
   });
   if (age === null) return done("idle");

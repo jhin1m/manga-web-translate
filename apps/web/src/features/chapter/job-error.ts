@@ -15,9 +15,9 @@ export const ERROR_CLASS: Record<string, string> = {
 };
 
 const RETRY_HINT = 'Bấm "Dịch lại trang này" hoặc "Chạy lại trang lỗi" để thử lại.';
-/** Khoá API sai thì bấm chạy lại cũng hỏng tiếp — nói rõ phải sửa cấu hình worker trước. */
+/** Khoá API sai thì bấm chạy lại cũng hỏng tiếp — nói rõ phải sửa cấu hình trước. */
 const AUTH_HINT =
-  'Khoá API AI của worker sai hoặc hết quyền (ANTHROPIC_API_KEY / GEMINI_API_KEY) — sửa khoá, khởi động lại worker rồi bấm "Chạy lại trang lỗi".';
+  'Khoá API AI sai, hết hạn mức hoặc chưa cấu hình — admin sửa ở Cài đặt › AI › Nhà cung cấp (hoặc key env của worker) rồi bấm "Chạy lại trang lỗi".';
 const PROVIDER_CLASSES = new Set(["provider", "rate_limited"]);
 const WAITING = new Set(["queued", "running"]);
 

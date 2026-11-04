@@ -2,12 +2,14 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
+  ClaimResponse,
   emptyPageState,
   idempotencyKey,
   JOB_TYPES,
   JobFonts,
   JobPayload,
   keyBelongsToUser,
+  LlmConfig,
   PageState,
   pageId,
   prepareInputRev,
@@ -140,6 +142,89 @@ describe("JobPayload", () => {
   it("covers every JobType", () => {
     const covered = JobPayload.options.map((o) => o.shape.type.value);
     expect([...covered].sort()).toEqual([...JOB_TYPES].sort());
+  });
+});
+
+describe("per-job llm config", () => {
+  const PROVIDER = "0192a3b4-c5d6-7e8f-9a0b-1c2d3e4f5a6c";
+  const ref = { provider_id: PROVIDER, model: "gpt-4.1-mini" };
+  const settings = {
+    glossary: {},
+    pronoun_rules: "",
+    honorific_policy: "",
+    style_prompt: "",
+    font: "Bangers-Regular",
+  };
+  const cfg = {
+    type: "openai",
+    model: "gpt-4.1-mini",
+    api_key: "sk-test-123456789",
+    base_url: null,
+    structured_output: "json_schema",
+    reasoning: false,
+  };
+  const job = (payload: unknown, llm?: unknown) => ({
+    id: PROVIDER,
+    type: "chapter.proofread",
+    attempt: 1,
+    lease_token: "t",
+    lease_expires_at: "2026-11-05T03:00:00.000Z",
+    payload,
+    inputs: {},
+    outputs: {},
+    ...(llm ? { llm } : {}),
+  });
+
+  it("payloads accept an llm snapshot and still parse without it", () => {
+    const base = { chapter_id: CH, page_ids: [CH], settings };
+    expect(
+      JobPayload.safeParse({
+        type: "chapter.translate",
+        ...base,
+        context: "rolling",
+        glossary_rev: 0,
+        settings_rev: 0,
+        llm: { translate: ref },
+      }).success,
+    ).toBe(true);
+    expect(
+      JobPayload.safeParse({ type: "page.prepare", page_id: CH, source_lang: "ko", llm: { ocr: ref } }).success,
+    ).toBe(true);
+    expect(
+      JobPayload.safeParse({
+        type: "page.ocr_region",
+        page_id: CH,
+        bbox: [0, 0, 5, 5],
+        llm: { ocr: ref, translate: ref },
+      }).success,
+    ).toBe(true);
+    expect(JobPayload.safeParse({ type: "page.ocr_region", page_id: CH, bbox: [0, 0, 5, 5] }).success).toBe(true);
+    // model_tier optional: job hiệu đính cũ (có tier) và mới (có llm) đều hợp lệ.
+    expect(JobPayload.safeParse({ type: "chapter.proofread", ...base, model_tier: "premium" }).success).toBe(true);
+    expect(JobPayload.safeParse({ type: "chapter.proofread", ...base, llm: { proofread: ref } }).success).toBe(true);
+    expect(JobPayload.safeParse({ type: "chapter.proofread", ...base, model_tier: "gold" }).success).toBe(false);
+  });
+
+  it("an llm ref needs a uuid provider and a model; the payload never carries a key", () => {
+    const base = { type: "page.prepare", page_id: CH, source_lang: "ko" };
+    expect(JobPayload.safeParse({ ...base, llm: { ocr: { provider_id: "x", model: "m" } } }).success).toBe(false);
+    expect(JobPayload.safeParse({ ...base, llm: { ocr: { provider_id: PROVIDER, model: "" } } }).success).toBe(false);
+    expect(JobPayload.safeParse({ ...base, llm: { ocr: { ...ref, api_key: "sk" } } }).success).toBe(false);
+  });
+
+  it("claim response parses with and without llm; LlmConfig rejects unknown fields", () => {
+    const payload = { type: "chapter.proofread", chapter_id: CH, page_ids: [CH], model_tier: "standard", settings };
+    expect(ClaimResponse.safeParse({ jobs: [job(payload)] }).success).toBe(true);
+    expect(ClaimResponse.safeParse({ jobs: [job(payload, { proofread: cfg })] }).success).toBe(true);
+    expect(ClaimResponse.safeParse({ jobs: [job(payload, { proofread: { ...cfg, vision: true } })] }).success).toBe(
+      false,
+    );
+    expect(
+      LlmConfig.safeParse({ ...cfg, base_url: "https://llm.example.com/v1", type: "openai_compatible" }).success,
+    ).toBe(true);
+    for (const bad of [{ api_key: "" }, { type: "mistral" }, { structured_output: "text" }]) {
+      expect(LlmConfig.safeParse({ ...cfg, ...bad }).success, JSON.stringify(bad)).toBe(false);
+    }
   });
 });
 

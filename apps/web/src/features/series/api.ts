@@ -14,7 +14,6 @@ export type SeriesSettings = {
   pronoun_rules: PronounRule[];
   style_prompt: string;
   default_fonts: Partial<Record<FontSlot, string>>;
-  llm_tier: "standard" | "premium";
   /** Chữ bỏ qua (watermark, URL nhóm dịch) — vùng OCR chứa mục nào thì không dịch, không box. */
   ignore_text: string[];
 };

@@ -21,10 +21,13 @@ from collections.abc import Callable
 from functools import cached_property
 from typing import Any
 
+from mtl_pipeline.providers import has_env_key
+
 from . import PIPELINE_VERSION
 from .client import AuthError, PipelineTooOld, WorkerClient
 from .handlers import HANDLERS, LLM_TYPES
-from .runner import Handler, run_job
+from .log_redact import configure_logging
+from .runner import Handler, JobFailure, run_job
 from .token import TokenError, load_token
 
 log = logging.getLogger("mtl_worker")
@@ -49,23 +52,23 @@ class RuntimeDeps:
 
     @cached_property
     def provider(self) -> Any:
-        if not self.provider_name:
-            raise RuntimeError("worker chạy --no-llm nhưng nhận job cần LLM")
-        from mtl_pipeline.providers import make_provider
-
-        return make_provider(self.provider_name)
+        return self._env_provider("standard")
 
     def provider_for(self, tier: str) -> Any:
         """standard = provider chung; premium nạp lười 1 lần (model MTL_*_PREMIUM_MODEL)."""
         if tier != "premium":
             return self.provider
         if self._premium is None:
-            if not self.provider_name:
-                raise RuntimeError("worker chạy --no-llm nhưng nhận job cần LLM")
-            from mtl_pipeline.providers import make_provider
-
-            self._premium = make_provider(self.provider_name, "premium")
+            self._premium = self._env_provider("premium")
         return self._premium
+
+    def _env_provider(self, tier: str) -> Any:
+        """Provider từ env worker (dự phòng khi job không có slot DB). Thiếu key → `auth`: job dừng, không retry."""
+        from mtl_pipeline.providers import has_env_key, make_provider
+
+        if not self.provider_name or not has_env_key(self.provider_name):
+            raise JobFailure("auth", "chưa cấu hình provider AI (slot DB hoặc env worker)")
+        return make_provider(self.provider_name, tier)
 
 
 def parse_args(argv: list[str] | None) -> argparse.Namespace:
@@ -73,7 +76,9 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
     ap.add_argument("--api", default=os.environ.get("MTL_API_URL"), help="URL API (hoặc MTL_API_URL)")
     ap.add_argument("--worker-id", default=os.environ.get("MTL_WORKER_ID", socket.gethostname()[:64]))
     ap.add_argument(
-        "--provider", default=os.environ.get("MTL_PROVIDER", "gemini"), choices=["gemini", "anthropic"]
+        "--provider",
+        default=os.environ.get("MTL_PROVIDER", "gemini"),
+        choices=["gemini", "anthropic", "openai", "openai_compatible"],
     )
     ap.add_argument("--no-llm", action="store_true", help="chỉ nhận job không cần LLM (ingest, reinpaint)")
     ap.add_argument("--capabilities", help="giới hạn loại job, phân tách bằng dấu phẩy")
@@ -111,10 +116,7 @@ def main(argv: list[str] | None = None) -> int:
     # Không bao giờ tải model ngầm từ HF khi chạy; weights đi theo models.lock.json (red team #15).
     os.environ["HF_HUB_OFFLINE"] = "1"
     args = parse_args(argv)
-    logging.basicConfig(
-        level=logging.DEBUG if args.verbose else logging.INFO,
-        format="%(asctime)s %(levelname)s %(name)s %(message)s",
-    )
+    configure_logging(args.verbose)
     if not args.api:
         print("thiếu --api hoặc MTL_API_URL", file=sys.stderr)
         return 2
@@ -131,8 +133,8 @@ def main(argv: list[str] | None = None) -> int:
     deps = RuntimeDeps(None if args.no_llm else args.provider, args.threads)
     if any(c in caps for c in ("chapter.ingest", "page.prepare", "page.reinpaint", "chapter.translate")):
         deps.pipeline  # noqa: B018 — nạp + kiểm model ngay lúc khởi động, lỗi thì dừng sớm
-    if not args.no_llm and any(c in LLM_TYPES for c in caps):
-        deps.provider  # noqa: B018
+    if not args.no_llm and any(c in LLM_TYPES for c in caps) and has_env_key(args.provider):
+        deps.provider  # noqa: B018 — chỉ nạp sớm khi có key env; không có thì job dùng slot DB
 
     stopping = threading.Event()
     grace_s = float(os.environ.get("MTL_SHUTDOWN_GRACE_S", "90"))

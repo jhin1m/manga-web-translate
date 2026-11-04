@@ -150,3 +150,41 @@ def test_contract_violation_raises():
         validate_contract("job-result", {"type": "page.prepare", "clean_rev": -1})
     with pytest.raises(ContractError):
         validate_contract("job-payload", {"type": "page.prepare", "page_id": "x"})
+
+
+def test_claim_response_with_llm_config_and_payload_llm():
+    ref = {"provider_id": "0192a3b4-c5d6-7e8f-9a0b-1c2d3e4f5a70", "model": "gpt-4.1-mini"}
+    cfg = {
+        "type": "openai",
+        "model": "gpt-4.1-mini",
+        "api_key": "sk-test-0123456789abcdef",
+        "base_url": None,
+        "structured_output": "json_schema",
+        "reasoning": False,
+    }
+    payload = {
+        "type": "page.ocr_region",
+        "page_id": "0192a3b4-c5d6-7e8f-9a0b-1c2d3e4f5a71",
+        "bbox": [10, 20, 200, 80],
+        "source_lang": "ko",
+        "target_lang": "vi",
+        "ocr_engine": "llm",
+        "reading_order": "ltr",
+        "llm": {"ocr": ref, "translate": ref},
+    }
+    validate_contract("job-payload", payload)
+    job = {
+        "id": "0192a3b4-c5d6-7e8f-9a0b-1c2d3e4f5a72",
+        "type": "page.ocr_region",
+        "attempt": 1,
+        "lease_token": "t" * 48,
+        "lease_expires_at": "2026-11-05T03:00:00.000Z",
+        "payload": payload,
+        "inputs": {"original": "https://files.example/o.png", "context_lines": []},
+        "outputs": {},
+        "llm": {"ocr": cfg, "translate": cfg},
+    }
+    validate_contract("claim-response", {"jobs": [job]})
+    validate_contract("claim-response", {"jobs": [{k: v for k, v in job.items() if k != "llm"}]})
+    with pytest.raises(ContractError):
+        validate_contract("claim-response", {"jobs": [{**job, "llm": {"ocr": {**cfg, "vision": True}}}]})

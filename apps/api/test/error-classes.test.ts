@@ -4,7 +4,7 @@
  * Usage được clamp ở server.
  */
 import { chapters, jobs, pages, runtimeFlags, usageLedger } from "@mtl/db";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, like, sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { MAX_OUTPUT_TOKENS_PER_CALL } from "../src/billing/prices.ts";
 import { BREAKER_THRESHOLD } from "../src/jobs/breaker.ts";
@@ -32,7 +32,7 @@ import {
 
 type Seed = Awaited<ReturnType<typeof seedUser>>;
 
-const clearBreaker = () => db.delete(runtimeFlags).where(sql`${runtimeFlags.key} in ('llm_paused', 'llm_errors')`);
+const clearBreaker = () => db.delete(runtimeFlags).where(like(runtimeFlags.key, "llm\\_%"));
 
 async function chapterWithPages(label: string, n: number) {
   const S = await seedUser(label);

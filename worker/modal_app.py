@@ -4,7 +4,8 @@
   uv run python scripts/fetch_models.py            # cả model optional (LaMa manga, OCR local) — không tải lazy
   modal volume put mtl-models models/ /            # weights đã kiểm sha256 theo models.lock.json
   modal secret create mtl-worker MTL_TOKEN=<token kind=modal> MTL_API_URL=https://<app-domain> \
-      MODAL_DRAIN_SECRET=<≥32 ký tự, trùng .env của API> GEMINI_API_KEY=<…>
+      MODAL_DRAIN_SECRET=<≥32 ký tự, trùng .env của API> [GEMINI_API_KEY=<…>]
+  # GEMINI_API_KEY chỉ còn là dự phòng: key AI theo job do API đính vào claim (Cài đặt › AI), slot chưa gán mới dùng env.
   modal deploy modal_app.py                        # in URL endpoint `drain` → MODAL_DRAIN_URL ở API
 
 Dispatcher POST /drain (HMAC) → endpoint kiểm chữ ký → `drain.spawn(dispatch_id)` trả 202 ngay. Container chạy

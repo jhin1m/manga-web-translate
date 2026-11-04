@@ -16,4 +16,6 @@
 #        đọc state có region style (schema strict) → không rollback worker xuống dưới mốc này sau khi đã dịch.
 # 0.9.0: page.reinpaint.auto_text_bbox — OCR vùng tự xoá chữ gốc (mask nét chữ trong khung tính ở worker); payload
 #        không còn user_mask_key/offset → worker < 0.9.0 fail schema.
-PIPELINE_VERSION = "0.9.0"
+# 0.10.0: claim `llm` (cấu hình provider + key theo slot ocr/translate/proofread) + payload `llm`; proofread
+#        `model_tier` optional. Worker < 0.10.0 fail schema claim-response/job-payload (strict).
+PIPELINE_VERSION = "0.10.0"

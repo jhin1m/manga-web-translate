@@ -528,11 +528,11 @@ describe("hide pages after step 1", () => {
 
 describe("series settings", () => {
   it("bumps settings_rev only when a translation field changes; rejects unsupported languages", async () => {
-    const s = await json<{ id: string; settings_rev: number; llm_tier: string }>(
+    const s = await json<{ id: string; settings_rev: number }>(
       await api("/series", { method: "POST", body: { title: "Rev test" } }),
       201,
     );
-    expect(s.llm_tier).toBe("standard");
+    expect(s).not.toHaveProperty("llm_tier");
     const t1 = await json<{ settings_rev: number }>(
       await api(`/series/${s.id}`, { method: "PATCH", body: { title: "Renamed" } }),
       200,
@@ -553,6 +553,18 @@ describe("series settings", () => {
       200,
     );
     expect(t3.settings_rev).toBe(t2.settings_rev);
+    // Client cũ vẫn gửi llm_tier: bỏ qua (không 400), không tăng rev, không còn trong view.
+    const legacy = await json<{ settings_rev: number }>(
+      await api(`/series/${s.id}`, { method: "PATCH", body: { llm_tier: "premium", style_prompt: "x" } }),
+      200,
+    );
+    expect(legacy).not.toHaveProperty("llm_tier");
+    expect(legacy.settings_rev).toBe(t2.settings_rev + 1);
+    const onlyTier = await json<{ settings_rev: number }>(
+      await api(`/series/${s.id}`, { method: "PATCH", body: { llm_tier: "standard", style_prompt: "x" } }),
+      200,
+    );
+    expect(onlyTier.settings_rev).toBe(legacy.settings_rev);
     expect((await api(`/series/${s.id}`, { method: "PATCH", body: { source_lang: "th" } })).status).toBe(400);
     expect((await api(`/series/${s.id}`, { method: "PATCH", body: {} })).status).toBe(400);
 

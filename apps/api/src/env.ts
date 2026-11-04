@@ -39,11 +39,12 @@ const Env = z.object({
    * 0.7.1: TextBox.valign — schema input export của worker cũ (additionalProperties: false) từ chối state có valign → job export fail.
    * 0.8.0: Region.style + settings.thought_font/note_font — schema input/output của worker cũ (additionalProperties: false) từ chối.
    * 0.9.0: page.reinpaint.auto_text_bbox (OCR vùng tự xoá chữ gốc) — worker cũ đòi user_mask_key/user_mask → fail.
+   * 0.10.0: payload `llm` + claim `llm` (key AI theo job), `model_tier` optional — schema worker cũ từ chối cả hai.
    */
   MIN_PIPELINE_VERSION: z
     .string()
     .regex(/^\d+\.\d+\.\d+$/)
-    .default("0.9.0"),
+    .default("0.10.0"),
   /**
    * Kill-switch ngân sách toàn cục (USD, cộng usage_ledger.cost_usd mọi người dùng + chi phí nền tảng, ngày/tháng
    * theo UTC). Bắt buộc ở production; 0 = chặn mọi job tốn tiền. Không đặt (dev/test) = không giới hạn.
@@ -71,6 +72,27 @@ const Env = z.object({
    * job LLM fail `quota_exceeded`. 0 = chặn mọi job LLM; không đặt = không giới hạn.
    */
   USER_DAILY_USD: optionalUsd,
+  /**
+   * Email quản trị (phân tách bằng dấu phẩy, không phân biệt hoa thường). Chỉ những tài khoản này vào được
+   * /api/admin/*; đăng ký qua web bằng các email này luôn bị từ chối — admin chỉ tạo bằng `pnpm create-user`.
+   */
+  ADMIN_EMAILS: blank(z.string().optional()).transform((v) =>
+    (v ?? "")
+      .split(",")
+      .map((e) => e.trim().toLowerCase())
+      .filter(Boolean),
+  ),
+  /**
+   * Khoá chính (32 byte base64, `openssl rand -base64 32`) mã hoá key provider AI trong DB (AES-256-GCM). Không đặt =
+   * không lưu / đổi được key provider. Mất hoặc đổi khoá = nhập lại key từng provider trên UI.
+   */
+  SECRETS_KEY: blank(
+    z
+      .string()
+      .regex(/^[A-Za-z0-9+/]{43}=$/)
+      .refine((v) => Buffer.from(v, "base64").length === 32, "SECRETS_KEY phải giải mã ra đúng 32 byte")
+      .optional(),
+  ),
   /** Chỉ dev: tài khoản SPA tự đăng nhập (POST /api/dev/auto-login). Đặt ở production → API không khởi động. */
   DEV_AUTO_LOGIN_EMAIL: blank(z.string().email().optional()),
   DEV_AUTO_LOGIN_PASSWORD: blank(z.string().min(10).optional()),

@@ -19,6 +19,15 @@ export type OcrEngine = (typeof OCR_ENGINES)[number];
 export type Inpainter = (typeof INPAINTERS)[number];
 export type ProofreadTier = (typeof PROOFREAD_TIERS)[number];
 
+/**
+ * Model hiệu đính theo cấp của bản trước 0.10.0 (còn lưu trong jsonb cài đặt chung dù không còn trong schema):
+ * dùng khi chưa gán slot Hiệu đính để job cũ/mới giữ cùng khoá idempotency. Thiếu / lạ → standard. Bỏ ở bản sau.
+ */
+export function legacyProofreadTier(raw: unknown): ProofreadTier {
+  const v = raw && typeof raw === "object" ? (raw as Record<string, unknown>).proofread_tier : undefined;
+  return v === "premium" ? "premium" : "standard";
+}
+
 /** Ngôn ngữ nguồn mỗi engine đọc được (manga-ocr chỉ tiếng Nhật). */
 export const OCR_ENGINE_LANGS: Record<OcrEngine, readonly SourceLang[]> = {
   llm: SOURCE_LANGS,
@@ -47,7 +56,6 @@ const PipelineSettingsFields = z.object({
   inpainter: z.enum(INPAINTERS),
   mask_dilation: z.number().int().min(MASK_DILATION.min).max(MASK_DILATION.max).nullable(),
   inpaint_size: z.number().int().min(INPAINT_SIZE.min).max(INPAINT_SIZE.max),
-  proofread_tier: z.enum(PROOFREAD_TIERS),
 });
 
 export const PipelineSettings = PipelineSettingsFields.superRefine((s, ctx) => {
@@ -70,7 +78,6 @@ export const DEFAULT_PIPELINE_SETTINGS: PipelineSettings = {
   inpainter: "big_lama",
   mask_dilation: null,
   inpaint_size: INPAINT_SIZE.default,
-  proofread_tier: "standard",
 };
 
 /**

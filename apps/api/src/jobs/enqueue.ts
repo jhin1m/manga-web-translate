@@ -14,7 +14,6 @@ import {
   pages,
   series,
   sourceFiles,
-  userSettings,
 } from "@mtl/db";
 import {
   ACTIVE_JOB_STATUSES,
@@ -24,13 +23,14 @@ import {
   type JobPayload,
   type JobType,
   LANG_NAMES,
+  type LlmRefs,
   LOCAL_OCR_ENGINES,
+  legacyProofreadTier,
   ocrEngineFor,
   type PageFormat,
   type PipelineSettings,
   prepareOptions,
   readingOrder,
-  resolvePipelineSettings,
   type SourceLang,
   type TargetLang,
   type TranslateCarry,
@@ -39,8 +39,10 @@ import {
 } from "@mtl/shared";
 import { and, asc, eq, inArray, isNull, ne, sql } from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
+import { llmFor, slotRefs } from "../ai/llm-refs.ts";
 import { db } from "../db.ts";
 import { mergeBySourceTerm, seriesGlossaryWhere } from "../lib/glossary-scope.ts";
+import { readSystemSettings, systemPipeline } from "../lib/system-settings.ts";
 import { exportKey, ingestKey, type JobKey, pageOpKey, prepareKey, proofreadKey, translateKey } from "./idempotency.ts";
 
 type Job = typeof jobs.$inferSelect;
@@ -214,15 +216,6 @@ export async function enqueueIngest(
   });
 }
 
-/** Cài đặt pipeline của người dùng (thiếu hàng / key → mặc định = hành vi cũ). */
-export async function pipelineSettingsOf(tx: DbLike, userId: string): Promise<PipelineSettings> {
-  const [row] = await tx
-    .select({ pipeline: userSettings.pipeline })
-    .from(userSettings)
-    .where(eq(userSettings.userId, userId));
-  return resolvePipelineSettings(row?.pipeline);
-}
-
 /** page.prepare của series này có gọi LLM không (OCR engine theo cài đặt + ngôn ngữ nguồn) — để kiểm hạn mức. */
 export async function prepareUsesLlm(tx: DbLike, userId: string, seriesId: string): Promise<boolean> {
   const [s] = await tx
@@ -230,7 +223,7 @@ export async function prepareUsesLlm(tx: DbLike, userId: string, seriesId: strin
     .from(series)
     .where(and(eq(series.userId, userId), eq(series.id, seriesId)));
   if (!s) return true;
-  return !LOCAL_OCR_ENGINES.includes(ocrEngineFor(await pipelineSettingsOf(tx, userId), s.sourceLang));
+  return !LOCAL_OCR_ENGINES.includes(ocrEngineFor(await systemPipeline(tx), s.sourceLang));
 }
 
 /**
@@ -238,8 +231,18 @@ export async function prepareUsesLlm(tx: DbLike, userId: string, seriesId: strin
  * page_format hiện tại của series — đổi định dạng chỉ áp cho lần commit sau). Cài đặt pipeline của người dùng được
  * snapshot vào payload (`pipeline`); vòng lặp nhiều page truyền sẵn để khỏi đọc lại.
  */
-export async function enqueuePrepare(tx: DbLike, page: Page, s: Series, ch: Chapter, pipeline?: PipelineSettings) {
-  const options = prepareOptions(pipeline ?? (await pipelineSettingsOf(tx, page.userId)), s.sourceLang);
+export async function enqueuePrepare(
+  tx: DbLike,
+  page: Page,
+  s: Series,
+  ch: Chapter,
+  pipeline?: PipelineSettings,
+  /** Slot model đã đọc sẵn (vòng lặp nhiều page); bỏ trống → đọc ở đây. */
+  refs?: LlmRefs,
+) {
+  const options = prepareOptions(pipeline ?? (await systemPipeline(tx)), s.sourceLang);
+  // OCR local không gọi LLM → không mang model OCR.
+  const llm = options.ocr_engine === "llm" ? llmFor(refs ?? (await slotRefs(tx)), ["ocr"]).llm : undefined;
   await tx.update(pages).set({ status: "pending" }).where(eq(pages.id, page.id));
   return insertJob(tx, {
     userId: page.userId,
@@ -249,8 +252,9 @@ export async function enqueuePrepare(tx: DbLike, page: Page, s: Series, ch: Chap
       source_lang: s.sourceLang,
       reading_order: readingOrder(s.sourceLang, ch.ingestMode),
       pipeline: options,
+      ...(llm ? { llm } : {}),
     },
-    key: prepareKey(page.id, page.originalSha256, s.settingsRev, options),
+    key: prepareKey(page.id, page.originalSha256, s.settingsRev, options, llm),
     chapterId: page.chapterId,
     pageId: page.id,
   });
@@ -302,6 +306,7 @@ export async function enqueueTranslate(
   const unprepared = rows.filter((p) => !p.ocrResult || !p.prepareInputRev);
   if (unprepared.length) throw conflict("page_not_prepared", `${unprepared.length} page chưa qua giai đoạn 1`);
   await tx.update(chapters).set({ status: "processing" }).where(eq(chapters.id, ch.id));
+  const { llm } = llmFor(await slotRefs(tx), ["translate"]);
   return insertJob(tx, {
     userId: userId,
     payload: {
@@ -313,6 +318,7 @@ export async function enqueueTranslate(
       settings_rev: s.settingsRev,
       settings: await translateSettings(tx, s),
       ...(opts.carry ? { carry: opts.carry } : {}),
+      ...(llm ? { llm } : {}),
     },
     key: translateKey(
       ch.id,
@@ -320,6 +326,7 @@ export async function enqueueTranslate(
       s.glossaryRev,
       s.settingsRev,
       context,
+      llm,
     ),
     chapterId: ch.id,
     priority: opts.priority,
@@ -333,7 +340,7 @@ export async function enqueueReinpaint(
   input: Omit<Extract<JobPayload, { type: "page.reinpaint" }>, "inpaint">,
 ) {
   const page = await pageIn(tx, userId, input.page_id);
-  const payload = { ...input, inpaint: inpaintOptions(await pipelineSettingsOf(tx, userId)) };
+  const payload = { ...input, inpaint: inpaintOptions(await systemPipeline(tx)) };
   const key = payload.user_mask_key;
   // Đúng một nguồn mask (cùng luật zod refine của JobPayload — insert không parse lại payload).
   if ((payload.auto_text_bbox === undefined) === (key === undefined || payload.offset === undefined)) {
@@ -367,12 +374,15 @@ export async function enqueueOcrRegion(
     .where(and(eq(chapters.userId, userId), eq(chapters.id, page.chapterId)));
   if (!ch) throw new NotFoundError("chapter");
   const s = await seriesOf(tx, ch);
+  const ocrEngine = ocrEngineFor(await systemPipeline(tx), s.sourceLang);
   const payload = {
     ...input,
     source_lang: s.sourceLang,
     target_lang: s.targetLang,
-    ocr_engine: ocrEngineFor(await pipelineSettingsOf(tx, userId), s.sourceLang),
+    ocr_engine: ocrEngine,
     reading_order: readingOrder(s.sourceLang, ch.ingestMode),
+    // OCR local không gọi LLM → chỉ mang model OCR khi engine là llm; dịch luôn qua LLM.
+    ...llmFor(await slotRefs(tx), ocrEngine === "llm" ? ["ocr", "translate"] : ["translate"]),
   };
   return insertJob(tx, {
     userId: userId,
@@ -438,17 +448,19 @@ export async function enqueueProofread(tx: DbLike, userId: string, chapterId: st
     .where(and(eq(pages.chapterId, ch.id), eq(pages.skipped, false), eq(pages.status, "ready")))
     .orderBy(asc(pages.ord));
   if (rows.length === 0) throw conflict("no_translated_pages", "chương chưa có trang đã dịch");
-  const tier = (await pipelineSettingsOf(tx, userId)).proofread_tier;
+  const { llm } = llmFor(await slotRefs(tx), ["proofread"]);
+  // Chưa gán slot Hiệu đính: giữ cấp model cũ trong cài đặt chung (không hạ âm thầm người đang dùng premium).
+  const tier = legacyProofreadTier((await readSystemSettings(tx))?.pipeline);
   return insertJob(tx, {
     userId: userId,
     payload: {
       type: "chapter.proofread",
       chapter_id: ch.id,
       page_ids: rows.map((r) => r.id),
-      model_tier: tier,
+      ...(llm ? { llm } : { model_tier: tier }),
       settings: await translateSettings(tx, s),
     },
-    key: proofreadKey(ch.id, rows, s.glossaryRev, s.settingsRev, tier),
+    key: proofreadKey(ch.id, rows, s.glossaryRev, s.settingsRev, llm ? { llm } : { tier }),
     chapterId: ch.id,
   });
 }
@@ -490,8 +502,9 @@ export async function createIngestedPages(
   await tx
     .insert(pageStates)
     .values(inserted.map((p) => ({ pageId: p.id, userId: ch.userId, state: emptyPageState(p.width, p.height) })));
-  const pipeline = await pipelineSettingsOf(tx, ch.userId);
-  for (const p of inserted) await enqueuePrepare(tx, p, s, ch, pipeline);
+  const pipeline = await systemPipeline(tx);
+  const refs = await slotRefs(tx);
+  for (const p of inserted) await enqueuePrepare(tx, p, s, ch, pipeline, refs);
   await tx.update(chapters).set({ status: "processing", runTotal: inserted.length }).where(eq(chapters.id, ch.id));
   return inserted;
 }

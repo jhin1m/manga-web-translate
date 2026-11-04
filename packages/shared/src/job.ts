@@ -100,6 +100,15 @@ export const EXPORT_OBJECT_TAG = "mtl-kind=export";
 /** = series.page_format (xem series-lang.ts). */
 export const IngestMode = z.enum(PAGE_FORMATS);
 
+/**
+ * Tham chiếu model do admin gán cho một tác vụ AI, chụp lúc enqueue (0.10.0). Không mang key: key giải mã lúc claim
+ * và chỉ có trong response claim (`ClaimedJob.llm`). Slot chưa gán không có mặt → worker dùng cấu hình env.
+ */
+export const LlmRef = z.strictObject({ provider_id: Uuid, model: z.string().min(1).max(128) });
+export type LlmRef = z.infer<typeof LlmRef>;
+export const LlmRefs = z.object({ ocr: LlmRef.optional(), translate: LlmRef.optional(), proofread: LlmRef.optional() });
+export type LlmRefs = z.infer<typeof LlmRefs>;
+
 /** Snapshot cài đặt dịch lúc enqueue (job tái lập được dù series đổi sau đó). */
 export const TranslateSettings = z.object({
   /** source_term → target_term (đã gộp entry chung + series). */
@@ -143,6 +152,8 @@ export const JobPayload = z.discriminatedUnion("type", [
     reading_order: z.enum(["ltr", "rtl"]).optional(),
     /** Cài đặt pipeline của người dùng lúc enqueue (0.6.0). Thiếu → worker dùng mặc định cũ. */
     pipeline: PrepareOptions.optional(),
+    /** Model slot OCR lúc enqueue (chỉ khi OCR engine là llm). Thiếu → worker dùng env. */
+    llm: LlmRefs.optional(),
   }),
   z.object({
     type: z.literal("chapter.translate"),
@@ -153,6 +164,8 @@ export const JobPayload = z.discriminatedUnion("type", [
     settings_rev: Rev,
     settings: TranslateSettings,
     carry: TranslateCarry.optional(),
+    /** Model slot Dịch lúc enqueue. Thiếu → worker dùng env. */
+    llm: LlmRefs.optional(),
   }),
   z
     .object({
@@ -184,6 +197,8 @@ export const JobPayload = z.discriminatedUnion("type", [
     ocr_engine: OcrEngineSchema.optional(),
     /** Thứ tự đọc của chương (0.6.0): `rtl` → OCR local đọc khối chữ cao theo cột dọc. Thiếu → ltr. */
     reading_order: z.enum(["ltr", "rtl"]).optional(),
+    /** Model slot OCR (engine llm) + Dịch lúc enqueue. Thiếu → worker dùng env. */
+    llm: LlmRefs.optional(),
   }),
   z.object({
     type: z.literal("chapter.export"),
@@ -198,7 +213,10 @@ export const JobPayload = z.discriminatedUnion("type", [
     type: z.literal("chapter.proofread"),
     chapter_id: Uuid,
     page_ids: z.array(Uuid).min(1),
-    model_tier: z.enum(PROOFREAD_TIERS),
+    /** Chỉ có khi chưa gán slot Hiệu đính (job cũ/mới dùng chung khoá `{tier}`); bỏ ở bản sau 0.10.0. */
+    model_tier: z.enum(PROOFREAD_TIERS).optional(),
+    /** Model slot Hiệu đính lúc enqueue; có thì không có `model_tier`. */
+    llm: LlmRefs.optional(),
     settings: TranslateSettings,
   }),
 ]);

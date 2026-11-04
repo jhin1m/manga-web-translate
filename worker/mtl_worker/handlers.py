@@ -35,6 +35,7 @@ from mtl_pipeline.typeset import bubble_siblings, font_for, typeset_region
 from . import PIPELINE_VERSION
 from .export import handle_export
 from .ingest import handle_ingest
+from .llm_cache import provider_for_config
 from .runner import (
     Deps,
     Handler,
@@ -74,11 +75,26 @@ def local_engine(deps: Deps, engine: str, source_lang: str, rtl: bool) -> Any:
     return deps.pipeline.local_ocr(engine, source_lang, rtl) if engine in LOCAL_OCR_ENGINES else None
 
 
-def run_ocr(deps: Deps, local: Any, img: np.ndarray, regions: list[Region], source_lang: str) -> OcrResult:
+def llm_provider(ctx: JobContext, deps: Deps, slot: str) -> Any:
+    """Provider của slot: cấu hình cấp job (claim `llm`) nếu có, không thì provider env của worker (như trước)."""
+    cfg = ctx.llm.get(slot)
+    if cfg is not None:
+        return provider_for_config(cfg)
+    if slot in (ctx.payload.get("llm") or {}):
+        # Payload nói job dùng slot DB nhưng claim không kèm cấu hình: không âm thầm chạy bằng key env.
+        raise JobFailure("auth", "thiếu cấu hình AI của job — admin kiểm tra Cài đặt › AI")
+    if slot == "proofread":
+        return deps.provider_for(ctx.payload.get("model_tier", "standard"))
+    return deps.provider
+
+
+def run_ocr(
+    ctx: JobContext, deps: Deps, local: Any, img: np.ndarray, regions: list[Region], source_lang: str
+) -> OcrResult:
     """OCR theo cài đặt pipeline: engine local qua ONNX (usage rỗng), không thì LLM qua provider (tính token)."""
     if local is not None:
         return ocr_page_local(local, img, regions)
-    return ocr_page(deps.provider, img, regions, 0, source_lang)
+    return ocr_page(llm_provider(ctx, deps, "ocr"), img, regions, 0, source_lang)
 
 
 def handle_prepare(ctx: JobContext, deps: Deps) -> dict[str, Any]:
@@ -104,7 +120,7 @@ def handle_prepare(ctx: JobContext, deps: Deps) -> dict[str, Any]:
     ctx.report("ocr", PREPARE_PROGRESS["ocr"])
     try:
         # LLM gọi cuối cùng: lỗi provider vẫn giữ được artifact detect/inpaint.
-        ocr = run_ocr(deps, local, img, regions, source_lang)
+        ocr = run_ocr(ctx, deps, local, img, regions, source_lang)
     except ProviderError as e:
         failure = classify_provider_error(e)
         ctx.upload("clean", png_bytes(clean)[0])
@@ -267,7 +283,8 @@ def handle_translate(ctx: JobContext, deps: Deps) -> dict[str, Any]:
         else None
     )
     ctx.report("translate", 0.1)
-    tr = translate_chapter(deps.provider, page_texts, _settings(p), "rolling", initial_context=initial)
+    provider = llm_provider(ctx, deps, "translate")
+    tr = translate_chapter(provider, page_texts, _settings(p), "rolling", initial_context=initial)
     ctx.add_usage(tr.usage)
     font = p["settings"]["font"]
     # Job xếp hàng trước khi có narration_font → chữ ngoài bóng dùng font thoại như cũ.
@@ -276,7 +293,7 @@ def handle_translate(ctx: JobContext, deps: Deps) -> dict[str, Any]:
     note_font = p["settings"].get("note_font")
     meta = {
         "pipeline_version": PIPELINE_VERSION,
-        "model": deps.provider.model,
+        "model": provider.model,
         "glossary_rev": p["glossary_rev"],
         "settings_rev": p["settings_rev"],
         "context_used": p["context"],
@@ -401,7 +418,7 @@ def handle_ocr_region(ctx: JobContext, deps: Deps) -> dict[str, Any]:
     source_lang = ctx.payload.get("source_lang", "ko")
     rtl = ctx.payload.get("reading_order", "ltr") == "rtl"
     local = local_engine(deps, ctx.payload.get("ocr_engine", "llm"), source_lang, rtl)
-    ocr = run_ocr(deps, local, img, [region], source_lang)
+    ocr = run_ocr(ctx, deps, local, img, [region], source_lang)
     ctx.add_usage(ocr.usage)
     item = next((it for it in ocr.items if it.id == region.id), OcrItem(id=region.id, empty=True))
     translation, low = "", item.low_conf
@@ -420,7 +437,9 @@ def handle_ocr_region(ctx: JobContext, deps: Deps) -> dict[str, Any]:
             ],
         )
         settings = SeriesSettings(source_lang=source_lang, target_lang=ctx.payload.get("target_lang", "vi"))
-        tr = translate_chapter(deps.provider, [page], settings, "rolling", RollingContext(lines=lines))
+        tr = translate_chapter(
+            llm_provider(ctx, deps, "translate"), [page], settings, "rolling", RollingContext(lines=lines)
+        )
         ctx.add_usage(tr.usage)
         it = tr.items.get("0", {}).get(qualified_id(0, region.id))
         if it:
@@ -449,7 +468,7 @@ MAX_SUGGESTIONS = 2000  # = trần JobResult chapter.proofread
 def handle_proofread(ctx: JobContext, deps: Deps) -> dict[str, Any]:
     p = ctx.payload
     settings = _settings(p)
-    provider = deps.provider_for(p.get("model_tier", "standard"))
+    provider = llm_provider(ctx, deps, "proofread")
     pages_in = [pg for pg in sorted(ctx.inputs["pages"], key=lambda pg: pg["ord"]) if pg["regions"]]
     # Tải + thu nhỏ ảnh mọi trang ngay sau claim: URL ký có hạn (10'), chương dài gọi LLM tuần tự lâu hơn thế.
     images = {pg["page_id"]: page_images(open_rgb(ctx.download(pg["image"]))) for pg in pages_in}

@@ -4,7 +4,14 @@
  */
 
 import { createHash } from "node:crypto";
-import { idempotencyKey, type JobPayload, type PrepareOptions, prepareInputRev, translateInputRev } from "@mtl/shared";
+import {
+  idempotencyKey,
+  type JobPayload,
+  type LlmRefs,
+  type PrepareOptions,
+  prepareInputRev,
+  translateInputRev,
+} from "@mtl/shared";
 import { env } from "../env.ts";
 
 export type JobKey = { inputRev: string; idempotencyKey: string };
@@ -16,15 +23,20 @@ export function ingestKey(chapterId: string, ingestRev: number, mode: string, so
   return { inputRev, idempotencyKey: idempotencyKey("chapter.ingest", chapterId, inputRev, { mode }) };
 }
 
-/** `options` = cài đặt pipeline đã snapshot; khác mặc định mới đổi input_rev (page cũ không bị coi là lỗi thời). */
+/**
+ * `options` = cài đặt pipeline đã snapshot; khác mặc định mới đổi input_rev (page cũ không bị coi là lỗi thời).
+ * `llm` (model slot) chỉ vào khoá idempotency, không vào input_rev: đổi model không làm page đã prepare/dịch thành
+ * lỗi thời, chỉ khiến enqueue lại không trùng job đang chạy dùng model khác. Không slot → khoá y như trước.
+ */
 export function prepareKey(
   pageId: string,
   originalSha256: string,
   settingsRev: number,
   options?: PrepareOptions,
+  llm?: LlmRefs,
 ): JobKey {
   const inputRev = prepareInputRev(originalSha256, settingsRev, env.PIPELINE_VERSION, options);
-  return { inputRev, idempotencyKey: idempotencyKey("page.prepare", pageId, inputRev) };
+  return { inputRev, idempotencyKey: idempotencyKey("page.prepare", pageId, inputRev, llm ? { llm } : {}) };
 }
 
 export function translateKey(
@@ -33,9 +45,13 @@ export function translateKey(
   glossaryRev: number,
   settingsRev: number,
   context: "rolling" | "neighbors",
+  llm?: LlmRefs,
 ): JobKey {
   const inputRev = translateInputRev(pages, glossaryRev, settingsRev, env.PIPELINE_VERSION);
-  return { inputRev, idempotencyKey: idempotencyKey("chapter.translate", chapterId, inputRev, { context }) };
+  return {
+    inputRev,
+    idempotencyKey: idempotencyKey("chapter.translate", chapterId, inputRev, llm ? { context, llm } : { context }),
+  };
 }
 
 /** page.reinpaint / page.ocr_region: input = payload (đã có base rev / bbox) + pipeline_version. */
@@ -47,18 +63,19 @@ export function pageOpKey(payload: Extract<JobPayload, { type: "page.reinpaint" 
 
 /**
  * chapter.proofread: input = version page_state từng page + glossary/settings rev + model → bấm lại khi chưa sửa gì
- * trả job đang chạy; sửa xong bấm lại là lượt mới.
+ * trả job đang chạy; sửa xong bấm lại là lượt mới. Chưa gán slot Hiệu đính: khoá `{tier}` y như bản trước 0.10.0
+ * (job cũ / mới dedup được); có slot: khoá `{llm}`.
  */
 export function proofreadKey(
   chapterId: string,
   pages: ReadonlyArray<{ id: string; version: number }>,
   glossaryRev: number,
   settingsRev: number,
-  tier: string,
+  model: { tier: string } | { llm: LlmRefs },
 ): JobKey {
   const items = pages.map((p) => `${p.id}:${p.version}`).sort();
   const inputRev = sha([items.join(","), glossaryRev, settingsRev, env.PIPELINE_VERSION].join("|"));
-  return { inputRev, idempotencyKey: idempotencyKey("chapter.proofread", chapterId, inputRev, { tier }) };
+  return { inputRev, idempotencyKey: idempotencyKey("chapter.proofread", chapterId, inputRev, model) };
 }
 
 /**

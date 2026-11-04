@@ -112,13 +112,13 @@ describe("failed pages summary", () => {
       ["internal", 1, "8"],
     ]);
     expect(g[0]?.label).toBe("AI từ chối khoá API");
-    expect(g[0]?.hint).toContain("ANTHROPIC_API_KEY");
+    expect(g[0]?.hint).toContain("Cài đặt › AI");
     expect(g[0]?.raw).toContain("401");
     expect(g[1]?.hint).toBeNull();
   });
 
   it("a failed job whose API key was rejected says to fix the key, not just retry", () => {
     const d = describeJobError(job({ status: "failed", error_class: "auth", error: "anthropic 401" }));
-    expect(d?.text).toContain("Khoá API AI của worker");
+    expect(d?.text).toContain("Khoá API AI sai");
   });
 });

@@ -3,6 +3,7 @@
  * Mọi lệnh sau claim mang `{lease_token, attempt}` (fencing): sai/hết lease → 409, worker bỏ job.
  */
 import { z } from "zod";
+import { AI_PROVIDER_TYPES, STRUCTURED_OUTPUTS } from "./ai-providers.ts";
 import { ErrorClass, JobPayload, JobResult, JobType, PreparePartial, SourceMapEntry } from "./job.ts";
 import { OcrRegion, OcrResult, PageState } from "./page-state.ts";
 
@@ -179,6 +180,26 @@ export const ProofreadInputs = z.object({
   ),
 });
 
+/**
+ * Cấu hình LLM của một slot, giải mã lúc claim (chỉ trong response claim, không ghi DB/log). Chỉ trường worker dùng.
+ * `strict`: trường lạ (VD `vision`) bị từ chối — hợp đồng đổi thì bump pipeline.
+ */
+export const LlmConfig = z.strictObject({
+  type: z.enum(AI_PROVIDER_TYPES),
+  model: z.string().min(1).max(128),
+  api_key: z.string().min(1),
+  base_url: z.url().nullable(),
+  structured_output: z.enum(STRUCTURED_OUTPUTS),
+  reasoning: z.boolean(),
+});
+export type LlmConfig = z.infer<typeof LlmConfig>;
+export const LlmConfigs = z.object({
+  ocr: LlmConfig.optional(),
+  translate: LlmConfig.optional(),
+  proofread: LlmConfig.optional(),
+});
+export type LlmConfigs = z.infer<typeof LlmConfigs>;
+
 export const ClaimedJob = z.object({
   id: Uuid,
   type: JobType,
@@ -188,6 +209,8 @@ export const ClaimedJob = z.object({
   payload: JobPayload,
   inputs: z.record(z.string(), z.unknown()),
   outputs: z.record(z.string(), PresignedOutput),
+  /** Cấu hình AI theo slot của job (0.10.0). Thiếu → worker dùng env. */
+  llm: LlmConfigs.optional(),
 });
 export type ClaimedJob = z.infer<typeof ClaimedJob>;
 export const ClaimResponse = z.object({ jobs: z.array(ClaimedJob) });

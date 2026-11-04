@@ -3,6 +3,7 @@ import {
   DEFAULT_PIPELINE_SETTINGS,
   isLlmPayload,
   JobPayload,
+  legacyProofreadTier,
   PipelineSettings,
   prepareInputRev,
   prepareOptions,
@@ -11,6 +12,17 @@ import {
 
 const PAGE = "0192a3b4-c5d6-7e8f-9a0b-1c2d3e4f5a6b";
 const SHA = "ab".repeat(32);
+
+describe("legacy proofread tier", () => {
+  it("is no longer a pipeline setting but is still readable from stored jsonb", () => {
+    expect(DEFAULT_PIPELINE_SETTINGS).not.toHaveProperty("proofread_tier");
+    expect(resolvePipelineSettings({ proofread_tier: "premium" })).not.toHaveProperty("proofread_tier");
+    expect(legacyProofreadTier({ proofread_tier: "premium" })).toBe("premium");
+    for (const raw of [undefined, null, {}, "premium", { proofread_tier: "gold" }, { proofread_tier: "standard" }]) {
+      expect(legacyProofreadTier(raw)).toBe("standard");
+    }
+  });
+});
 
 describe("pipeline settings", () => {
   it("defaults validate and resolve from empty/garbage", () => {

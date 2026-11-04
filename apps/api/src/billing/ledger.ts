@@ -7,7 +7,13 @@
 import { type DbLike, type jobs, usageLedger } from "@mtl/db";
 import type { JobPayload, WorkerUsage } from "@mtl/shared";
 import { and, eq, sql } from "drizzle-orm";
-import { GPU_USD_PER_S, llmPrice, MAX_INPUT_TOKENS_PER_CALL, MAX_OUTPUT_TOKENS_PER_CALL } from "./prices.ts";
+import {
+  GPU_USD_PER_S,
+  llmPrice,
+  llmPriceFor,
+  MAX_INPUT_TOKENS_PER_CALL,
+  MAX_OUTPUT_TOKENS_PER_CALL,
+} from "./prices.ts";
 
 type Job = typeof jobs.$inferSelect;
 type Kind = "llm_tokens_in" | "llm_tokens_out" | "gpu_seconds" | "pages" | "gpu_idle_seconds";
@@ -67,7 +73,9 @@ export async function recordUsage(
   const elapsedS = job.claimedAt ? (Date.now() - job.claimedAt.getTime()) / 1000 + GPU_SLACK_S : 0;
   const gpuS = Math.max(0, Math.min(usage.gpu_s, elapsedS - prev.gpu));
 
-  const { price, known } = llmPrice(usage.model);
+  // Không token LLM (heartbeat chỉ GPU) → đơn giá không dùng tới, khỏi truy vấn giá ref.
+  const { price, known } =
+    llmIn > 0 || llmOut > 0 ? await llmPriceFor(tx, usage.model, job.payload) : llmPrice(usage.model);
   if ((llmIn > 0 || llmOut > 0) && !known) {
     console.warn(`[ledger] model chưa có giá "${usage.model}" — tính theo giá cao nhất`);
   }

@@ -46,6 +46,8 @@ workerRoutes.onError((err, c) => {
 
 workerRoutes.post("/claim", async (c) => {
   const body = await parseJson(c, ClaimRequest);
+  // Response mang key AI đã giải mã (`jobs[].llm`) → không cache ở bất kỳ hop nào.
+  c.header("Cache-Control", "no-store");
   return c.json({ jobs: await claim(c.get("worker"), body) });
 });
 

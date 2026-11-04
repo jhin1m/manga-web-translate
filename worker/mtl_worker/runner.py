@@ -22,6 +22,7 @@ from mtl_pipeline.schema import BBox, ContractError, Region, TokenUsage, validat
 
 from .client import LeaseLost, WorkerApi
 from .job_fonts import job_fonts
+from .log_redact import forget_secrets, redact, register_secret
 
 log = logging.getLogger("mtl_worker")
 
@@ -60,7 +61,8 @@ def classify_provider_error(e: ProviderError) -> JobFailure:
         cls = "internal"
     else:
         cls = {"rate_limit": "rate_limited", "provider": "provider", "schema": "schema"}[e.error_class]
-    return JobFailure(cls, str(e), retry_after_s=e.retry_after, usage=list(e.usage))
+    log.warning("lỗi provider (%s): %s", e.error_class, e)
+    return JobFailure(cls, e.public_message(), retry_after_s=e.retry_after, usage=list(e.usage))
 
 
 class Deps(Protocol):
@@ -84,6 +86,11 @@ class JobContext:
         self.payload: dict[str, Any] = job["payload"]
         self.inputs: dict[str, Any] = job["inputs"]
         self.outputs: dict[str, dict[str, Any]] = dict(job["outputs"])
+        #: Cấu hình provider theo slot (ocr|translate|proofread) do API giải mã lúc claim; rỗng = dùng env của worker.
+        self.llm: dict[str, dict[str, Any]] = job.get("llm") or {}
+        self.secrets = [c["api_key"] for c in self.llm.values() if c.get("api_key")]
+        for s in self.secrets:
+            register_secret(s)
         self._deadline = deadline or (lambda: False)
         self._lock = threading.Lock()
         self._progress = 0.0
@@ -300,6 +307,21 @@ def run_job(
     """→ "succeeded" | "failed" | "aborted". Không ném lỗi ra ngoài (vòng lặp worker đi tiếp job sau)."""
     ctx = JobContext(client, job, deadline)
     try:
+        return _run_job(client, job, handlers, deps, ctx, heartbeat_s, heartbeat_gap_s)
+    finally:
+        forget_secrets(ctx.secrets)
+
+
+def _run_job(
+    client: WorkerApi,
+    job: dict[str, Any],
+    handlers: dict[str, Handler],
+    deps: Deps,
+    ctx: JobContext,
+    heartbeat_s: float,
+    heartbeat_gap_s: float,
+) -> str:
+    try:
         with Heartbeat(ctx, heartbeat_s, heartbeat_gap_s):
             try:
                 validate_contract("job-payload", job["payload"])
@@ -328,13 +350,13 @@ def run_job(
         return _report_failure(client, job, ctx, f)
     except Exception as e:  # lỗi không lường trước → internal (tính attempt)
         log.exception("job %s lỗi", job["id"])
-        return _report_failure(client, job, ctx, JobFailure("internal", f"{type(e).__name__}: {e}"))
+        return _report_failure(client, job, ctx, JobFailure("internal", f"internal: {type(e).__name__}"))
 
 
 def _report_failure(client: WorkerApi, job: dict[str, Any], ctx: JobContext, f: JobFailure) -> str:
     log.warning("job %s %s fail: %s", job["type"], job["id"], f)
     try:
-        client.fail(job, f.error_class, f.message, f.retry_after_s, ctx.take_usage(), f.partial)
+        client.fail(job, f.error_class, redact(f.message), f.retry_after_s, ctx.take_usage(), f.partial)
     except LeaseLost:
         return "aborted"
     return "failed"

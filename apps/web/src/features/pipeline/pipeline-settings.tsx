@@ -1,5 +1,5 @@
 /**
- * Cài đặt chung → tab Pipeline: detector, OCR engine theo ngôn ngữ nguồn, inpainter, model hiệu đính; ngưỡng / nới
+ * Cài đặt admin → Pipeline (chung toàn hệ thống): detector, OCR engine theo ngôn ngữ nguồn, inpainter, model hiệu đính; ngưỡng / nới
  * mask / cỡ vùng xoá chữ gom ở "Nâng cao". Mỗi option: nhãn tiếng Việt + thuật ngữ gốc + tooltip (dấu ?).
  * Có hiệu lực từ lần chạy sau (Xoá chữ + OCR, xoá chữ lại, OCR vùng, AI hiệu đính); job đang chờ giữ cài đặt cũ.
  */
@@ -14,13 +14,13 @@ import {
   type OcrEngine,
   ocrEngineSupports,
   type PipelineSettings,
-  PROOFREAD_TIERS,
   SOURCE_LANGS,
   TEXT_DETECTORS,
 } from "@mtl/shared";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { api, errorMessage } from "../../lib/api.ts";
+import { adminSettingsKey } from "../admin/api.ts";
 
 const DETECTOR_LABEL: Record<(typeof TEXT_DETECTORS)[number], string> = {
   rtdetr_v2_comic: "RT-DETR v2 comic — bóng thoại + chữ (mặc định)",
@@ -34,10 +34,6 @@ const OCR_LABEL: Record<OcrEngine, string> = {
 const INPAINTER_LABEL: Record<(typeof INPAINTERS)[number], string> = {
   big_lama: "Big LaMa — tổng quát (mặc định)",
   lama_manga: "LaMa manga — huấn luyện cho manga/anime",
-};
-const TIER_LABEL: Record<(typeof PROOFREAD_TIERS)[number], string> = {
-  standard: "Standard (rẻ, nhanh)",
-  premium: "Premium (chất lượng cao hơn)",
 };
 
 /**
@@ -83,8 +79,8 @@ export function PipelineSettingsForm(props: { value: PipelineSettings }) {
   const set = <K extends keyof PipelineSettings>(k: K, v: PipelineSettings[K]) => setF((s) => ({ ...s, [k]: v }));
   const save = useMutation({
     mutationFn: (pipeline: PipelineSettings) =>
-      api<{ pipeline: PipelineSettings }>("/api/settings/pipeline", { method: "PUT", body: { pipeline } }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["me"] }),
+      api<{ pipeline: PipelineSettings }>("/api/admin/settings/pipeline", { method: "PUT", body: { pipeline } }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: adminSettingsKey }),
   });
   const dirty = JSON.stringify(f) !== JSON.stringify(props.value);
 
@@ -100,8 +96,8 @@ export function PipelineSettingsForm(props: { value: PipelineSettings }) {
       }}
     >
       <p className="muted small">
-        Áp dụng cho mọi series của bạn từ lần chạy sau (Xoá chữ + OCR, xoá chữ lại, OCR vùng tự vẽ, AI hiệu đính).
-        Chương đã xử lý không tự chạy lại.
+        Áp dụng cho mọi người dùng từ lần chạy sau (Xoá chữ + OCR, xoá chữ lại, OCR vùng tự vẽ, AI hiệu đính). Chương đã
+        xử lý không tự chạy lại.
       </p>
       <fieldset disabled={save.isPending} className="pipe-fields">
         <Group legend="Phát hiện chữ">
@@ -172,27 +168,6 @@ export function PipelineSettingsForm(props: { value: PipelineSettings }) {
             {INPAINTERS.map((m) => (
               <option key={m} value={m}>
                 {INPAINTER_LABEL[m]}
-              </option>
-            ))}
-          </select>
-        </Group>
-
-        <Group legend="Hiệu đính">
-          <Term
-            htmlFor="p-proofread"
-            vi="Model AI hiệu đính"
-            en="AI proofread model"
-            tip="Model rà bản dịch cả chương và đề xuất sửa từng khối (không tự ghi đè). Premium chính xác hơn, tốn hơn."
-          />
-          <select
-            id="p-proofread"
-            aria-describedby={tipId("p-proofread")}
-            value={f.proofread_tier}
-            onChange={(e) => set("proofread_tier", e.target.value as never)}
-          >
-            {PROOFREAD_TIERS.map((t) => (
-              <option key={t} value={t}>
-                {TIER_LABEL[t]}
               </option>
             ))}
           </select>
