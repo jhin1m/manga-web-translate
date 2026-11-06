@@ -29,3 +29,22 @@ export function ocrStallNote(j: Pick<JobView, "status" | "error">, waitedMs: num
   const s = Math.floor(waitedMs / 1000);
   return `Chưa có máy xử lý nhận lệnh quét chữ sau ${s} giây — hàng đợi đang bận hoặc máy xử lý đang tắt. Vẫn đang chờ; có thể huỷ.`;
 }
+
+/**
+ * Báo server dừng job OCR mà kết quả đã bị bỏ. Lỗi một lần (mạng, 5xx lúc tải cao) thì job kẹt `queued` rồi chạy tốn AI,
+ * nên thử lại một lần sau `retryDelayMs`; vẫn lỗi thì thôi (best-effort, không ném).
+ */
+export async function cancelJobBestEffort(
+  jobId: string,
+  cancel: (jobId: string) => Promise<unknown>,
+  retryDelayMs = 1500,
+): Promise<void> {
+  try {
+    await cancel(jobId);
+    return;
+  } catch {
+    // thử lại bên dưới
+  }
+  await new Promise((r) => setTimeout(r, retryDelayMs));
+  await cancel(jobId).catch(() => undefined);
+}

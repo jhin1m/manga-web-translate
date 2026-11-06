@@ -15,7 +15,7 @@ import { cancelJob } from "../../chapter/api.ts";
 import { insertOcrRegion, refreshRegionFromOcr } from "../actions.ts";
 import { type OcrRegionResult, startOcrRegion, startReinpaint, waitJob } from "../api.ts";
 import { createEraseQueue, type EraseQueue } from "../erase-queue.ts";
-import { ocrRetryNote, ocrStallNote } from "../ocr-wait.ts";
+import { cancelJobBestEffort, ocrRetryNote, ocrStallNote } from "../ocr-wait.ts";
 import { blockBarPos, type Size } from "../page-layout.ts";
 import { editorStore, type View } from "../store.ts";
 import { SELECT_FILL, SELECT_STROKE } from "./colors.ts";
@@ -86,7 +86,7 @@ export function useOcrRegion(
     return () => {
       ctl.abort();
       // Kết quả page cũ luôn bị bỏ → báo server dừng job, khỏi tốn AI vô ích.
-      for (const w of mine.values()) if (w.jobId) void cancelJob(w.jobId).catch(() => undefined);
+      for (const w of mine.values()) if (w.jobId) void cancelJobBestEffort(w.jobId, cancelJob);
       mine.clear();
     };
   }, [pageId]);
@@ -112,7 +112,7 @@ export function useOcrRegion(
         const { job } = await startOcrRegion(pageId, bbox);
         wait.jobId = job.id;
         // Đã huỷ từ lúc POST còn bay (chưa có job id để báo server) → huỷ ngay khi có id.
-        if (signal.aborted) void cancelJob(job.id).catch(() => undefined);
+        if (signal.aborted) void cancelJobBestEffort(job.id, cancelJob);
         const sentAt = Date.now();
         const done = await waitJob(job.id, signal, undefined, (j) => {
           if (!signal.aborted) setRetry(ocrRetryNote(j) ?? ocrStallNote(j, Date.now() - sentAt));
@@ -147,7 +147,7 @@ export function useOcrRegion(
   const cancel = useCallback(() => {
     for (const w of waits.current.values()) {
       w.ctl.abort();
-      if (w.jobId) void cancelJob(w.jobId).catch(() => undefined);
+      if (w.jobId) void cancelJobBestEffort(w.jobId, cancelJob);
     }
   }, []);
 

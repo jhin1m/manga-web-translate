@@ -120,6 +120,18 @@ export function revealBlockView(
   return next.x === v.x && next.y === v.y ? null : next;
 }
 
+/** Panel mở ra có dời khung nhìn để lộ khối `rect` không (ngang hoặc dọc) — như `revealBlockView` trả khác null. */
+export function revealWouldMove(
+  rect: { x: number; y: number; w: number; h: number },
+  v: View,
+  box: Size,
+  coverLeft: number,
+  content: Size,
+  x0 = 0,
+): boolean {
+  return coverLeft > 0 && revealBlockView(rect, v, box, coverLeft, content, x0) !== null;
+}
+
 /** Page cao hơn `PAGE_RATIO_MAX` × rộng (webtoon cắt dải) không vừa theo chiều cao — chữ sẽ quá nhỏ để đọc. */
 export const PAGE_RATIO_MAX = 2;
 

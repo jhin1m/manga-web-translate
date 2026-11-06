@@ -10,6 +10,7 @@ import {
   pageStartView,
   REVEAL_MARGIN,
   revealBlockView,
+  revealWouldMove,
   SPLIT_GAP,
 } from "../page-layout.ts";
 
@@ -274,5 +275,29 @@ describe("clampView with an overlay panel", () => {
     const c = { w: 2000, h: 3000 };
     expect(clampView({ scale: 1, x: 500, y: 0 }, c, box, 0, 272).x).toBe(40 + 272);
     expect(clampView({ scale: 1, x: 500, y: 0 }, c, box, 0, 0).x).toBe(40);
+  });
+});
+
+describe("revealWouldMove", () => {
+  const box = { w: 1104, h: 700 };
+  const panel = 296;
+  const page = { w: 800, h: 3000 };
+  const v = { scale: 1, x: (box.w - 800) / 2, y: 40 };
+
+  it("is true for a block under the panel", () => {
+    expect(revealWouldMove({ x: 10, y: 100, w: 100, h: 60 }, v, box, panel, page)).toBe(true);
+  });
+
+  it("is true for a block clear of the panel but cut by the bottom edge", () => {
+    expect(revealWouldMove({ x: 400, y: 680, w: 100, h: 60 }, v, box, panel, page)).toBe(true);
+  });
+
+  it("is true for a block cut by the right edge", () => {
+    expect(revealWouldMove({ x: 700, y: 100, w: 150, h: 60 }, { ...v, x: 300 }, box, panel, page)).toBe(true);
+  });
+
+  it("is false for a block fully in the clear, or without a panel to cover", () => {
+    expect(revealWouldMove({ x: 400, y: 100, w: 100, h: 60 }, v, box, panel, page)).toBe(false);
+    expect(revealWouldMove({ x: 10, y: 100, w: 100, h: 60 }, v, box, 0, page)).toBe(false);
   });
 });

@@ -37,7 +37,7 @@ export type SessionDeps = {
   putStates(
     pages: { page_id: string; version: number; state: PageState }[],
   ): Promise<{ batch_id: string; versions: Record<string, number> }>;
-  queue: Pick<PendingQueue, "delete">;
+  queue: Pick<PendingQueue, "delete" | "put">;
   onError(e: unknown): void;
 };
 
@@ -125,12 +125,12 @@ export class ChapterSession {
       await saver.persist();
       // Page đang dịch: chưa lưu được tới khi lô của nó xong → cất phần sửa, mở lại page thì rebase + lưu tiếp.
       if (prev.readOnly === "page_busy" && prev.base && prev.doc) {
-        this.deferred.set(prev.pageId, {
+        await this.defer({
           pageId: prev.pageId,
           baseVersion: prev.baseVersion,
           ops: diffStates(prev.base, prev.doc),
           updatedAt: Date.now(),
-        });
+        }).catch((e: unknown) => console.warn("[editor] không ghi được bản nháp IndexedDB", e));
       } else {
         // Không lưu được (mất khoá, lỗi mạng): ở lại page này — đổi page sẽ bỏ sửa khỏi editor.
         throw new UnsavedPageError(chapter.getState().pages.find((p) => p.id === prev.pageId)?.ord);
@@ -226,6 +226,19 @@ export class ChapterSession {
     }
   }
 
+  /**
+   * Cất phần sửa của page không lưu được ngay (bận / xung đột) tới khi mở page đó, và ghi vào IndexedDB để sống qua tải
+   * lại. Đã có phần cất cho page này (sửa tiếp rồi lại hoãn) thì gộp — phần mới hơn áp trước, phần cũ lệch thì thành xung
+   * đột để người dùng chọn, không rớt. Lịch sử undo đã cất của page bỏ vì phần cất rebase lại khi mở.
+   */
+  private async defer(rec: PendingRecord) {
+    const old = this.deferred.get(rec.pageId);
+    const merged = old ? { ...rec, ops: [...old.ops, ...rec.ops] } : rec;
+    this.deferred.set(rec.pageId, merged);
+    this.stash.delete(rec.pageId);
+    await this.deps.queue.put(merged);
+  }
+
   /** Lưu phần sửa đã cất của page không active (sau lần đổi page đang chờ, để mở page đó thấy bản đã lưu). */
   private saveDeferred(rec: PendingRecord) {
     this.chain = this.chain
@@ -279,7 +292,7 @@ export class ChapterSession {
   async restoreOther(rec: PendingRecord): Promise<"saved" | "deferred" | "noop"> {
     const { chapter, queue } = this.deps;
     if (this.busy.has(rec.pageId)) {
-      this.deferred.set(rec.pageId, rec);
+      await this.defer(rec);
       return "deferred";
     }
     const c = chapter.getState().cache[rec.pageId];
@@ -287,7 +300,7 @@ export class ChapterSession {
     for (let round = 0; ; round++) {
       const r = rebase(server.state, rec.ops);
       if (r.conflicts.length) {
-        this.deferred.set(rec.pageId, rec);
+        await this.defer(rec);
         return "deferred";
       }
       if (same(r.state, server.state)) {
@@ -301,7 +314,7 @@ export class ChapterSession {
         return "saved";
       } catch (e) {
         if (isPageBusyError(e)) {
-          this.deferred.set(rec.pageId, rec);
+          await this.defer(rec);
           return "deferred";
         }
         if (statusOf(e) !== 409 || round > 0) throw e;

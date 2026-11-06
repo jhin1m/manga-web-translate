@@ -334,6 +334,9 @@ test("double-clicking a block under the future panel with the panel collapsed st
   // Hai lần bấm cách nhau như người bấm (không phải hai sự kiện liền nhau).
   await page.mouse.click(cx, at.y + at.h / 2, { clickCount: 2, delay: 80 });
   await expect(page.getByRole("textbox", { name: "Sửa chữ" })).toBeVisible();
+  // Nhấp đúp bỏ lần mở panel đã hẹn: qua hết cửa sổ nhấp đúp panel vẫn đóng.
+  await page.waitForTimeout(DBLCLICK_GAP);
+  await expect(blockPanel(page)).toBeHidden();
 });
 
 test("fit-to-frame: switching Văn bản → Chọn scrolls the selected block out from under the panel", async ({ page }) => {

@@ -11,8 +11,8 @@ import {
   clampView,
   contentBox,
   pageStartView,
-  REVEAL_MARGIN,
   revealBlockView,
+  revealWouldMove,
   type Size,
   viewAtY,
 } from "./page-layout.ts";
@@ -233,11 +233,16 @@ export function revealSelection() {
   if (next) s.setView(next);
 }
 
-/** Khối đang chọn (page active) có nằm dưới dải `cover` px mép trái canvas — chỗ panel sắp đè — không. */
+/**
+ * Mở panel rộng `cover` px đè mép trái canvas có dời khung nhìn để lộ khối đang chọn (page active) không — khối nằm dưới
+ * panel, hoặc bị cắt ở mép dưới / phải. Dời là ảnh đổi chỗ ngay dưới con trỏ nên lần bấm thứ hai của nhấp đúp trượt khối.
+ */
 export function selectionUnderCover(cover: number): boolean {
   const s = editorStore.getState();
   const cs = chapterStore.getState();
   const box = s.selection ? s.doc?.text_boxes.find((b) => b.id === s.selection) : undefined;
-  if (!box || s.pageId !== cs.activePageId || cs.box.w === 0) return false;
-  return s.view.x + box.x * s.view.scale < cover + REVEAL_MARGIN;
+  const meta = cs.pages.find((p) => p.id === cs.activePageId);
+  if (!box || !meta || s.pageId !== meta.id || cs.box.w === 0) return false;
+  const c = contentBox({ w: meta.width, h: meta.height }, cs.viewMode === "split");
+  return revealWouldMove(box, s.view, cs.box, cover, c, c.x);
 }

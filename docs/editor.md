@@ -194,7 +194,7 @@ người đã chỉnh). "Đã xem" → `POST /pages/:id/ai-update/ack {ai_rev}` 
 ## Rail, panel khối, thanh phụ công cụ và panel Văn bản
 
 Rail công cụ (`tool-rail.tsx`, hành vi ở `tool-rail-model.ts`, 48px, chỉ icon): **Chọn (V)** mở / thu panel khối (bấm lại icon
-đang mở → thu, công cụ giữ nguyên; chỉ mở khi có khối đang chọn hoặc có nội dung phải xử lý — không có gì thì không mở, như phím V); **Chữ (T)** / **Tẩy chữ (B)** / **Quét chữ (R)** chỉ đặt công cụ — tuỳ chọn nằm ở thanh phụ
+đang mở → thu, công cụ giữ nguyên; chỉ mở khi có khối đang chọn hoặc có nội dung phải xử lý — không có gì thì không mở; phím V về Chọn chỉ mở lại panel khi nó vừa thu vì đổi công cụ — thu bằng × / Esc thì V không mở); **Chữ (T)** / **Tẩy chữ (B)** / **Quét chữ (R)** chỉ đặt công cụ — tuỳ chọn nằm ở thanh phụ
 nổi trên canvas, không có panel riêng (panel khối thu lại trừ khi còn nội dung phải xử lý); **Văn bản** chỉ mở/thu panel Văn
 bản, không đổi công cụ. Mỗi nút có `aria-label` "Tên (phím)", `aria-pressed`, và tooltip (tên + phím) hiện khi rê chuột
 **hoặc focus bàn phím** (CSS `:hover` / `:focus-visible`, `.cw-tip`); nút tắt có lý do trong tooltip và `aria-describedby`.

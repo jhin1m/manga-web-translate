@@ -347,6 +347,87 @@ describe("ChapterSession", () => {
     expect(await queue.get("B")).toBeDefined();
   });
 
+  const recFor = (pageId: string, n: number, edit: (d: ReturnType<typeof doc>) => void, baseVersion = 1) => {
+    const local = doc(n);
+    edit(local);
+    return { pageId, baseVersion, ops: diffStates(doc(n), local), updatedAt: 1 };
+  };
+
+  it("a deferred restore survives a reload: it is written to IndexedDB, restored through the normal path, then removed", async () => {
+    const { srv, queue, saver, editor, session } = setup();
+    await session.activate("A");
+    session.setBusy(new Set(["B"]));
+    const rec = recFor("B", 3, (d) => {
+      if (d.text_boxes[0]) d.text_boxes[0].x = 55;
+    });
+    expect(await session.restoreOther(rec)).toBe("deferred");
+    const stored = await queue.get("B");
+    expect(stored?.ops).toEqual(rec.ops);
+    // Tải lại: bản từ IndexedDB đi qua luồng khôi phục của trang không active khi trang hết bận.
+    const reloaded = setup();
+    await reloaded.queue.put(stored as NonNullable<typeof stored>);
+    expect(await reloaded.session.restoreOther(stored as NonNullable<typeof stored>)).toBe("saved");
+    expect(reloaded.srv.B?.state.text_boxes[0]).toMatchObject({ x: 55 });
+    expect(await reloaded.queue.get("B")).toBeUndefined();
+    // Cùng phiên: mở trang → áp vào editor, lưu xong thì bản ghi biến mất, không khôi phục lặp.
+    await session.activate("B");
+    expect(editor.getState().doc?.text_boxes[0]).toMatchObject({ x: 55 });
+    session.setBusy(new Set());
+    await saver.flush();
+    expect(srv.B?.state.text_boxes[0]).toMatchObject({ x: 55 });
+    expect(await queue.get("B")).toBeUndefined();
+  });
+
+  it("a restore deferred by a conflict is also kept in IndexedDB", async () => {
+    const { chapter, queue, session } = setup();
+    const rec = recFor("B", 3, (d) => {
+      if (d.text_boxes[0]) d.text_boxes[0].x = 55;
+    });
+    const other = doc(3);
+    if (other.text_boxes[0]) other.text_boxes[0].x = 90;
+    chapter.getState().setCached("B", { state: other, version: 2 });
+    expect(await session.restoreOther(rec)).toBe("deferred");
+    expect((await queue.get("B"))?.ops).toEqual(rec.ops);
+  });
+
+  it("deferring a restore drops the page's stashed undo history", async () => {
+    const { editor, session } = setup();
+    await session.activate("A");
+    editor.getState().apply(moveBox("t0", 3, 3));
+    await session.activate("B");
+    session.setBusy(new Set(["A"]));
+    const rec = recFor(
+      "A",
+      2,
+      (d) => {
+        if (d.text_boxes[1]) d.text_boxes[1].x = 12;
+      },
+      2,
+    );
+    expect(await session.restoreOther(rec)).toBe("deferred");
+    await session.activate("A");
+    expect(editor.getState().history.past).toHaveLength(0);
+    editor.getState().undo();
+    expect(editor.getState().doc?.text_boxes[0]).toMatchObject({ x: 3 });
+  });
+
+  it("a second deferred restore for the same page merges with the first instead of replacing it", async () => {
+    const { editor, queue, session } = setup();
+    await session.activate("A");
+    editor.getState().apply(moveBox("t0", 4, 4));
+    session.setBusy(new Set(["A"]));
+    await session.activate("B");
+    const rec = recFor("A", 2, (d) => {
+      if (d.text_boxes[1]) d.text_boxes[1].x = 12;
+    });
+    expect(await session.restoreOther(rec)).toBe("deferred");
+    expect((await queue.get("A"))?.ops.length).toBeGreaterThan(rec.ops.length);
+    await session.activate("A");
+    const boxes = editor.getState().doc?.text_boxes;
+    expect(boxes?.[0]).toMatchObject({ x: 4 });
+    expect(boxes?.[1]).toMatchObject({ x: 12 });
+  });
+
   it("restoreOther rebases a pending record onto the cached state and PUTs it", async () => {
     const { srv, queue, session } = setup();
     const local = doc(3);

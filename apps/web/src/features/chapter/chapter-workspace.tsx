@@ -319,7 +319,7 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
     };
   }, []);
   // Panel khối tự mở/đóng theo ngữ cảnh. Mở: chọn (hoặc chọn lại) khối trên canvas ở công cụ Chọn, về công cụ Chọn khi còn khối
-  // đang chọn (panel đang thu; đang ở Bản dịch / Tìm thì giữ), hoặc
+  // đang chọn mà panel vừa thu vì đổi công cụ (thu bằng × / Esc thì không mở lại; đang ở Bản dịch / Tìm thì giữ), hoặc
   // có nội dung phải xử lý mà không chọn khối (AI có bản mới, xung đột khi lưu — đổi trang là mất danh sách xung đột).
   // Đóng: bỏ chọn khối (bấm nền, Esc, đổi trang) khi hết nội dung — còn xung đột / AI mới thì panel ở lại. Đổi sang công
   // cụ có thanh phụ cũng thu panel khi hết nội dung. Chọn khối cũng đặt dòng bảng tương ứng thành dòng hiện tại (bảng cuộn
@@ -350,7 +350,8 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
     const unsub = editorStore.subscribe((s, prev) => {
       const content = hasToolContent(s);
       if (content && !hasToolContent(prev) && panelRef.current === null) setPanel("tool");
-      // Chọn lại đúng khối đang chọn (panel đã thu bằng nút thu / công cụ khác) hoặc về công cụ Chọn khi còn khối chọn.
+      // Chọn lại đúng khối đang chọn (panel đã thu bằng nút thu / công cụ khác) hoặc về công cụ Chọn khi còn khối chọn
+      // mà panel vừa thu vì đổi công cụ.
       const backToSelect = s.tool === "select" && prev.tool !== "select";
       const reselected = s.reselects > prev.reselects || (backToSelect && collapsedByTool.current);
       if (backToSelect) collapsedByTool.current = false;
@@ -916,6 +917,7 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
               notify(null);
               if (now.pageId !== page.id) void restoreSaved();
               else if (step && now.history.past.at(-1) === step) now.undo();
+              else notify({ tone: "info", text: "Đã sửa tiếp sau bước này — dùng Cmd+Z (Ctrl+Z) để lùi từng bước." });
             },
           },
         ],
