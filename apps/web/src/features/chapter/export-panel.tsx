@@ -9,6 +9,7 @@ import { EXPORT_FILE, EXPORT_RETENTION_DAYS } from "@mtl/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { errorMessage } from "../../lib/api.ts";
+import { timeAgo } from "../../lib/format.ts";
 import {
   createExport,
   type ExportFormat,
@@ -71,15 +72,6 @@ export function triggerDownload(url: string) {
 /** Tổng chỗ cần xem trong 1 dòng tóm tắt (cùng tập với `warningLines`). */
 const warnTotal = (w: ExportWarnings, includeUntranslated: boolean) =>
   (includeUntranslated ? 0 : w.untranslated) + w.empty + w.aiPending + w.overflow;
-
-/** "5 phút trước", "2 giờ trước", "3 ngày trước". */
-function timeAgo(iso: string, now = Date.now()): string {
-  const min = Math.max(0, Math.round((now - Date.parse(iso)) / 60_000));
-  if (min < 1) return "vừa xong";
-  if (min < 60) return `${min} phút trước`;
-  if (min < 60 * 24) return `${Math.round(min / 60)} giờ trước`;
-  return `${Math.round(min / 60 / 24)} ngày trước`;
-}
 
 export function ExportPanel(props: {
   chapterId: string;

@@ -132,32 +132,6 @@
   align-items: center;
   gap: 2px;
 }
-.cw-seg {
-  border: 0;
-  margin: 0;
-  min-width: 0;
-}
-.cw-seg {
-  display: flex;
-  padding: 0;
-}
-.cw-seg > * {
-  border-radius: 0;
-}
-.cw-seg > :first-child {
-  border-radius: var(--radius) 0 0 var(--radius);
-}
-.cw-seg > :last-child {
-  border-radius: 0 var(--radius) var(--radius) 0;
-}
-.cw-seg > * + * {
-  margin-left: -1px;
-}
-.cw-seg [aria-pressed="true"] {
-  background: var(--c-accent);
-  border-color: var(--c-accent);
-  color: #fff;
-}
 .cw-band {
   grid-area: band;
   display: flex;
@@ -1030,28 +1004,6 @@ label.cw-field-head {
 }
 .cw-field textarea {
   font-size: var(--fs-md);
-}
-.cw-panel-sub {
-  font-size: var(--fs-xs);
-  color: var(--c-fg-muted);
-}
-.cw-page-line {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-2);
-  font-size: var(--fs-sm);
-  color: var(--c-fg);
-}
-.cw-flags {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-1);
-  margin: 0;
-  padding-left: var(--sp-4);
-  font-size: var(--fs-sm);
-}
-.cw-flags .danger {
-  color: var(--c-danger);
 }
 /* Font + Cỡ: ô cỡ hẹp (số 3 chữ số). */
 .cw-block .ed-row-font {

@@ -10,7 +10,7 @@ import { errorMessage } from "../../lib/api.ts";
 import { fetchSeriesList, patchSeries, type Series, seriesKeys } from "../series/api.ts";
 import { pairLabel, type SourceLang, type TargetLang } from "../series/lang-labels.ts";
 import { type ChapterDetail, chapterKeys, patchChapter } from "./api.ts";
-import { LangPairFields } from "./lang-pair-popover.tsx";
+import { LangPairFields } from "./lang-pair-fields.tsx";
 
 const NUMBER_RE = /^\d+(\.\d+)?$/;
 

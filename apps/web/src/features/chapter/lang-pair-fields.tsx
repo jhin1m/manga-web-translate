@@ -1,7 +1,7 @@
 /**
  * Hai ô chọn ngôn ngữ gốc / đích của series, nằm trong popover tên chương (chapter-meta-popover.tsx; lưu bằng PATCH
- * series, giống form Cài đặt series). Ngôn ngữ gốc sai (VD chọn Manhwa nhưng ảnh là bản scan tiếng Anh) làm OCR bỏ
- * trống khối có chữ — đổi ở đây rồi OCR lại vùng đó / dịch lại.
+ * series, giống form Cài đặt series). Ngôn ngữ gốc sai (VD chọn Manhwa nhưng ảnh là bản scan tiếng Anh) làm bước quét
+ * chữ bỏ trống khối có chữ — đổi ở đây rồi quét lại vùng đó / dịch lại.
  */
 import { LANG_NAMES, SOURCE_LANGS, type SourceLang, TARGET_LANGS, type TargetLang } from "../series/lang-labels.ts";
 
@@ -34,8 +34,8 @@ export function LangPairFields(props: {
         </select>
       </label>
       <span className="small muted">
-        Áp cho cả series từ lần chạy sau. Trang đã dịch không tự chạy lại: khối bị trống thì dùng công cụ OCR kéo khung
-        quanh chữ; đổi ngôn ngữ đích thì "Dịch lại cả chương".
+        Áp cho cả series từ lần chạy sau. Trang đã dịch không tự chạy lại: khối bị trống thì dùng công cụ Quét chữ kéo
+        khung quanh chữ; đổi ngôn ngữ đích thì "Dịch lại cả chương".
       </span>
     </>
   );

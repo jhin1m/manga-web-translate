@@ -97,13 +97,6 @@
   margin: 0;
   font-weight: 400;
 }
-.drawer-warn {
-  border-left: 3px solid var(--c-warn);
-  background: var(--c-surface);
-  padding: var(--sp-2) var(--sp-3);
-  display: grid;
-  gap: 4px;
-}
 .drawer-keys {
   width: 100%;
   border-collapse: collapse;
