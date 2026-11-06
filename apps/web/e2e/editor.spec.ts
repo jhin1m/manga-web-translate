@@ -550,7 +550,7 @@ test("block panel is closed by default and overlays the canvas: opening or closi
   const closed = await width();
   expect(closed).toBeGreaterThan(0);
 
-  // Chưa chọn khối và không có nội dung phải xử lý: bấm Chọn không mở panel (như phím V).
+  // Chưa chọn khối và không có nội dung phải xử lý: bấm Chọn không mở panel.
   await select.click();
   await expect(panel).toBeHidden();
   await expect(select).toHaveAttribute("aria-pressed", "false");
@@ -581,7 +581,7 @@ test("block panel is closed by default and overlays the canvas: opening or closi
   await expect(panel).toBeVisible();
 
   // Phím T chuyển sang công cụ Chữ: thanh phụ trên canvas thay panel (panel khối thu lại), V quay về Chọn.
-  // Bấm nền canvas ngoài vùng panel đè (panel đang mở, chưa chọn khối) để phím rơi vào canvas.
+  // Bấm nền canvas ngoài vùng panel đè (panel đang mở, khối đang chọn): bấm nền bỏ chọn khối và đưa phím vào canvas.
   await page.locator(".ed-canvas").click({ position: { x: panelBox.width + 100, y: 10 } });
   await page.keyboard.press("t");
   await expect(toolBar(page, "Thêm chữ")).toBeVisible();

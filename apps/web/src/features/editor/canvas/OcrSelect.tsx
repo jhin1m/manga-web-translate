@@ -117,9 +117,9 @@ export function useOcrRegion(
         const done = await waitJob(job.id, signal, undefined, (j) => {
           if (!signal.aborted) setRetry(ocrRetryNote(j) ?? ocrStallNote(j, Date.now() - sentAt));
         });
-        if (done.status !== "succeeded") throw new Error(done.error ?? "OCR vùng thất bại");
+        if (done.status !== "succeeded") throw new Error(done.error ?? "Quét chữ vùng thất bại");
         const region = (done.result as OcrRegionResult | null)?.region as Region | undefined;
-        if (!region) throw new Error("OCR không trả về vùng");
+        if (!region) throw new Error("Quét chữ không trả về vùng");
         const s = editorStore.getState();
         if (s.pageId !== pageId || !s.layout) return;
         if (regionId) {
@@ -227,7 +227,7 @@ export function OcrConfirmBar(props: { rect: PageRect; view: View; frame: Size; 
       ref={ref}
       className="ed-ocrbar"
       role="toolbar"
-      aria-label="Xác nhận OCR vùng"
+      aria-label="Xác nhận quét chữ vùng"
       style={{ left: pos.left, top: pos.top }}
       // Không để pointerdown lọt xuống Stage (bắt đầu kéo khung mới).
       onPointerDown={(e) => e.stopPropagation()}
