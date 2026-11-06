@@ -115,9 +115,11 @@ export function ActivityDrawer(props: {
 export function ShellActivity() {
   const [open, setOpen] = useState(false);
   const count = useUploadCount();
+  // Upload lỗi không còn "đang chạy" nhưng nút Thử lại chỉ nằm trong drawer, nên nút vẫn phải hiện.
+  const hasFailed = useStore(uploadManager.store, (s) => Object.values(s.chapters).some((c) => c.phase === "failed"));
   return (
     <>
-      {(count > 0 || open) && <ActivityButton count={count} onClick={() => setOpen(true)} />}
+      {(count > 0 || hasFailed || open) && <ActivityButton count={count} onClick={() => setOpen(true)} />}
       {open && <ActivityDrawer onClose={() => setOpen(false)} />}
     </>
   );
