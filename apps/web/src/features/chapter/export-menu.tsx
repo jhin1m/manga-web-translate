@@ -13,6 +13,12 @@ import type { Row } from "./text-table/rows.ts";
 /** Khoảng cách mép phải menu tới mép cửa sổ khi không có nút để căn theo. */
 const EDGE = 16;
 
+/** Phần tử nằm trong `<details>` đang đóng (trừ chính `<summary>`): không focus được bằng Tab. */
+const closedDetails = (el: HTMLElement) => {
+  const d = el.closest("details");
+  return !!d && !d.open && !(el.tagName === "SUMMARY" && el.parentElement === d);
+};
+
 export function ExportMenu(props: {
   chapterId: string;
   detail: ChapterDetail | undefined;
@@ -74,9 +80,10 @@ export function ExportMenu(props: {
       onKeyDown={(e) => {
         // Tab ra khỏi menu → đóng, focus đi tiếp từ nút đã mở.
         if (e.key === "Tab" && ref.current) {
+          // Chỉ phần tử còn Tab tới được: ô trong "Tuỳ chọn" thu gọn không focus được nên không tính là phần tử cuối.
           const items = [
             ...ref.current.querySelectorAll<HTMLElement>("a[href], button:not(:disabled), input, summary"),
-          ];
+          ].filter((el) => !closedDetails(el));
           const first = items[0];
           const last = items.at(-1);
           const at = document.activeElement;

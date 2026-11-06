@@ -11,6 +11,7 @@ import { runFakeWorker } from "./fake-worker.ts";
 import {
   apiReadyChapter,
   blockPanel,
+  docPanel,
   login,
   openPanel,
   pageThumb,
@@ -24,6 +25,8 @@ import {
 test.use({ viewport: { width: 1280, height: 800 } });
 
 const headers = { origin: WEB_URL };
+/** Konva coi hai lần bấm trong 400ms là nhấp đúp. */
+const DBLCLICK_GAP = 450;
 /** Số chương riêng của spec này. */
 let seq = 9400;
 const nextNumber = () => String(++seq);
@@ -193,28 +196,176 @@ test("AI update shows even while a block of the page is selected, above the bloc
   await expect(panel.locator("#cw-translation")).toBeVisible();
 });
 
-/** Giả xung đột khi lưu bằng cách đặt thẳng vào store (luật rebase đã có unit test); kiểm hành vi của panel. */
-async function injectConflict(page: Page) {
-  await page.evaluate(async () => {
-    const m = await import(/* @vite-ignore */ "/src/features/editor/store.ts");
-    const st = m.editorStore.getState();
-    const region = st.doc?.regions[0];
-    if (!st.base || !st.doc || !region) throw new Error("page not loaded");
-    st.rebased(st.base, st.baseVersion, st.doc, [
-      {
-        key: "e2e-conflict",
-        reason: "changed_on_server",
-        fields: ["translation"],
-        op: {
-          t: "update",
-          coll: "regions",
-          id: region.id,
-          fields: { translation: { from: "Xin chào", to: "Bản của tôi" } },
-          local: { ...region, translation: "Bản của tôi" },
-        },
-      },
-    ]);
+test("closing the Văn bản panel brings back the AI update; closing the block panel leaves a band to reopen it", async ({
+  page,
+}) => {
+  await login(page);
+  const { chapterId, pageId } = await readyChapter(page);
+  await makeAiUpdate(page, chapterId, pageId);
+  await open(page, chapterId);
+  const panel = blockPanel(page);
+  const band = page.getByRole("alert", { name: "Cảnh báo chương" });
+  await expect(panel.getByText("Có kết quả AI mới")).toBeVisible();
+
+  // Sang Văn bản: nội dung AI không còn trước mắt nên băng báo; thu Văn bản (nút rail hoặc nút thu) → panel khối mở lại.
+  await railButton(page, "doc").click();
+  await expect(docPanel(page)).toBeVisible();
+  await expect(band).toContainText("AI có bản mới cho trang này");
+  await railButton(page, "doc").click();
+  await expect(docPanel(page)).toBeHidden();
+  await expect(panel.getByText("Có kết quả AI mới")).toBeVisible();
+  await expect(band).toHaveCount(0);
+
+  await railButton(page, "doc").click();
+  await docPanel(page).getByRole("button", { name: "Thu panel" }).click();
+  await expect(docPanel(page)).toBeHidden();
+  await expect(panel.getByText("Có kết quả AI mới")).toBeVisible();
+
+  // Người dùng thu panel khối bằng tay → băng còn đó và đưa về panel.
+  await panel.getByRole("button", { name: "Thu panel" }).click();
+  await expect(panel).toBeHidden();
+  await expect(band).toContainText("AI có bản mới cho trang này");
+  await band.getByRole("button", { name: "Xem" }).click();
+  await expect(panel.getByText("Có kết quả AI mới")).toBeVisible();
+  await expect(band).toHaveCount(0);
+});
+
+test("a save conflict is not lost behind the Văn bản panel after closing it", async ({ page }) => {
+  await login(page);
+  const { chapterId } = await readyChapter(page);
+  await open(page, chapterId);
+  await armSaveConflict(page, false);
+  await openPanel(page, "table");
+  await page.getByLabel("Bản dịch trang 1 vùng 1", { exact: true }).fill("Bản của tôi");
+  await expect(docPanel(page).getByText("1 thay đổi chưa áp được")).toBeVisible();
+  await docPanel(page).getByRole("button", { name: "Thu panel" }).click();
+  await expect(blockPanel(page).getByText("1 thay đổi chưa áp được")).toBeVisible();
+});
+
+test("clicking the selected block again reopens the collapsed panel (after the close button, or after B then V)", async ({
+  page,
+}) => {
+  await login(page);
+  const { chapterId, pageId } = await readyChapter(page);
+  const b: Box = { x: 300, y: 300, w: 160, h: 60 };
+  await writeState(page, chapterId, pageId, (s) => {
+    s.text_boxes = [textBox("tb-one", b)];
   });
+  await open(page, chapterId);
+  const panel = blockPanel(page);
+  await clickBlock(page, b);
+  await expect(panel).toBeVisible();
+  await panel.getByRole("button", { name: "Thu panel" }).click();
+  await expect(panel).toBeHidden();
+  await page.waitForTimeout(DBLCLICK_GAP); // hai lần bấm sát nhau trên một khối là nhấp đúp (sửa chữ)
+  await clickBlock(page, b);
+  await expect(panel.getByRole("heading", { name: "Khối 1/1" })).toBeVisible();
+
+  // B rồi V: khối vẫn đang chọn nên V mở lại panel; thu bằng nút rồi bấm lại đúng khối cũng mở lại.
+  await page.keyboard.press("b");
+  await expect(panel).toBeHidden();
+  await page.keyboard.press("v");
+  await expect(panel.getByRole("heading", { name: "Khối 1/1" })).toBeVisible();
+  await page.keyboard.press("b");
+  await page.keyboard.press("v");
+  await panel.getByRole("button", { name: "Thu panel" }).click();
+  await expect(panel).toBeHidden();
+  await page.waitForTimeout(DBLCLICK_GAP);
+  await clickBlock(page, b);
+  await expect(panel.getByRole("heading", { name: "Khối 1/1" })).toBeVisible();
+});
+
+test("the Chọn rail button opens the panel only with a selected block or content to handle", async ({ page }) => {
+  await login(page);
+  const { chapterId, pageId } = await readyChapter(page);
+  const b: Box = { x: 300, y: 300, w: 160, h: 60 };
+  await writeState(page, chapterId, pageId, (s) => {
+    s.text_boxes = [textBox("tb-one", b)];
+  });
+  await open(page, chapterId);
+  const panel = blockPanel(page);
+  await page.keyboard.press("b");
+  await railButton(page, "select").click();
+  await expect(railButton(page, "select")).toHaveAttribute("aria-current", "true");
+  await expect(panel).toBeHidden();
+
+  await clickBlock(page, b);
+  await expect(panel).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(panel).toBeHidden();
+  await railButton(page, "select").click();
+  await expect(panel).toBeHidden();
+
+  await page.waitForTimeout(DBLCLICK_GAP);
+  await clickBlock(page, b);
+  await expect(panel).toBeVisible();
+  await page.keyboard.press("t");
+  await railButton(page, "select").click();
+  await expect(panel.getByRole("heading", { name: "Khối 1/1" })).toBeVisible();
+});
+
+test("double-clicking a block at the left edge with the panel collapsed still edits the text on the image", async ({
+  page,
+}) => {
+  await login(page);
+  const { chapterId, pageId } = await readyChapter(page);
+  const left: Box = { x: 8, y: 200, w: 120, h: 60 };
+  await writeState(page, chapterId, pageId, (s) => {
+    s.text_boxes = [textBox("tb-left", left)];
+  });
+  await open(page, chapterId);
+  await zoomButton(page).click();
+  await expect(zoomButton(page)).toHaveText("100%");
+  const at = await screenRect(page, left);
+  // Ở 100% khối nằm dưới chỗ panel sắp đè.
+  expect(at.x).toBeLessThan(48 + 272);
+  await page.mouse.dblclick(at.x + at.w / 2, at.y + at.h / 2);
+  await expect(page.getByRole("textbox", { name: "Sửa chữ" })).toBeVisible();
+});
+
+test("fit-to-frame: switching Văn bản → Chọn scrolls the selected block out from under the panel", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 1250 });
+  await login(page);
+  const { chapterId, pageId } = await readyChapter(page);
+  const left: Box = { x: 8, y: 200, w: 120, h: 60 };
+  await writeState(page, chapterId, pageId, (s) => {
+    s.text_boxes = [textBox("tb-left", left, null)];
+  });
+  await open(page, chapterId);
+  await openPanel(page, "table");
+  await docPanel(page).locator(".cw-tbody [data-row]").nth(1).locator(".cw-src").click();
+  await expect(zoomButton(page)).toHaveAccessibleName(/^Đang vừa khung /);
+  await railButton(page, "select").click();
+  const panel = blockPanel(page);
+  await expect(panel).toBeVisible();
+  const pb = await panel.boundingBox();
+  if (!pb) throw new Error("no panel");
+  await expect.poll(async () => (await screenRect(page, left)).x).toBeGreaterThanOrEqual(pb.x + pb.width);
+  expect((await viewOf(page)).scale).toBeGreaterThan(0.9);
+});
+
+/**
+ * Xung đột khi lưu thật: PUT lưu đầu tiên của editor bị chặn lại (đợi `release`), trong lúc đó máy chủ nhận một bản
+ * khác của cùng bản dịch (cùng người giữ khoá), rồi PUT gốc đi tiếp với version đã cũ → máy chủ trả 409 và editor
+ * rebase ra xung đột. Không đụng code sản phẩm.
+ */
+async function armSaveConflict(page: Page, gated = true) {
+  let release: () => void = () => {};
+  const gate = gated ? new Promise<void>((r) => (release = r)) : Promise.resolve();
+  let used = false;
+  await page.route(/\/api\/pages\/[0-9a-f-]{36}\/state$/, async (route) => {
+    const req = route.request();
+    if (req.method() !== "PUT" || used) return route.fallback();
+    used = true;
+    await gate;
+    const server = structuredClone((req.postDataJSON() as { state: PageBody["state"] }).state);
+    const first = server.regions[0];
+    if (first) first.translation = "Bản của máy chủ";
+    const bump = await route.fetch({ postData: JSON.stringify({ state: server }) });
+    expect(bump.ok()).toBe(true);
+    await route.continue();
+  });
+  return release;
 }
 
 test("a save conflict opens the panel and it stays open while conflicts remain, even after deselecting", async ({
@@ -229,12 +380,17 @@ test("a save conflict opens the panel and it stays open while conflicts remain, 
   const panel = blockPanel(page);
   await expect(panel).toBeHidden();
 
-  await injectConflict(page);
+  // Sửa bản dịch của khối, thu panel, rồi để lần lưu gặp 409 thật: panel tự mở lại vì có xung đột.
+  const release = await armSaveConflict(page);
+  await clickBlock(page, { x: 300, y: 300, w: 160, h: 60 });
+  await panel.locator("#cw-translation").fill("Bản của tôi");
+  await panel.getByRole("button", { name: "Thu panel" }).click();
+  await expect(panel).toBeHidden();
+  release();
   await expect(panel).toBeVisible();
   await expect(panel.getByText("1 thay đổi chưa áp được")).toBeVisible();
 
-  // Chọn khối rồi bỏ chọn (Esc): panel không đóng vì còn xung đột.
-  await clickBlock(page, { x: 300, y: 300, w: 160, h: 60 });
+  // Khối vẫn đang chọn; bỏ chọn (Esc): panel không đóng vì còn xung đột.
   await expect(panel.getByRole("heading", { name: "Khối 1/1" })).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(panel.getByRole("heading", { name: "Chọn & sửa" })).toBeVisible();
@@ -628,6 +784,53 @@ test("page menu: ⋯ and right-click open the same menu; actions for the open pa
   await page.getByRole("menuitem", { name: "Dịch lại trang 2" }).click();
   expect(((await sent).postDataJSON() as { page_ids: string[] }).page_ids).toEqual([pageIds[1]]);
   await expect(page.locator(".cw-toasts .notice", { hasText: "Đã xếp dịch lại trang 2" })).toBeVisible();
+});
+
+test("the Hoàn tác of 'Bỏ chỉnh sửa tay' only reverts that reset: once, on its own page", async ({ page }) => {
+  await login(page);
+  const { chapterId } = await readyChapter(page, 2);
+  await open(page, chapterId);
+  await openPanel(page, "table");
+  const cell1 = page.getByLabel("Bản dịch trang 1 vùng 1", { exact: true });
+  const cell2 = page.getByLabel("Bản dịch trang 2 vùng 1", { exact: true });
+  // Trang 1 có 2 bước sửa cũ (cách nhau quá thời gian gộp), trang 2 có 1 bước sửa.
+  await cell1.fill("Sửa một");
+  await page.waitForTimeout(1100);
+  await cell1.fill("Sửa hai");
+  await pageThumb(page, 2).click();
+  await expect(pageThumb(page, 2)).toHaveAttribute("aria-current", "page");
+  await cell2.fill("Trang hai sửa");
+  await expect(cell2).toHaveValue("Trang hai sửa");
+  await pageThumb(page, 1).click();
+  await expect(pageThumb(page, 1)).toHaveAttribute("aria-current", "page");
+  const more = pageThumbs(page).getByRole("button", { name: "Thao tác trang 1" });
+  const toast = page.locator(".cw-toasts .notice", { hasText: "Đã bỏ chỉnh sửa tay trên trang 1" });
+
+  // Bấm một lần: chỉ lùi đúng thao tác bỏ sửa (về "Sửa hai", không lùi tiếp về "Sửa một"); toast đóng nên không bấm lần hai.
+  await more.click();
+  await page.getByRole("menuitem", { name: "Bỏ chỉnh sửa tay trang 1" }).click();
+  await expect(cell1).toHaveValue("Xin chào");
+  await toast.getByRole("button", { name: "Hoàn tác" }).click();
+  await expect(cell1).toHaveValue("Sửa hai");
+  await expect(toast).toHaveCount(0);
+
+  // Đổi trang rồi mới bấm: không hoàn tác nhầm bước sửa của trang 2, trang 1 giữ bản AI.
+  await more.click();
+  await page.getByRole("menuitem", { name: "Bỏ chỉnh sửa tay trang 1" }).click();
+  await expect(cell1).toHaveValue("Xin chào");
+  await pageThumb(page, 2).click();
+  await expect(pageThumb(page, 2)).toHaveAttribute("aria-current", "page");
+  await cell2.fill("Trang hai mới");
+  await toast.getByRole("button", { name: "Hoàn tác" }).click();
+  await expect(toast).toHaveCount(0);
+  // Đọc thẳng trang đang mở: ô bảng giữ chữ đang gõ nên không phản ánh ngay một lần undo nhầm.
+  const open2 = await page.evaluate(async () => {
+    const m = await import(/* @vite-ignore */ "/src/features/editor/store.ts");
+    return m.editorStore.getState().doc?.regions[0]?.translation;
+  });
+  expect(open2).toBe("Trang hai mới");
+  await expect(cell1).toHaveValue("Xin chào");
+  await expect(toast).toHaveCount(0);
 });
 
 test("a page waiting to be translated offers 'Dịch trang' in its menu once opened", async ({ page }) => {

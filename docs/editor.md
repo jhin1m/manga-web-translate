@@ -178,7 +178,7 @@ thoại) vẫn trong state nhưng không thành dòng (`text-table/rows.ts`).
   Checkbox "Xoá chữ gốc" ở thanh phụ Quét chữ (mặc định bật, nhớ ở localStorage `mtl.ocr.autoErase`): khối dịch chèn xong →
   khung vào hàng xoá của page (`editor/erase-queue.ts`) → `POST /pages/:id/reinpaint {auto_text_bbox, base_clean_rev}`,
   **tuần tự** giữa các khung (mỗi lần dựng trên `clean_rev` job trước trả; 409 `clean_rev_changed` → thử lại 1 lần với
-  rev server báo) → tải lại page. Chỉ xoá khi đã có khối dịch: OCR lỗi / "Huỷ OCR" → chữ gốc giữ nguyên. Hàng xoá mỗi
+  rev server báo) → tải lại page. Chỉ xoá khi đã có khối dịch: OCR lỗi / "Huỷ quét chữ" → chữ gốc giữ nguyên. Hàng xoá mỗi
   page sống tới khi rời chương (đổi trang không bỏ lần xoá của khối đã chèn). Worker chỉ xoá nét chữ CTD thấy trong khung
   (kể cả SFX), không xoá cả khung; không thấy chữ → job fail "Không thấy chữ trong khung…" (dùng Mask). Xoá ảnh sạch
   không hoàn tác được (như Tẩy chữ). "Dịch lại khối" không xoá. Lần xoá lỗi chỉ báo trong editor, không thành "trang lỗi"
@@ -194,19 +194,20 @@ người đã chỉnh). "Đã xem" → `POST /pages/:id/ai-update/ack {ai_rev}` 
 ## Rail, panel khối, thanh phụ công cụ và panel Văn bản
 
 Rail công cụ (`tool-rail.tsx`, hành vi ở `tool-rail-model.ts`, 48px, chỉ icon): **Chọn (V)** mở / thu panel khối (bấm lại icon
-đang mở → thu, công cụ giữ nguyên); **Chữ (T)** / **Tẩy chữ (B)** / **Quét chữ (R)** chỉ đặt công cụ — tuỳ chọn nằm ở thanh phụ
+đang mở → thu, công cụ giữ nguyên; chỉ mở khi có khối đang chọn hoặc có nội dung phải xử lý — không có gì thì không mở, như phím V); **Chữ (T)** / **Tẩy chữ (B)** / **Quét chữ (R)** chỉ đặt công cụ — tuỳ chọn nằm ở thanh phụ
 nổi trên canvas, không có panel riêng (panel khối thu lại trừ khi còn nội dung phải xử lý); **Văn bản** chỉ mở/thu panel Văn
 bản, không đổi công cụ. Mỗi nút có `aria-label` "Tên (phím)", `aria-pressed`, và tooltip (tên + phím) hiện khi rê chuột
 **hoặc focus bàn phím** (CSS `:hover` / `:focus-visible`, `.cw-tip`); nút tắt có lý do trong tooltip và `aria-describedby`.
-Phím V/T/B/E/R đổi công cụ (đổi khỏi Chọn → panel khối thu nếu hết nội dung). `PanelId` chỉ còn `tool` | `doc`; tab của
+Phím V/T/B/E/R đổi công cụ (đổi khỏi Chọn → panel khối thu nếu hết nội dung; về Chọn khi còn khối đang chọn → panel khối mở lại). `PanelId` chỉ còn `tool` | `doc`; tab của
 panel Văn bản là `DocTab` (`table` | `find` | `glossary` | `proofread`).
 
 **Panel khối** (272px, `role="complementary"` "Chọn & sửa") đóng mặc định, **đè lên mép trái canvas** (cùng ô lưới với canvas
-nên canvas không đổi bề ngang khi đóng/mở; cụm pager căn giữa phần canvas còn lộ nên không bị panel che). Tự mở khi: chọn khối ở công cụ Chọn (chọn bằng
+nên canvas không đổi bề ngang khi đóng/mở; cụm pager căn giữa phần canvas còn lộ nên không bị panel che). Tự mở khi: chọn khối ở công cụ Chọn — kể cả bấm lại đúng khối đang chọn (`editorStore.reselects`) — (chọn bằng
 chuột thì mở sau khi nhả chuột để không chắn con trỏ giữa chừng kéo; đang ở panel Văn bản thì giữ); có nội dung phải xử lý
 mà không chọn khối — AI có bản mới của trang đang mở, hoặc xung đột khi lưu (`hasToolContent`). Tự đóng khi bỏ chọn khối
-(bấm nền, Esc, đổi trang) và hết nội dung; còn xung đột / AI mới thì không tự đóng. Thu panel bằng tay khi còn xung đột → băng
-cảnh báo báo số mục + nút "Xem". Không nhớ panel nào theo trình duyệt (khoá cũ `mtl.layout` bị xoá khi vào màn chương,
+(bấm nền, Esc, đổi trang) và hết nội dung; còn xung đột / AI mới thì không tự đóng. Thu Văn bản (nút rail hoặc "Thu panel") khi còn nội dung phải xử lý → về panel khối thay vì đóng hẳn. Thu panel khối bằng tay
+khi còn xung đột / AI mới → băng cảnh báo ("N thay đổi chưa áp được", "AI có bản mới cho trang này") + nút "Xem"; băng AI
+cũng hiện khi đang ở panel Văn bản. Không nhớ panel nào theo trình duyệt (khoá cũ `mtl.layout` bị xoá khi vào màn chương,
 `layout-prefs.ts`). Chỉ xem → mọi công cụ trừ Chọn tắt (cả phím T/B/E/R), panel hiện nội dung nhưng ô nhập và 3 icon bị tắt;
 chương chưa có page → Chữ / Tẩy chữ / Quét chữ tắt; chương chưa dịch xong → các tab Tìm / Thay, Glossary, Hiệu đính tắt (đang ở tab đó thì về Bản dịch).
 
@@ -214,7 +215,7 @@ Khối bị panel che thì canvas tự cuộn lộ ra: `page-layout.revealBlockV
 `chapterStore.cover`, không số cứng; chỉ dịch khi khối bị che / ngoài khung, chừa 24px, qua `clampView` nên không quá đầu/cuối
 trang; chia đôi gốc / dịch dùng `contentBox` + `x0`). `clampView(…, coverLeft)` nới tầm cuộn ngang thêm đúng bề ngang panel
 nên lăn chuột và lần đổi cỡ khung sau đó không kẹp khối về lại dưới panel. Khung canvas đổi bề ngang lúc panel khối đang mở
-(chuyển từ panel Văn bản rộng sang panel khối: cột thu lại, canvas rộng ra) → đo lại và cuộn lộ khối đang chọn. Bấm một
+(chuyển từ panel Văn bản rộng sang panel khối: cột thu lại, canvas rộng ra) → đo lại và cuộn lộ khối đang chọn (`chapterStore.revealSelection`, gọi lại sau mỗi lần canvas căn lại trang theo khung: đổi cỡ khung, chia đôi, nút %). Panel thu → khung nhìn được kẹp lại ngay. Bấm một
 dòng bảng văn bản đi qua cùng `pick` (chọn khối + `revealRect`); panel Văn bản không che canvas nên không cần cuộn thêm.
 
 - **Đầu panel**: "Khối i/N" + 3 icon Dịch lại khối · Nhân đôi khối (`actions.duplicateBox`: id mới, lệch +16px, cùng
@@ -230,7 +231,7 @@ dòng bảng văn bản đi qua cùng `pick` (chọn khối + `revealRect`); pan
   Suy nghĩ / Ghi chú (khối vẽ tay không vùng → không có ô). Option: Thường + loại có slot (+ loại hiện tại của vùng nếu slot đã bị
   bỏ, để không mất giá trị). Đổi = `setTextStyle`: đặt `region.style` và `font_family` của khối theo `fontForStyle` (slot của
   loại; trống → font theo kind như worker), **1 bước undo**. Chương dịch trước 0.8.0 không có `style` (= Thường); đổi tay bằng ô này.
-- **Thao tác trang** là một menu (`page-rail.tsx`): nút ⋯ luôn hiện trên thumbnail trang đang mở, chuột phải / Shift+F10 / phím Menu mở cùng menu. Trang đang mở: Dịch trang n / Dịch lại trang n (trang chọn được, không bận), Bỏ chỉnh sửa tay trang n (chỉ khi khác bản AI; không hỏi lại, hoàn tác bằng toast hoặc Cmd+Z), Ẩn trang n. Trang khác: chuột phải chỉ có Ẩn trang (trang ẩn: Khôi phục). Trạng thái + cờ của trang ở thumbnail (viền, cờ "!" / "×", tooltip, tên truy cập); chi tiết kỹ thuật của trang lỗi (lỗi thô của
+- **Thao tác trang** là một menu (`page-rail.tsx`): nút ⋯ luôn hiện trên thumbnail trang đang mở, chuột phải / Shift+F10 / phím Menu mở cùng menu. Trang đang mở: Dịch trang n / Dịch lại trang n (trang chọn được, không bận), Bỏ chỉnh sửa tay trang n (chỉ khi khác bản AI; không hỏi lại, hoàn tác bằng toast hoặc Cmd+Z; nút Hoàn tác của toast chỉ lùi đúng bước này, một lần, trên đúng trang đó), Ẩn trang n. Trang khác: chuột phải chỉ có Ẩn trang (trang ẩn: Khôi phục). Trạng thái + cờ của trang ở thumbnail (viền, cờ "!" / "×", tooltip, tên truy cập); chi tiết kỹ thuật của trang lỗi (lỗi thô của
   provider) đọc ở Hoạt động › "Chi tiết kỹ thuật".
 - **Thanh phụ trên canvas** (`tool-panels.tsx` `CanvasToolBar`, `role="toolbar"`, nổi giữa mép trên, không đẩy bố cục):
   **Chữ** "Thêm chữ · Kéo khung trên ảnh" (kéo xong → khối mới được chọn, công cụ về Chọn, panel mở, sửa chữ ngay trên ảnh);

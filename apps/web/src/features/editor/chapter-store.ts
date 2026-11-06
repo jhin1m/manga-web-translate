@@ -7,7 +7,7 @@ import type { PageState } from "@mtl/shared";
 import { useStore } from "zustand";
 import { createStore } from "zustand/vanilla";
 import type { PageStatus } from "../chapter/status.ts";
-import { clampView, contentBox, pageStartView, type Size, viewAtY } from "./page-layout.ts";
+import { clampView, contentBox, pageStartView, revealBlockView, type Size, viewAtY } from "./page-layout.ts";
 import { editorStore } from "./store.ts";
 
 export type PageMeta = {
@@ -153,7 +153,16 @@ export function createChapterStore() {
     },
     setBox: (box) => set({ box }),
     setCover: (cover) => {
-      if (get().cover !== cover) set({ cover });
+      const s = get();
+      if (s.cover === cover) return;
+      set({ cover });
+      // Panel thu: ảnh đang lệch sang phải chừa chỗ cho nó → kẹp lại ngay thay vì giữ lệch tới lần cuộn kế.
+      const p = s.pages.find((x) => x.id === s.activePageId);
+      if (cover > 0 || !p || s.box.w === 0) return;
+      const e = editorStore.getState();
+      const c = contentBox({ w: p.width, h: p.height }, s.viewMode === "split");
+      const next = clampView(e.view, c, s.box, c.x);
+      if (next.x !== e.view.x || next.y !== e.view.y) e.setView(next);
     },
     setZoomed: (zoomed) => set({ zoomed }),
     fitView: (scale) => {
@@ -162,6 +171,7 @@ export function createChapterStore() {
       if (!p || s.box.w === 0) return;
       editorStore.getState().setView(pageStartView({ w: p.width, h: p.height }, s.viewMode === "split", s.box, scale));
       set({ zoomed: scale !== undefined });
+      revealSelection();
     },
     setViewMode: (viewMode) => set({ viewMode }),
     setHoldOriginal: (holdOriginal) => {
@@ -197,4 +207,20 @@ export function revealRect(pageId: string, rect: { y: number; h: number }, margi
   const v = viewAtY(e.view, rect.y);
   const c = contentBox({ w: p.width, h: p.height }, s.viewMode === "split");
   e.setView(clampView({ ...v, y: v.y + margin }, c, s.box, c.x, s.cover));
+}
+
+/**
+ * Panel đè mép trái canvas (`cover` > 0): cuộn để khối đang chọn của page active lộ ra khỏi panel. Gọi lại sau mọi
+ * lần khung nhìn bị đặt lại theo khung (đổi cỡ khung, vừa khung, chia đôi) vì chúng căn lại trang mà không biết panel.
+ */
+export function revealSelection() {
+  const s = editorStore.getState();
+  const cs = chapterStore.getState();
+  if (cs.cover <= 0) return;
+  const box = s.selection ? s.doc?.text_boxes.find((b) => b.id === s.selection) : undefined;
+  const meta = cs.pages.find((p) => p.id === cs.activePageId);
+  if (!box || !meta || s.pageId !== meta.id) return;
+  const c = contentBox({ w: meta.width, h: meta.height }, cs.viewMode === "split");
+  const next = revealBlockView(box, s.view, cs.box, cs.cover, c, c.x);
+  if (next) s.setView(next);
 }

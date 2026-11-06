@@ -89,8 +89,10 @@ export function ProofreadPanel(props: {
   activeId: string | null;
   onPick(row: Row): Promise<void>;
   beforeRun(): Promise<unknown>;
+  /** Tab đang hiện. Panel giữ mount khi chuyển tab; rời tab thì đóng hộp xác nhận (giá ước tính sẽ cũ khi quay lại). */
+  active: boolean;
 }) {
-  const { chapterId, rows, activeId } = props;
+  const { chapterId, rows, activeId, active } = props;
   const qc = useQueryClient();
   const readOnly = useEditor((s) => !!s.readOnly);
   const q = useProofread(chapterId);
@@ -111,6 +113,9 @@ export function ProofreadPanel(props: {
     staleTime: 0,
     gcTime: 0,
   });
+  useEffect(() => {
+    if (!active) setConfirming(false);
+  }, [active]);
   const confirmRef = useRef<HTMLElement>(null);
   // Mở hộp: lấy ước tính mới (dữ liệu cũ không hiện lại) + đưa focus vào hộp cho người dùng bàn phím / screen reader.
   useEffect(() => {

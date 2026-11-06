@@ -264,7 +264,10 @@ export function LockBand(props: {
   aiWait: { short: string; long: string } | null;
   /** Số xung đột khi lưu đang bị giấu (panel thu) — đổi trang là mất danh sách, nên báo ở băng. */
   hiddenConflicts: number;
-  onShowConflicts(): void;
+  /** Trang đang mở có kết quả AI mới mà panel khối không hiện (thu, hoặc đang ở panel Văn bản). */
+  hiddenAi: boolean;
+  /** Đưa về panel khối, nơi có xung đột / kết quả AI mới. */
+  onShowHidden(): void;
 }) {
   const readOnly = useEditor((s) => s.readOnly);
   const save = useEditor((s) => s.save);
@@ -332,7 +335,22 @@ export function LockBand(props: {
       body: (
         <>
           {props.hiddenConflicts} thay đổi chưa áp được{" "}
-          <button type="button" className="btn-ghost" onClick={props.onShowConflicts}>
+          <button type="button" className="btn-ghost" onClick={props.onShowHidden}>
+            Xem
+          </button>
+        </>
+      ),
+    });
+  }
+  if (props.hiddenAi) {
+    items.push({
+      key: "ai-update",
+      tone: "warn",
+      why: "Trang này đã có bản dịch AI mới, bản sửa tay của bạn được giữ nguyên cho tới khi bạn áp hoặc bỏ qua.",
+      body: (
+        <>
+          AI có bản mới cho trang này{" "}
+          <button type="button" className="btn-ghost" onClick={props.onShowHidden}>
             Xem
           </button>
         </>

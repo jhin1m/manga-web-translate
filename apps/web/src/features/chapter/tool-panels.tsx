@@ -27,7 +27,7 @@ export function TextToolBar() {
 export function OcrWait({
   retry,
   onCancel,
-  label = "Huỷ OCR",
+  label = "Huỷ quét chữ",
 }: {
   retry: string | null;
   onCancel(): void;

@@ -293,6 +293,14 @@ test.describe("menu Xuất", () => {
     await expect(menu).toBeHidden();
     await expect(button).toBeFocused();
 
+    // Tab từ dòng Tuỳ chọn (thu gọn, mục cuối còn hiện) đi ra ngoài thì menu đóng, focus về nút đã mở.
+    await button.click();
+    await expect(menu).toBeVisible();
+    await menu.locator("summary").focus();
+    await page.keyboard.press("Tab");
+    await expect(menu).toBeHidden();
+    await expect(button).toBeFocused();
+
     await button.click();
     await expect(menu).toBeVisible();
     await page.locator(".ed-canvas").click({ position: { x: 300, y: 300 } });

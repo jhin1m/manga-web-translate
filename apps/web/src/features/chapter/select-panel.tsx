@@ -49,9 +49,9 @@ export type SelectPanelProps = {
 
 /** Lý do "Dịch lại khối" bị tắt (undefined = bấm được). */
 export function reocrDisabled(row: Pick<Row, "regionId">, readOnly: boolean, ocrBusy: boolean) {
-  if (!row.regionId) return "Khối tự thêm không có vùng OCR để dịch lại";
+  if (!row.regionId) return "Khối tự thêm không có vùng quét chữ để dịch lại";
   if (readOnly) return "Đang chỉ xem";
-  if (ocrBusy) return "Đang OCR…";
+  if (ocrBusy) return "Đang quét chữ…";
   return undefined;
 }
 
@@ -167,7 +167,7 @@ function BlockView(props: SelectPanelProps & { row: Row }) {
       {props.busy.ocr && (
         <div className="cw-field">
           <span className="status" data-tone="busy">
-            Đang OCR…
+            Đang quét chữ…
           </span>
           <OcrWait retry={props.ocrRetry} onCancel={props.onCancelOcr} />
         </div>

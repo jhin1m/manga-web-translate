@@ -45,7 +45,7 @@ const PAGE: Record<string, -1 | 1> = { a: -1, d: 1, pageup: -1, pagedown: 1, arr
 
 /** Bảng tra phím trong UI (`?`). */
 export const SHORTCUT_HELP: { keys: string; action: string }[] = [
-  { keys: "V · T · B · E · R", action: "Chọn · Khung chữ · Mask · Tẩy mask · OCR vùng" },
+  { keys: "V · T · B · E · R", action: "Chọn · Chữ · Tẩy chữ · Tẩy nét · Quét chữ" },
   { keys: "Giữ O", action: "Tạm xem ảnh gốc (nhả = về chế độ trước)" },
   { keys: "\\", action: "Đổi Gốc ↔ Dịch (nút Xem gốc)" },
   { keys: "A / D · PageUp / PageDown · ← / →", action: "Trang trước / sau" },

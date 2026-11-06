@@ -21,15 +21,25 @@ export type RailState = { panel: PanelId | null; tool: Tool };
 export const railTool = (t: Tool): Tool => (t === "eraser" ? "brush" : t);
 
 /**
- * `keepToolPanel`: panel khối đang có nội dung phải xử lý (AI có bản mới, xung đột khi lưu) — đổi sang công cụ không có
- * panel thì giữ panel mở để không giấu nội dung đó.
+ * `content`: panel khối đang có nội dung phải xử lý (AI có bản mới, xung đột khi lưu) — không được giấu: thu Văn bản
+ * thì quay về panel khối, đổi sang công cụ không có panel thì giữ panel khối. `selection`: đang chọn một khối.
+ * Chọn chỉ mở panel khi có khối đang chọn hoặc có nội dung (như phím V); không có gì thì không mở.
  */
-export function railClick(cur: RailState, t: RailTarget, keepToolPanel = false): RailState {
-  if (isPanelOnly(t)) return { panel: cur.panel === t ? null : t, tool: cur.tool };
+export type RailHas = { content: boolean; selection: boolean };
+
+export function railClick(
+  cur: RailState,
+  t: RailTarget,
+  has: RailHas = { content: false, selection: false },
+): RailState {
+  if (isPanelOnly(t)) return { panel: cur.panel === t ? (has.content ? "tool" : null) : t, tool: cur.tool };
   // Bấm nút của công cụ đang dùng (Tẩy chữ khi đang Tẩy nét cũng vậy) → giữ nguyên công cụ.
   const tool = railTool(cur.tool) === t ? cur.tool : t;
-  if (t === "select") return { panel: railTool(cur.tool) === t && cur.panel === "tool" ? null : "tool", tool };
-  return { panel: cur.panel === "tool" && keepToolPanel ? "tool" : null, tool };
+  if (t === "select") {
+    if (railTool(cur.tool) === t && cur.panel === "tool") return { panel: null, tool };
+    return { panel: has.content || has.selection ? "tool" : cur.panel === "tool" ? null : cur.panel, tool };
+  }
+  return { panel: cur.panel === "tool" && has.content ? "tool" : null, tool };
 }
 
 /** Tên panel (cũng là tên truy cập của `<aside>`). */

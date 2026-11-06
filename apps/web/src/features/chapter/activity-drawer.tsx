@@ -22,7 +22,7 @@ const JOB_LABEL: Record<string, string> = {
   "page.prepare": "Xoá chữ + OCR",
   "chapter.translate": "Dịch lô trang",
   "page.reinpaint": "Xoá chữ lại theo mask",
-  "page.ocr_region": "OCR vùng",
+  "page.ocr_region": "Quét chữ vùng",
   "chapter.export": "Xuất",
   "chapter.proofread": "AI hiệu đính",
 };

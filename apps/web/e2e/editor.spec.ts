@@ -535,7 +535,8 @@ test("block panel is closed by default and overlays the canvas: opening or closi
   page,
 }) => {
   await login(page);
-  const { chapterId } = await readyChapter(page);
+  const { chapterId, pageId } = await readyChapter(page);
+  await seedTextBox(page, chapterId, pageId);
   // Khoá bố cục của bản cũ đang nhớ panel mở: bị bỏ, panel vẫn đóng mặc định.
   await page.addInitScript(() => localStorage.setItem("mtl.layout", JSON.stringify({ panel: "tool" })));
   await page.goto(chapterUrl(chapterId));
@@ -549,8 +550,15 @@ test("block panel is closed by default and overlays the canvas: opening or closi
   const closed = await width();
   expect(closed).toBeGreaterThan(0);
 
-  // Bấm Chọn mở panel (đè lên canvas, canvas giữ nguyên bề ngang); bấm lại thu panel, công cụ vẫn là Chọn.
+  // Chưa chọn khối và không có nội dung phải xử lý: bấm Chọn không mở panel (như phím V).
   await select.click();
+  await expect(panel).toBeHidden();
+  await expect(select).toHaveAttribute("aria-pressed", "false");
+  expect(await width()).toBe(closed);
+
+  // Có khối đang chọn: panel mở (đè lên canvas, canvas giữ nguyên bề ngang); bấm lại Chọn thu panel, công cụ vẫn là Chọn.
+  const at = await blockCenter(page, { x: 40, y: 120, w: 200, h: 80 });
+  await page.mouse.click(at.x, at.y);
   await expect(panel).toBeVisible();
   await expect(select).toHaveAttribute("aria-pressed", "true");
   expect(await width()).toBe(closed);
@@ -1059,12 +1067,12 @@ test("cancelling a block's re-OCR while its job is still queued restores the but
   await panel.getByRole("button", { name: "Dịch lại khối" }).click();
   const jobId = ((await (await started).json()) as { job: { id: string } }).job.id;
 
-  await expect(panel.getByText("Đang OCR…")).toBeVisible();
+  await expect(panel.getByText("Đang quét chữ…")).toBeVisible();
   await expect(panel.getByRole("button", { name: "Dịch lại khối" })).toBeDisabled();
-  await panel.getByRole("button", { name: "Huỷ OCR" }).click();
+  await panel.getByRole("button", { name: "Huỷ quét chữ" }).click();
 
   await expect(panel.getByRole("button", { name: "Dịch lại khối" })).toBeEnabled();
-  await expect(panel.getByRole("button", { name: "Huỷ OCR" })).toHaveCount(0);
+  await expect(panel.getByRole("button", { name: "Huỷ quét chữ" })).toHaveCount(0);
   await expect(page.getByRole("alert")).toHaveCount(0);
   await expect
     .poll(async () => ((await (await page.request.get(`/api/jobs/${jobId}`)).json()) as { status: string }).status)
@@ -1083,7 +1091,7 @@ test("leaving the chapter while a block's re-OCR is queued cancels the job on th
   const started = page.waitForResponse((r) => r.url().includes("/ocr-region") && r.request().method() === "POST");
   await panel.getByRole("button", { name: "Dịch lại khối" }).click();
   const jobId = ((await (await started).json()) as { job: { id: string } }).job.id;
-  await expect(panel.getByText("Đang OCR…")).toBeVisible();
+  await expect(panel.getByText("Đang quét chữ…")).toBeVisible();
 
   // Rời editor trong app (không tải lại trang) → kết quả bị bỏ, job trên server cũng phải dừng.
   await page.locator(".cw-back").click();
