@@ -1,5 +1,5 @@
 /**
- * Thả file (kéo-thả hoặc chọn): vùng thả lớn, nút chọn file, và thả bất kỳ đâu trên trang. Chỉ trả về danh sách
+ * Thả file (kéo-thả hoặc chọn): dải thả (hoặc vùng lớn khi chưa có series), nút chọn file, và thả bất kỳ đâu trên trang. Chỉ trả về danh sách
  * File; đọc ZIP/kiểm file do dòng xác nhận / upload-manager làm.
  */
 import { type DragEvent, type ReactNode, useEffect, useRef, useState } from "react";
@@ -105,25 +105,35 @@ const UploadIcon = ({ size }: { size: number }) => (
   </svg>
 );
 
+/**
+ * `strip`: dải 56px một dòng (icon + tiêu đề + "chọn file"), dùng khi đã có series. `lg`: vùng lớn có dòng gợi ý,
+ * dùng cho người chưa có series nào. `md`: vùng vừa có dòng gợi ý (màn chương, tải tiếp ảnh).
+ */
 export function DropZone(props: {
   label: string;
   title: ReactNode;
-  hint: ReactNode;
+  hint?: ReactNode;
   onFiles: (files: File[]) => void;
-  size?: "lg" | "md";
+  size?: "lg" | "md" | "strip";
 }) {
-  const size = props.size ?? "lg";
+  const size = props.size ?? "strip";
   const drop = useDropTarget(props.onFiles);
   return (
     <section aria-label={props.label} className="dropzone" data-size={size} data-over={drop.over} {...drop.props}>
-      <UploadIcon size={size === "lg" ? 36 : 28} />
+      <UploadIcon size={size === "lg" ? 36 : size === "md" ? 28 : 18} />
       <div className="dropzone-text">
         <div className="dropzone-title">{props.title}</div>
-        <div className="dropzone-hint">{props.hint}</div>
+        {size !== "strip" && props.hint && <div className="dropzone-hint">{props.hint}</div>}
       </div>
-      <FilePickButton className={`btn-primary ${size === "lg" ? "lg" : ""}`} onFiles={props.onFiles}>
-        Chọn file…
-      </FilePickButton>
+      {size === "strip" ? (
+        <FilePickButton className="link" onFiles={props.onFiles}>
+          chọn file
+        </FilePickButton>
+      ) : (
+        <FilePickButton className={`btn-primary ${size === "lg" ? "lg" : ""}`} onFiles={props.onFiles}>
+          Chọn file…
+        </FilePickButton>
+      )}
     </section>
   );
 }

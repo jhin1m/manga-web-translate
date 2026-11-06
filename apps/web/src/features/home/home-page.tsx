@@ -1,7 +1,8 @@
 /**
- * Home, từ trên xuống: vùng thả lớn (thả bất kỳ đâu trên trang cũng được; đoán được series → tạo
- * chương + tự dịch + mở màn chương, không thì dòng xác nhận inline) → danh sách series (tìm, "+ Series mới"; bấm
- * hàng để mở series, icon Sửa → cài đặt series, icon Xoá → xác nhận tại chỗ rồi xoá cả series).
+ * Home, từ trên xuống: dải thả (thả bất kỳ đâu trên trang cũng được; chưa có series nào thì là vùng lớn; đoán được
+ * series → tạo chương + tải ảnh + mở màn chương, không thì dòng "Vừa thả" inline) → ô tìm + "+ Series" → danh sách
+ * series một dòng mỗi hàng (bấm hàng để mở series, icon Sửa → cài đặt series, icon Xoá → xác nhận tại chỗ rồi xoá
+ * cả series).
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
@@ -15,7 +16,7 @@ import { DropZone, usePageDrop } from "../upload/drop-zone.tsx";
 import { normalizeName } from "../upload/parse-chapter-filename.ts";
 import { useDropToTranslate } from "./drop-to-translate.ts";
 import { NewChapterConfirmRow } from "./new-chapter-confirm-row.tsx";
-import { PencilIcon, TrashIcon } from "./row-icons.tsx";
+import { CloseIcon, PencilIcon, TrashIcon } from "./row-icons.tsx";
 import "./home.css";
 
 type Pending = { files: File[]; seriesId?: string; seq: number };
@@ -37,8 +38,9 @@ export function HomePage() {
     <main className="home">
       <DropZone
         label="Tạo chương mới"
-        title="Thả strip hoặc ZIP của chương mới vào đây"
-        hint="Thả ảnh/ZIP — tự tạo chương và dịch ngay (series, số chương đoán từ tên file; sửa được trên màn chương)."
+        size={series?.length === 0 ? "lg" : "strip"}
+        title={series?.length === 0 ? "Thả strip hoặc ZIP của chương mới vào đây" : "Thả ảnh / ZIP"}
+        hint="Series và số chương đoán từ tên file (sửa được trên màn chương). Tải ảnh xong, bấm “Dịch chương” để bắt đầu dịch."
         onFiles={(f) => drop(f)}
       />
       {auto.isPending && (
@@ -88,52 +90,42 @@ function SeriesRows(props: { series: SeriesListItem[] | undefined; error: unknow
   return (
     <section aria-label="Series" className="block">
       <div className="block-head">
-        <h2>Series</h2>
-        {props.series && <span className="muted small">{props.series.length}</span>}
-        <span className="spacer" />
         <input
           type="search"
           aria-label="Tìm series"
-          placeholder="Tìm series…"
+          placeholder="Tìm series"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
         {!adding && (
           <button type="button" onClick={() => setAdding(true)}>
-            + Series mới
+            + Series
           </button>
         )}
       </div>
       {adding && (
-        // Khối riêng dưới tiêu đề (không chen vào hàng tìm kiếm): tên → loại truyện → Tạo. Esc ở bất kỳ ô nào = Huỷ.
+        // Một dòng: tên → loại truyện → Tạo → ✕. Esc ở bất kỳ ô nào = Huỷ.
         <form
-          className="new-series"
+          className="inline-form"
           aria-label="Tạo series mới"
           onSubmit={submit}
           onKeyDown={(e) => e.key === "Escape" && setAdding(false)}
         >
-          <label className="new-series-field">
-            Tên series
-            <input
-              placeholder="VD: Solo Leveling"
-              // biome-ignore lint/a11y/noAutofocus: vừa bấm "+ Series mới" → gõ tên ngay
-              autoFocus
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-            />
-          </label>
-          <div className="new-series-field">
-            Loại truyện
-            <ComicKindPicker value={kind} onChange={setKind} />
-          </div>
-          <div className="new-series-actions">
-            <button type="submit" className="btn-primary" disabled={create.isPending || !title.trim()}>
-              {create.isPending ? "Đang tạo…" : "Tạo series"}
-            </button>
-            <button type="button" onClick={() => setAdding(false)}>
-              Huỷ
-            </button>
-          </div>
+          <input
+            aria-label="Tên series"
+            placeholder="Tên series"
+            // biome-ignore lint/a11y/noAutofocus: vừa bấm "+ Series" → gõ tên ngay
+            autoFocus
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+          />
+          <ComicKindPicker value={kind} onChange={setKind} />
+          <button type="submit" className="btn-primary" disabled={create.isPending || !title.trim()}>
+            {create.isPending ? "Đang tạo…" : "Tạo series"}
+          </button>
+          <button type="button" className="icon-btn" aria-label="Huỷ" title="Huỷ" onClick={() => setAdding(false)}>
+            <CloseIcon />
+          </button>
         </form>
       )}
       {(props.error || create.error) && <p className="notice danger">{errorMessage(props.error ?? create.error)}</p>}
@@ -142,7 +134,7 @@ function SeriesRows(props: { series: SeriesListItem[] | undefined; error: unknow
           <div className="rows-empty">
             {search
               ? "Không có series nào khớp."
-              : "Chưa có series nào — bấm “+ Series mới”, hoặc thả ảnh ở trên rồi chọn series."}
+              : "Chưa có series nào — bấm “+ Series”, hoặc thả ảnh ở trên rồi chọn series."}
           </div>
         )}
         {list.map((s) => (
@@ -164,20 +156,15 @@ function SeriesRow({ s }: { s: SeriesListItem }) {
   return (
     <div className="row-item" data-series={s.id}>
       <Link className="row-open" to="/s/$seriesId" params={{ seriesId: s.id }}>
-        <span className="cover" aria-hidden="true">
-          {s.title.trim().charAt(0).toUpperCase()}
-        </span>
-        <span className="row-title">
-          <span className="row-name" title={s.title}>
-            {s.title}
-          </span>
-          <span className="row-sub">
-            {s.chapter_count} chương · {s.exported_count ?? 0} đã xuất
-          </span>
+        <span className="row-name" title={s.title}>
+          {s.title}
         </span>
         <span className="grow row small">
           <span className="dot" data-tone={tone} />
           {state}
+        </span>
+        <span className="row-count small muted" title={`${s.chapter_count} chương`}>
+          {s.chapter_count} ch
         </span>
       </Link>
       {confirming ? (

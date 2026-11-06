@@ -8,7 +8,7 @@ export const state = JSON.parse(readFileSync(STATE_FILE, "utf8")) as E2EState;
 
 async function expectHome(page: Page) {
   await expect(page).toHaveURL(/\/$/);
-  await expect(page.getByRole("heading", { name: "Series", exact: true })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Series", exact: true })).toBeVisible();
 }
 
 /** API e2e bật dev auto-login cho owner seed → mở `/` là vào thẳng home. */

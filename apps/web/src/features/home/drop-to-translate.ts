@@ -1,6 +1,6 @@
 /**
- * Thả là dịch (home + series): xác định được series → tạo chương ngay (số đoán từ tên file nếu chưa trùng, không thì
- * số kế tiếp), upload nền + tự dịch khi upload xong, mở thẳng màn chương đầu. Không xác định được series (chưa có
+ * Thả file (home + series): xác định được series → tạo chương ngay (số đoán từ tên file nếu chưa trùng, không thì
+ * số kế tiếp), upload nền, mở thẳng màn chương đầu; chương dừng ở nháp tới khi bấm "Dịch chương". Không xác định được series (chưa có
  * series nào, hoặc nhiều series mà chưa từng có chương) hoặc file có vấn đề → trả về null để hiện dòng xác nhận.
  *
  * Series theo thứ tự: (a) series cố định (màn series, nút "+ Ch.N") → (b) tên file khớp series có sẵn → (c) series
@@ -82,7 +82,7 @@ export function chapterNumbers(guesses: (string | null)[], taken: readonly strin
 }
 
 /**
- * Thả file → tạo chương + tự dịch + mở chương đầu. `onFallback` nhận lại bộ file khi không tự làm được (series
+ * Thả file → tạo chương + upload + mở chương đầu. `onFallback` nhận lại bộ file khi không tự làm được (series
  * không đoán được, file lỗi) để hiện dòng xác nhận.
  */
 export function useDropToTranslate(onFallback: (files: File[], seriesId?: string) => void) {

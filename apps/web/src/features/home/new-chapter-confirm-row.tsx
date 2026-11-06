@@ -1,9 +1,9 @@
 /**
- * Dòng xác nhận inline ngay dưới vùng thả (Home + Series) — chỉ hiện khi thả file không tự tạo chương được
- * (drop-to-translate.ts: chưa đoán được series, hoặc file có vấn đề): tên file + kích thước, series (có "+ Series
- * mới…"), số chương (đoán từ tên file / số tiếp theo), [Bỏ] [Tạo và mở chương]. Enter = tạo, Esc = bỏ. Tạo xong tự
- * dịch khi upload xong như đường tự động. Nhiều file: mỗi ZIP = 1 chương; nhiều ảnh lẻ → hỏi "1 chương gồm N ảnh"
- * (mặc định) hay "N chương".
+ * Dòng "Vừa thả" inline ngay dưới dải thả (Home + Series) — chỉ hiện khi thả file không tự tạo chương được
+ * (drop-to-translate.ts: chưa đoán được series, hoặc file có vấn đề). Một dòng: tên file + kích thước, series (có
+ * "+ Series mới…"), số chương (đoán từ tên file / số tiếp theo), [Tạo] [✕]. Enter = tạo, Esc = bỏ. Tạo xong mở màn
+ * chương, chương dừng ở nháp tới khi bấm "Dịch chương" như đường tự động. Nhiều file: mỗi ZIP = 1 chương; nhiều ảnh
+ * lẻ → hỏi "1 chương gồm N ảnh" (mặc định) hay "N chương".
  */
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
@@ -18,6 +18,7 @@ import { naturalSortBy } from "../upload/natural-sort.ts";
 import { parseChapterFilename } from "../upload/parse-chapter-filename.ts";
 import { uploadManager } from "../upload/upload-manager.ts";
 import { type Dropped, readDropped } from "./drop-to-translate.ts";
+import { CloseIcon } from "./row-icons.tsx";
 
 const NEW_SERIES = "__new";
 const NUMBER_RE = /^\d+(\.\d+)?$/;
@@ -173,54 +174,49 @@ export function NewChapterConfirmRow(props: {
       }}
     >
       <div className="confirm-fields">
-        <div className="confirm-file">
-          <span className="small muted">Vừa thả</span>
-          <b>
-            {fileLabel} · {sizeLabel}
-          </b>
-        </div>
+        <span className="confirm-file" title={`${fileLabel} · ${sizeLabel}`}>
+          <span className="small muted">Vừa thả</span> <b>{fileLabel}</b> · {sizeLabel}
+        </span>
         {!props.fixedSeriesId && (
-          <label className="field">
-            Series (đoán từ tên file)
-            <select value={seriesId} onChange={(e) => setSeriesId(e.target.value)}>
-              {props.series.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.title}
-                </option>
-              ))}
-              <option value={NEW_SERIES}>+ Series mới…</option>
-            </select>
-          </label>
+          <select
+            aria-label="Series"
+            title="Series (đoán từ tên file)"
+            value={seriesId}
+            onChange={(e) => setSeriesId(e.target.value)}
+          >
+            {props.series.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.title}
+              </option>
+            ))}
+            <option value={NEW_SERIES}>+ Series mới…</option>
+          </select>
         )}
         {seriesId === NEW_SERIES && (
-          <label className="field">
-            Tên series mới
-            <input value={newTitle} onChange={(e) => setNewTitle(e.target.value)} placeholder="Tên series" />
-          </label>
+          <input
+            aria-label="Tên series mới"
+            value={newTitle}
+            onChange={(e) => setNewTitle(e.target.value)}
+            placeholder="Tên series mới"
+          />
         )}
-        {seriesId === NEW_SERIES && (
-          // Nhóm radio tự mang aria-label "Loại truyện"; div thay label vì control nằm trong component con.
-          <div className="field">
-            Loại truyện
-            <ComicKindPicker value={newKind} onChange={setNewKind} />
-          </div>
-        )}
-        <label className="field">
-          {groups.length > 1 ? "Từ chương số" : "Chương số"}
+        {seriesId === NEW_SERIES && <ComicKindPicker value={newKind} onChange={setNewKind} />}
+        <label className="confirm-number">
+          {groups.length > 1 ? "Từ ch." : "Ch."}
           <input
             ref={numberRef}
             className="num"
             inputMode="decimal"
+            aria-label={groups.length > 1 ? "Từ chương số" : "Chương số"}
             value={chapterNumber}
             onChange={(e) => setNumber(e.target.value.trim())}
           />
         </label>
-        <span className="spacer" />
-        <button type="button" onClick={props.onCancel}>
-          Bỏ
-        </button>
         <button type="submit" className="btn-primary" disabled={!canCreate}>
           {groups.length > 1 ? `Tạo ${groups.length} chương` : "Tạo và mở chương"}
+        </button>
+        <button type="button" className="icon-btn" aria-label="Bỏ" title="Bỏ" onClick={props.onCancel}>
+          <CloseIcon />
         </button>
       </div>
       {askMode && d && (

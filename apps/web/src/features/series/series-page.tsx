@@ -1,6 +1,6 @@
 /**
- * Màn series: đầu trang (nút Glossary / Cài đặt dịch), vùng thả "Chương {next}", toàn bộ danh sách chương (bấm cả hàng
- * hoặc icon Sửa để mở — dịch/xuất/chạy lại làm trong màn chương; icon Xoá), cột phải tóm tắt cài đặt dịch + glossary.
+ * Màn series, một cột: đầu trang (‹ về home, tên, cặp ngôn ngữ, "Glossary · N", icon Cài đặt dịch), dải thả "Thả
+ * Ch.{next}", toàn bộ danh sách chương (bấm cả hàng để mở — dịch/xuất/chạy lại làm trong màn chương; icon Xoá).
  * Glossary / Cài đặt dịch mở thành modal trên danh sách; `?tab=` giữ trạng thái modal (link sâu từ home / màn chương).
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -9,12 +9,12 @@ import { useState } from "react";
 import { Drawer } from "../../app/drawer.tsx";
 import { ApiError, errorMessage } from "../../lib/api.ts";
 import { timeAgo } from "../../lib/format.ts";
-import { needsWork, nextAction } from "../chapter/next-action.ts";
+import { nextAction } from "../chapter/next-action.ts";
 import { fetchGlossary, glossaryKey } from "../glossary/api.ts";
 import { GlossaryEditor } from "../glossary/glossary-editor.tsx";
 import { useDropToTranslate } from "../home/drop-to-translate.ts";
 import { NewChapterConfirmRow } from "../home/new-chapter-confirm-row.tsx";
-import { PencilIcon, TrashIcon } from "../home/row-icons.tsx";
+import { BackIcon, SlidersIcon, TrashIcon } from "../home/row-icons.tsx";
 import { resumeFromFiles } from "../upload/chapter-upload-status.tsx";
 import { DropZone, useDropTarget, usePageDrop } from "../upload/drop-zone.tsx";
 import { uploadManager, useUploads } from "../upload/upload-manager.ts";
@@ -27,10 +27,8 @@ import {
   type SeriesDetail,
   seriesKeys,
 } from "./api.ts";
-import { langShort, pairLabel } from "./lang-labels.ts";
-import { DeleteSeries, SeriesSettingsForm } from "./series-settings-form.tsx";
-import { SeriesSidebar } from "./series-sidebar.tsx";
-import { SkipImagesSection } from "./skip-images-section.tsx";
+import { pairLabel } from "./lang-labels.ts";
+import { SeriesSettingsDialog } from "./series-settings-form.tsx";
 import "../home/home.css";
 
 export type SeriesTab = "chapters" | "glossary" | "settings";
@@ -51,72 +49,48 @@ export function SeriesPage(props: { seriesId: string; tab?: SeriesTab }) {
   const navigate = useNavigate();
   const closeModal = () => void navigate({ to: "/s/$seriesId", params: { seriesId }, search: {} });
   return (
-    <div className="series-layout">
-      <main className="series-main">
-        <div className="crumbs">
-          <Link to="/">Trang chủ</Link> / {s?.title ?? "…"}
-        </div>
-        {q.error && <p className="notice danger">{errorMessage(q.error)}</p>}
-        {s && (
-          <>
-            <SeriesHead series={s} />
-            <ChapterList series={s} />
-            {/* key: dựng lại form khi dữ liệu server đổi rev (sau khi lưu). */}
-            {tab === "settings" && (
-              <Drawer variant="modal" title="Cài đặt dịch" onClose={closeModal}>
-                <SeriesSettingsForm key={`${s.id}:${s.settings_rev}`} series={s} />
-                <SkipImagesSection seriesId={s.id} />
-                <DeleteSeries series={s} />
-              </Drawer>
-            )}
-            {tab === "glossary" && (
-              <Drawer variant="modal" title="Glossary của series" onClose={closeModal}>
-                <GlossaryEditor scope={{ seriesId }} inheritedLabel={`từ glossary chung (${pairLabel(s)})`} />
-              </Drawer>
-            )}
-          </>
-        )}
-      </main>
-      {s && <SeriesSidebar series={s} />}
-    </div>
+    <main className="series-main">
+      {q.error && <p className="notice danger">{errorMessage(q.error)}</p>}
+      {s && (
+        <>
+          <SeriesHead series={s} />
+          <ChapterList series={s} />
+          {tab === "settings" && <SeriesSettingsDialog series={s} onClose={closeModal} />}
+          {tab === "glossary" && (
+            <Drawer variant="modal" title="Glossary của series" onClose={closeModal}>
+              <GlossaryEditor scope={{ seriesId }} inheritedLabel={`từ glossary chung (${pairLabel(s)})`} />
+            </Drawer>
+          )}
+        </>
+      )}
+    </main>
   );
 }
 
 function SeriesHead({ series }: { series: SeriesDetail }) {
-  const exported = series.chapters.filter((c) => !needsWork(c)).length;
-  return (
-    <div className="series-head">
-      <div className="cover lg" aria-hidden="true">
-        {series.title.trim().charAt(0).toUpperCase()}
-      </div>
-      <div className="series-head-text">
-        <h1 title={series.title}>{series.title}</h1>
-        <span className="muted">
-          {langShort(series.source_lang)} → {langShort(series.target_lang)} · {series.chapters.length} chương ·{" "}
-          {exported} đã xuất
-        </span>
-      </div>
-      <SeriesModalLinks series={series} />
-    </div>
-  );
-}
-
-/** Mở modal Glossary / Cài đặt dịch (`?tab=`). */
-function SeriesModalLinks({ series }: { series: SeriesDetail }) {
   const scope = { seriesId: series.id };
   const glossary = useQuery({ queryKey: glossaryKey(scope), queryFn: () => fetchGlossary(scope) });
   const terms = glossary.data?.entries.length;
-  const links: [Exclude<SeriesTab, "chapters">, string][] = [
-    ["glossary", terms === undefined ? "Glossary" : `Glossary · ${terms}`],
-    ["settings", "Cài đặt dịch"],
-  ];
   return (
-    <div className="row">
-      {links.map(([t, label]) => (
-        <Link key={t} className="btn" to="/s/$seriesId" params={{ seriesId: series.id }} search={{ tab: t }}>
-          {label}
-        </Link>
-      ))}
+    <div className="series-head">
+      <Link to="/" className="btn icon-btn" aria-label="Về trang chủ" title="Về trang chủ">
+        <BackIcon />
+      </Link>
+      <h1 title={series.title}>{series.title}</h1>
+      <span className="muted series-pair">{pairLabel(series)}</span>
+      <Link className="btn" to="/s/$seriesId" params={{ seriesId: series.id }} search={{ tab: "glossary" }}>
+        {terms === undefined ? "Glossary" : `Glossary · ${terms}`}
+      </Link>
+      <Link
+        className="btn icon-btn"
+        to="/s/$seriesId"
+        params={{ seriesId: series.id }}
+        search={{ tab: "settings" }}
+        aria-label="Cài đặt dịch"
+        title="Cài đặt dịch"
+      >
+        <SlidersIcon />
+      </Link>
     </div>
   );
 }
@@ -137,13 +111,7 @@ function ChapterList({ series }: { series: SeriesDetail }) {
 
   return (
     <>
-      <DropZone
-        size="md"
-        label="Thêm chương tiếp theo"
-        title={`Thả strip của Chương ${next} vào đây`}
-        hint="Thả ảnh/ZIP — tự tạo chương và dịch ngay; mỗi ZIP 1 chương, số chương tự tăng."
-        onFiles={drop}
-      />
+      <DropZone label="Thêm chương tiếp theo" title={`Thả Ch.${next}`} onFiles={drop} />
       {auto.isPending && (
         <p className="small muted" role="status">
           Đang tạo chương…
@@ -163,7 +131,7 @@ function ChapterList({ series }: { series: SeriesDetail }) {
       )}
 
       <div className="rows">
-        {chapters.length === 0 && <div className="rows-empty">Chưa có chương nào — thả strip ở trên.</div>}
+        {chapters.length === 0 && <div className="rows-empty">Chưa có chương nào — thả ảnh / ZIP ở trên.</div>}
         {chapters.map((c) => (
           <ChapterLine key={c.id} ch={c} upload={uploadManager.view(c.id, uploads[c.id])} />
         ))}
@@ -185,26 +153,24 @@ function ChapterLine(props: { ch: ChapterRow; upload: ReturnType<typeof uploadMa
   });
   const dropProps = a.kind === "resume" ? target.props : {};
 
+  const running = a.tone === "busy";
+
   return (
     <div className="row-item" data-chapter={ch.id} data-drop={a.kind === "resume" && target.over} {...dropProps}>
-      <Link className="ch-open" to="/s/$seriesId/c/$chapterId" params={params} aria-label={`Mở chương ${ch.number}`}>
+      <Link
+        className="ch-open"
+        to="/s/$seriesId/c/$chapterId"
+        params={params}
+        aria-label={`Mở chương ${ch.number}`}
+        title={a.detail}
+      >
         <span className="ch-num">Ch.{ch.number}</span>
-        <span className="ch-body">
-          <span className="ch-line">
-            <span className="dot" data-tone={a.tone} />
-            <span style={{ fontWeight: 500 }}>{a.state}</span>
-            <span className="small muted">· {timeAgo(ch.updated_at)}</span>
-          </span>
-          <span className="ch-line">
-            <span className="bar">
-              <span data-tone={a.tone} style={{ width: `${Math.round(a.progress * 100)}%` }} />
-            </span>
-            <span className="small muted">
-              {a.detail}
-              {a.kind === "resume" ? " · thả lại file vào hàng này để tải tiếp" : ""}
-            </span>
-          </span>
+        <span className="ch-state">
+          <span className="dot" data-tone={a.tone} />
+          <span style={{ fontWeight: 500 }}>{a.state}</span>
+          {a.kind === "resume" && <span className="small muted">· thả lại file vào hàng này để tải tiếp</span>}
         </span>
+        <span className="small muted ch-time">{timeAgo(ch.updated_at)}</span>
       </Link>
       {confirming ? (
         <DeleteChapterConfirm
@@ -216,32 +182,29 @@ function ChapterLine(props: { ch: ChapterRow; upload: ReturnType<typeof uploadMa
           }}
         />
       ) : (
-        <>
-          <Link
-            className="btn icon-btn"
-            to="/s/$seriesId/c/$chapterId"
-            params={params}
-            aria-label={`Sửa chương ${ch.number}`}
-            title="Sửa chương"
-          >
-            <PencilIcon />
-          </Link>
-          <button
-            type="button"
-            className="icon-btn"
-            data-danger
-            aria-label={`Xoá chương ${ch.number}`}
-            title="Xoá chương"
-            onClick={() => {
-              setMsg(null);
-              setConfirming(true);
-            }}
-          >
-            <TrashIcon />
-          </button>
-        </>
+        <button
+          type="button"
+          className="icon-btn"
+          data-danger
+          aria-label={`Xoá chương ${ch.number}`}
+          title="Xoá chương"
+          onClick={() => {
+            setMsg(null);
+            setConfirming(true);
+          }}
+        >
+          <TrashIcon />
+        </button>
       )}
       {msg && <div className="row-error">{msg}</div>}
+      {running && (
+        // Vạch 2px dưới hàng, chỉ khi chương đang chạy; trạng thái cũng đã có chữ ở trên nên không truyền chỉ bằng màu.
+        <span
+          className="row-progress"
+          aria-hidden="true"
+          style={{ width: `${Math.max(4, Math.round(a.progress * 100))}%` }}
+        />
+      )}
     </div>
   );
 }

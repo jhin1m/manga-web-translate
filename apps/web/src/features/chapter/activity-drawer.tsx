@@ -108,13 +108,16 @@ export function ActivityDrawer(props: {
   );
 }
 
-/** Nút + drawer Hoạt động cho app shell (home, series…): chỉ mục Upload. */
+/**
+ * Nút + drawer Hoạt động cho app shell (home, series…): chỉ mục Upload. Nút chỉ hiện khi có chương đang tải ảnh (hoặc
+ * khi drawer đang mở, để không biến mất giữa chừng lúc việc cuối vừa xong).
+ */
 export function ShellActivity() {
   const [open, setOpen] = useState(false);
   const count = useUploadCount();
   return (
     <>
-      <ActivityButton count={count} onClick={() => setOpen(true)} />
+      {(count > 0 || open) && <ActivityButton count={count} onClick={() => setOpen(true)} />}
       {open && <ActivityDrawer onClose={() => setOpen(false)} />}
     </>
   );

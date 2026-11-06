@@ -5,7 +5,7 @@
  * Ctrl/Shift-click chọn 3 trang → "Dịch 3 trang" chỉ dịch 3 trang đó → "Dịch chương" dịch nốt → 9 trang "Xong".
  * Thêm: drawer
  * Hoạt động ở home khi đang upload; màn series (3 ảnh lẻ = 1 chương nháp số kế tiếp) + đổi số chương / series trên thanh trên +
- * glossary thêm nhanh; ảnh credit "Luôn bỏ ở series này" tự bỏ ở chương sau; file lỗi → dòng xác nhận cũ báo lỗi. Test đầu đăng nhập bằng form `/login` (các spec khác
+ * glossary thêm từ trong modal; ảnh credit "Luôn bỏ ở series này" tự bỏ ở chương sau; file lỗi → dòng xác nhận cũ báo lỗi. Test đầu đăng nhập bằng form `/login` (các spec khác
  * dùng dev auto-login).
  */
 import { expect, type Route, test } from "@playwright/test";
@@ -153,10 +153,11 @@ test("drop a 10-page ZIP on home, open the chapter while uploading, prepare it, 
   // Thumbnail là ảnh sạch ký qua FILES_DOMAIN.
   await expect(rail.locator("img").first()).toHaveAttribute("src", /localhost:9100\/.*\/clean\//);
 
-  // Màn series: hàng chương vừa dịch báo "Chờ sửa", icon Sửa mở lại màn chương.
+  // Màn series: hàng chương vừa dịch báo "Chờ sửa"; bấm hàng mở lại màn chương (không còn icon Sửa riêng).
   await page.getByRole("link", { name: "Series e2e" }).click();
   await expect(page.getByRole("link", { name: "Mở chương 501", exact: true })).toContainText("Chờ sửa");
-  await page.getByRole("link", { name: "Sửa chương 501", exact: true }).click();
+  await expect(page.getByRole("link", { name: "Sửa chương 501" })).toHaveCount(0);
+  await page.getByRole("link", { name: "Mở chương 501", exact: true }).click();
   await expect(page.getByRole("heading", { name: /^Chương 501/ })).toBeVisible();
 });
 
@@ -174,7 +175,7 @@ test("series page: 3 loose images = 1 draft chapter waiting for Dịch chương;
 
   await page.goto(`/s/${s}`);
   const zone = page.getByRole("region", { name: "Thêm chương tiếp theo" });
-  const next = Number((await zone.getByText(/^Thả strip của Chương \d+/).textContent())?.match(/\d+/)?.[0]);
+  const next = Number((await zone.getByText(/^Thả Ch\.\d+/).textContent())?.match(/\d+/)?.[0]);
   expect(next).toBeGreaterThan(0);
   await zone
     .locator('input[type="file"]')
@@ -201,10 +202,11 @@ test("series page: 3 loose images = 1 draft chapter waiting for Dịch chương;
   await expect(page.locator(".cw-back")).toHaveText("Series phụ e2e");
 
   await page.goto(`/s/${s}`);
-  const glossary = page.getByRole("region", { name: "Glossary của series" });
-  await glossary.getByLabel("Từ gốc").fill("김준");
-  await glossary.getByLabel("Bản dịch").fill("Kim Jun");
-  await glossary.getByRole("button", { name: "Thêm" }).click();
+  await page.getByRole("link", { name: /^Glossary/ }).click();
+  const glossary = page.getByRole("dialog", { name: "Glossary của series" });
+  await glossary.getByLabel("Từ gốc mới").fill("김준");
+  await glossary.getByLabel("Bản dịch mới").fill("Kim Jun");
+  await glossary.getByRole("button", { name: "Thêm", exact: true }).click();
   await expect(glossary.getByRole("cell", { name: "Kim Jun" })).toBeVisible();
 });
 
@@ -259,6 +261,7 @@ test("a credit deleted with “Luôn bỏ ở series này” is skipped in the n
 
   // Cài đặt series: ảnh đã học, xoá khỏi danh sách.
   await page.goto(`/s/${sid}?tab=settings`);
+  await page.getByRole("dialog", { name: "Cài đặt dịch" }).getByText("Ảnh tự bỏ", { exact: true }).click();
   const learned = page.getByRole("group", { name: "Ảnh tự bỏ" });
   await expect(learned.getByRole("img", { name: "Ảnh tự bỏ 1" })).toBeVisible();
   await learned.getByRole("button", { name: "Xoá ảnh tự bỏ 1" }).click();

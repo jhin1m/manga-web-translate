@@ -1,5 +1,5 @@
 /**
- * Khung app: thanh trên (brand → home `/`, slot phải, Hoạt động = upload của tab, menu tài khoản) + nội dung.
+ * Khung app: thanh trên (brand → home `/`, slot phải, Hoạt động = upload của tab, chỉ hiện khi đang tải; menu tài khoản) + nội dung.
  * Mỗi người một tài khoản — dữ liệu luôn của người đang đăng nhập (`GET /api/me`). Editor toàn màn hình nằm ngoài
  * shell.
  */
