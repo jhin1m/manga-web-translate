@@ -280,3 +280,60 @@ test("files the app cannot take as-is fall back to the confirm row with the prob
   await expect(confirm.getByRole("button", { name: "Tạo và mở chương" })).toBeDisabled();
   await expect(page).toHaveURL(/\/$/);
 });
+
+test("shell activity button shows only while an upload has failed, and its drawer retries the upload to completion", async ({
+  page,
+}) => {
+  await login(page);
+  await page.goto(`/s/${s}`);
+  await expect(page.getByRole("region", { name: "Thêm chương tiếp theo" })).toBeVisible();
+  // Chưa có upload nào trong tab → không có nút Hoạt động trên shell.
+  await expect(page.getByRole("button", { name: /^Hoạt động/ })).toHaveCount(0);
+
+  // Chặn POST lên storage (presigned): trả 500 tới khi mở lại route. Mỗi file thử tối đa 3 lần → upload thất bại thật.
+  let storageOpen = false;
+  let rejected = 0;
+  await page.route(
+    (url) => !url.href.startsWith(WEB_URL),
+    (route) => {
+      if (route.request().method() !== "POST" || storageOpen) {
+        void route.continue();
+        return;
+      }
+      rejected++;
+      void route.fulfill({ status: 500, headers: { "access-control-allow-origin": WEB_URL }, body: "storage down" });
+    },
+  );
+
+  await page
+    .getByRole("region", { name: "Thêm chương tiếp theo" })
+    .locator('input[type="file"]')
+    .setInputFiles(["p1.png", "p2.png"].map((name) => ({ name, mimeType: "image/png", buffer: PNG_1PX })));
+  await expect(page).toHaveURL(new RegExp(`/s/${s}/c/[0-9a-f-]{36}$`), { timeout: 30_000 });
+  const chapterId = new URL(page.url()).pathname.split("/").at(-1) ?? "";
+  await expect.poll(() => rejected, { timeout: 30_000 }).toBeGreaterThanOrEqual(6);
+
+  // Về màn series (shell): upload lỗi → nút Hoạt động hiện dù không còn file nào đang chạy.
+  await page.getByRole("link", { name: "Series e2e" }).click();
+  await expect(page).toHaveURL(new RegExp(`/s/${s}$`));
+  const shellActivity = page.getByRole("button", { name: /^Hoạt động/ });
+  await expect(shellActivity).toBeVisible({ timeout: 30_000 });
+  await shellActivity.click();
+
+  const activity = page.getByRole("dialog", { name: "Hoạt động" });
+  const item = activity.locator(`.drawer-item[data-chapter="${chapterId}"]`);
+  await expect(item).toContainText("Lỗi 2 ảnh · đã tải 0/2");
+  const retry = item.getByRole("button", { name: "Thử lại", exact: true });
+  await expect(retry).toBeVisible();
+
+  // Mở lại route rồi bấm Thử lại: upload hoàn tất → phase "đã tải xong", nút Thử lại biến mất.
+  storageOpen = true;
+  await retry.click();
+  await expect(item).toContainText("Đã tải xong 2 ảnh", { timeout: 30_000 });
+  await expect(retry).toHaveCount(0);
+
+  // Đóng drawer: không còn lỗi hay việc đang chạy → nút Hoạt động ẩn lại.
+  await activity.getByRole("button", { name: "Đóng", exact: true }).click();
+  await expect(activity).toBeHidden();
+  await expect(shellActivity).toHaveCount(0);
+});
