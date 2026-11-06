@@ -10,7 +10,7 @@ import { Link } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 import type { LockState } from "../chapter/use-chapter-lock.ts";
 import { PAGE_BUSY_SAVE_TEXT } from "../editor/save.ts";
-import { type ReadOnlyReason, type SaveStatus, useEditor } from "../editor/store.ts";
+import { type SaveStatus, useEditor } from "../editor/store.ts";
 import type { RecoveryItem } from "../editor/use-chapter-session.ts";
 import type { Series } from "../series/api.ts";
 import { FilePickButton } from "../upload/drop-zone.tsx";
@@ -243,9 +243,10 @@ function EditState(props: EditAccess) {
   );
 }
 
-const READ_ONLY_TEXT: Partial<Record<Exclude<ReadOnlyReason, null>, string>> = {
-  lock_lost: "Mất khoá chương (hết hạn hoặc tab khác đã mở) — thay đổi chưa lưu vẫn giữ trên máy này; đang chỉ xem",
-};
+/** Lý do dài của băng cảnh báo — nằm trong tooltip; băng chỉ hiện câu ngắn + nút. */
+const LOCK_LOST_WHY =
+  "Mất khoá chương (hết hạn hoặc tab khác đã mở) — thay đổi chưa lưu vẫn giữ trên máy này; đang chỉ xem";
+const LOCK_DENIED_WHY = "Tab khác đang giữ khoá chương nên tab này chỉ xem được. Đóng tab kia rồi bấm Thử lại.";
 
 /**
  * Băng cảnh báo dưới thanh trên: chỉ render khi có việc người dùng phải biết/làm — tab khác giữ khoá, lỗi khoá,
@@ -258,8 +259,8 @@ export function LockBand(props: {
   recovery: RecoveryItem[] | null;
   canRestore: boolean;
   onRecovery(accept: boolean): void;
-  /** Câu giải thích khi trang chờ AI thử lại (job-error.ts providerWaitText); null = không có. */
-  aiWait: string | null;
+  /** Trang chờ AI thử lại (job-error.ts): câu ngắn cho băng, câu đầy đủ cho tooltip; null = không có. */
+  aiWait: { short: string; long: string } | null;
   /** Số xung đột khi lưu đang bị giấu (panel thu) — đổi trang là mất danh sách, nên báo ở băng. */
   hiddenConflicts: number;
   onShowConflicts(): void;
@@ -267,7 +268,7 @@ export function LockBand(props: {
   const readOnly = useEditor((s) => s.readOnly);
   const save = useEditor((s) => s.save);
   const { lock, lockEnabled, hasPages } = props.access;
-  const items: { key: string; tone: "warn" | "danger"; body: ReactNode }[] = [];
+  const items: { key: string; tone: "warn" | "danger"; body: ReactNode; why?: string }[] = [];
   const retry = (
     <button type="button" className="btn-ghost" onClick={props.onRetryLock}>
       Thử lại
@@ -277,32 +278,30 @@ export function LockBand(props: {
     items.push({
       key: "lock",
       tone: "warn",
-      body: <>Chương đang mở ở tab khác — chỉ xem ở tab này. {retry}</>,
+      body: <>Chương đang mở ở tab khác {retry}</>,
+      why: LOCK_DENIED_WHY,
     });
   } else if (hasPages && lockEnabled && lock.status === "error") {
     items.push({
       key: "lock",
       tone: "danger",
-      body: (
-        <>
-          Không lấy được khoá chương: {lock.message} {retry}
-        </>
-      ),
+      body: <>Không lấy được khoá chương {retry}</>,
+      why: lock.message,
     });
   } else if (hasPages && readOnly === "lock_lost") {
-    items.push({ key: "lock", tone: "danger", body: READ_ONLY_TEXT.lock_lost });
+    items.push({ key: "lock", tone: "danger", body: "Mất khoá chương, đang chỉ xem", why: LOCK_LOST_WHY });
   } else if (hasPages && readOnly === "page_busy" && save.status !== "saved") {
-    items.push({ key: "lock", tone: "warn", body: PAGE_BUSY_SAVE_TEXT });
+    items.push({ key: "lock", tone: "warn", body: "Trang đang dịch, bản sửa chờ lưu", why: PAGE_BUSY_SAVE_TEXT });
   }
   const rec = props.recovery;
   if (rec && rec.length > 0) {
     items.push({
       key: "recovery",
       tone: "warn",
+      why: `Thay đổi chưa lưu từ phiên trước, lúc ${new Date(Math.max(...rec.map((r) => r.updatedAt))).toLocaleString("vi-VN")}.`,
       body: (
         <>
-          Có thay đổi chưa lưu từ phiên trước ở trang {rec.map((r) => r.ord + 1).join(", ")} (
-          {new Date(Math.max(...rec.map((r) => r.updatedAt))).toLocaleString("vi-VN")}).{" "}
+          Thay đổi chưa lưu ở trang {rec.map((r) => r.ord + 1).join(", ")}{" "}
           <button
             type="button"
             className="btn-primary"
@@ -321,16 +320,17 @@ export function LockBand(props: {
   }
   // Mất khoá đã giải thích vì sao không lưu được.
   if (hasPages && save.status === "error" && readOnly !== "lock_lost") {
-    items.push({ key: "save", tone: "danger", body: `Lỗi lưu: ${save.error ?? "không lưu được"}` });
+    items.push({ key: "save", tone: "danger", body: "Lỗi lưu, chưa ghi được", why: save.error ?? "Không lưu được" });
   }
-  if (props.aiWait) items.push({ key: "ai", tone: "warn", body: props.aiWait });
+  if (props.aiWait) items.push({ key: "ai", tone: "warn", body: props.aiWait.short, why: props.aiWait.long });
   if (props.hiddenConflicts > 0) {
     items.push({
       key: "conflicts",
       tone: "danger",
+      why: "Các thay đổi này xung đột với bản đã lưu trên máy chủ. Đổi trang sẽ mất danh sách.",
       body: (
         <>
-          {props.hiddenConflicts} thay đổi chưa áp được do xung đột khi lưu — đổi trang sẽ mất danh sách.{" "}
+          {props.hiddenConflicts} thay đổi chưa áp được{" "}
           <button type="button" className="btn-ghost" onClick={props.onShowConflicts}>
             Xem
           </button>
@@ -342,8 +342,9 @@ export function LockBand(props: {
   return (
     <div className="cw-band" role="alert" aria-label="Cảnh báo chương">
       {items.map((it) => (
-        <span key={it.key} className="status" data-tone={it.tone}>
+        <span key={it.key} className="status" data-tone={it.tone} title={it.why}>
           {it.body}
+          {it.why && <span className="sr-only"> — {it.why}</span>}
         </span>
       ))}
     </div>

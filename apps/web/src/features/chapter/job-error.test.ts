@@ -6,6 +6,7 @@ import {
   nextQuotaReset,
   pageRanges,
   providerWait,
+  providerWaitShort,
   providerWaitText,
 } from "./job-error.ts";
 
@@ -80,6 +81,8 @@ describe("provider wait band", () => {
     if (!w) throw new Error("expected wait");
     expect(providerWaitText(w)).toContain(`trang 1, 2, 3 đang chờ, tự thử lại lúc ${clock(w.next ?? "")}`);
     expect(providerWaitText(w)).toContain("Huỷ xử lý");
+    expect(providerWaitShort(w)).toBe("AI hết hạn mức, trang 1, 2, 3 tự thử lại");
+    expect(providerWaitShort({ ...w, rateLimited: false })).toBe("AI lỗi tạm thời, trang 1, 2, 3 tự thử lại");
   });
 
   it("is null when no page is waiting on the provider", () => {

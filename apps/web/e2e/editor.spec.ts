@@ -12,14 +12,15 @@ import { type FakeWorkerOptions, PNG_1PX, runFakeWorker } from "./fake-worker.ts
 import {
   apiReadyChapter,
   blockPanel,
+  expectVisiblePages,
   login,
   openPanel,
   pageThumb,
-  pageThumbs,
   railButton,
   state,
   toolBar,
   translateIfPrepared,
+  zoomButton,
 } from "./helpers.ts";
 
 const headers = { origin: WEB_URL };
@@ -223,7 +224,7 @@ test("edit translation → autosave → reload keeps it; crash mid-edit → rest
   const again = await context.newPage();
   await again.goto(chapterUrl(chapterId));
   await openTable(again);
-  await expect(again.getByText(/thay đổi chưa lưu từ phiên trước ở trang 1/)).toBeVisible();
+  await expect(again.getByText(/Thay đổi chưa lưu ở trang 1/)).toBeVisible();
   await expect(cell(again)).toHaveValue("Chào cậu, ệ ẫ ữ");
   await again.getByRole("button", { name: "Khôi phục" }).click();
   await expect(cell(again)).toHaveValue("Chưa kịp lưu");
@@ -245,23 +246,23 @@ test("3 pages shown one at a time: pager and thumbnails stay in sync with ?page=
   await expect(canvas.locator("canvas").first()).toBeVisible();
   await openTable(page);
   await expect(cell(page)).toHaveValue("Xin chào");
-  await expect(pager(page)).toContainText("Trang 1 / 3");
-  await expect(pageThumbs(page).getByText("3 trang", { exact: true })).toBeVisible();
+  await expect(pager(page)).toContainText("1/3");
+  await expectVisiblePages(page, 3);
 
   // Nút ‹ › góc dưới canvas đổi trang: thumbnail và `?page=` cùng theo.
   const foot = pager(page);
   await expect(foot.getByRole("button", { name: "Trang trước (←)" })).toBeDisabled();
   await foot.getByRole("button", { name: "Trang sau (→)" }).click();
-  await expect(foot).toContainText("Trang 2 / 3");
+  await expect(foot).toContainText("2/3");
   await foot.getByRole("button", { name: "Trang sau (→)" }).click();
-  await expect(foot).toContainText("Trang 3 / 3");
+  await expect(foot).toContainText("3/3");
   await expect(foot.getByRole("button", { name: "Trang sau (→)" })).toBeDisabled();
   await expect(pageThumb(page, 3)).toHaveAttribute("aria-current", "page");
   await expect(pageThumb(page, 3)).toHaveAccessibleName("Trang 3 · Xong");
   await expect(page).toHaveURL(new RegExp(`\\?page=${pageIds[2]}$`));
 
   await pageThumb(page, 2).click();
-  await expect(foot).toContainText("Trang 2 / 3");
+  await expect(foot).toContainText("2/3");
   await expect(pageThumb(page, 2)).toHaveAttribute("aria-current", "page");
   await openTable(page);
   await expect(cell(page, 2)).toHaveValue("Xin chào");
@@ -269,7 +270,7 @@ test("3 pages shown one at a time: pager and thumbnails stay in sync with ?page=
   // Sửa trang 2 rồi bấm trang 1 ở cột thumbnail → trang 2 lưu trước khi đổi.
   await cell(page, 2).fill("Trang hai");
   await pageThumb(page, 1).click();
-  await expect(foot).toContainText("Trang 1 / 3");
+  await expect(foot).toContainText("1/3");
   await expect
     .poll(async () => {
       const r = (await (await page.request.get(`/api/pages/${pageIds[1]}`)).json()) as {
@@ -349,7 +350,7 @@ test("two tabs on one chapter: the second only reads; closing another tab keeps 
   const tabB = await context.newPage();
   await tabB.goto(chapterUrl(chapterId));
   const band = tabB.getByRole("alert", { name: "Cảnh báo chương" });
-  await expect(band).toContainText("Chương đang mở ở tab khác — chỉ xem ở tab này.");
+  await expect(band).toContainText("Chương đang mở ở tab khác");
   const editB = tabB.getByRole("status", { name: "Khoá chương" });
   await expect(editB).toContainText("Chỉ xem");
 
@@ -389,7 +390,7 @@ test("text table: row click activates its page; edit in place autosaves; Enter m
   // Click dòng trang 2 → thumbnail + pager trang 2, dòng sáng; panel khối "Khối 1/1".
   await page.locator(`[data-row="${p2}:t0"] .cw-src`).click();
   await expect(pageThumb(page, 2)).toHaveAttribute("aria-current", "page");
-  await expect(pager(page)).toContainText("Trang 2 / 2");
+  await expect(pager(page)).toContainText("2/2");
   await expect(page.locator(`[data-row="${p2}:t0"]`)).toHaveClass(/\bon\b/);
   await expect(await openPanel(page, "select")).toContainText("Khối 1/1");
   await openTable(page);
@@ -398,7 +399,7 @@ test("text table: row click activates its page; edit in place autosaves; Enter m
   await expect(cell(page, 1)).toHaveAttribute("readonly");
   await cell(page, 1).click();
   await cell(page, 1).fill("Trang một mới");
-  await expect(pager(page)).toContainText("Trang 1 / 2");
+  await expect(pager(page)).toContainText("1/2");
   await expect(page.getByRole("status", { name: "Khoá chương" })).toContainText("Đã lưu", { timeout: 10_000 });
   await expect.poll(() => translationOf(page, p1)).toBe("Trang một mới");
 
@@ -472,7 +473,11 @@ test("overflowing box is flagged in the table and thumbnails; 'Chỉ khối cầ
   await expect(page.locator(`[data-row="${p1}:t0"]`)).toContainText("Tràn khung");
   await expect(page.locator(`[data-row="${p2}:t0"]`)).toContainText("Xong");
   await expect(pageThumb(page, 1)).toHaveAccessibleName(/^Trang 1 · Cần xem: .*tràn khung/);
-  await expect(page.locator(`[data-page="${p1}"] .cw-thumb-mark`)).toHaveText("Cần xem");
+  // Cờ "!" ở góc thumbnail: tên truy cập + tooltip là câu đầy đủ, không chỉ màu.
+  const flag = page.locator(`[data-page="${p1}"] .cw-thumb-flag`);
+  await expect(flag).toHaveText("!");
+  await expect(flag).toHaveAccessibleName(/^Cần xem: .*tràn khung/);
+  await expect(flag).toHaveAttribute("title", /^Cần xem: .*tràn khung/);
   await expect(pageThumb(page, 2)).toHaveAccessibleName("Trang 2 · Xong");
 
   await page.getByLabel("Chỉ khối cần xem").check();
@@ -576,17 +581,16 @@ test("block panel is closed by default and overlays the canvas: opening or closi
   await expect(page.getByRole("complementary", { name: "Tìm / Thay · Glossary" })).toBeVisible();
   await expect(page.locator("#fr-find")).toBeFocused();
 
-  // Vừa khung ↔ 100% (góc dưới phải canvas).
-  const zoom = page.locator(".cw-zoom");
-  const fit = zoom.getByRole("button", { name: "Vừa khung", exact: true });
-  const full = zoom.getByRole("button", { name: "100%", exact: true });
-  await expect(fit).toHaveAttribute("aria-pressed", "true");
-  await full.click();
-  await expect(full).toHaveAttribute("aria-pressed", "true");
-  await expect(fit).toHaveAttribute("aria-pressed", "false");
-  await expect(zoom.locator(".mono")).toHaveText("100%");
-  await fit.click();
-  await expect(fit).toHaveAttribute("aria-pressed", "true");
+  // Nút % (cụm pager giữa đáy canvas): vừa khung ↔ 100%.
+  const zoom = zoomButton(page);
+  await expect(zoom).toHaveAccessibleName(/^Đang vừa khung .*Bấm để xem cỡ thật 100%/);
+  await expect(zoom).toHaveAttribute("title", /Bấm để xem cỡ thật 100%/);
+  await zoom.click();
+  await expect(zoom).toHaveText("100%");
+  await expect(zoom).toHaveAccessibleName("Đang 100%. Bấm để vừa khung");
+  await zoom.click();
+  await expect(zoom).toHaveAccessibleName(/^Đang vừa khung /);
+  await expect(zoom).toHaveAttribute("data-fit", "true");
 });
 
 /** Box chữ gắn vùng t0 (ghi qua API, cần khoá chương). */
@@ -1128,7 +1132,7 @@ test("scrolling past the page edge turns the page; small, zoom, drag and reduced
   const canvas = page.locator(".ed-canvas");
   await expect(canvas.locator("canvas").first()).toBeVisible();
   const foot = pager(page);
-  await expect(foot).toContainText("Trang 1 / 3");
+  await expect(foot).toContainText("1/3");
 
   const box = await canvas.boundingBox();
   if (!box) throw new Error("canvas has no box");
@@ -1136,11 +1140,11 @@ test("scrolling past the page edge turns the page; small, zoom, drag and reduced
 
   // Mức 100%: trang cao hơn khung nên cuộn được; cuộn hết cỡ tới mép dưới trước (ở "Vừa khung" trang nằm trọn
   // khung nên đổi trang ngay, xem test "a fitted page" bên dưới).
-  await page.getByRole("button", { name: "100%", exact: true }).click();
+  await zoomButton(page).click();
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
   await page.mouse.wheel(0, 200);
   await page.waitForTimeout(200);
-  await expect(foot).toContainText("Trang 1 / 3");
+  await expect(foot).toContainText("1/3");
   const bottomY = (await viewOf(page)).y;
   expect(bottomY).toBeLessThan(0);
 
@@ -1148,13 +1152,13 @@ test("scrolling past the page edge turns the page; small, zoom, drag and reduced
   await page.waitForTimeout(400);
   await page.mouse.wheel(0, 40);
   await page.waitForTimeout(400);
-  await expect(foot).toContainText("Trang 1 / 3");
+  await expect(foot).toContainText("1/3");
   await page.keyboard.down("Control");
   await page.mouse.wheel(0, 600);
   await page.keyboard.up("Control");
   await page.waitForTimeout(400);
-  await expect(foot).toContainText("Trang 1 / 3");
-  await page.getByRole("button", { name: "100%", exact: true }).click();
+  await expect(foot).toContainText("1/3");
+  await zoomButton(page).click();
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
   await page.mouse.wheel(0, 200);
   await page.waitForTimeout(400);
@@ -1162,7 +1166,7 @@ test("scrolling past the page edge turns the page; small, zoom, drag and reduced
   // Đầu chương cuộn lên: không có trang trước → ở yên.
   await page.mouse.wheel(0, -1200);
   await page.waitForTimeout(400);
-  await expect(foot).toContainText("Trang 1 / 3");
+  await expect(foot).toContainText("1/3");
   await page.mouse.wheel(0, 1200);
   await page.waitForTimeout(400);
 
@@ -1180,7 +1184,7 @@ test("scrolling past the page edge turns the page; small, zoom, drag and reduced
   await page.mouse.move(box.x + at.x + 20, box.y + at.y + 5, { steps: 5 });
   await page.mouse.wheel(0, 400);
   await page.waitForTimeout(400);
-  await expect(foot).toContainText("Trang 1 / 3");
+  await expect(foot).toContainText("1/3");
   await page.mouse.move(box.x + box.width / 2, 4, { steps: 5 }); // ra ngoài Stage rồi mới thả
   await page.mouse.up();
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
@@ -1192,10 +1196,10 @@ test("scrolling past the page edge turns the page; small, zoom, drag and reduced
   await page.mouse.wheel(0, 300);
   await page.mouse.wheel(0, 100);
   await page.mouse.wheel(0, 100);
-  await expect(foot).toContainText("Trang 2 / 3");
+  await expect(foot).toContainText("2/3");
   await expect.poll(async () => (await viewOf(page)).y).toBeGreaterThan(0);
   await page.waitForTimeout(300);
-  await expect(foot).toContainText("Trang 2 / 3");
+  await expect(foot).toContainText("2/3");
   const top = await viewOf(page);
   expect(top.y).toBeGreaterThan(0);
   expect(top.y).toBeLessThanOrEqual(40);
@@ -1203,14 +1207,14 @@ test("scrolling past the page edge turns the page; small, zoom, drag and reduced
   // Cuộn lên quá mép trên → về trang 1, vào cuối trang.
   await page.waitForTimeout(700);
   await page.mouse.wheel(0, -300);
-  await expect(foot).toContainText("Trang 1 / 3");
+  await expect(foot).toContainText("1/3");
   await expect.poll(async () => (await viewOf(page)).y).toBeLessThan(0);
 
   // Giảm chuyển động: vẫn đổi trang (tức thì).
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.waitForTimeout(1000);
   await page.mouse.wheel(0, 300);
-  await expect(foot).toContainText("Trang 2 / 3");
+  await expect(foot).toContainText("2/3");
 });
 
 test("a page fitted with Vừa khung counts as fitting: one wheel notch does not move the view, two notches turn the page", async ({
@@ -1222,9 +1226,8 @@ test("a page fitted with Vừa khung counts as fitting: one wheel notch does not
   const canvas = page.locator(".ed-canvas");
   await expect(canvas.locator("canvas").first()).toBeVisible();
   const foot = pager(page);
-  await expect(foot).toContainText("Trang 1 / 3");
-  const fit = page.getByRole("button", { name: "Vừa khung", exact: true });
-  await expect(fit).toHaveAttribute("aria-pressed", "true");
+  await expect(foot).toContainText("1/3");
+  await expect(zoomButton(page)).toHaveAccessibleName(/^Đang vừa khung /);
   const box = await canvas.boundingBox();
   if (!box) throw new Error("canvas has no box");
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
@@ -1242,21 +1245,21 @@ test("a page fitted with Vừa khung counts as fitting: one wheel notch does not
   // Một nấc (100px < ngưỡng 160): không đổi trang, không xê dịch khung nhìn.
   await page.mouse.wheel(0, 100);
   await page.waitForTimeout(100); // < 300ms: nấc kế vẫn cộng dồn
-  await expect(foot).toContainText("Trang 1 / 3");
+  await expect(foot).toContainText("1/3");
   expect(await viewOf(page)).toEqual(before);
   // Nấc thứ hai cộng dồn qua ngưỡng → trang sau.
   await page.mouse.wheel(0, 100);
-  await expect(foot).toContainText("Trang 2 / 3");
+  await expect(foot).toContainText("2/3");
 
   // Cuộn lên cũng đúng 2 nấc, và nấc đầu không dịch khung nhìn.
   await page.waitForTimeout(1800);
   const at2 = await viewOf(page);
   await page.mouse.wheel(0, -100);
   await page.waitForTimeout(100); // < 300ms: nấc kế vẫn cộng dồn
-  await expect(foot).toContainText("Trang 2 / 3");
+  await expect(foot).toContainText("2/3");
   expect(await viewOf(page)).toEqual(at2);
   await page.mouse.wheel(0, -100);
-  await expect(foot).toContainText("Trang 1 / 3");
+  await expect(foot).toContainText("1/3");
 });
 
 /** Kéo khung OCR vùng ở giữa canvas rồi bấm "Nhận dạng vùng này" → body POST /ocr-region. */

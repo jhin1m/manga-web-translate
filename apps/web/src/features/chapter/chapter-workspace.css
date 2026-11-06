@@ -1,14 +1,14 @@
 /*
  * Màn chương gộp (docs/design-guidelines.md, hướng A): thanh trên + băng cảnh báo (chỉ khi có) | rail công cụ 64px ·
  * panel ngữ cảnh (560px cho Bản dịch / Tìm / Hiệu đính, thu = cột về 0; panel khối 272px đè lên canvas, không chiếm cột)
- * · canvas · cột thumbnail trang 112px. Toàn màn hình (ngoài app shell). Canvas nền ấm trung tính để nhìn ảnh.
+ * · canvas · cột thumbnail trang 72px. Toàn màn hình (ngoài app shell). Canvas nền ấm trung tính để nhìn ảnh.
  */
 .cw {
   --cw-overlay-w: 272px;
   position: fixed;
   inset: 0;
   display: grid;
-  grid-template-columns: 64px auto minmax(0, 1fr) 112px;
+  grid-template-columns: 64px auto minmax(0, 1fr) 72px;
   grid-template-rows: 52px auto minmax(0, 1fr);
   grid-template-areas:
     "top top top top"
@@ -343,7 +343,7 @@
   justify-content: center;
 }
 
-/* Cột thumbnail trang / ảnh gốc: chỉ ảnh + số; trạng thái = viền + nhãn ngắn khi có vấn đề. */
+/* Cột thumbnail trang / ảnh gốc (72px): chỉ ảnh + số; trạng thái = viền + cờ ở góc (tên đầy đủ trong tooltip). */
 .cw-thumbs {
   grid-area: thumbs;
   display: flex;
@@ -365,16 +365,6 @@
   color: var(--c-fg-muted);
   text-align: center;
 }
-.cw-thumbs-head button {
-  min-height: 32px;
-  padding: 0 var(--sp-2);
-  font-size: var(--fs-xs);
-}
-.cw-thumbs-head [aria-pressed="true"] {
-  border-color: var(--c-accent);
-  background: var(--c-accent-weak);
-  color: var(--c-accent-hover);
-}
 /* Thanh "Dịch N trang · Bỏ chọn" khi có trang chọn (⌘/Ctrl/Shift-click thumbnail). */
 .cw-thumbs-sel {
   flex: none;
@@ -390,6 +380,8 @@
   min-height: 32px;
   padding: 0 var(--sp-1);
   font-size: var(--fs-xs);
+  line-height: 1.2;
+  white-space: normal;
 }
 .cw-thumbs-list {
   flex: 1;
@@ -431,8 +423,8 @@
 }
 .cw-thumb {
   position: relative;
-  width: 72px;
-  height: 100px;
+  width: 52px;
+  height: 72px;
   padding: 0;
   overflow: hidden;
   background: #fff;
@@ -463,15 +455,14 @@
 .cw-thumb[data-tone="busy"] {
   border: 2px solid var(--c-info);
 }
-/* Trang chọn để dịch riêng: phủ màu nhấn + dấu ✓ góc trên (không đè viền trạng thái). */
+/* Trang chọn để dịch riêng: phủ màu nhấn + dấu ✓ giữa thumbnail (không đè cờ góc, viền trạng thái). */
 .cw-thumb[data-selected]::after {
   content: "✓";
   position: absolute;
   inset: 0;
   display: flex;
-  align-items: flex-start;
-  justify-content: flex-start;
-  padding: 2px 4px;
+  align-items: center;
+  justify-content: center;
   background: color-mix(in srgb, var(--c-accent) 22%, transparent);
   color: #fff;
   font-size: var(--fs-xs);
@@ -512,28 +503,34 @@
   line-height: 16px;
   text-align: center;
 }
-.cw-thumb-mark {
-  max-width: 100px;
-  padding: 1px 6px;
-  border-radius: 3px;
-  font-size: 11px;
-  line-height: 1.35;
-  text-align: center;
-  color: var(--c-fg-muted);
+/* Cờ góc trên-trái thumbnail: "!" cần xem / chờ AI, "×" lỗi, "…" đang tải (cột ảnh gốc). */
+.cw-thumb-flag {
+  position: absolute;
+  top: 3px;
+  left: calc(50% - 24px);
+  min-width: 18px;
+  height: 18px;
+  padding: 0 3px;
+  display: grid;
+  place-items: center;
+  border-radius: 9px;
+  background: var(--c-fg-muted);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1;
 }
-.cw-thumb-mark[data-tone="danger"] {
-  color: var(--c-danger);
-  background: var(--c-danger-weak);
+.cw-thumb-flag[data-tone="danger"] {
+  background: var(--c-danger);
 }
-.cw-thumb-mark[data-tone="warn"] {
-  color: var(--c-warn);
-  background: var(--c-warn-weak);
+.cw-thumb-flag[data-tone="warn"] {
+  background: var(--c-warn);
 }
-.cw-thumb-mark[data-tone="busy"] {
-  color: var(--c-info);
+.cw-thumb-flag[data-tone="busy"] {
+  background: var(--c-info);
 }
-.cw-thumb-mark[data-tone="ok"] {
-  color: var(--c-ok);
+.cw-thumb-flag[data-tone="ok"] {
+  background: var(--c-ok);
 }
 .cw-thumbs-busy {
   color: var(--c-info);
@@ -553,7 +550,7 @@
   bottom: 0;
 }
 .cw-thumbs-head .cw-thumb-bar {
-  width: 72px;
+  width: 52px;
   height: 3px;
   border-radius: 2px;
   overflow: hidden;
@@ -582,12 +579,12 @@
   }
 }
 
-/* Nút xoá / khôi phục ở góc trên thumbnail: hiện khi rê chuột hoặc focus trong mục; màn cảm ứng luôn hiện. */
+/* Nút ở góc trên-phải thumbnail: xoá / khôi phục ảnh gốc (hiện khi rê chuột hoặc focus trong mục; màn cảm ứng luôn hiện); ⋯ của trang đang mở luôn hiện. */
 .cw-thumb-act {
   position: absolute;
   top: 4px;
-  /* Mục có thể rộng hơn thumbnail 72px (nhãn dưới) và thumbnail canh giữa → bám mép phải thumbnail. */
-  right: calc(50% - 32px);
+  /* Thumbnail 52px canh giữa cột → bám mép phải thumbnail. */
+  right: calc(50% - 26px);
   width: 24px;
   height: 24px;
   min-height: 0;
@@ -601,7 +598,9 @@
   opacity: 0;
 }
 .cw-thumb-item:hover .cw-thumb-act,
-.cw-thumb-item:focus-within .cw-thumb-act {
+.cw-thumb-item:focus-within .cw-thumb-act,
+.cw-thumb-act[data-always],
+.cw-thumb-act[aria-expanded="true"] {
   opacity: 1;
 }
 @media (hover: none) {
@@ -685,11 +684,12 @@
 .cw-canvas .ed-canvas {
   background: var(--c-canvas);
 }
-/* Điều khiển nổi góc dưới canvas: ‹ Trang n / M › (trái), Vừa khung · 100% · zoom (phải). */
-.cw-pager,
-.cw-zoom {
+/* Một cụm nổi giữa đáy canvas: ‹ 3/12 › · 62%. Panel khối đè mép trái → căn giữa phần canvas còn lộ để không bị che. */
+.cw-pager {
   position: absolute;
   bottom: 14px;
+  left: 50%;
+  transform: translateX(-50%);
   z-index: 5;
   display: flex;
   align-items: center;
@@ -700,8 +700,8 @@
   border-radius: 6px;
   font-size: var(--fs-xs);
 }
-.cw-pager {
-  left: 16px;
+.cw[data-cover] .cw-pager {
+  left: calc(50% + var(--cw-overlay-w) / 2);
 }
 .cw-pager > span {
   padding: 0 6px;
@@ -711,29 +711,19 @@
   width: 32px;
   height: 32px;
 }
-.cw-zoom {
-  right: 16px;
-}
-.cw-zoom > button {
+.cw-zoom-btn {
+  min-width: 52px;
   min-height: 32px;
-  padding: 0 10px;
+  padding: 0 8px;
   border: 0;
+  border-left: 1px solid var(--c-line);
+  border-radius: 0 4px 4px 0;
   background: none;
   font-size: var(--fs-xs);
-}
-.cw-zoom > button[aria-pressed="true"] {
-  background: var(--c-accent-weak);
-  color: var(--c-accent-hover);
-}
-.cw-zoom > .mono {
-  min-width: 44px;
-  padding: 0 6px;
-  text-align: right;
   color: var(--c-fg-muted);
 }
-/* Panel khối đè lên mép trái canvas: pager dời sang phải để không nằm dưới panel. */
-.cw[data-cover] .cw-pager {
-  left: calc(var(--cw-overlay-w) + 16px);
+.cw-zoom-btn:hover {
+  color: var(--c-fg);
 }
 /* Thanh phụ của công cụ Chữ / Tẩy chữ / Quét chữ: nổi giữa mép trên canvas, tự xuống dòng khi hẹp. */
 .cw-toolbar {

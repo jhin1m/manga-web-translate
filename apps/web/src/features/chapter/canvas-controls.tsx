@@ -1,15 +1,27 @@
 /**
- * Điều khiển nổi trên canvas màn chương: góc dưới trái "‹ Trang n / M ›" (cùng phím ←/→), góc dưới phải "Vừa khung" ·
- * "100%" + mức zoom hiện tại. Vừa khung = khung nhìn mở trang (bỏ cờ đã zoom); 100% = đầu trang sát mép trên ở mức 1,
- * giữ khi đổi trang (chapterStore.fitView).
+ * Một cụm nổi giữa đáy canvas: ‹ 3/12 › · 62% (cùng phím ←/→). Nút % đổi Vừa khung ↔ 100%: đang vừa khung → 100%
+ * (đầu trang sát mép trên, giữ khi đổi trang); đang 100% → vừa khung (khung nhìn mở trang, bỏ cờ đã zoom); zoom khác
+ * (Ctrl+cuộn, chụm) → 100%. Zoom tuỳ ý vẫn bằng chuột. Khi panel khối đè mép trái canvas, cụm căn giữa phần canvas còn
+ * lộ (CSS `[data-cover]`) nên panel không che nút nào.
  */
 import { chapterStore, useChapterStore } from "../editor/chapter-store.ts";
 import { useEditor } from "../editor/store.ts";
 import { ChevronLeftIcon, ChevronRightIcon } from "./tool-icons.tsx";
 
+/** Tên + tooltip nút %: nói trạng thái hiện tại và việc bấm sẽ làm. */
+export function zoomLabel(percent: number, zoomed: boolean): string {
+  if (!zoomed) return `Đang vừa khung (${percent}%). Bấm để xem cỡ thật 100%`;
+  if (percent === 100) return "Đang 100%. Bấm để vừa khung";
+  return `Đang ${percent}%. Bấm để xem cỡ thật 100%`;
+}
+
 export function CanvasPager(props: { onStep(dir: -1 | 1): void }) {
   const total = useChapterStore((s) => s.pages.length);
   const ord = useChapterStore((s) => s.pages.findIndex((p) => p.id === s.activePageId));
+  const zoomed = useChapterStore((s) => s.zoomed);
+  const scale = useEditor((s) => s.view.scale);
+  const percent = Math.round(scale * 100);
+  const label = zoomLabel(percent, zoomed);
   return (
     <div className="cw-pager">
       <button
@@ -22,8 +34,8 @@ export function CanvasPager(props: { onStep(dir: -1 | 1): void }) {
       >
         <ChevronLeftIcon size={16} />
       </button>
-      <span>
-        Trang {ord >= 0 ? ord + 1 : "–"} / {total || "–"}
+      <span className="cw-pager-pos">
+        {ord >= 0 ? ord + 1 : "–"}/{total || "–"}
       </span>
       <button
         type="button"
@@ -35,34 +47,16 @@ export function CanvasPager(props: { onStep(dir: -1 | 1): void }) {
       >
         <ChevronRightIcon size={16} />
       </button>
-    </div>
-  );
-}
-
-export function CanvasZoom() {
-  const scale = useEditor((s) => s.view.scale);
-  const zoomed = useChapterStore((s) => s.zoomed);
-  return (
-    <div className="cw-zoom">
       <button
         type="button"
-        aria-pressed={!zoomed}
-        title="Vừa khung: cả trang trong khung nhìn"
-        onClick={() => chapterStore.getState().fitView()}
+        className="cw-zoom-btn mono"
+        data-fit={!zoomed || undefined}
+        aria-label={label}
+        title={label}
+        onClick={() => chapterStore.getState().fitView(zoomed && percent === 100 ? undefined : 1)}
       >
-        Vừa khung
+        {percent}%
       </button>
-      <button
-        type="button"
-        aria-pressed={zoomed && scale === 1}
-        title="Cỡ thật (100%), giữ khi đổi trang"
-        onClick={() => chapterStore.getState().fitView(1)}
-      >
-        100%
-      </button>
-      <span className="mono" title="Mức zoom">
-        {Math.round(scale * 100)}%
-      </span>
     </div>
   );
 }

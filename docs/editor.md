@@ -3,7 +3,7 @@
 Editor là một phần của **màn chương** gộp: `/s/$seriesId/c/$chapterId[?page=<pageId>][&drawer=export]`
 (toàn màn hình, ngoài app shell). Bố cục: rail công cụ
 (trái, 64px) | panel ngữ cảnh (panel khối 272px đóng mặc định, đè lên canvas; 560px cho Bản dịch / Tìm / Hiệu đính, chiếm cột) | canvas Konva từng trang
-| cột thumbnail trang (phải, 112px) — xem [design-guidelines.md](./design-guidelines.md#màn-chương). Code: màn ở `apps/web/src/features/chapter/`, editor ở
+| cột thumbnail trang (phải, 72px) — xem [design-guidelines.md](./design-guidelines.md#màn-chương). Code: màn ở `apps/web/src/features/chapter/`, editor ở
 `apps/web/src/features/editor/`, API ở `apps/api/src/routes/page-state.ts`.
 
 ## Trang đang sửa và cache
@@ -54,12 +54,12 @@ dịch — chờ lượt này xong hoặc huỷ rồi thử lại.").
 
 **Chọn trang để dịch riêng** (`page-selection.ts`, cột thumbnail): ⌘-click (macOS) / Ctrl-click (nơi khác) bật/tắt 1
 trang (và làm neo), Shift-click chọn dải từ neo; Esc bỏ chọn. Chỉ chọn được trang hiện, không bận, đã xoá chữ + OCR (chờ
-dịch / xong / lỗi lúc dịch). Có chọn → đầu cột hiện "Dịch N trang · Bỏ chọn" (gửi `POST …/translate {page_ids}`, bản sửa tay giữ
-nguyên). Trang đã chọn mà vào lượt dịch (bận) tự rơi khỏi lựa chọn. Một trang: menu chuột phải của thumbnail
+dịch / xong / lỗi lúc dịch). Có chọn → đầu cột hiện "Dịch N trang · Bỏ chọn" (cột không còn đầu "N trang" / lọc "Cần xem") (gửi `POST …/translate {page_ids}`, bản sửa tay giữ
+nguyên). Trang đã chọn mà vào lượt dịch (bận) tự rơi khỏi lựa chọn. Một trang: menu trang của trang đang mở
 có "Dịch trang n" (trang chờ dịch) / "Dịch lại trang n" (trang đã dịch hoặc lỗi lúc dịch); trang bận không có mục này.
 
 **Tiến độ**: chip trạng thái ở thanh trên — "Đang cắt trang", "Xoá chữ + OCR x/y", "Đang dịch · x/y trang · lô k/n", "Chờ dịch",
-"Chờ duyệt · n cần xem", "Xong" (`status.ts`). Thumbnail trang (`page-status.ts` `thumbMark`): "Chờ xoá chữ" / "Xoá chữ" +
+"Chờ duyệt · n cần xem", "Xong" (`status.ts`). Thumbnail trang không chữ: `thumbMark` cho viền + thanh %, `thumbFlag` cho cờ góc ("!" / "×"), tên truy cập (`thumbAria`) và tooltip (`thumbTitle`) mang nhãn: "Chờ xoá chữ" / "Xoá chữ" +
 %, "Chờ lượt · lô k" (trang của lô sau), "Đang dịch" / "Đang đặt chữ" + % (trang của lô đang chạy), "Chờ AI" (provider tự thử
 lại), "Lỗi", "Cần xem", "Đã ẩn". Nhãn bước tiếng Việt cho thumbnail, cột ảnh gốc ("Đã tải" / "Đang tải" / "Chờ" khi cắt trang) và
 drawer Hoạt động lấy từ `stage-labels.ts` (mã lạ → "Đang xử lý", không lộ mã tiếng Anh); progress poll 2,5s.
@@ -67,8 +67,8 @@ drawer Hoạt động lấy từ `stage-labels.ts` (mã lạ → "Đang xử lý
 ## Ảnh gốc trước khi cắt trang, xoá ảnh / trang, ảnh tự bỏ
 
 **Trước khi cắt trang** (chương chưa có page: nháp, đang cắt, cắt lỗi) cột thumbnail là các ảnh gốc "Ảnh n" theo thứ tự
-upload (`source-rail.tsx`, `use-source-images.ts`): ảnh thả trong tab hiện ngay từ Blob local khi còn đang tải (nhãn
-"Đang tải" / "Tải lỗi" / "Chưa tải"), còn lại dùng URL ký (`GET …/chapters/:id/source-files`). Bấm = xem lớn ở canvas,
+upload (`source-rail.tsx`, `use-source-images.ts`): ảnh thả trong tab hiện ngay từ Blob local khi còn đang tải (cờ ở góc
+thumbnail + tooltip "Đang tải" / "Tải lỗi" / "Chưa tải"), còn lại dùng URL ký (`GET …/chapters/:id/source-files`). Bấm = xem lớn ở canvas,
 ←/→ chuyển ảnh. Xoá / Khôi phục ảnh khi còn sửa được bộ ảnh — menu chuột phải thumbnail
 (Shift+F10 / phím Menu khi đang focus) hoặc nút góc thumbnail (hiện khi rê chuột / focus): `PATCH …/chapters/:id/source-files/:fileId {skip}` đặt
 `source_files.skip = 'user'` (giữ hàng để hoàn tác và để tải tiếp khớp bộ file); commit/ingest bỏ ảnh `skip`, nút
@@ -81,7 +81,7 @@ theo ảnh). Cập nhật lạc quan, lỗi → trả thứ tự cũ + toast; to
 `source_set_mismatch`), ghi `ord = vị trí`; cùng guard với PATCH skip (423 chương đang mở ở tab khác, 409 `chapter_not_draft`).
 Ingest đọc theo `ord` nên worker không đổi. Kéo-thả HTML5 gốc không chạy trên màn cảm ứng — dùng menu.
 
-**Sau khi cắt trang** "Ẩn trang n" ở menu chuột phải thumbnail (hoặc nút góc thumbnail) ẩn trang
+**Sau khi cắt trang** "Ẩn trang n" ở menu chuột phải thumbnail (hoặc nút ⋯ khi là trang đang mở) ẩn trang
 (`PATCH /pages/:id {skipped}`, cần giữ khoá; chương đang chạy → 409 `chapter_busy`; trang hiện cuối cùng → 409
 `last_page`). Trang ẩn giữ dữ liệu, hiện mờ "Đã ẩn" đúng vị trí trong cột thumbnail; bấm hoặc chuột phải → "Khôi phục
 trang n"; không dịch (dịch chương, dịch lại, chạy lại lỗi; dịch thẳng trang ẩn → 409 `page_skipped`), không làm ngữ cảnh trang
@@ -199,7 +199,7 @@ panel riêng (panel khối thu lại trừ khi còn nội dung phải xử lý);
 nó, không đổi công cụ. Phím V/T/B/E/R đổi công cụ (đổi khỏi Chọn → panel khối thu nếu hết nội dung).
 
 **Panel khối** (272px, `role="complementary"` "Chọn & sửa") đóng mặc định, **đè lên mép trái canvas** (cùng ô lưới với canvas
-nên canvas không đổi bề ngang khi đóng/mở; pager dời sang phải khi panel mở). Tự mở khi: chọn khối ở công cụ Chọn (chọn bằng
+nên canvas không đổi bề ngang khi đóng/mở; cụm pager căn giữa phần canvas còn lộ nên không bị panel che). Tự mở khi: chọn khối ở công cụ Chọn (chọn bằng
 chuột thì mở sau khi nhả chuột để không chắn con trỏ giữa chừng kéo; đang ở Bản dịch / Tìm thì giữ); có nội dung phải xử lý
 mà không chọn khối — AI có bản mới của trang đang mở, hoặc xung đột khi lưu (`hasToolContent`). Tự đóng khi bỏ chọn khối
 (bấm nền, Esc, đổi trang) và hết nội dung; còn xung đột / AI mới thì không tự đóng. Thu panel bằng tay khi còn xung đột → băng
@@ -225,9 +225,7 @@ nên lăn chuột sau đó không kẹp khối về lại dưới panel.
   Suy nghĩ / Ghi chú (khối vẽ tay không vùng → không có ô). Option: Thường + loại có slot (+ loại hiện tại của vùng nếu slot đã bị
   bỏ, để không mất giá trị). Đổi = `setTextStyle`: đặt `region.style` và `font_family` của khối theo `fontForStyle` (slot của
   loại; trống → font theo kind như worker), **1 bước undo**. Chương dịch trước 0.8.0 không có `style` (= Thường); đổi tay bằng ô này.
-- **Thao tác trang** nằm ở menu chuột phải (Shift+F10 / phím Menu) của thumbnail: Dịch trang n / Dịch lại trang n (trang chọn
-  được, không bận), Bỏ chỉnh sửa tay trang n (chỉ trang đang mở và khác bản AI; hoàn tác bằng toast hoặc Cmd+Z), Ẩn / Khôi phục
-  trang n. Trạng thái + cờ của trang ở thumbnail (viền, nhãn, tooltip, tên truy cập); chi tiết kỹ thuật của trang lỗi (lỗi thô của
+- **Thao tác trang** là một menu (`page-rail.tsx`): nút ⋯ luôn hiện trên thumbnail trang đang mở, chuột phải / Shift+F10 / phím Menu mở cùng menu. Trang đang mở: Dịch trang n / Dịch lại trang n (trang chọn được, không bận), Bỏ chỉnh sửa tay trang n (chỉ khi khác bản AI; không hỏi lại, hoàn tác bằng toast hoặc Cmd+Z), Ẩn trang n. Trang khác: chuột phải chỉ có Ẩn trang (trang ẩn: Khôi phục). Trạng thái + cờ của trang ở thumbnail (viền, cờ "!" / "×", tooltip, tên truy cập); chi tiết kỹ thuật của trang lỗi (lỗi thô của
   provider) đọc ở Hoạt động › "Chi tiết kỹ thuật".
 - **Thanh phụ trên canvas** (`tool-panels.tsx` `CanvasToolBar`, `role="toolbar"`, nổi giữa mép trên, không đẩy bố cục):
   **Chữ** "Thêm chữ · Kéo khung trên ảnh" (kéo xong → khối mới được chọn, công cụ về Chọn, panel mở, sửa chữ ngay trên ảnh);
@@ -260,7 +258,7 @@ vượt ngân sách, lỗi + "Chi tiết kỹ thuật"); Nhận không được 
 
 ## Chế độ xem (Xem gốc / Chia đôi) và khung nhìn
 
-Canvas hiện **từng trang một** (page active); đổi trang ở cột thumbnail, pager "‹ Trang n / M ›" góc dưới trái canvas
+Canvas hiện **từng trang một** (page active); đổi trang ở cột thumbnail, cụm "‹ n/M › · 62%" giữa đáy canvas
 hoặc ←/→/A/D — thumbnail (`aria-current`) và `?page=` luôn theo page active (URL không có `?page=` = trang
 đầu).
 
@@ -275,8 +273,8 @@ Khung nhìn mở chương / đổi trang / bật-tắt Chia đôi: `page-layout.
 hiện** (không theo page rộng nhất chương) — vừa bề ngang nội dung, trọn chiều cao page dạng tờ (cao ≤ 2× rộng; dải
 webtoon chỉ vừa bề ngang), trần 100%, căn giữa ngang, đầu page sát mép trên. Khung đổi cỡ (thu/mở panel) trước khi
 người dùng động vào khung nhìn → vừa lại; đã tự zoom (Ctrl/Cmd+cuộn, `chapterStore.zoomed`) → đổi trang / Chia đôi giữ
-zoom. Góc dưới phải canvas: **Vừa khung** (khung nhìn mở trang, bỏ cờ zoom) · **100%** (mức 1, đầu trang sát mép
-trên, giữ khi đổi trang) — cả hai qua `chapterStore.fitView` — + mức zoom hiện tại. Page đang chạy AI (`pageLevel`
+zoom. Nút % trong cụm giữa đáy canvas (`canvas-controls.tsx`) đổi **Vừa khung** (khung nhìn mở trang, bỏ cờ zoom) ↔ **100%** (mức 1, đầu trang sát mép
+trên, giữ khi đổi trang) qua `chapterStore.fitView`; đang zoom khác → 100%. Tên + tooltip nói trạng thái và việc bấm sẽ làm; cụm căn giữa phần canvas còn lộ khi panel khối đè. Page đang chạy AI (`pageLevel`
 busy): cột Dịch hiện ảnh gốc + lớp mờ + "Đang xử lý…", không vẽ chữ; ảnh sạch vẫn tải ngầm để đổi ngay khi xong.
 Page đã xoá chữ + OCR, chờ dịch (`prepared`, "Chờ dịch"): hiện ảnh sạch như thường để soát, sửa mask trước khi bấm Dịch.
 Chế độ Gốc không đổi.

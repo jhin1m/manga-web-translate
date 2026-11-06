@@ -55,7 +55,9 @@ test("drop a 10-page ZIP on home, open the chapter while uploading, prepare it, 
   const sources = page.getByRole("complementary", { name: "Danh sách ảnh gốc" });
   await expect(sources.locator("img")).toHaveCount(10);
   await expect(sources.locator("img").first()).toHaveAttribute("src", /^blob:/);
-  await expect(sources.getByText("Đang tải").first()).toBeVisible();
+  // "Đang tải" không còn là chữ dưới thumbnail: cờ ở góc có tên truy cập + tooltip.
+  await expect(sources.getByRole("img", { name: "Đang tải" }).first()).toBeVisible();
+  await expect(sources.getByRole("img", { name: "Đang tải" }).first()).toHaveAttribute("title", "Đang tải");
   // Canvas hiện ảnh đầu; bấm Ảnh 3 trên rail → xem ảnh 3, ← về ảnh 2.
   await expect(page.getByRole("img", { name: "Ảnh gốc 1" })).toBeVisible();
   await sources.getByRole("button", { name: /^Ảnh 3/ }).click();
@@ -104,7 +106,7 @@ test("drop a 10-page ZIP on home, open the chapter while uploading, prepare it, 
   // Kéo-thả: ảnh 1 thả vào nửa dưới ảnh 3 → nằm sau ảnh 3 (vị trí 3); Hoàn tác trả về đầu.
   const first = await fileOf(0);
   const items = sources.locator(".cw-thumb-item");
-  await items.nth(0).dragTo(items.nth(2), { targetPosition: { x: 20, y: 90 } });
+  await items.nth(0).dragTo(items.nth(2), { targetPosition: { x: 20, y: 62 } });
   await expect.poll(() => fileOf(2)).toBe(first);
   await page.getByRole("status").filter({ hasText: "Đã đổi thứ tự" }).getByRole("button", { name: "Hoàn tác" }).click();
   await expect.poll(() => fileOf(0)).toBe(first);
@@ -114,8 +116,8 @@ test("drop a 10-page ZIP on home, open the chapter while uploading, prepare it, 
   await thumb2.click({ button: "right" });
   await page.getByRole("menuitem", { name: "Xoá ảnh 2" }).click();
   await expect(sources).toContainText("đã bỏ 1");
-  await expect(sources.getByText("Đã xoá")).toBeVisible();
   await expect(thumb2).toHaveAccessibleName("Ảnh 2 · Đã xoá");
+  await expect(thumb2).toHaveAttribute("title", /^Đã xoá/);
   await page.getByRole("status").filter({ hasText: "Đã xoá ảnh 2" }).getByRole("button", { name: "Hoàn tác" }).click();
   await expect(thumb2).toHaveAccessibleName("Ảnh 2");
   await expect(sources).not.toContainText("đã bỏ");
@@ -242,16 +244,17 @@ test("a credit deleted with “Luôn bỏ ở series này” is skipped in the n
   let sources = await dropChapter();
   const last = sources.locator(".cw-thumb-item").nth(2);
   // Ảnh cuối lệch khổ → chỉ gợi ý, không tự bỏ.
-  await expect(last).toContainText("Có thể là credit");
+  await expect(last.getByRole("img", { name: "Có thể là credit" })).toBeVisible();
+  await expect(sources.getByRole("button", { name: /^Ảnh 3/ })).toHaveAccessibleName("Ảnh 3 · Có thể là credit");
   await sources.getByRole("button", { name: /^Ảnh 3/ }).click({ button: "right" });
   await page.getByRole("menuitem", { name: "Xoá ảnh 3" }).click();
   await page.getByRole("button", { name: "Luôn bỏ ở series này" }).click();
   await expect(page.getByText("Đã học 1 ảnh")).toBeVisible();
 
   sources = await dropChapter();
-  await expect(sources.locator(".cw-thumb-item").nth(2)).toContainText("Credit · tự bỏ");
+  await expect(sources.getByRole("button", { name: /^Ảnh 3/ })).toHaveAccessibleName("Ảnh 3 · Credit · tự bỏ");
   await expect(sources).toContainText("đã bỏ 1");
-  await expect(sources.locator(".cw-thumb-item").nth(0)).not.toContainText("Credit");
+  await expect(sources.getByRole("button", { name: /^Ảnh 1/ })).not.toHaveAccessibleName(/Credit/);
   await sources.getByRole("button", { name: /^Ảnh 3/ }).click({ button: "right" });
   await page.getByRole("menuitem", { name: "Khôi phục ảnh 3" }).click();
   await expect(sources.getByRole("button", { name: /^Ảnh 3/ })).not.toHaveAccessibleName(/Credit · tự bỏ|Đã xoá/);

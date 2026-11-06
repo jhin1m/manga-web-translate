@@ -129,3 +129,10 @@ export const pageThumbs = (page: Page) => page.getByRole("complementary", { name
 /** Thumbnail trang `n` (tên truy cập "Trang n · <trạng thái>"). */
 export const pageThumb = (page: Page, n: number) =>
   pageThumbs(page).getByRole("button", { name: new RegExp(`^Trang ${n} · `) });
+
+/** Số thumbnail trang còn hiện (không tính trang ẩn) — cột trang không còn dòng đếm "N trang". */
+export const expectVisiblePages = (page: Page, n: number) =>
+  expect(pageThumbs(page).getByRole("button", { name: /^Trang \d+ · (?!Đã ẩn)/ })).toHaveCount(n);
+
+/** Nút % trong cụm pager giữa đáy canvas (đổi Vừa khung ↔ 100%). */
+export const zoomButton = (page: Page) => page.locator(".cw-pager .cw-zoom-btn");

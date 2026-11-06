@@ -70,6 +70,12 @@ export function providerWaitText(w: NonNullable<ReturnType<typeof providerWait>>
   return `${why} — trang ${w.pages.join(", ")} đang chờ, tự thử lại${at}. Không cần làm gì; muốn dừng thì bấm "Huỷ xử lý".`;
 }
 
+/** Bản ngắn của `providerWaitText` cho băng cảnh báo: lý do + trang nào tự thử lại. */
+export function providerWaitShort(w: NonNullable<ReturnType<typeof providerWait>>) {
+  const why = w.rateLimited ? "AI hết hạn mức" : "AI lỗi tạm thời";
+  return `${why}, trang ${w.pages.join(", ")} tự thử lại`;
+}
+
 /** Số trang (1-based) → dải gọn: [2, 3, 4, 6, 9] → "2–4, 6, 9". */
 export function pageRanges(ords: number[]): string {
   const sorted = [...new Set(ords)].sort((a, b) => a - b);

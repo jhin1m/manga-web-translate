@@ -5,7 +5,7 @@
  * không quá 8 mục ở 1280. Tiến độ chương giả bằng cách sửa phản hồi /progress (worker giả không tạo được trang lỗi).
  */
 import { expect, type Page, test } from "@playwright/test";
-import { apiReadyChapter, login, openPanel, state } from "./helpers.ts";
+import { apiReadyChapter, login, openPanel, pageThumb, state } from "./helpers.ts";
 
 test.use({ viewport: { width: 1280, height: 800 } });
 
@@ -145,6 +145,14 @@ test("failed pages: primary re-runs N pages, Xuất moves into the menu, no 'Exp
   await expect(top(page).getByRole("button", { name: "Chạy lại 2 trang", exact: true })).toBeVisible();
   await expect(top(page).getByRole("button", { name: "Xuất", exact: true })).toHaveCount(0);
   expect(await controls(page).count()).toBeLessThanOrEqual(8);
+
+  // Trang lỗi: cờ "×" ở góc thumbnail có tên truy cập + tooltip nói rõ lỗi (không chỉ viền đỏ); trang xong không có cờ.
+  await expect(pageThumb(page, 2)).toHaveAccessibleName(/^Trang 2 · Lỗi/);
+  const flag = page.locator(".cw-thumb-item").nth(1).locator(".cw-thumb-flag");
+  await expect(flag).toHaveText("×");
+  await expect(flag).toHaveAccessibleName(/^Lỗi/);
+  await expect(flag).toHaveAttribute("title", /^Lỗi/);
+  await expect(page.locator(".cw-thumb-item").nth(0).locator(".cw-thumb-flag")).toHaveCount(0);
 
   await page.getByRole("button", { name: "Thêm thao tác" }).click();
   const menu = page.getByRole("menu", { name: "Thêm thao tác" });

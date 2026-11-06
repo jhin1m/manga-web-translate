@@ -59,7 +59,7 @@ Toàn màn hình (ngoài app shell), `chapter-workspace.css`. Nguyên tắc (own
 ```
 ┌ thanh trên 52px: ‹ series · Chương N · chip · Đã lưu ····· ↶ ↷ | Xem gốc · Hoạt động · ⋯ · [Huỷ][Xuất] [nút chính] ┐
 ├ (băng cảnh báo — chỉ khi có)                                                                                     ┤
-├ rail công cụ 64px ┬ panel 288px (560: Bản dịch, Tìm) ┬ canvas (vừa khung, ‹ Trang n/M ›, Vừa khung|100%) ┬ thumbnail 112px ┤
+├ rail công cụ 64px ┬ panel 288px (560: Bản dịch, Tìm) ┬ canvas (cụm giữa đáy ‹ n/M › · 62%) ┬ thumbnail 72px ┤
 ```
 
 | Vùng | Nội dung |
@@ -69,18 +69,18 @@ Toàn màn hình (ngoài app shell), `chapter-workspace.css`. Nguyên tắc (own
 | Panel khối 272px | Đóng mặc định, **đè lên mép trái canvas** (canvas không đổi bề ngang), tự mở khi chọn khối hoặc khi có nội dung phải xử lý (AI có bản mới, xung đột khi lưu), đóng khi bỏ chọn nếu hết nội dung. Đầu panel "Khối i/N" + 3 icon (Dịch lại · Nhân đôi · Xoá); thân: Gốc, Dịch, cảnh báo ngắn "Tràn 12px", Font + Cỡ, nhóm "Kiểu chữ" thu gọn (Loại chữ, Tự khớp, nâng cao, Áp kiểu). Khối bị panel che thì canvas tự cuộn lộ ra. Không nhớ theo trình duyệt |
 | Thanh phụ trên canvas | **Chữ** / **Tẩy chữ** (Tô ↔ Tẩy nét, cỡ bút, Bỏ nét, Xoá chữ vùng tô) / **Quét chữ** (Xoá chữ gốc; đang quét: n vùng + Huỷ) không có panel riêng: 1 dòng nổi giữa mép trên canvas |
 | Panel rộng 560px | **Bản dịch** (bảng văn bản cả chương: #, Tr., Gốc, Dịch sửa tại chỗ, Loại, Tình trạng), **Tìm** (segmented "Tìm / Thay" \| "Glossary") và **Hiệu đính** (gợi ý AI theo khối: cũ → mới, lý do, Nhận / Bỏ) |
-| Canvas | Trang active, mặc định **Vừa khung**; nút 100% (giữ khi đổi trang); pager "‹ Trang n / M ›" góc dưới trái (dời sang phải khi panel khối mở); không còn thanh nổi cạnh khối — thao tác khối ở đầu panel khối |
-| Cột thumbnail phải 112px | Chỉ ảnh 72×100 + số trang. Trạng thái = viền + nhãn ngắn khi có vấn đề: "Đã ẩn" (mờ, viền đứt) · "Lỗi" (viền đỏ) · "Chờ AI" / "Cần xem" (viền cam); trang bình thường không chữ (trạng thái ở `aria-label`). Trang đang mở: outline màu nhấn. Ẩn / khôi phục trang, Dịch / Dịch lại trang, Bỏ chỉnh sửa tay, xoá / khôi phục ảnh gốc: menu chuột phải (Shift+F10) hoặc nút góc thumbnail. Có trang cần xem → nút lọc "Cần xem k" |
+| Canvas | Trang active, mặc định **Vừa khung**; một cụm giữa đáy "‹ n/M › · 62%" (căn giữa phần canvas còn lộ khi panel khối đè nên không bị che); nút % đổi Vừa khung ↔ 100% (100% giữ khi đổi trang), zoom khác bằng Ctrl/⌘+cuộn; không còn thanh nổi cạnh khối — thao tác khối ở đầu panel khối |
+| Cột thumbnail phải 72px | Chỉ ảnh 52×72 + số trang, không chữ, không đầu cột (tổng trang ở pager, nhảy trang cần xem ở chip). Trạng thái = viền + cờ ở góc, tên đầy đủ trong tooltip và `aria-label`: "×" (viền đỏ) lỗi · "!" (viền cam) cần xem / chờ AI · thanh % khi AI đang chạy · trang ẩn mờ + viền đứt; trang bình thường không cờ. Trang đang mở: outline màu nhấn + nút ⋯ luôn hiện. Thao tác trang là **một menu**: nút ⋯ (trang đang mở) hoặc chuột phải / Shift+F10 mở cùng menu — Dịch / Dịch lại trang, Bỏ chỉnh sửa tay (chỉ khi khác bản AI, không hỏi lại: Ctrl/⌘+Z hoặc toast Hoàn tác), Ẩn trang. Trang khác: chuột phải chỉ có Ẩn trang; trang ẩn bấm hoặc chuột phải → Khôi phục. Không có nút thùng rác khi rê chuột. Cột ảnh gốc (chưa cắt trang) cùng cỡ: cờ ở góc thay nhãn "Đang tải" / "Tải lỗi"…, nút xoá / khôi phục ở góc thumbnail |
 
 - **Tên chương** ("Chương N") bấm được → popover đổi series (select) / số chương (`chapter-meta-popover.tsx`,
   `PATCH /chapters/:id`; trùng số → báo lỗi tại chỗ; đổi series → URL theo series mới).
 - **Trạng thái chương ở 1 chỗ**: chip cạnh tên chương (`status.ts` `chapterChip`, `role="status"`, aria-live
   polite): "Đang tải ảnh 2/5", "Đang dịch 3/5", "Chờ duyệt · 2 cần xem", "Xong". Cột thumbnail chỉ giữ trạng thái
   theo trang. Cạnh chip: chỉ báo nhỏ khoá + lưu (icon khoá + Đã lưu / Đang lưu…, hoặc "Chỉ xem").
-- **Băng cảnh báo** (`LockBand`, `role="alert"`): chỉ hiện khi người dùng phải biết/làm — chương đang mở ở tab khác (Thử
-  lại), lỗi khoá, mất khoá, khôi phục thay đổi từ phiên trước, lỗi lưu, trang đang chờ AI tự thử lại (provider lỗi
-  tạm / 429 hết hạn mức: "trang 1, 2 đang chờ, tự thử lại lúc HH:MM … muốn dừng thì bấm Huỷ xử lý"). Trạng thái bình
-  thường không chiếm dải.
+- **Băng cảnh báo** (`LockBand`, `role="alert"`): chỉ hiện khi người dùng phải biết/làm — mỗi mục là câu ngắn + nút
+  ("Chương đang mở ở tab khác · Thử lại", "Thay đổi chưa lưu ở trang 3, 4 · Khôi phục · Bỏ", "Lỗi lưu, chưa ghi được",
+  "AI hết hạn mức, trang 1, 2 tự thử lại", "n thay đổi chưa áp được · Xem"); lý do dài nằm trong tooltip (và đọc được bằng
+  trình đọc màn hình). Trạng thái bình thường không chiếm dải.
 - **Lỗi job viết cho người** (`job-error.ts`): thumbnail (title) / Hoạt động nói loại lỗi + việc cần làm
   ("Dịch lại trang" ở menu trang, "Chạy lại trang lỗi"); lỗi thô của provider (JSON dài) chỉ nằm trong "Chi tiết kỹ thuật" thu
   gọn ở Hoạt động.

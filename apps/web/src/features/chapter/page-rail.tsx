@@ -1,19 +1,20 @@
 /**
- * Cột trang bên phải canvas (112px): thumbnail (ảnh sạch/ảnh gốc, tải lười) + số trang. Trạng thái = viền + nhãn ngắn
- * khi đang chạy AI (Xoá chữ / Chờ lượt · lô k / Đang dịch / Đang đặt chữ + thanh %) hoặc có vấn đề (Đã ẩn / Lỗi / Chờ
- * AI / Cần xem — page-status.ts `thumbMark`); tên truy cập luôn đủ trạng thái. Trang ẩn nằm đúng vị trí theo số trang
- * (mờ). Nút "Cần xem k" lọc trang lỗi / AI có bản mới / tràn khung. Bấm = kích hoạt page và cuộn canvas tới (bỏ chọn);
- * ⌘-click (macOS) / Ctrl-click / Shift-click = chọn trang để dịch riêng (page-selection.ts), có chọn → thanh "Dịch N trang · Bỏ chọn"
- * ở đầu cột. Xoá (ẩn) / khôi phục trang bằng nút góc
- * thumbnail (hiện khi rê chuột / focus, khi sửa được) hoặc menu chuột phải (Shift+F10 / phím Menu), bấm trang ẩn cũng mở
- * menu. Menu trang còn "Dịch / Dịch lại trang" và (trang đang mở, đã sửa tay) "Bỏ chỉnh sửa tay". Số trang giữ số gốc (ord + 1) — trang ẩn để lại lỗ số, khớp bảng văn bản và Tìm/Thay.
+ * Cột trang bên phải canvas (72px): thumbnail 52×72 (ảnh sạch/ảnh gốc, tải lười) + số trang, không chữ. Trạng thái =
+ * viền + cờ ở góc ("!" cần xem / chờ AI, "×" lỗi; tên truy cập + tooltip là câu đầy đủ — page-status.ts `thumbFlag`),
+ * thanh % trên thumbnail khi AI đang chạy; trang ẩn mờ + viền đứt, nằm đúng vị trí theo số trang. Bấm = kích hoạt
+ * page và cuộn canvas tới (bỏ chọn); ⌘-click (macOS) / Ctrl-click / Shift-click = chọn trang để dịch riêng
+ * (page-selection.ts), có chọn → thanh "Dịch N trang · Bỏ chọn" ở đầu cột. Thao tác trang là một menu: nút ⋯ luôn hiện
+ * trên trang đang mở, chuột phải (Shift+F10 / phím Menu) mở cùng menu — Dịch / Dịch lại trang, Bỏ chỉnh sửa tay (khi khác
+ * bản AI), Ẩn trang. Trang khác chỉ có Ẩn trang; bấm trang ẩn mở menu Khôi phục. Số trang giữ số gốc (ord + 1) — trang
+ * ẩn để lại lỗ số, khớp bảng văn bản và Tìm/Thay.
  */
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import type { PageImage, ProgressPage } from "./api.ts";
 import { ContextMenu, isMenuKey, type MenuAt, type MenuItem, menuAtElement } from "./context-menu.tsx";
 import { selectablePage } from "./page-selection.ts";
-import { needsReview, thumbAria, thumbMark, thumbTitle } from "./page-status.ts";
-import { TrashIcon, UndoIcon } from "./tool-icons.tsx";
+import { thumbAria, thumbFlag, thumbMark, thumbTitle } from "./page-status.ts";
+import { ThumbFlagBadge } from "./thumb-flag.tsx";
+import { MoreIcon } from "./tool-icons.tsx";
 
 const LOCK_HINT = "Cần giữ khoá chương (chương không đang chạy)";
 
@@ -44,16 +45,11 @@ export const PageRail = memo(function PageRail(props: {
   canResetEdits(page: ProgressPage): boolean;
   onResetEdits(page: ProgressPage): void;
 }) {
-  const [reviewOnly, setReviewOnly] = useState(false);
   const [menu, setMenu] = useState<{ page: ProgressPage; at: MenuAt; anchor: HTMLElement } | null>(null);
   const all = useMemo(
     () => [...props.pages, ...props.hidden].sort((a, b) => a.ord - b.ord),
     [props.pages, props.hidden],
   );
-  const review = props.pages.filter((p) => needsReview(p, props.overflow.has(p.id)));
-  // Hết trang cần xem → bỏ lọc (nút lọc biến mất).
-  const filtering = reviewOnly && review.length > 0;
-  const list = filtering ? review : all;
   const listRef = useRef<HTMLDivElement>(null);
 
   // Page active đổi (canvas, phím ←/→, ?page=) → đưa vào tầm nhìn của cột.
@@ -77,7 +73,8 @@ export const PageRail = memo(function PageRail(props: {
     // Trang cuối còn hiện không ẩn được (API 409 last_page).
     const reason = !props.editable ? LOCK_HINT : props.pages.length <= 1 ? "Không ẩn được trang cuối cùng" : undefined;
     const items: MenuItem[] = [];
-    if (selectablePage(p)) {
+    // Dịch / bỏ sửa tay chỉ có ở trang đang mở (state AI nằm trong phiên sửa của nó); trang khác chỉ ẩn được.
+    if (p.id === props.activeId && selectablePage(p)) {
       const first = p.status === "prepared";
       items.push({
         label: first ? `Dịch trang ${n}` : `Dịch lại trang ${n}`,
@@ -111,14 +108,6 @@ export const PageRail = memo(function PageRail(props: {
 
   return (
     <aside className="cw-thumbs" aria-label="Danh sách trang">
-      <div className="cw-thumbs-head">
-        <span>{props.pages.length} trang</span>
-        {review.length > 0 && (
-          <button type="button" aria-pressed={filtering} onClick={() => setReviewOnly(!filtering)}>
-            Cần xem {review.length}
-          </button>
-        )}
-      </div>
       {props.selected.size > 0 && (
         <div className="cw-thumbs-sel" role="toolbar" aria-label="Trang đã chọn">
           <button
@@ -136,11 +125,12 @@ export const PageRail = memo(function PageRail(props: {
         </div>
       )}
       <div className="cw-thumbs-list" ref={listRef}>
-        {list.map((p) => {
+        {all.map((p) => {
           const img = props.images.get(p.id);
           const on = p.id === props.activeId;
           const overflow = props.overflow.has(p.id);
           const mark = thumbMark(p, overflow);
+          const flag = thumbFlag(p, overflow);
           const picked = props.selected.has(p.id);
           const openMenu = (at: MenuAt, anchor: HTMLElement) => setMenu({ page: p, at, anchor });
           return (
@@ -153,7 +143,7 @@ export const PageRail = memo(function PageRail(props: {
                 data-selected={picked || undefined}
                 aria-label={`${thumbAria(p, overflow)}${picked ? " · đã chọn" : ""}`}
                 aria-haspopup={p.skipped ? "menu" : undefined}
-                title={thumbTitle(p, overflow)}
+                title={thumbTitle(p, overflow, undefined, on)}
                 // Trang ẩn không mở trên canvas (canvas chỉ có trang còn hiện) → bấm mở menu khôi phục.
                 onClick={(e) => {
                   const toggle = e.ctrlKey || e.metaKey;
@@ -188,23 +178,24 @@ export const PageRail = memo(function PageRail(props: {
                   {p.ord + 1}
                 </span>
               </button>
-              {/* Trang cuối còn hiện không ẩn được (API 409 last_page) → không hiện nút xoá. */}
-              {props.editable && (p.skipped || props.pages.length > 1) && (
+              {flag && <ThumbFlagBadge glyph={flag.glyph} tone={flag.tone} text={flag.text} />}
+              {on && !p.skipped && (
                 <button
                   type="button"
                   className="cw-thumb-act"
-                  data-danger={!p.skipped || undefined}
-                  aria-label={p.skipped ? `Khôi phục trang ${p.ord + 1}` : `Xoá (ẩn) trang ${p.ord + 1}`}
-                  title={p.skipped ? "Khôi phục trang" : "Xoá trang — không dịch, không xuất, khôi phục được"}
-                  onClick={() => props.onSkip(p, !p.skipped)}
+                  data-always
+                  aria-label={`Thao tác trang ${p.ord + 1}`}
+                  aria-haspopup="menu"
+                  aria-expanded={menu?.page.id === p.id}
+                  title="Thao tác trang (chuột phải cũng mở)"
+                  onClick={(e) => {
+                    const anchor = e.currentTarget;
+                    // Bấm lại nút khi menu của nó đang mở = đóng.
+                    setMenu((m) => (m?.anchor === anchor ? null : { page: p, at: menuAtElement(anchor), anchor }));
+                  }}
                 >
-                  {p.skipped ? <UndoIcon size={14} /> : <TrashIcon size={14} />}
+                  <MoreIcon size={16} />
                 </button>
-              )}
-              {mark && (
-                <span className="cw-thumb-mark" data-tone={mark.tone} aria-hidden="true">
-                  {mark.label}
-                </span>
               )}
             </div>
           );

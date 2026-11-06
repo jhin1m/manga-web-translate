@@ -7,6 +7,7 @@ import {
   pageLevelOf,
   selectHint,
   thumbAria,
+  thumbFlag,
   thumbMark,
   thumbTitle,
 } from "./page-status.ts";
@@ -164,7 +165,10 @@ describe("page level", () => {
   it("thumbnail title hints page selection with the platform's key; hidden pages only offer restore", () => {
     const visible = { ...base, job: null };
     expect(thumbTitle(visible, false, true)).toBe(
-      "Chuột phải: xoá (ẩn) trang · ⌘-click hoặc Shift-click: chọn để dịch riêng",
+      "Chuột phải: ẩn trang · ⌘-click hoặc Shift-click: chọn để dịch riêng",
+    );
+    expect(thumbTitle(visible, false, true, true)).toBe(
+      "Chuột phải hoặc nút ⋯: thao tác trang · ⌘-click hoặc Shift-click: chọn để dịch riêng",
     );
     expect(thumbTitle(visible, false, false)).toContain("Ctrl-click hoặc Shift-click");
     expect(thumbTitle(visible, false, false)).not.toContain("⌘");
@@ -179,5 +183,34 @@ describe("page level", () => {
     );
     expect(thumbAria({ ...base, status: "failed", job: null }, false)).toBe("Trang 3 · Lỗi");
     expect(thumbAria({ ...base, skipped: true, job: null }, false)).toBe("Trang 3 · Đã ẩn");
+  });
+
+  it("corner flag: ! for review / waiting on AI, × for errors, none for quiet, busy or hidden pages; text carries the reason", () => {
+    expect(thumbFlag({ ...base, job: null }, false)).toBeNull();
+    expect(thumbFlag({ ...base, skipped: true, job: null }, false)).toBeNull();
+    expect(thumbFlag({ ...base, status: "translating", job: null }, false)).toBeNull();
+    expect(thumbFlag({ ...base, job: null }, true)).toEqual({
+      glyph: "!",
+      tone: "warn",
+      text: "Cần xem: tràn khung",
+    });
+    expect(thumbFlag({ ...base, ai_update_available: true, cut_flag: true, job: null }, true)?.text).toBe(
+      "Cần xem: AI có bản mới, tràn khung, cắt ở trần chiều cao",
+    );
+    const err = thumbFlag({ ...base, status: "failed", job: null }, false);
+    expect(err).toEqual({ glyph: "×", tone: "danger", text: "Lỗi" });
+    const failedJob = job({ status: "failed", error_class: "schema", error: "bad json" });
+    expect(thumbFlag({ ...base, status: "failed", job: failedJob }, false)).toMatchObject({
+      glyph: "×",
+      text: expect.stringMatching(/^Lỗi: AI trả sai định dạng/),
+    });
+    expect(thumbFlag({ ...base, job: job({}) }, false)).toMatchObject({
+      glyph: "!",
+      text: expect.stringContaining("Chờ AI"),
+    });
+  });
+
+  it("thumbnail title names the running step now that the thumbnail has no text label", () => {
+    expect(thumbTitle({ ...base, status: "translating", job: null }, false, false)).toMatch(/^Đang dịch · chờ\n/);
   });
 });

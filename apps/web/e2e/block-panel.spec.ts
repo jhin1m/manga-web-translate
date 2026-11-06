@@ -8,7 +8,18 @@
 import { expect, type Page, test } from "@playwright/test";
 import { WEB_URL } from "./env.ts";
 import { runFakeWorker } from "./fake-worker.ts";
-import { apiReadyChapter, blockPanel, login, openPanel, pageThumb, railButton, state, toolBar } from "./helpers.ts";
+import {
+  apiReadyChapter,
+  blockPanel,
+  login,
+  openPanel,
+  pageThumb,
+  pageThumbs,
+  railButton,
+  state,
+  toolBar,
+  zoomButton,
+} from "./helpers.ts";
 
 test.use({ viewport: { width: 1280, height: 800 } });
 
@@ -258,9 +269,9 @@ test("opening and closing the block panel never changes the canvas box", async (
   const panel = blockPanel(page);
   await expect(panel).toBeHidden();
   const before = await canvasBox(page);
-  // Số đo thực tế ở khung 1280 khi không chọn gì (rail 64px + cột trang 112px hiện tại).
+  // Số đo thực tế ở khung 1280 khi không chọn gì (rail 64px + cột trang 72px hiện tại).
   console.log(`canvas 1280x800 (no selection): ${before.width}x${before.height} at x=${before.x}`);
-  expect(before.width).toBe(1280 - 64 - 112);
+  expect(before.width).toBe(1280 - 64 - 72);
 
   await clickBlock(page, { x: 300, y: 300, w: 160, h: 60 });
   await expect(panel).toBeVisible();
@@ -283,6 +294,46 @@ test("opening and closing the block panel never changes the canvas box", async (
   expect(await canvasBox(page)).toEqual(before);
 });
 
+test("the pager cluster stays clear of the open panel and the % button does not break block reveal", async ({
+  page,
+}) => {
+  await login(page);
+  const { chapterId } = await readyChapter(page, 2);
+  const pageId = (await progress(page, chapterId)).pages.find((p) => p.ord === 0)?.id ?? "";
+  const left: Box = { x: 8, y: 200, w: 120, h: 60 };
+  await writeState(page, chapterId, pageId, (s) => {
+    s.text_boxes = [textBox("tb-left", left)];
+  });
+  await open(page, chapterId);
+  const panel = blockPanel(page);
+  const pager = page.locator(".cw-pager");
+  await zoomButton(page).click();
+  await expect(zoomButton(page)).toHaveText("100%");
+
+  await clickBlock(page, left);
+  await expect(panel).toBeVisible();
+  const pb = await panel.boundingBox();
+  const cluster = await pager.boundingBox();
+  const canvas = await canvasBox(page);
+  if (!pb || !cluster) throw new Error("missing box");
+  // Cụm nằm trọn trong phần canvas còn lộ, căn giữa phần đó; mọi nút bấm được (không bị panel che).
+  expect(cluster.x).toBeGreaterThanOrEqual(pb.x + pb.width);
+  expect(cluster.x + cluster.width).toBeLessThanOrEqual(canvas.x + canvas.width);
+  await pager.getByRole("button", { name: "Trang sau (→)" }).click();
+  await expect(pager).toContainText("2/2");
+  await pager.getByRole("button", { name: "Trang trước (←)" }).click();
+  await expect(pager).toContainText("1/2");
+
+  // Đổi % (100% → vừa khung → 100%) rồi chọn lại khối: vẫn cuộn khối ra khỏi dưới panel.
+  await zoomButton(page).click();
+  await expect(zoomButton(page)).toHaveAccessibleName(/^Đang vừa khung /);
+  await zoomButton(page).click();
+  await expect(zoomButton(page)).toHaveText("100%");
+  await page.keyboard.press("Escape");
+  await clickBlock(page, left);
+  await expect.poll(async () => (await screenRect(page, left)).x).toBeGreaterThanOrEqual(pb.x + pb.width);
+});
+
 test("a block at the left edge is scrolled out from under the panel at 100% zoom; later scrolling keeps it clear", async ({
   page,
 }) => {
@@ -293,8 +344,8 @@ test("a block at the left edge is scrolled out from under the panel at 100% zoom
     s.text_boxes = [textBox("tb-left", left)];
   });
   await open(page, chapterId);
-  await page.locator(".cw-zoom").getByRole("button", { name: "100%", exact: true }).click();
-  await expect(page.locator(".cw-zoom .mono")).toHaveText("100%");
+  await zoomButton(page).click();
+  await expect(zoomButton(page)).toHaveText("100%");
   const panel = blockPanel(page);
   const before = await screenRect(page, left);
 
@@ -322,8 +373,8 @@ test("a block near the bottom of the page is brought into view above the page en
     s.text_boxes = [textBox("tb-top", top), textBox("tb-bottom", bottom, null)];
   });
   await open(page, chapterId);
-  await page.locator(".cw-zoom").getByRole("button", { name: "100%", exact: true }).click();
-  await expect(page.locator(".cw-zoom .mono")).toHaveText("100%");
+  await zoomButton(page).click();
+  await expect(zoomButton(page)).toHaveText("100%");
   // Alt+↓ chọn khối kế (xuyên khối, cuộn tới): khối thứ hai nằm sát đáy trang, ngoài khung nhìn lúc đầu.
   await page.locator(".ed-canvas").click({ position: { x: 700, y: 10 } });
   await page.keyboard.press("Alt+ArrowDown");
@@ -350,8 +401,8 @@ test("split original / translated at 100%: a block of the translated column unde
   await open(page, chapterId);
   await page.getByRole("button", { name: "Thêm thao tác" }).click();
   await page.getByRole("menuitemcheckbox", { name: "Chia đôi gốc / dịch" }).click();
-  await page.locator(".cw-zoom").getByRole("button", { name: "100%", exact: true }).click();
-  await expect(page.locator(".cw-zoom .mono")).toHaveText("100%");
+  await zoomButton(page).click();
+  await expect(zoomButton(page)).toHaveText("100%");
   // Cuộn ngang cho cột Dịch (x ≥ 0) nằm dưới mép trái panel.
   const view = await viewOf(page);
   await setView(page, { ...view, x: 100 });
@@ -504,49 +555,82 @@ test.describe("canvas toolbars keep every function", () => {
   });
 });
 
-test("page actions moved to the page menu: translate again, drop manual edits (undoable), hide", async ({ page }) => {
+test("page menu: ⋯ and right-click open the same menu; actions for the open page, only hide for others", async ({
+  page,
+}) => {
   await login(page);
   const { chapterId, pageIds } = await readyChapter(page, 2);
   await open(page, chapterId);
-
-  // Trang chưa sửa tay: không có mục "Bỏ chỉnh sửa tay".
-  await pageThumb(page, 1).click({ button: "right" });
+  const thumbs = pageThumbs(page);
+  const more = thumbs.getByRole("button", { name: "Thao tác trang 1" });
   const menu = page.getByRole("menu", { name: "Trang 1" });
+
+  // Nút ⋯ luôn hiện trên trang đang mở; chuột phải thumbnail mở đúng menu đó (trang chưa sửa tay: không có "Bỏ chỉnh sửa tay").
+  await expect(more).toBeVisible();
+  await more.click();
+  await expect(menu.getByRole("menuitem").first()).toBeFocused();
+  const viaButton = await menu.getByRole("menuitem").allTextContents();
+  await page.keyboard.press("Escape");
+  await expect(menu).toHaveCount(0);
+  await expect(more).toBeFocused();
+  await pageThumb(page, 1).click({ button: "right" });
+  expect(await menu.getByRole("menuitem").allTextContents()).toEqual(viaButton);
   await expect(menu.getByRole("menuitem", { name: "Dịch lại trang 1" })).toBeEnabled();
   await expect(menu.getByRole("menuitem", { name: "Ẩn trang 1" })).toBeEnabled();
   await expect(menu.getByRole("menuitem", { name: /Bỏ chỉnh sửa tay/ })).toHaveCount(0);
   await page.keyboard.press("Escape");
+  await expect(pageThumb(page, 1)).toBeFocused();
 
-  // Sửa tay trang đang mở → có mục "Bỏ chỉnh sửa tay"; bấm = về bản AI, toast Hoàn tác khôi phục bản sửa.
+  // Shift+F10 trên thumbnail đang focus: cùng menu, focus vào menu, Esc đóng và trả focus.
+  await page.keyboard.press("Shift+F10");
+  await expect(menu.getByRole("menuitem").first()).toBeFocused();
+  expect(await menu.getByRole("menuitem").allTextContents()).toEqual(viaButton);
+  await page.keyboard.press("Escape");
+  await expect(menu).toHaveCount(0);
+  await expect(pageThumb(page, 1)).toBeFocused();
+
+  // Sửa tay trang đang mở → có mục "Bỏ chỉnh sửa tay"; bấm = về bản AI không hỏi lại, toast Hoàn tác khôi phục bản sửa.
   await openPanel(page, "table");
   const cell = page.getByLabel("Bản dịch trang 1 vùng 1", { exact: true });
   await cell.fill("Sửa tay");
   await expect(cell).toHaveValue("Sửa tay");
-  await pageThumb(page, 1).click({ button: "right" });
+  await more.click();
   await menu.getByRole("menuitem", { name: "Bỏ chỉnh sửa tay trang 1" }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
   await expect(cell).toHaveValue("Xin chào");
   const toast = page.locator(".cw-toasts .notice", { hasText: "Đã bỏ chỉnh sửa tay trên trang 1" });
   await expect(toast).toBeVisible();
   await toast.getByRole("button", { name: "Hoàn tác" }).click();
   await expect(cell).toHaveValue("Sửa tay");
-  // Mục này chỉ có cho trang đang mở (state AI nằm trong phiên sửa của nó); trang khác không có.
+
+  // Ctrl+Z cũng hoàn tác được "Bỏ chỉnh sửa tay".
+  await more.click();
+  await menu.getByRole("menuitem", { name: "Bỏ chỉnh sửa tay trang 1" }).click();
+  await expect(cell).toHaveValue("Xin chào");
+  await page.locator(".ed-canvas").click({ position: { x: 5, y: 5 } });
+  await page.keyboard.press("ControlOrMeta+z");
+  await expect(cell).toHaveValue("Sửa tay");
+
+  // Trang khác (không phải trang đang mở): không có nút ⋯, chuột phải chỉ có Ẩn trang.
+  await expect(thumbs.getByRole("button", { name: "Thao tác trang 2" })).toHaveCount(0);
   await pageThumb(page, 2).click({ button: "right" });
-  await expect(
-    page.getByRole("menu", { name: "Trang 2" }).getByRole("menuitem", { name: /Bỏ chỉnh sửa tay/ }),
-  ).toHaveCount(0);
+  const other = page.getByRole("menu", { name: "Trang 2" });
+  await expect(other.getByRole("menuitem")).toHaveText(["Ẩn trang 2"]);
   await page.keyboard.press("Escape");
 
-  // Dịch lại riêng trang 2 (không phải trang đang mở): gửi đúng page_ids.
-  await pageThumb(page, 2).click({ button: "right" });
+  // Mở trang 2 rồi dịch lại riêng trang đó: gửi đúng page_ids.
+  await pageThumb(page, 2).click();
+  await expect(pageThumb(page, 2)).toHaveAttribute("aria-current", "page");
   const sent = page.waitForRequest(
     (r) => r.url().endsWith(`/chapters/${chapterId}/translate`) && r.method() === "POST",
   );
+  await thumbs.getByRole("button", { name: "Thao tác trang 2" }).click();
   await page.getByRole("menuitem", { name: "Dịch lại trang 2" }).click();
   expect(((await sent).postDataJSON() as { page_ids: string[] }).page_ids).toEqual([pageIds[1]]);
   await expect(page.locator(".cw-toasts .notice", { hasText: "Đã xếp dịch lại trang 2" })).toBeVisible();
 });
 
-test("a page waiting to be translated offers 'Dịch trang' in its menu", async ({ page }) => {
+test("a page waiting to be translated offers 'Dịch trang' in its menu once opened", async ({ page }) => {
   await login(page);
   const { chapterId } = await readyChapter(page, 2);
   await page.route(/\/api\/chapters\/[0-9a-f-]{36}\/progress$/, async (route) => {
@@ -561,6 +645,8 @@ test("a page waiting to be translated offers 'Dịch trang' in its menu", async 
   });
   await page.goto(chapterUrl(chapterId));
   await expect(page.locator(".ed-canvas canvas").first()).toBeVisible();
+  await pageThumb(page, 2).click();
+  await expect(pageThumb(page, 2)).toHaveAttribute("aria-current", "page");
   await pageThumb(page, 2).click({ button: "right" });
   await expect(page.getByRole("menuitem", { name: "Dịch trang 2", exact: true })).toBeEnabled();
 });

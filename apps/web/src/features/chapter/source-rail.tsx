@@ -1,12 +1,12 @@
 /**
- * Cột ảnh gốc bên phải canvas khi chương chưa có page (nháp, đang cắt trang, cắt lỗi): thumbnail từng ảnh theo thứ tự
- * upload + số, hiện ngay khi thả file (Blob local). Bấm = xem ảnh đó ở canvas. Nhãn dưới thumbnail chỉ khi có
- * (Đã xoá / Credit · tự bỏ / Đang tải / Tải lỗi / Chưa tải / Có thể là credit). Xoá / Khôi phục ảnh bằng nút góc
- * thumbnail (hiện khi rê chuột / focus) hoặc menu chuột phải (Shift+F10 / phím Menu) khi còn sửa được bộ ảnh (trước
- * khi cắt trang); ảnh bỏ qua mờ đi, lúc cắt trang không ghép chúng. Cũng khi còn sửa được: kéo-thả thumbnail (vạch báo
- * chỗ thả), menu "Đưa lên đầu / Lên 1 / Xuống 1 / Đưa xuống cuối" hoặc Alt+↑/↓ trên thumbnail đang focus để đổi thứ tự
- * ghép. Đang cắt trang → đầu cột hiện bước + đếm
- * ("Đang tải ảnh 3/10"), ảnh được ghép có viền "đang xử lý" và nhãn Đã tải / Đang tải / Chờ / Đang xử lý.
+ * Cột ảnh gốc bên phải canvas khi chương chưa có page (nháp, đang cắt trang, cắt lỗi), cùng cỡ thumbnail với cột trang
+ * (52×72): thumbnail từng ảnh theo thứ tự upload + số, hiện ngay khi thả file (Blob local). Bấm = xem ảnh đó ở canvas.
+ * Trạng thái (Đã xoá / Credit · tự bỏ / Đang tải / Tải lỗi / Chưa tải / Có thể là credit) = cờ ở góc thumbnail + tên
+ * truy cập + tooltip, không chữ dưới thumbnail. Xoá / Khôi phục ảnh bằng nút góc thumbnail (hiện khi rê chuột / focus)
+ * hoặc menu chuột phải (Shift+F10 / phím Menu) khi còn sửa được bộ ảnh (trước khi cắt trang); ảnh bỏ qua mờ đi, lúc
+ * cắt trang không ghép chúng. Cũng khi còn sửa được: kéo-thả thumbnail (vạch báo chỗ thả), menu "Đưa lên đầu / Lên 1 /
+ * Xuống 1 / Đưa xuống cuối" hoặc Alt+↑/↓ trên thumbnail đang focus để đổi thứ tự ghép. Đang cắt trang → đầu cột hiện
+ * bước + đếm ("Đang tải ảnh 3/10"), ảnh được ghép có viền "đang xử lý" và cờ Đã tải / Đang tải / Chờ / Đang xử lý.
  */
 import { memo, useEffect, useRef, useState } from "react";
 import { ContextMenu, isMenuKey, type MenuAt, type MenuItem, menuAtElement } from "./context-menu.tsx";
@@ -18,7 +18,16 @@ import {
   sourceCounts,
   sourceLabel,
 } from "./source-rail-model.ts";
+import { ThumbFlagBadge, type ThumbFlagTone } from "./thumb-flag.tsx";
 import { TrashIcon, UndoIcon } from "./tool-icons.tsx";
+
+const FLAG_GLYPH: Record<string, { glyph: string; tone: ThumbFlagTone }> = {
+  danger: { glyph: "×", tone: "danger" },
+  warn: { glyph: "!", tone: "warn" },
+  busy: { glyph: "…", tone: "busy" },
+  idle: { glyph: "…", tone: "idle" },
+  ok: { glyph: "✓", tone: "ok" },
+};
 
 export const SourceRail = memo(function SourceRail(props: {
   items: SourceItem[];
@@ -106,6 +115,7 @@ export const SourceRail = memo(function SourceRail(props: {
           const openMenu = (at: MenuAt, anchor: HTMLElement) => {
             if (props.editable) setMenu({ item: it, at, anchor });
           };
+          const flag = tag ? FLAG_GLYPH[tag.tone] : undefined;
           const i = props.items.indexOf(it);
           const drop = drag?.gap === i ? "before" : drag?.gap === last + 1 && i === last ? "after" : undefined;
           return (
@@ -148,7 +158,12 @@ export const SourceRail = memo(function SourceRail(props: {
                 aria-current={on ? "page" : undefined}
                 aria-label={`Ảnh ${it.n}${tag ? ` · ${tag.label}` : ""}`}
                 title={
-                  props.editable ? `Kéo để đổi thứ tự · chuột phải: ${it.skip ? "khôi phục" : "xoá"} ảnh` : undefined
+                  [
+                    tag?.label,
+                    props.editable ? `Kéo để đổi thứ tự · chuột phải: ${it.skip ? "khôi phục" : "xoá"} ảnh` : null,
+                  ]
+                    .filter(Boolean)
+                    .join("\n") || undefined
                 }
                 onClick={() => props.onPick(it.id)}
                 onContextMenu={(e) => {
@@ -185,11 +200,7 @@ export const SourceRail = memo(function SourceRail(props: {
                   {it.skip ? <UndoIcon size={14} /> : <TrashIcon size={14} />}
                 </button>
               )}
-              {tag && (
-                <span className="cw-thumb-mark" data-tone={it.skip ? "hidden" : tag.tone} aria-hidden="true">
-                  {tag.label}
-                </span>
-              )}
+              {tag && flag && <ThumbFlagBadge glyph={flag.glyph} tone={flag.tone} text={tag.label} />}
             </div>
           );
         })}

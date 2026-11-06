@@ -9,6 +9,7 @@ import { type APIRequestContext, expect, type Page, test } from "@playwright/tes
 import { WEB_URL } from "./env.ts";
 import { PNG_1PX, runFakeWorker } from "./fake-worker.ts";
 import {
+  expectVisiblePages,
   login,
   openFind,
   openPanel,
@@ -314,7 +315,7 @@ test("hide a page from the thumbnail column (undo, then restore from its menu)",
   const { chapterId } = await readyChapter(page, 3);
   await openChapter(page, chapterId);
   const thumbs = pageThumbs(page);
-  await expect(thumbs.getByText("3 trang", { exact: true })).toBeVisible();
+  await expectVisiblePages(page, 3);
 
   // Chuột phải thumbnail → menu; Esc đóng, focus về thumbnail.
   await pageThumb(page, 2).click({ button: "right" });
@@ -331,7 +332,7 @@ test("hide a page from the thumbnail column (undo, then restore from its menu)",
   // Chuột phải thumbnail → "Ẩn trang 2".
   await pageThumb(page, 2).click({ button: "right" });
   await page.getByRole("menuitem", { name: "Ẩn trang 2" }).click();
-  await expect(thumbs.getByText("2 trang", { exact: true })).toBeVisible();
+  await expectVisiblePages(page, 2);
   // Số trang giữ số gốc; trang ẩn nằm đúng chỗ, mờ + "Đã ẩn".
   await expect(thumbs.getByRole("button", { name: /^Trang \d · / })).toHaveCount(3);
   await expect(thumbs.getByRole("button", { name: "Trang 2 · Đã ẩn", exact: true })).toBeVisible();
@@ -339,7 +340,7 @@ test("hide a page from the thumbnail column (undo, then restore from its menu)",
   await expect(pageThumb(page, 3)).not.toHaveAccessibleName(/Đã ẩn/);
   // "Hoàn tác" của thông báo (thanh trên cũng có nút Hoàn tác).
   await page.getByRole("status").filter({ hasText: "Đã ẩn trang 2" }).getByRole("button", { name: "Hoàn tác" }).click();
-  await expect(thumbs.getByText("3 trang", { exact: true })).toBeVisible();
+  await expectVisiblePages(page, 3);
   await expect(thumbs.getByRole("button", { name: /Đã ẩn/ })).toHaveCount(0);
 
   // Ẩn lại bằng bàn phím (Shift+F10 trên thumbnail đang focus), rồi bấm trang ẩn → menu "Khôi phục trang 2".
@@ -348,14 +349,31 @@ test("hide a page from the thumbnail column (undo, then restore from its menu)",
   await page.getByRole("menuitem", { name: "Ẩn trang 2" }).click();
   await thumbs.getByRole("button", { name: "Trang 2 · Đã ẩn", exact: true }).click();
   await page.getByRole("menuitem", { name: "Khôi phục trang 2" }).click();
-  await expect(thumbs.getByText("3 trang", { exact: true })).toBeVisible();
+  await expectVisiblePages(page, 3);
   await expect(thumbs.getByRole("button", { name: /Đã ẩn/ })).toHaveCount(0);
 
-  // Nút góc thumbnail (hiện khi rê chuột): xoá rồi khôi phục không qua menu.
-  await pageThumb(page, 3).hover();
-  await thumbs.getByRole("button", { name: "Xoá (ẩn) trang 3" }).click();
+  // Trang đang mở: nút ⋯ luôn hiện (không cần rê chuột) và mở cùng menu với chuột phải; Esc đóng, focus về nút.
+  await pageThumb(page, 3).click();
+  await expect(pageThumb(page, 3)).toHaveAttribute("aria-current", "page");
+  const more = thumbs.getByRole("button", { name: "Thao tác trang 3" });
+  await expect(more).toBeVisible();
+  await more.click();
+  const menu = page.getByRole("menu", { name: "Trang 3" });
+  await expect(menu.getByRole("menuitem").first()).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(menu).toHaveCount(0);
+  await expect(more).toBeFocused();
+  // Chỉ trang đang mở có ⋯; không còn nút thùng rác khi rê chuột.
+  await expect(thumbs.getByRole("button", { name: /^Thao tác trang / })).toHaveCount(1);
+  await pageThumb(page, 1).hover();
+  await expect(thumbs.getByRole("button", { name: /Xoá \(ẩn\) trang/ })).toHaveCount(0);
+
+  // Ẩn bằng menu ⋯, rồi khôi phục từ menu của trang ẩn.
+  await more.click();
+  await menu.getByRole("menuitem", { name: "Ẩn trang 3" }).click();
   await expect(thumbs.getByRole("button", { name: "Trang 3 · Đã ẩn", exact: true })).toBeVisible();
-  await thumbs.getByRole("button", { name: "Khôi phục trang 3" }).click();
-  await expect(thumbs.getByText("3 trang", { exact: true })).toBeVisible();
+  await thumbs.getByRole("button", { name: "Trang 3 · Đã ẩn", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Khôi phục trang 3" }).click();
+  await expectVisiblePages(page, 3);
   await expect(thumbs.getByRole("button", { name: /Đã ẩn/ })).toHaveCount(0);
 });

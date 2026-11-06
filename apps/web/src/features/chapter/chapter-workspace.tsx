@@ -63,14 +63,14 @@ import {
   translatePrepared,
   undoBatch,
 } from "./api.ts";
-import { CanvasPager, CanvasZoom } from "./canvas-controls.tsx";
+import { CanvasPager } from "./canvas-controls.tsx";
 import { ChapterTopbar, type EditAccess, LockBand } from "./chapter-topbar.tsx";
 import { ContextPanel, type FocusRequest } from "./context-panel.tsx";
 import { ExportDrawer } from "./export-drawer.tsx";
 import { isExportActive } from "./export-options.ts";
 import { triggerDownload, useExports } from "./export-panel.tsx";
 import { type BatchHooks, FindReplacePanel } from "./FindReplace.tsx";
-import { providerWait, providerWaitText } from "./job-error.ts";
+import { providerWait, providerWaitShort, providerWaitText } from "./job-error.ts";
 import { clearLegacyLayout } from "./layout-prefs.ts";
 import { PageRail } from "./page-rail.tsx";
 import { clickSelect, EMPTY_SELECTION, pruneSelection, type Selection, selectionIds } from "./page-selection.ts";
@@ -905,7 +905,7 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
   const ingestError = data.progress?.jobs.find((j) => j.type === "chapter.ingest" && j.error)?.error ?? null;
   const canTools = settled && pages.length > 0;
   const aiWaitInfo = providerWait(pages);
-  const aiWait = aiWaitInfo ? providerWaitText(aiWaitInfo) : null;
+  const aiWait = aiWaitInfo ? { short: providerWaitShort(aiWaitInfo), long: providerWaitText(aiWaitInfo) } : null;
 
   const readOnly = useEditor((s) => !!s.readOnly);
   const readOnlyReason = useEditor((s) => s.readOnly);
@@ -1286,7 +1286,6 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
               </CanvasToolBar>
             )}
             <CanvasPager onStep={(dir) => go(pages[idx + dir]?.id)} />
-            <CanvasZoom />
           </div>
         )}
       </main>
