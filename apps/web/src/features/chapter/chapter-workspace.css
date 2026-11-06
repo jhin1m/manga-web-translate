@@ -1,6 +1,6 @@
 /*
- * Màn chương gộp (docs/design-guidelines.md, hướng A): thanh trên + băng cảnh báo (chỉ khi có) | rail công cụ 64px ·
- * panel ngữ cảnh (560px cho Bản dịch / Tìm / Hiệu đính, thu = cột về 0; panel khối 272px đè lên canvas, không chiếm cột)
+ * Màn chương gộp (docs/design-guidelines.md, hướng A): thanh trên + băng cảnh báo (chỉ khi có) | rail công cụ 48px ·
+ * panel ngữ cảnh (560px cho Văn bản, thu = cột về 0; panel khối 272px đè lên canvas, không chiếm cột)
  * · canvas · cột thumbnail trang 72px. Toàn màn hình (ngoài app shell). Canvas nền ấm trung tính để nhìn ảnh.
  */
 .cw {
@@ -8,7 +8,7 @@
   position: fixed;
   inset: 0;
   display: grid;
-  grid-template-columns: 64px auto minmax(0, 1fr) 72px;
+  grid-template-columns: 48px auto minmax(0, 1fr) 72px;
   grid-template-rows: 52px auto minmax(0, 1fr);
   grid-template-areas:
     "top top top top"
@@ -179,34 +179,34 @@
   min-height: 0;
 }
 
-/* Rail công cụ: nút 52×52 icon + nhãn 11px. Đang mở panel của nó = nền nhấn; công cụ đang chọn (panel thu) = chữ nhấn. */
+/* Rail công cụ 48px: nút 40×40 chỉ icon, tên + phím ở tooltip (hiện khi rê chuột hoặc focus bàn phím). Đang mở panel của nó
+   = nền nhấn; công cụ đang chọn (panel thu) = icon nhấn. Không cuộn riêng: tooltip phải tràn ra ngoài rail. */
 .cw-toolrail {
   grid-area: tools;
+  position: relative;
+  z-index: 20;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 4px;
   padding: var(--sp-2) 0;
   border-right: 1px solid var(--c-line);
+  background: var(--c-bg);
   min-height: 0;
-  overflow-y: auto;
 }
 .cw-toolbtn {
+  position: relative;
   flex: none;
-  width: 52px;
-  height: 52px;
+  width: 40px;
+  height: 40px;
   padding: 0;
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 2px;
   border: 0;
   border-radius: 6px;
   background: none;
   color: var(--c-fg-muted);
-  font-size: 11px;
-  line-height: 1.1;
 }
 .cw-toolbtn:hover {
   background: var(--c-surface-2);
@@ -218,11 +218,44 @@
 .cw-toolbtn[aria-pressed="true"] {
   background: var(--c-accent-weak);
   color: var(--c-accent-hover);
-  font-weight: 500;
+}
+.cw-toolbtn .cw-tip {
+  display: none;
+  position: absolute;
+  left: calc(100% + 8px);
+  top: 50%;
+  transform: translateY(-50%);
+  align-items: baseline;
+  gap: var(--sp-2);
+  width: max-content;
+  max-width: 240px;
+  padding: 4px var(--sp-2);
+  border: 1px solid var(--c-line-strong);
+  border-radius: var(--radius);
+  background: var(--c-bg);
+  color: var(--c-fg);
+  font-size: var(--fs-xs);
+  line-height: var(--lh);
+  white-space: nowrap;
+  box-shadow: 0 2px 8px rgb(42 38 32 / 0.12);
+  pointer-events: none;
+}
+.cw-toolbtn .cw-tip kbd {
+  color: var(--c-fg-muted);
+  font: inherit;
+}
+.cw-toolbtn .cw-tip em {
+  font-style: normal;
+  color: var(--c-fg-muted);
+  white-space: normal;
+}
+.cw-toolbtn:hover .cw-tip,
+.cw-toolbtn:focus-visible .cw-tip {
+  display: flex;
 }
 .cw-toolrail-sep {
   flex: none;
-  width: 32px;
+  width: 28px;
   height: 1px;
   margin: 4px 0;
   background: var(--c-line);
@@ -320,27 +353,59 @@
   padding: var(--sp-2) var(--sp-4);
   border-bottom: 1px solid var(--c-surface-2);
 }
+/* Panel Văn bản: dải tab + các tab đã mở (chỉ ẩn khi chuyển, giữ nội dung đã mount). */
+.cw-panel-doc {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.cw-panel-doc > [hidden] {
+  display: none;
+}
+.cw-doctabs {
+  flex: none;
+  display: flex;
+  gap: 2px;
+  padding: 0 var(--sp-2);
+  border-bottom: 1px solid var(--c-line);
+}
+.cw-doctabs button {
+  min-height: 36px;
+  padding: 0 var(--sp-3);
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  background: none;
+  color: var(--c-fg-muted);
+  white-space: nowrap;
+}
+.cw-doctabs button:hover:not(:disabled) {
+  color: var(--c-fg);
+  background: none;
+}
+.cw-doctabs button[aria-selected="true"] {
+  border-bottom-color: var(--c-accent);
+  color: var(--c-accent-hover);
+  font-weight: 600;
+}
+.cw-panel-proofread {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
 .cw-panel-find {
   flex: 1;
   min-height: 0;
   overflow: auto;
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-3);
   padding: var(--sp-4);
-}
-.cw-panel-find > [hidden] {
-  display: none;
 }
 .cw-find-part {
   min-width: 0;
   margin: 0;
   padding: 0;
   border: 0;
-}
-.cw-seg-full > * {
-  flex: 1;
-  justify-content: center;
 }
 
 /* Cột thumbnail trang / ảnh gốc (72px): chỉ ảnh + số; trạng thái = viền + cờ ở góc (tên đầy đủ trong tooltip). */
@@ -844,7 +909,7 @@
 }
 .cw-tr {
   display: grid;
-  grid-template-columns: 28px 32px minmax(0, 1fr) minmax(0, 1.2fr) 52px 84px;
+  grid-template-columns: 44px minmax(0, 1fr) minmax(0, 1.2fr) 22px;
   align-items: center;
   gap: var(--sp-2);
   padding: 0 var(--sp-3);
@@ -879,8 +944,7 @@
   background: var(--c-accent-weak);
   box-shadow: inset 3px 0 0 var(--c-accent);
 }
-.cw-src,
-.cw-kind {
+.cw-src {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -897,10 +961,21 @@
 .cw-tr textarea[readonly] {
   background: var(--c-surface);
 }
-.cw-tr .status {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.cw-rowflag {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--c-warn);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+}
+.cw-rowflag[data-tone="busy"] {
+  background: var(--c-accent);
 }
 
 /* Tab Tìm/Thay, Áp glossary. */

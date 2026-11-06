@@ -1,15 +1,15 @@
 /**
- * Xuất chương (.zip ảnh / .cbz) trong drawer "Xuất chương": cảnh báo nói hậu quả → tuỳ chọn thu gọn (1 dòng tóm
- * tắt) → 1 nút tải: gửi job → tiến độ ngay tại nút → xong tự tải qua link có xác thực (API trả 302 tới presigned
- * GET 5'); link "Tải xuống" tại chỗ phòng trình duyệt chặn tự tải. Danh sách lượt xuất trước + huỷ job đang chạy
- * (ExportRow dùng lại ở drawer Hoạt động).
+ * Xuất chương (.zip ảnh / .cbz) trong menu dưới nút "Xuất": 1 dòng "N chỗ cần xem" (bấm mở nói hậu quả) → 1 nút tải:
+ * gửi job → tiến độ ngay tại nút → xong tự tải qua link có xác thực (API trả 302 tới presigned GET 5'); link "Tải
+ * xuống" tại chỗ phòng trình duyệt chặn tự tải → tuỳ chọn thu gọn (1 dòng tóm tắt) → lần xuất trước + "Tải lại".
+ * Đóng menu giữa chừng không mất việc: mở lại thì theo dõi tiếp lượt còn chạy. Danh sách lượt xuất + huỷ job đang chạy
+ * nằm ở drawer Hoạt động (ExportRow).
  */
 import { EXPORT_FILE, EXPORT_RETENTION_DAYS } from "@mtl/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { errorMessage } from "../../lib/api.ts";
 import {
-  cancelJob,
   createExport,
   type ExportFormat,
   type ExportLayout,
@@ -46,7 +46,7 @@ const STATUS: Record<ExportStatus, { label: string; tone: Tone }> = {
   cancelled: { label: "Đã huỷ", tone: "idle" },
   paused_budget: { label: "Tạm dừng (hết ngân sách)", tone: "warn" },
 };
-/** Lượt xuất gần đây của chương; poll khi còn lượt đang chạy. Dùng chung cho drawer Xuất, Hoạt động và số việc. */
+/** Lượt xuất gần đây của chương; poll khi còn lượt đang chạy. Dùng chung cho menu Xuất, Hoạt động và số việc. */
 export function useExports(chapterId: string) {
   const qc = useQueryClient();
   const q = useQuery({
@@ -68,6 +68,19 @@ export function triggerDownload(url: string) {
   a.remove();
 }
 
+/** Tổng chỗ cần xem trong 1 dòng tóm tắt (cùng tập với `warningLines`). */
+const warnTotal = (w: ExportWarnings, includeUntranslated: boolean) =>
+  (includeUntranslated ? 0 : w.untranslated) + w.empty + w.aiPending + w.overflow;
+
+/** "5 phút trước", "2 giờ trước", "3 ngày trước". */
+function timeAgo(iso: string, now = Date.now()): string {
+  const min = Math.max(0, Math.round((now - Date.parse(iso)) / 60_000));
+  if (min < 1) return "vừa xong";
+  if (min < 60) return `${min} phút trước`;
+  if (min < 60 * 24) return `${Math.round(min / 60)} giờ trước`;
+  return `${Math.round(min / 60 / 24)} ngày trước`;
+}
+
 export function ExportPanel(props: {
   chapterId: string;
   /** Tên file không đuôi, khớp tên server đặt khi tải (`{series}-ch{số}`). */
@@ -75,7 +88,7 @@ export function ExportPanel(props: {
   /** `sources` = ảnh đã tải lên còn dùng; `pages` = trang đã cắt đang hiện. */
   counts: { sources: number; pages: number };
   warnings: ExportWarnings;
-  /** "Xem N chỗ này" → bảng văn bản lọc "Cần xem" (drawer đóng). */
+  /** "Xem N chỗ này" → bảng văn bản lọc "Cần xem" (menu đóng). */
   onShowWarnings(): void;
   /** Lưu phần đang sửa trước khi gửi job (server render từ state đã lưu). */
   beforeStart(): Promise<unknown>;
@@ -87,11 +100,11 @@ export function ExportPanel(props: {
   const [includeUntranslated, setInclude] = useState(false);
   const { q: listQ, refresh } = useExports(chapterId);
   /**
-   * Lượt xuất nút chính theo dõi và tự tải đúng 1 lần khi xong: lượt vừa gửi từ drawer này, hoặc lượt còn chạy lúc
-   * mở lại drawer (đóng drawer giữa chừng không mất việc tự tải).
+   * Lượt xuất nút chính theo dõi và tự tải đúng 1 lần khi xong: lượt vừa gửi từ menu này, hoặc lượt còn chạy lúc
+   * mở lại menu (đóng menu giữa chừng không mất tiến độ).
    */
   const [pending, setPending] = useState<ExportView | null>(() => latestActiveExport(listQ.data?.exports));
-  // Danh sách chưa có lúc mở drawer → nhận lượt còn chạy ở lần tải đầu.
+  // Danh sách chưa có lúc mở menu → nhận lượt còn chạy ở lần tải đầu.
   const adoptedRef = useRef(!!listQ.data);
   useEffect(() => {
     if (adoptedRef.current || !listQ.data) return;
@@ -101,7 +114,6 @@ export function ExportPanel(props: {
   }, [listQ.data]);
   const downloadedRef = useRef<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [cancelError, setCancelError] = useState<string | null>(null);
 
   // 1 ảnh tải lên = 1 trang → không hỏi cách chia, xuất như lúc tải lên.
   const layoutChoice = showLayoutChoice(counts);
@@ -130,13 +142,6 @@ export function ExportPanel(props: {
       setError(code === "no_pages" ? "Chương chưa có trang nào để xuất." : errorMessage(e));
     },
   });
-  const cancel = useMutation({
-    mutationFn: (id: string) => cancelJob(id),
-    onSettled: refresh,
-    onMutate: () => setCancelError(null),
-    onError: (e) => setCancelError(errorMessage(e)),
-  });
-
   const exports = listQ.data?.exports ?? [];
   // Danh sách chưa kịp tải lại sau khi gửi: theo dõi bằng job server vừa trả.
   const tracked = pending && !exports.some((e) => e.id === pending.id) ? [pending, ...exports] : exports;
@@ -160,25 +165,80 @@ export function ExportPanel(props: {
     error ??
     (phase.kind === "failed" ? phase.error : lost ? `Không theo dõi được tiến độ: ${errorMessage(listQ.error)}` : null);
 
+  const last = exports.find((x) => x.status === "succeeded");
+  const lastExpired = !!last && last.expires_at !== null && Date.parse(last.expires_at) < Date.now();
+  // Đang theo dõi một lượt (chạy / vừa xong / lỗi / hết hạn) thì trạng thái của nó đã hiện ở nút — "Lần trước" chỉ khi rảnh.
+  const showLast = !!last && phase.kind === "idle";
+
   return (
     <>
       {lines.length > 0 && (
-        <section className="drawer-warn" aria-label="Trước khi xuất">
-          <strong className="small">Trước khi xuất</strong>
-          <ul className="exp-warn-list small">
-            {lines.map((l) => (
-              <li key={l}>{l}</li>
-            ))}
-          </ul>
-          {review > 0 && (
-            <span className="small">
-              <button type="button" className="link" onClick={props.onShowWarnings}>
-                Xem {review} chỗ này
-              </button>{" "}
-              <span className="muted">— vẫn xuất được.</span>
-            </span>
-          )}
+        <section aria-label="Trước khi xuất">
+          <details className="exp-warn">
+            <summary>
+              <span className="exp-warn-mark" aria-hidden="true">
+                !
+              </span>
+              {warnTotal(props.warnings, includeUntranslated)} chỗ cần xem
+            </summary>
+            <ul className="exp-warn-list small">
+              {lines.map((l) => (
+                <li key={l}>{l}</li>
+              ))}
+            </ul>
+            {review > 0 && (
+              <span className="small">
+                <button type="button" className="link" onClick={props.onShowWarnings}>
+                  Xem {review} chỗ này
+                </button>{" "}
+                <span className="muted">— vẫn xuất được.</span>
+              </span>
+            )}
+          </details>
         </section>
+      )}
+
+      <div className="exp-main" aria-live="polite">
+        <button
+          type="button"
+          className="btn-primary exp-main-btn"
+          disabled={start.isPending || running}
+          onClick={() => start.mutate()}
+        >
+          {start.isPending ? (
+            "Đang gửi…"
+          ) : running ? (
+            phase.kind === "running" && phase.paused ? (
+              "Tạm dừng — hết ngân sách"
+            ) : (
+              `Đang xuất ${phase.pct}%…`
+            )
+          ) : (
+            <>
+              <span aria-hidden="true">⬇</span> Tải chương ({ext})
+            </>
+          )}
+        </button>
+        {phase.kind === "ready" && (
+          <span className="small">
+            Đã xong. Nếu file chưa tự tải:{" "}
+            <a className="btn" href={phase.url} download>
+              Tải xuống
+            </a>
+          </span>
+        )}
+        {phase.kind === "running" && phase.paused && (
+          <span className="muted small">Hết ngân sách AI — tự xuất tiếp khi có lại, không cần bấm lại.</span>
+        )}
+        {phase.kind === "expired" && <span className="muted small">Link đã hết hạn — bấm tải lại để xuất mới.</span>}
+        <span className="muted small">
+          Tên file: <span className="mono">{`${props.fileBase}.${EXPORT_FILE[format].ext}`}</span>
+        </span>
+      </div>
+      {failure && (
+        <p className="notice danger" role="alert">
+          {failure} Bấm “Tải chương” để thử lại.
+        </p>
       )}
 
       <details className="exp-options">
@@ -236,68 +296,25 @@ export function ExportPanel(props: {
         </div>
       </details>
 
-      <div className="exp-main" aria-live="polite">
-        <button
-          type="button"
-          className="btn-primary exp-main-btn"
-          disabled={start.isPending || running}
-          onClick={() => start.mutate()}
-        >
-          {start.isPending ? (
-            "Đang gửi…"
-          ) : running ? (
-            phase.kind === "running" && phase.paused ? (
-              "Tạm dừng — hết ngân sách"
-            ) : (
-              `Đang xuất ${phase.pct}%…`
-            )
-          ) : (
-            <>
-              <span aria-hidden="true">⬇</span> Tải chương ({ext})
-            </>
-          )}
-        </button>
-        {phase.kind === "ready" && (
-          <span className="small">
-            Đã xong. Nếu file chưa tự tải:{" "}
-            <a className="btn" href={phase.url} download>
-              Tải xuống
-            </a>
-          </span>
-        )}
-        {phase.kind === "running" && phase.paused && (
-          <span className="muted small">Hết ngân sách AI — tự xuất tiếp khi có lại, không cần bấm lại.</span>
-        )}
-        {phase.kind === "expired" && <span className="muted small">Link đã hết hạn — bấm tải lại để xuất mới.</span>}
-        <span className="muted small">
-          Tên file: <span className="mono">{`${props.fileBase}.${EXPORT_FILE[format].ext}`}</span>
-        </span>
-      </div>
-      {failure && (
+      {listQ.isError && (
         <p className="notice danger" role="alert">
-          {failure} Bấm “Tải chương” để thử lại.
+          {errorMessage(listQ.error)}
         </p>
       )}
-
-      <details className="exp-history">
-        <summary>Lượt xuất trước ({exports.length})</summary>
-        <div className="exp-history-body">
-          {listQ.isError && <p className="notice danger">{errorMessage(listQ.error)}</p>}
-          {cancelError && (
-            <p className="notice danger" role="alert">
-              {cancelError}
-            </p>
+      {showLast && last && (
+        <p className="exp-last small" title={`Link tải hiệu lực 5 phút, file giữ ${EXPORT_RETENTION_DAYS} ngày`}>
+          <span className="grow">
+            Lần trước · {timeAgo(last.created_at)} · {exportLabel(last)}
+          </span>
+          {last.download_url && !lastExpired ? (
+            <a className="btn" href={last.download_url} download>
+              Tải lại
+            </a>
+          ) : (
+            <span className="muted exp-last-note">Đã hết hạn — bấm tải chương để xuất lại</span>
           )}
-          {!listQ.isError && exports.length === 0 && (
-            <p className="muted small">{listQ.isLoading ? "Đang tải…" : "Chưa có lượt xuất nào."}</p>
-          )}
-          <div className="drawer-list">
-            {exports.map((x) => (
-              <ExportRow key={x.id} x={x} cancelling={cancel.isPending} onCancel={() => cancel.mutate(x.id)} />
-            ))}
-          </div>
-        </div>
-      </details>
+        </p>
+      )}
     </>
   );
 }

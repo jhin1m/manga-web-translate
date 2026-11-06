@@ -22,18 +22,14 @@ describe("railClick", () => {
   });
   it("Tẩy nét đứng chung nút Tẩy chữ: bấm Tẩy chữ giữ chế độ tẩy", () => {
     expect(railClick({ panel: null, tool: "eraser" }, "brush")).toEqual({ panel: null, tool: "eraser" });
-    expect(railClick({ panel: "table", tool: "eraser" }, "brush")).toEqual({ panel: null, tool: "eraser" });
+    expect(railClick({ panel: "doc", tool: "eraser" }, "brush")).toEqual({ panel: null, tool: "eraser" });
   });
-  it("Bản dịch / Tìm bật tắt panel của nó, không đổi công cụ", () => {
-    expect(railClick({ panel: "tool", tool: "eraser" }, "table")).toEqual({ panel: "table", tool: "eraser" });
-    expect(railClick({ panel: "table", tool: "eraser" }, "table")).toEqual({ panel: null, tool: "eraser" });
-    expect(railClick({ panel: "table", tool: "eraser" }, "find")).toEqual({ panel: "find", tool: "eraser" });
+  it("Văn bản bật tắt panel của nó, không đổi công cụ", () => {
+    expect(railClick({ panel: "tool", tool: "eraser" }, "doc")).toEqual({ panel: "doc", tool: "eraser" });
+    expect(railClick({ panel: "doc", tool: "eraser" }, "doc")).toEqual({ panel: null, tool: "eraser" });
+    expect(railClick({ panel: null, tool: "text" }, "doc")).toEqual({ panel: "doc", tool: "text" });
   });
-  it("bấm công cụ Chọn đang chọn khi panel đang là Bản dịch thì mở panel khối", () => {
-    expect(railClick({ panel: "table", tool: "select" }, "select")).toEqual({ panel: "tool", tool: "select" });
-  });
-  it("Hiệu đính bật tắt panel của nó như Bản dịch / Tìm", () => {
-    expect(railClick({ panel: "tool", tool: "text" }, "proofread")).toEqual({ panel: "proofread", tool: "text" });
-    expect(railClick({ panel: "proofread", tool: "text" }, "proofread")).toEqual({ panel: null, tool: "text" });
+  it("bấm công cụ Chọn đang chọn khi panel đang là Văn bản thì mở panel khối", () => {
+    expect(railClick({ panel: "doc", tool: "select" }, "select")).toEqual({ panel: "tool", tool: "select" });
   });
 });

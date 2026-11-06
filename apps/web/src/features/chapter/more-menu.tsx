@@ -36,7 +36,7 @@ export function MoreMenu(props: {
   /** Mục phụ của nút chính (primary-action.ts) đưa vào menu. */
   commands: { command: ChapterCommand; label: string }[];
   pending: boolean;
-  onCommand(cmd: ChapterCommand): void;
+  onCommand(cmd: ChapterCommand, opener?: HTMLElement): void;
   /** Mở Hoạt động — lối vào cố định (nút riêng đã bỏ khỏi thanh trên). */
   onActivity(): void;
   /** Số việc đang chạy (upload, job chương, xuất) — ghi cạnh mục Hoạt động. */
@@ -53,7 +53,11 @@ export function MoreMenu(props: {
       title: "Gốc bên trái, Dịch bên phải — cuộn/zoom cùng nhau, sửa ở cột Dịch",
       run: () => chapterStore.getState().setViewMode(split ? "translated" : "split"),
     },
-    ...props.commands.map((m) => ({ label: m.label, disabled: props.pending, run: () => props.onCommand(m.command) })),
+    ...props.commands.map((m) => ({
+      label: m.label,
+      disabled: props.pending,
+      run: () => props.onCommand(m.command, btn.current ?? undefined),
+    })),
     {
       label: props.activityCount > 0 ? `Hoạt động (${props.activityCount} đang chạy)` : "Hoạt động",
       run: props.onActivity,

@@ -1,16 +1,20 @@
 /**
- * Rail công cụ màn chương. Icon công cụ (V/T/B/R) đặt công cụ: Chọn mở/thu panel khối (bấm lại icon đang mở thì thu,
- * công cụ giữ nguyên); Chữ / Tẩy chữ / Quét chữ dùng thanh phụ trên canvas nên không mở panel (panel khối chỉ ở lại
- * khi còn nội dung phải xử lý). Tẩy nét (E) không có icon riêng — nó là chế độ của Tẩy chữ (đổi trong thanh phụ hoặc
- * phím E), nên trên rail đứng chung nút Tẩy chữ. "Bản dịch" / "Tìm" / "Hiệu đính" chỉ mở/thu panel của nó, không đổi công cụ.
+ * Rail công cụ màn chương (5 nút). Icon công cụ (V/T/B/R) đặt công cụ: Chọn mở/thu panel khối (bấm lại icon đang mở thì
+ * thu, công cụ giữ nguyên); Chữ / Tẩy chữ / Quét chữ dùng thanh phụ trên canvas nên không mở panel (panel khối chỉ ở
+ * lại khi còn nội dung phải xử lý). Tẩy nét (E) không có icon riêng — nó là chế độ của Tẩy chữ (đổi trong thanh phụ hoặc
+ * phím E), nên trên rail đứng chung nút Tẩy chữ. "Văn bản" chỉ mở/thu panel 4 tab (Bản dịch, Tìm / Thay, Glossary,
+ * Hiệu đính), không đổi công cụ.
  */
 import type { Tool } from "../editor/store.ts";
 
-export type PanelId = "tool" | "table" | "find" | "proofread";
-export type RailTarget = Tool | "table" | "find" | "proofread";
+/** `tool` = panel khối (đè canvas); `doc` = panel Văn bản (chiếm cột, nhiều tab). */
+export type PanelId = "tool" | "doc";
+export type RailTarget = Tool | "doc";
+/** Tab của panel Văn bản. */
+export type DocTab = "table" | "find" | "glossary" | "proofread";
+export const DOC_TABS: readonly DocTab[] = ["table", "find", "glossary", "proofread"];
 /** Icon chỉ mở/thu panel của nó (không phải công cụ vẽ). */
-const PANEL_ONLY: readonly RailTarget[] = ["table", "find", "proofread"];
-export const isPanelOnly = (t: RailTarget): t is "table" | "find" | "proofread" => PANEL_ONLY.includes(t);
+export const isPanelOnly = (t: RailTarget): t is "doc" => t === "doc";
 export type RailState = { panel: PanelId | null; tool: Tool };
 
 /** Nút rail của một công cụ: Tẩy nét mask dùng chung nút Mask. */
@@ -28,17 +32,11 @@ export function railClick(cur: RailState, t: RailTarget, keepToolPanel = false):
   return { panel: cur.panel === "tool" && keepToolPanel ? "tool" : null, tool };
 }
 
-/** Tiêu đề panel (cũng là tên truy cập của `<aside>`). */
-export const PANEL_TITLE: Record<RailTarget, string> = {
-  select: "Chọn & sửa",
-  text: "Thêm chữ",
-  brush: "Tẩy chữ",
-  eraser: "Tẩy chữ",
-  ocr: "Quét chữ",
-  table: "Bản dịch cả chương",
-  find: "Tìm / Thay · Glossary",
-  proofread: "AI hiệu đính",
+/** Tên panel (cũng là tên truy cập của `<aside>`). */
+export const PANEL_TITLE: Record<PanelId, string> = {
+  tool: "Chọn & sửa",
+  doc: "Văn bản",
 };
 
-/** Panel rộng: bảng nhiều cột (Bản dịch, xem trước Tìm/Thay, bảng Áp glossary). */
-export const isWidePanel = (p: PanelId | null) => p === "table" || p === "find" || p === "proofread";
+/** Panel rộng: bảng nhiều cột (Văn bản: bảng dịch, xem trước Tìm/Thay, bảng Áp glossary). */
+export const isWidePanel = (p: PanelId | null) => p === "doc";

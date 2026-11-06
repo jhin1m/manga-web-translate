@@ -12,6 +12,8 @@ import { type FakeWorkerOptions, PNG_1PX, runFakeWorker } from "./fake-worker.ts
 import {
   apiReadyChapter,
   blockPanel,
+  docPanel,
+  docTab,
   expectVisiblePages,
   login,
   openPanel,
@@ -470,8 +472,14 @@ test("overflowing box is flagged in the table and thumbnails; 'Chỉ khối cầ
   await openTable(page);
   const rows = page.locator(".cw-tbody [data-row]");
   await expect(rows).toHaveCount(2);
-  await expect(page.locator(`[data-row="${p1}:t0"]`)).toContainText("Tràn khung");
-  await expect(page.locator(`[data-row="${p2}:t0"]`)).toContainText("Xong");
+  // Cờ của dòng có tên truy cập + tooltip nói lý do (không chỉ màu); dòng ổn không có cờ. Vị trí "trang·khối".
+  const rowFlag = page.locator(`[data-row="${p1}:t0"] .cw-rowflag`);
+  await expect(rowFlag).toHaveText("!");
+  await expect(rowFlag).toHaveAccessibleName("Tràn khung");
+  await expect(rowFlag).toHaveAttribute("title", "Tràn khung");
+  await expect(page.locator(`[data-row="${p1}:t0"] .num`)).toHaveText("1·1");
+  await expect(page.locator(`[data-row="${p2}:t0"] .cw-rowflag`)).toHaveCount(0);
+  await expect(page.locator(`[data-row="${p2}:t0"] .num`)).toHaveText("2·1");
   await expect(pageThumb(page, 1)).toHaveAccessibleName(/^Trang 1 · Cần xem: .*tràn khung/);
   // Cờ "!" ở góc thumbnail: tên truy cập + tooltip là câu đầy đủ, không chỉ màu.
   const flag = page.locator(`[data-page="${p1}"] .cw-thumb-flag`);
@@ -576,9 +584,10 @@ test("block panel is closed by default and overlays the canvas: opening or closi
   await expect(toolBar(page, "Thêm chữ")).toHaveCount(0);
   await expect(panel).toBeHidden();
 
-  // Ctrl/Cmd+F → panel Tìm, đoạn "Tìm / Thay", focus ô tìm.
+  // Ctrl/Cmd+F (đang ở công cụ khác) → panel Văn bản, tab "Tìm / Thay", focus ô tìm.
   await page.keyboard.press("ControlOrMeta+f");
-  await expect(page.getByRole("complementary", { name: "Tìm / Thay · Glossary" })).toBeVisible();
+  await expect(docPanel(page)).toBeVisible();
+  await expect(docTab(page, "find")).toHaveAttribute("aria-selected", "true");
   await expect(page.locator("#fr-find")).toBeFocused();
 
   // Nút % (cụm pager giữa đáy canvas): vừa khung ↔ 100%.

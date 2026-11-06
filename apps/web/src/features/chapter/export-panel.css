@@ -1,17 +1,50 @@
-/* Drawer "Xuất chương": tuỳ chọn + lượt xuất trước thu gọn bằng <details>, nút chính chiếm cả hàng. */
+/* Menu "Xuất chương" dưới thanh trên: cao tối đa tới đáy cửa sổ, nội dung dài cuộn trong menu. */
+.exp-menu {
+  position: fixed;
+  z-index: 70;
+  top: 56px;
+  width: 360px;
+  max-width: calc(100vw - 16px);
+  max-height: calc(100vh - 64px);
+  overflow-y: auto;
+  display: grid;
+  gap: var(--sp-3);
+  padding: var(--sp-3);
+  border: 1px solid var(--c-line-strong);
+  border-radius: var(--radius);
+  background: var(--c-bg);
+  box-shadow: 0 4px 16px rgb(42 38 32 / 0.16);
+  font-size: var(--fs-sm);
+}
+.exp-menu:focus {
+  outline: none;
+}
+.exp-last {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+  margin: 0;
+}
+.exp-last-note {
+  flex-basis: 100%;
+}
+.exp-last .grow {
+  flex: 1;
+  min-width: 0;
+}
+/* Tuỳ chọn thu gọn bằng <details>, nút chính chiếm cả hàng. */
 .exp-warn-list {
   margin: 0;
   padding-left: 18px;
   display: grid;
   gap: 2px;
 }
-.exp-options,
-.exp-history {
+.exp-options {
   border: 1px solid var(--c-line);
   border-radius: var(--radius);
 }
-.exp-options > summary,
-.exp-history > summary {
+.exp-options > summary {
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
@@ -22,24 +55,20 @@
   font-weight: 600;
   list-style: none;
 }
-.exp-options > summary::-webkit-details-marker,
-.exp-history > summary::-webkit-details-marker {
+.exp-options > summary::-webkit-details-marker {
   display: none;
 }
-.exp-options > summary::before,
-.exp-history > summary::before {
+.exp-options > summary::before {
   content: "▸";
   color: var(--c-fg-muted);
 }
-.exp-options[open] > summary::before,
-.exp-history[open] > summary::before {
+.exp-options[open] > summary::before {
   content: "▾";
 }
 .exp-options > summary .muted {
   font-weight: 400;
 }
-.exp-options-body,
-.exp-history-body {
+.exp-options-body {
   display: grid;
   gap: var(--sp-3);
   padding: 0 var(--sp-3) var(--sp-3);
@@ -85,6 +114,33 @@
   border-color: var(--c-accent);
   background: var(--c-accent-weak);
   color: var(--c-accent-hover);
+}
+/* Dòng "N chỗ cần xem": bấm mở danh sách hậu quả. Dấu "!" để không chỉ dựa vào màu. */
+.exp-warn > summary {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  cursor: pointer;
+  font-weight: 600;
+  list-style: none;
+}
+.exp-warn > summary::-webkit-details-marker {
+  display: none;
+}
+.exp-warn-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--c-warn);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+}
+.exp-warn[open] > summary {
+  margin-bottom: var(--sp-1);
 }
 .exp-main {
   display: grid;

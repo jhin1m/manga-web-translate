@@ -269,9 +269,9 @@ test("opening and closing the block panel never changes the canvas box", async (
   const panel = blockPanel(page);
   await expect(panel).toBeHidden();
   const before = await canvasBox(page);
-  // Số đo thực tế ở khung 1280 khi không chọn gì (rail 64px + cột trang 72px hiện tại).
+  // Số đo thực tế ở khung 1280 khi không chọn gì (rail 48px + cột trang 72px).
   console.log(`canvas 1280x800 (no selection): ${before.width}x${before.height} at x=${before.x}`);
-  expect(before.width).toBe(1280 - 64 - 72);
+  expect(before.width).toBe(1280 - 48 - 72);
 
   await clickBlock(page, { x: 300, y: 300, w: 160, h: 60 });
   await expect(panel).toBeVisible();

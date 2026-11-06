@@ -3,7 +3,7 @@
  * chương (nút: có trang cần xem → nhảy tới trang đó, không thì mở Hoạt động; chỗ duy nhất nói chương đang ở đâu),
  * chỉ báo sửa/lưu (chỉ hiện khi đang lưu / lỗi / chưa lưu / chỉ xem) · Hoàn tác / Làm lại · Gốc · menu ⋯ (Chia đôi,
  * Xuất, Dịch lại cả chương, Hoạt động, Phím tắt) · nút chính theo trạng thái (primary-action.ts; đang chạy = Huỷ,
- * "Xuất" mở drawer). Thanh 2px ở đáy cho tiến độ chương đang chạy.
+ * "Xuất" mở menu ngay dưới nút). Thanh 2px ở đáy cho tiến độ chương đang chạy.
  * Dưới nó là băng cảnh báo — chỉ hiện khi người dùng phải biết/làm gì (khoá bị giữ/mất/lỗi, khôi phục, lỗi lưu, chờ AI).
  */
 import { Link } from "@tanstack/react-router";
@@ -47,7 +47,8 @@ export function ChapterTopbar(props: {
   access: EditAccess;
   primary: PrimaryAction | null;
   pending: boolean;
-  onCommand(cmd: ChapterCommand): void;
+  /** `opener` = nút vừa bấm (menu Xuất căn theo nút đó và trả focus về nó). */
+  onCommand(cmd: ChapterCommand, opener?: HTMLElement): void;
   onUploadFiles(files: File[]): void;
   /** Lưu xong rồi mới rời (giữ href cho mở tab mới). */
   onBack(): void;
@@ -131,7 +132,7 @@ export function ChapterTopbar(props: {
             className={primary.command === "cancel" ? "btn-danger" : "btn-primary"}
             disabled={primary.disabled || props.pending}
             title={primary.title}
-            onClick={() => props.onCommand(primary.command)}
+            onClick={(e) => props.onCommand(primary.command, e.currentTarget)}
           >
             {primary.label}
           </button>

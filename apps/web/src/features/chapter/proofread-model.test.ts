@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
   estimateLines,
+  estimateSummary,
   fmtDurationRange,
   fmtUsdRange,
   type ProofreadEstimate,
+  pendingCount,
   sortSuggestions,
   suggestionState,
 } from "./proofread-model.ts";
@@ -80,5 +82,38 @@ describe("proofread estimate text", () => {
     });
     expect(known[0]).toBe("12 trang · DeepSeek · deepseek-flash");
     expect(known.join("\n")).not.toContain("giá cao nhất");
+  });
+});
+
+describe("estimateSummary", () => {
+  const e: ProofreadEstimate = {
+    pages: 12,
+    provider: null,
+    model: null,
+    price_known: false,
+    usd: { low: 0.012, high: 0.05 },
+    seconds: { low: 120, high: 420 },
+    basis: "default",
+  };
+  it("một dòng: trang, giá, thời gian; chưa gán model thì nói giá cao nhất", () => {
+    expect(estimateSummary(e)).toBe("12 trang · $0.012 – $0.050 (giá cao nhất) · khoảng 2–7 phút");
+  });
+  it("giá đã biết thì không ghi chú thêm", () => {
+    expect(estimateSummary({ ...e, price_known: true })).toBe("12 trang · $0.012 – $0.050 · khoảng 2–7 phút");
+  });
+});
+
+describe("pendingCount", () => {
+  const list = [
+    { page_id: "p1", region_id: "r1", old: "a", suggestion: "b" },
+    { page_id: "p1", region_id: "r2", old: "c", suggestion: "d" },
+    { page_id: "p2", region_id: "r1", old: "e", suggestion: "f" },
+  ];
+  it("chỉ đếm gợi ý mà bản dịch hiện tại còn là bản AI đã đọc", () => {
+    const now: Record<string, string> = { "p1:r1": "a", "p1:r2": "d", "p2:r1": "khác" };
+    expect(pendingCount(list, (k) => now[k])).toBe(1);
+  });
+  it("khối không còn → lỗi thời, không đếm", () => {
+    expect(pendingCount(list, () => undefined)).toBe(0);
   });
 });

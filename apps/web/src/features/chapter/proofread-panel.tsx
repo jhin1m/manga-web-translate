@@ -10,6 +10,7 @@ import type { PageState } from "@mtl/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Draft } from "immer";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { InfoTip } from "../../app/info-tip.tsx";
 import { errorMessage } from "../../lib/api.ts";
 import { setRegionTranslation } from "../editor/actions.ts";
 import { editorStore, useEditor } from "../editor/store.ts";
@@ -24,7 +25,9 @@ import {
 import { describeJobError, ERROR_CLASS } from "./job-error.ts";
 import {
   estimateLines,
+  estimateSummary,
   PROOFREAD_DATA_NOTICE,
+  pendingCount,
   STATE_LABEL,
   type Suggestion,
   type SuggestionState,
@@ -60,6 +63,25 @@ function jobNotice(job: JobView | null): { text: string; tone: "info" | "danger"
   return null;
 }
 
+/** Gợi ý + lượt hiệu đính của chương; poll khi lượt còn chạy. Panel và nhãn tab "Hiệu đính · N" dùng chung cache. */
+export function useProofread(chapterId: string, enabled = true) {
+  return useQuery({
+    queryKey: proofreadKey(chapterId),
+    queryFn: () => fetchProofread(chapterId),
+    enabled,
+    refetchInterval: (query) => (query.state.data?.job && ACTIVE.has(query.state.data.job.status) ? 2500 : false),
+  });
+}
+
+/** Số gợi ý chờ duyệt của chương (nhãn tab "Hiệu đính · N"); theo bản dịch hiện tại của từng khối. */
+export function usePendingProofread(chapterId: string, rows: Row[], enabled: boolean): number {
+  const q = useProofread(chapterId, enabled);
+  return useMemo(() => {
+    const byKey = new Map(rows.map((r) => [r.key, r.translation]));
+    return pendingCount(q.data?.suggestions ?? [], (k) => byKey.get(k));
+  }, [q.data, rows]);
+}
+
 export function ProofreadPanel(props: {
   chapterId: string;
   status: string | undefined;
@@ -71,11 +93,7 @@ export function ProofreadPanel(props: {
   const { chapterId, rows, activeId } = props;
   const qc = useQueryClient();
   const readOnly = useEditor((s) => !!s.readOnly);
-  const q = useQuery({
-    queryKey: proofreadKey(chapterId),
-    queryFn: () => fetchProofread(chapterId),
-    refetchInterval: (query) => (query.state.data?.job && ACTIVE.has(query.state.data.job.status) ? 2500 : false),
-  });
+  const q = useProofread(chapterId);
   const refresh = () => qc.invalidateQueries({ queryKey: proofreadKey(chapterId) });
   const run = useMutation({
     mutationFn: async () => {
@@ -185,19 +203,15 @@ export function ProofreadPanel(props: {
           className="notice info cw-pad cw-proofread-confirm"
           aria-label="Xác nhận chạy AI hiệu đính"
         >
-          <strong>Trước khi chạy AI hiệu đính</strong>
           {estimate.isPending ? (
             <p className="muted small">Đang ước tính…</p>
           ) : estimate.isError ? (
             <p className="small">Chưa ước tính được ({errorMessage(estimate.error)}). Vẫn có thể chạy.</p>
           ) : (
-            <ul className="small">
-              {estimateLines(estimate.data).map((line) => (
-                <li key={line}>{line}</li>
-              ))}
-            </ul>
+            <p className="small" title={estimateLines(estimate.data).join("\n")}>
+              {estimateSummary(estimate.data)}
+            </p>
           )}
-          <p className="small">{PROOFREAD_DATA_NOTICE}</p>
           <div className="row">
             <button
               type="button"
@@ -210,6 +224,7 @@ export function ProofreadPanel(props: {
             >
               Chạy hiệu đính
             </button>
+            <InfoTip label="Dữ liệu gửi lên AI">{PROOFREAD_DATA_NOTICE}</InfoTip>
             <button type="button" className="btn-ghost" onClick={() => setConfirming(false)}>
               Huỷ
             </button>
@@ -237,12 +252,8 @@ export function ProofreadPanel(props: {
           )}
         </div>
       )}
-      {!items.length && !running && !q.isError && (
-        <p className="muted small cw-pad">
-          {job?.status === "succeeded"
-            ? "AI không thấy khối nào cần sửa (hoặc mọi gợi ý đã được bỏ)."
-            : "AI đọc bản dịch cả chương (kèm ảnh trang, glossary, quy tắc xưng hô, giọng văn của series) và đề xuất sửa từng khối. Gợi ý không tự ghi đè bản dịch — bạn Nhận hoặc Bỏ từng cái. Model do quản trị viên chọn."}
-        </p>
+      {!items.length && !running && !q.isError && job?.status === "succeeded" && (
+        <p className="muted small cw-pad">AI không thấy khối nào cần sửa (hoặc mọi gợi ý đã được bỏ).</p>
       )}
       <ol className="cw-proofread-list" aria-label="Gợi ý hiệu đính">
         {items.map((it) => (

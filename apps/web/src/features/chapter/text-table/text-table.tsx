@@ -1,5 +1,6 @@
 /**
- * Bảng văn bản cả chương (panel "Bản dịch cả chương", 560px): 1 dòng / khối, sửa bản dịch tại chỗ, song song canvas.
+ * Bảng văn bản cả chương (tab "Bản dịch" của panel Văn bản, 560px): 1 dòng / khối (Vị trí "trang·khối", Gốc, Dịch, cờ),
+ * sửa bản dịch tại chỗ, song song canvas.
  * Virtualize (`@tanstack/react-virtual`) — dòng đang focus luôn được render để textarea không mất focus khi cuộn.
  *
  * Đồng bộ 2 chiều: focus/click dòng → `onPick` (kích hoạt page, chọn box, cuộn canvas); dòng `current` đổi từ
@@ -79,11 +80,19 @@ export function TableFilters(props: { value: TableFilter; onChange(f: TableFilte
   );
 }
 
-function statusOf(r: Row): { text: string; tone: "ok" | "warn" | "busy" | "idle" } {
+/**
+ * Cờ của dòng: "!" cần xem, "↻" chỉ còn AI có bản mới. Tên + tooltip nói rõ lý do (không chỉ dựa vào màu); dòng ổn
+ * thì không có cờ.
+ */
+function flagOf(r: Row): { mark: string; text: string; tone: "warn" | "busy" } | null {
   const flags = r.flags.filter((f) => f !== "sfx");
-  if (flags.length === 0) return { text: "Xong", tone: "ok" };
-  const tone = flags.includes("ai_update") && flags.length === 1 ? "busy" : "warn";
-  return { text: flags.map((f) => FLAG_LABEL[f]).join(" · "), tone };
+  if (flags.length === 0) return null;
+  const aiOnly = flags.includes("ai_update") && flags.length === 1;
+  return {
+    mark: aiOnly ? "↻" : "!",
+    text: flags.map((f) => FLAG_LABEL[f]).join(" · "),
+    tone: aiOnly ? "busy" : "warn",
+  };
 }
 
 export function TextTable(props: {
@@ -162,19 +171,17 @@ export function TextTable(props: {
   return (
     <div className="cw-table">
       <div className="cw-tr cw-th" aria-hidden="true">
-        <span>#</span>
-        <span>Tr.</span>
+        <span>Vị trí</span>
         <span>Gốc</span>
         <span>Dịch (sửa tại chỗ)</span>
-        <span>Loại</span>
-        <span>Tình trạng</span>
+        <span />
       </div>
       <div className="cw-tbody" ref={scrollRef}>
         {rows.length === 0 && <p className="muted small cw-pad">Không có khối nào cần xem.</p>}
         <div style={{ height: virt.getTotalSize(), position: "relative" }}>
           {virt.getVirtualItems().map((v) => {
             const r = rows[v.index] as Row;
-            const st = statusOf(r);
+            const flag = flagOf(r);
             const cls = ["cw-tr", r.key === current && "on", r.pageId === activeId && "active"].filter(Boolean);
             return (
               // biome-ignore lint/a11y/useKeyWithClickEvents: bàn phím đi qua ô Dịch (focus = chọn dòng).
@@ -189,8 +196,9 @@ export function TextTable(props: {
                   if (!(e.target instanceof HTMLTextAreaElement)) onPick(r);
                 }}
               >
-                <span className="num">{v.index + 1}</span>
-                <span className="num">{r.ord + 1}</span>
+                <span className="num">
+                  {r.ord + 1}·{r.index}
+                </span>
                 <span className="cw-src" title={r.source || undefined}>
                   {r.source || <span className="muted">—</span>}
                 </span>
@@ -212,11 +220,18 @@ export function TextTable(props: {
                     onKeyDown={(e) => onKey(e, v.index)}
                   />
                 </span>
-                <span className="muted small cw-kind">{KIND_LABEL[r.kind]}</span>
                 <span>
-                  <span className="status" data-tone={st.tone} title={st.text}>
-                    {st.text}
-                  </span>
+                  {flag && (
+                    <span
+                      className="cw-rowflag"
+                      data-tone={flag.tone}
+                      role="img"
+                      aria-label={flag.text}
+                      title={flag.text}
+                    >
+                      {flag.mark}
+                    </span>
+                  )}
                 </span>
               </div>
             );

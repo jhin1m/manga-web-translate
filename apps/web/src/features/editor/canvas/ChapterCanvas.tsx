@@ -135,7 +135,7 @@ export const ChapterCanvas = memo(function ChapterCanvas(props: {
     if (!fitted || size.w === 0 || page.w === 0 || v === lastFit.current) return;
     const c = contentBox(page, chapterStore.getState().viewMode === "split");
     if (chapterStore.getState().zoomed) {
-      editorStore.getState().setView(clampView(v, c, size, c.x));
+      editorStore.getState().setView(clampView(v, c, size, c.x, chapterStore.getState().cover));
       return;
     }
     const topY = (FIT_EDGE - v.y) / v.scale;

@@ -79,47 +79,61 @@ export async function apiReadyChapter(page: Page, number: string, opts: FakeWork
 }
 
 /**
- * Nút rail công cụ màn chương → vùng nó mở: tên của `complementary` (panel khối, Bản dịch, Tìm, Hiệu đính) hoặc của
- * `toolbar` thanh phụ trên canvas (Chữ, Tẩy chữ, Quét chữ).
+ * Nút rail công cụ màn chương → vùng nó mở: tên của `complementary` (panel khối, Văn bản) hoặc của `toolbar` thanh
+ * phụ trên canvas (Chữ, Tẩy chữ, Quét chữ). `table` / `find` / `glossary` / `proofread` là tab của panel Văn bản.
  */
 const PANELS = {
   select: ["Chọn (V)", "Chọn & sửa", "complementary"],
   text: ["Chữ (T)", "Thêm chữ", "toolbar"],
   brush: ["Tẩy chữ (B)", "Tuỳ chọn Tẩy chữ", "toolbar"],
-  table: ["Bản dịch cả chương", "Bản dịch cả chương", "complementary"],
-  find: ["Tìm / Thay · Glossary (Ctrl+F)", "Tìm / Thay · Glossary", "complementary"],
-  proofread: ["AI hiệu đính", "AI hiệu đính", "complementary"],
   ocr: ["Quét chữ (R)", "Quét chữ", "toolbar"],
+  doc: ["Văn bản (Ctrl+F tìm)", "Văn bản", "complementary"],
 } as const;
+const DOC_TAB_NAME = { table: "Bản dịch", find: "Tìm / Thay", glossary: "Glossary", proofread: "Hiệu đính" } as const;
+type DocTabKey = keyof typeof DOC_TAB_NAME;
+type PanelKey = keyof typeof PANELS | DocTabKey;
+const isDocTab = (k: PanelKey): k is DocTabKey => k in DOC_TAB_NAME;
 
-/** Nút trên rail công cụ màn chương. */
-export const railButton = (page: Page, panel: keyof typeof PANELS) =>
-  page.getByRole("navigation", { name: "Công cụ" }).getByRole("button", { name: PANELS[panel][0], exact: true });
+/** Nút trên rail công cụ màn chương (tab của Văn bản dùng nút "Văn bản"). */
+export const railButton = (page: Page, panel: PanelKey) =>
+  page
+    .getByRole("navigation", { name: "Công cụ" })
+    .getByRole("button", { name: PANELS[isDocTab(panel) ? "doc" : panel][0], exact: true });
 
 /** Panel khối (aside "Chọn & sửa"): đóng mặc định, tự mở khi chọn khối. */
 export const blockPanel = (page: Page) => page.getByRole("complementary", { name: "Chọn & sửa", exact: true });
+
+/** Panel Văn bản (aside) và một tab của nó. */
+export const docPanel = (page: Page) => page.getByRole("complementary", { name: "Văn bản", exact: true });
+export const docTab = (page: Page, tab: DocTabKey) =>
+  docPanel(page).getByRole("tab", { name: new RegExp(`^${DOC_TAB_NAME[tab]}`) });
 
 /** Thanh phụ của công cụ đang dùng trên canvas. */
 export const toolBar = (page: Page, name: string) => page.getByRole("toolbar", { name, exact: true });
 
 /**
  * Mở panel / bật công cụ qua rail (đang mở thì giữ — bấm lại sẽ thu) → vùng của nó (panel hoặc thanh phụ trên canvas).
+ * Với tab của Văn bản: mở panel rồi chọn tab, trả về cả panel.
  */
-export async function openPanel(page: Page, panel: keyof typeof PANELS) {
+export async function openPanel(page: Page, panel: PanelKey) {
   const btn = railButton(page, panel);
   await expect(btn).toBeEnabled({ timeout: 15_000 });
   if ((await btn.getAttribute("aria-pressed")) !== "true") await btn.click();
   await expect(btn).toHaveAttribute("aria-pressed", "true");
+  if (isDocTab(panel)) {
+    const tab = docTab(page, panel);
+    await expect(tab).toBeEnabled({ timeout: 15_000 });
+    await tab.click();
+    await expect(tab).toHaveAttribute("aria-selected", "true");
+    return docPanel(page);
+  }
   const [, name, role] = PANELS[panel];
   return page.getByRole(role, { name, exact: true });
 }
 
-/** Panel Tìm, đoạn "Tìm / Thay" hoặc "Áp glossary" → vùng của đoạn đó. */
+/** Tab Tìm / Thay hoặc Glossary → vùng (nhóm) nội dung của tab đó. */
 export async function openFind(page: Page, part: "Tìm / Thay" | "Glossary") {
-  const panel = await openPanel(page, "find");
-  const seg = panel.getByRole("button", { name: part, exact: true });
-  await seg.click();
-  await expect(seg).toHaveAttribute("aria-pressed", "true");
+  const panel = await openPanel(page, part === "Glossary" ? "glossary" : "find");
   return panel.getByRole("group", { name: part === "Glossary" ? "Áp glossary" : "Tìm / Thay", exact: true });
 }
 

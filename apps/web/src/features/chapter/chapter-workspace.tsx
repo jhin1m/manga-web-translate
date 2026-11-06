@@ -1,6 +1,6 @@
 /**
  * Màn chương = editor gộp (`/s/:s/c/:c?page=`): thanh trên (+ băng cảnh báo khi có) | rail công cụ · panel ngữ
- * cảnh (mỗi lúc 1 panel: công cụ đang chọn / Bản dịch cả chương / Tìm–Thay · Glossary; bấm lại icon đang mở thì thu) ·
+ * cảnh (mỗi lúc 1 panel: khối đang chọn / Văn bản = tab Bản dịch · Tìm / Thay · Glossary · Hiệu đính; bấm lại icon đang mở thì thu) ·
  * canvas từng trang · cột trang. Chương chưa có page (nháp, đang cắt trang, cắt lỗi): cột trang là từng ảnh gốc (xoá /
  * khôi phục trước khi cắt trang), canvas là ảnh đang chọn + tiến độ upload + vùng thả để tải tiếp. Upload xong không
  * tự chạy: "Dịch chương" = cắt trang → xoá chữ + OCR → dịch theo lô, nối một mạch; menu ⋯ "Chỉ xoá chữ + OCR" dừng ở
@@ -12,9 +12,10 @@
  *
  * Trạng thái chương chỉ ở chip thanh trên (+ rail theo trang). Kết quả thao tác (dịch lại, áp kiểu…) là thông báo nổi
  * trên canvas, tự ẩn; "Dịch chương" thành công không báo gì thêm (chip đã đổi), chỉ báo khi có ảnh bị loại. Lượt xuất
- * xong lúc drawer Xuất đã đóng → thông báo kèm nút "Tải xuống".
+ * xong lúc menu Xuất đã đóng → thông báo kèm nút "Tải xuống".
  *
- * Drawer phải: Xuất (nút "Xuất" hoặc `?drawer=export` từ "Xuất lại" ở home), Hoạt động, Phím tắt (`?`). Chế độ xem
+ * Menu Xuất dưới nút "Xuất" (hoặc `?drawer=export` từ "Xuất lại" ở home; mục Xuất trong menu ⋯ khi chương có trang lỗi); drawer
+ * phải: Hoạt động, Phím tắt (`?`). Chế độ xem
  * (chapterStore.viewMode): nút "Xem gốc" + giữ `O`, Chia đôi trong menu ⋯. Thao tác khối (Dịch lại · Nhân đôi · Xoá) ở
  * đầu panel khối; thao tác trang (Dịch / Dịch lại, Bỏ chỉnh sửa tay, Ẩn) ở menu chuột phải cột trang. Phím tắt:
  * `editor/shortcuts.ts` (1 listener).
@@ -66,7 +67,8 @@ import {
 import { CanvasPager } from "./canvas-controls.tsx";
 import { ChapterTopbar, type EditAccess, LockBand } from "./chapter-topbar.tsx";
 import { ContextPanel, type FocusRequest } from "./context-panel.tsx";
-import { ExportDrawer } from "./export-drawer.tsx";
+import { DocTabs, docPanelId, docTabId } from "./doc-tabs.tsx";
+import { ExportMenu } from "./export-menu.tsx";
 import { isExportActive } from "./export-options.ts";
 import { triggerDownload, useExports } from "./export-panel.tsx";
 import { type BatchHooks, FindReplacePanel } from "./FindReplace.tsx";
@@ -76,7 +78,7 @@ import { PageRail } from "./page-rail.tsx";
 import { clickSelect, EMPTY_SELECTION, pruneSelection, type Selection, selectionIds } from "./page-selection.ts";
 import { isPageBusy, needsReview, pageLevel } from "./page-status.ts";
 import { type ChapterCommand, primaryAction } from "./primary-action.ts";
-import { ProofreadPanel } from "./proofread-panel.tsx";
+import { ProofreadPanel, usePendingProofread } from "./proofread-panel.tsx";
 import { BlockActions, SelectPanel } from "./select-panel.tsx";
 import { ShortcutHelp } from "./shortcut-help.tsx";
 import { SourceRail } from "./source-rail.tsx";
@@ -89,7 +91,7 @@ import { TableFilters, TextTable, useChapterRows } from "./text-table/text-table
 import { describeWriteError } from "./text-utils.ts";
 import { CanvasToolBar, OcrToolBar, TextToolBar } from "./tool-panels.tsx";
 import { ToolRail } from "./tool-rail.tsx";
-import { isWidePanel, PANEL_TITLE, type PanelId, type RailTarget, railClick } from "./tool-rail-model.ts";
+import { type DocTab, isWidePanel, PANEL_TITLE, type PanelId, type RailTarget, railClick } from "./tool-rail-model.ts";
 import { undoStyleText } from "./undo-style-text.ts";
 import { useChapterData } from "./use-chapter-data.ts";
 import { useReorderSources, useSetSourceSkip, useSourceImages } from "./use-source-images.ts";
@@ -179,22 +181,21 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
   // Toast "Hoàn tác" của lượt áp kiểu: cách duy nhất hoàn tác lượt này nên tách khỏi `notice` (thông báo khác không đè mất).
   const [styleUndo, setStyleUndo] = useState<Notice | null>(null);
   const [imageError, setImageError] = useState<string | null>(null);
-  // Mở từ "Xuất lại" (`?drawer=export`): drawer Xuất mở ngay; URL bỏ tham số ở lần đồng bộ `?page=` kế tiếp.
+  // Mở từ "Xuất lại" (`?drawer=export`): menu Xuất mở ngay; URL bỏ tham số ở lần đồng bộ `?page=` kế tiếp.
   const [drawer, setDrawer] = useState<DrawerKind | null>(searchDrawer ?? null);
+  // Nút đã mở menu Xuất (nút "Xuất" hoặc nút ⋯): menu căn theo nút và trả focus về đó khi đóng.
+  const [exportOpener, setExportOpener] = useState<HTMLElement | null>(null);
   // ---- Rail công cụ + panel ngữ cảnh ----
   const tool = useEditor((s) => s.tool);
   // Panel đóng mặc định; mở theo ngữ cảnh (chọn khối, nội dung phải xử lý) hoặc bằng rail.
   const [panel, setPanelState] = useState<PanelId | null>(null);
-  // Panel Bản dịch / Tìm mount lần đầu khi mở, sau đó chỉ ẩn (giữ kết quả xem trước Tìm/Thay, vị trí cuộn bảng).
-  const [seen, setSeen] = useState<ReadonlySet<PanelId>>(() => new Set());
-  const [findTab, setFindTab] = useState<"find" | "glossary">("find");
+  // Panel Văn bản: mỗi tab mount lần đầu khi mở, sau đó chỉ ẩn (giữ kết quả xem trước Tìm/Thay, vị trí cuộn bảng).
+  const [docTab, setDocTab] = useState<DocTab>("table");
+  const [seenTabs, setSeenTabs] = useState<ReadonlySet<DocTab>>(() => new Set());
   const [focusReq, setFocusReq] = useState<FocusRequest | null>(null);
   const panelRef = useRef(panel);
   panelRef.current = panel;
-  const setPanel = useCallback((p: PanelId | null) => {
-    setPanelState(p);
-    if (p) setSeen((s) => (s.has(p) ? s : new Set(s).add(p)));
-  }, []);
+  const setPanel = useCallback((p: PanelId | null) => setPanelState(p), []);
   // Khoá bố cục của bản cũ nhớ panel đang mở: bỏ để mặc định đóng có hiệu lực.
   useEffect(() => clearLegacyLayout(), []);
 
@@ -656,8 +657,11 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
   const { mutate: runAction } = action;
   const translateSelected = useCallback(() => runAction("translate-pages"), [runAction]);
 
-  const onCommand = (cmd: ChapterCommand) => {
-    if (cmd === "export") return setDrawer("export");
+  const onCommand = (cmd: ChapterCommand, opener?: HTMLElement | null) => {
+    if (cmd === "export") {
+      setExportOpener(opener ?? null);
+      return setDrawer((d) => (d === "export" ? null : "export"));
+    }
     if (cmd === "upload") return;
     action.mutate(cmd);
   };
@@ -922,10 +926,25 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
     if (sourceMode) railDisabled[t] = "Dùng được khi chương đã cắt trang";
     else if (readOnly) railDisabled[t] = "Đang chỉ xem";
   }
-  if (!canTools) railDisabled.find = "Dùng được khi chương dịch xong";
-  if (!canTools) railDisabled.proofread = "Dùng được khi chương đã dịch";
-  // Panel Tìm / Hiệu đính đang mở mà chương không còn dịch xong (VD chạy lại) → không hiện panel nào.
-  const view = (panel === "find" || panel === "proofread") && !canTools ? null : panel;
+  // Tab Tìm / Thay, Glossary, Hiệu đính cần chương đã dịch; đang ở tab đó mà chương chạy lại thì về Bản dịch.
+  const docDisabled: Partial<Record<DocTab, string>> = canTools
+    ? {}
+    : {
+        find: "Dùng được khi chương dịch xong",
+        glossary: "Dùng được khi chương dịch xong",
+        proofread: "Dùng được khi chương đã dịch",
+      };
+  const tab: DocTab = docDisabled[docTab] ? "table" : docTab;
+  const view = panel;
+  const pendingProofread = usePendingProofread(chapterId, allRows, canTools);
+  useEffect(() => {
+    if (view === "doc") setSeenTabs((s) => (s.has(tab) ? s : new Set(s).add(tab)));
+  }, [view, tab]);
+  /** Mở panel Văn bản ở tab `t` (Ctrl+F, "Xem N chỗ này" của menu Xuất, chuyển tab). */
+  const showDoc = (t: DocTab) => {
+    setDocTab(t);
+    setPanel("doc");
+  };
   const toolOpen = view === "tool";
   const onRail = (t: RailTarget) => {
     const next = railClick({ panel: view, tool }, t, hasToolContent(editorStore.getState()));
@@ -959,9 +978,18 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
       else reveal();
     };
     schedule();
-    return editorStore.subscribe((s, prev) => {
+    // Khung canvas đổi bề ngang sau khi panel mở (đang ở panel Văn bản rộng rồi chuyển sang panel khối: cột thu lại,
+    // canvas rộng ra) → đo lại, khối đã chọn có thể đang nằm dưới panel.
+    const unsubBox = chapterStore.subscribe((s, prev) => {
+      if (s.box.w !== prev.box.w || s.box.h !== prev.box.h) schedule();
+    });
+    const unsubSel = editorStore.subscribe((s, prev) => {
       if (s.selection && s.selection !== prev.selection) schedule();
     });
+    return () => {
+      unsubBox();
+      unsubSel();
+    };
   }, [toolOpen]);
 
   // ---- Phím tắt (1 listener, bảng ở editor/shortcuts.ts) ----
@@ -1005,8 +1033,7 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
         return;
       case "find":
         if (!canTools) return false;
-        setPanel("find");
-        setFindTab("find");
+        showDoc("find");
         setFocusReq((r) => ({ seq: (r?.seq ?? 0) + 1, selector: "#fr-find" }));
         return;
       case "editText":
@@ -1034,7 +1061,7 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
   const uploadCount = useUploadCount();
   const exportList = useExports(chapterId).q.data?.exports;
   const exportsActive = (exportList ?? []).filter((x) => isExportActive(x.status)).length;
-  // Lượt xuất xong lúc drawer Xuất đóng (panel Xuất không còn tự tải) → thông báo kèm nút tải. Lượt đã xong lúc mở
+  // Lượt xuất xong lúc menu Xuất đóng (menu không còn tự tải) → thông báo kèm nút tải. Lượt đã xong lúc mở
   // màn chương (lần tải danh sách đầu) không báo lại.
   const exportsDone = useRef<Set<string> | null>(null);
   useEffect(() => {
@@ -1114,7 +1141,7 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
       />
       <ToolRail panel={view} tool={tool} disabled={railDisabled} onClick={onRail} />
       <ContextPanel
-        title={PANEL_TITLE[view === "tool" || !view ? "select" : view]}
+        title={PANEL_TITLE[view ?? "tool"]}
         heading={toolOpen && currentRow ? `Khối ${currentRow.index}/${activeBlocks}` : undefined}
         actions={
           toolOpen && currentRow ? (
@@ -1151,56 +1178,84 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
             />
           </div>
         )}
-        {seen.has("table") && (
-          <div className="cw-panel-table" hidden={view !== "table"}>
-            <div className="cw-panel-tools">
-              <span className="small">{allRows.length} khối</span>
-              <TableFilters value={filter} onChange={setFilter} />
-            </div>
-            <TextTable rows={rows} total={allRows.length} current={current} activeId={activeId} onPick={pick} />
-          </div>
-        )}
-        {view === "proofread" && (
-          <ProofreadPanel
-            chapterId={chapterId}
-            status={status}
-            rows={allRows}
-            activeId={activeId}
-            onPick={pick}
-            beforeRun={flush}
-          />
-        )}
-        {/* Giữ mount cả khi chương chạy lại (Dịch lại…): "Hoàn tác" của lần thay hàng loạt nằm trong state panel. */}
-        {seen.has("find") && (
-          <div className="cw-panel-find" hidden={view !== "find"}>
-            <fieldset className="cw-seg cw-seg-full" aria-label="Tìm / Thay hoặc Glossary">
-              <button type="button" aria-pressed={findTab === "find"} onClick={() => setFindTab("find")}>
-                Tìm / Thay
-              </button>
-              <button type="button" aria-pressed={findTab === "glossary"} onClick={() => setFindTab("glossary")}>
-                Glossary
-              </button>
-            </fieldset>
-            <fieldset className="cw-find-part" aria-label="Tìm / Thay" hidden={findTab !== "find"}>
-              <FindReplacePanel
-                seriesId={seriesId}
-                chapterId={chapterId}
-                lock={session.lock}
-                beforeWrite={flush}
-                onJump={jump}
-                batch={batchHooks("thay thế")}
-              />
-            </fieldset>
-            <fieldset className="cw-find-part" aria-label="Áp glossary" hidden={findTab !== "glossary"}>
-              <ApplyGlossaryPanel
-                seriesId={seriesId}
-                chapterId={chapterId}
-                lock={session.lock}
-                beforeWrite={flush}
-                onJump={jump}
-                batch={batchHooks("áp glossary")}
-              />
-            </fieldset>
+        {/* Mỗi tab đã mở giữ mount (chỉ ẩn khi chuyển): bảng Bản dịch, kết quả xem trước Tìm/Thay, hộp xác nhận Hiệu đính. */}
+        {seenTabs.size > 0 && (
+          <div className="cw-panel-doc" hidden={view !== "doc"}>
+            <DocTabs tab={tab} disabled={docDisabled} pendingProofread={pendingProofread} onSelect={setDocTab} />
+            {seenTabs.has("table") && (
+              <div
+                className="cw-panel-table"
+                role="tabpanel"
+                id={docPanelId("table")}
+                aria-labelledby={docTabId("table")}
+                hidden={tab !== "table"}
+              >
+                <div className="cw-panel-tools">
+                  <span className="small">{allRows.length} khối</span>
+                  <TableFilters value={filter} onChange={setFilter} />
+                </div>
+                <TextTable rows={rows} total={allRows.length} current={current} activeId={activeId} onPick={pick} />
+              </div>
+            )}
+            {seenTabs.has("find") && (
+              <div
+                className="cw-panel-find"
+                role="tabpanel"
+                id={docPanelId("find")}
+                aria-labelledby={docTabId("find")}
+                hidden={tab !== "find"}
+              >
+                {/* Giữ mount cả khi chương chạy lại (Dịch lại…): "Hoàn tác" của lần thay hàng loạt nằm trong state panel. */}
+                <fieldset className="cw-find-part" aria-label="Tìm / Thay">
+                  <FindReplacePanel
+                    seriesId={seriesId}
+                    chapterId={chapterId}
+                    lock={session.lock}
+                    beforeWrite={flush}
+                    onJump={jump}
+                    batch={batchHooks("thay thế")}
+                  />
+                </fieldset>
+              </div>
+            )}
+            {seenTabs.has("glossary") && (
+              <div
+                className="cw-panel-find"
+                role="tabpanel"
+                id={docPanelId("glossary")}
+                aria-labelledby={docTabId("glossary")}
+                hidden={tab !== "glossary"}
+              >
+                <fieldset className="cw-find-part" aria-label="Áp glossary">
+                  <ApplyGlossaryPanel
+                    seriesId={seriesId}
+                    chapterId={chapterId}
+                    lock={session.lock}
+                    beforeWrite={flush}
+                    onJump={jump}
+                    batch={batchHooks("áp glossary")}
+                  />
+                </fieldset>
+              </div>
+            )}
+            {seenTabs.has("proofread") && (
+              <div
+                className="cw-panel-proofread"
+                role="tabpanel"
+                id={docPanelId("proofread")}
+                aria-labelledby={docTabId("proofread")}
+                hidden={tab !== "proofread"}
+              >
+                <ProofreadPanel
+                  chapterId={chapterId}
+                  status={status}
+                  rows={allRows}
+                  activeId={activeId}
+                  onPick={pick}
+                  beforeRun={flush}
+                />
+              </div>
+            )}
           </div>
         )}
       </ContextPanel>
@@ -1321,15 +1376,16 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
         />
       )}
       {drawer === "export" && (
-        <ExportDrawer
+        <ExportMenu
           chapterId={chapterId}
           detail={data.detail}
           pages={pages}
           rows={allRows}
+          opener={exportOpener}
           beforeStart={flush}
           onShowWarnings={() => {
             setFilter({ review: true, page: false });
-            setPanel("table");
+            showDoc("table");
             setDrawer(null);
             data.refresh();
           }}
