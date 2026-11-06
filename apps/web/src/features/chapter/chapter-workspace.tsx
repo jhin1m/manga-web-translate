@@ -28,18 +28,20 @@ import "../editor/editor.css";
 import "./chapter-workspace.css";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
+import Konva from "konva";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ApiError, errorMessage } from "../../lib/api.ts";
 import { deleteBox, resetToAI, setStyleMany } from "../editor/actions.ts";
 import { ChapterCanvas } from "../editor/canvas/ChapterCanvas.tsx";
 import { type PageRect, useOcrRegion } from "../editor/canvas/OcrSelect.tsx";
 import type { SlotImages, SlotProcessing } from "../editor/canvas/PageSlot.tsx";
-import { chapterStore, revealRect, revealSelection } from "../editor/chapter-store.ts";
+import { chapterStore, revealRect, revealSelection, selectionUnderCover } from "../editor/chapter-store.ts";
 import { readAutoErase, writeAutoErase } from "../editor/erase-queue.ts";
 import { dialogueFont } from "../editor/fonts.ts";
 import { batchOnTop } from "../editor/history.ts";
 import { ConflictList } from "../editor/panels/ConflictList.tsx";
 import { MaskToolBar } from "../editor/panels/MaskToolBar.tsx";
+import { diffStates } from "../editor/rebase.ts";
 import type { ShortcutAction } from "../editor/shortcuts.ts";
 import { type EditorState, editorStore, useEditor } from "../editor/store.ts";
 import { resetChapterSession, useChapterSession } from "../editor/use-chapter-session.ts";
@@ -298,6 +300,8 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
   // Khối được chọn ngay lúc nhấn chuột (có thể đang bắt đầu kéo): panel đè lên canvas ngay lúc đó sẽ chắn con trỏ giữa
   // chừng kéo, và cuộn lộ khối làm khối lệch khỏi chỗ thả. Đang nhấn chuột thì hoãn tới khi nhả.
   const pointerDown = useRef(false);
+  // Panel khối vừa thu vì đổi sang công cụ khác (Chữ, Tẩy…): phím V về Chọn mở lại nó. Thu bằng × / Esc thì V không mở.
+  const collapsedByTool = useRef(false);
   useEffect(() => {
     const down = () => {
       pointerDown.current = true;
@@ -329,21 +333,38 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
       )
         setPanel("tool");
     };
-    return editorStore.subscribe((s, prev) => {
+    // Bấm chuột chọn khối nằm dưới chỗ panel sắp đè: panel mở ngay sẽ che / dời khối trước khi lần bấm thứ hai của nhấp
+    // đúp (sửa chữ trên ảnh) kịp tới → đợi hết cửa sổ nhấp đúp; thành nhấp đúp thì bỏ mở.
+    let pending: ReturnType<typeof setTimeout> | undefined;
+    const cancelPending = () => {
+      clearTimeout(pending);
+      pending = undefined;
+    };
+    const openAfterPointer = () => {
+      cancelPending();
+      const root = document.querySelector(".cw");
+      const w = (root && Number.parseFloat(getComputedStyle(root).getPropertyValue("--cw-overlay-w"))) || 272;
+      if (selectionUnderCover(w)) pending = setTimeout(openToolPanel, Konva.dblClickWindow);
+      else openToolPanel();
+    };
+    const unsub = editorStore.subscribe((s, prev) => {
       const content = hasToolContent(s);
       if (content && !hasToolContent(prev) && panelRef.current === null) setPanel("tool");
       // Chọn lại đúng khối đang chọn (panel đã thu bằng nút thu / công cụ khác) hoặc về công cụ Chọn khi còn khối chọn.
-      const reselected = s.reselects > prev.reselects || (s.tool === "select" && prev.tool !== "select");
+      const backToSelect = s.tool === "select" && prev.tool !== "select";
+      const reselected = s.reselects > prev.reselects || (backToSelect && collapsedByTool.current);
+      if (backToSelect) collapsedByTool.current = false;
       if (reselected && (s.selection || hasBlock.current) && panelRef.current === null) {
-        if (pointerDown.current) addEventListener("pointerup", openToolPanel, { once: true });
+        if (pointerDown.current) addEventListener("pointerup", openAfterPointer, { once: true });
         else openToolPanel();
       }
+      if ((s.editing && !prev.editing) || s.selection !== prev.selection) cancelPending();
       if (s.selection !== prev.selection && s.pageId && s.doc) {
         if (!s.selection) {
           setCurrent((c) => (rowsRef.current.find((r) => r.key === c)?.boxId ? null : c));
         } else {
           if (panelRef.current === null && s.tool === "select") {
-            if (pointerDown.current) addEventListener("pointerup", openToolPanel, { once: true });
+            if (pointerDown.current) addEventListener("pointerup", openAfterPointer, { once: true });
             else openToolPanel();
           }
           const box = s.doc.text_boxes.find((b) => b.id === s.selection);
@@ -354,9 +375,16 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
         const deselected = !!prev.selection && !s.selection;
         const contentGone = hasToolContent(prev) && !s.selection;
         const toolLeft = s.tool !== prev.tool && s.tool !== "select";
-        if (deselected || contentGone || toolLeft) setPanel(null);
+        if (deselected || contentGone || toolLeft) {
+          collapsedByTool.current = toolLeft && !deselected;
+          setPanel(null);
+        }
       }
     });
+    return () => {
+      unsub();
+      cancelPending();
+    };
   }, []);
   /** Bấm 1 kết quả Tìm/Thay hoặc Áp glossary → nhảy tới khối đó (panel Tìm giữ nguyên). */
   const jump = (m: FindMatch) => {
@@ -849,10 +877,34 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
       const s = editorStore.getState();
       const ai = s.ai.state;
       if (page.id !== s.pageId || !ai || s.readOnly) return;
+      const before = s.doc;
       s.apply(resetToAI(ai));
-      // Nút Hoàn tác chỉ hoàn tác đúng bước này: còn là bước cuối của đúng trang này thì undo, không thì thôi (đã đổi
-      // trang, đã sửa tiếp, đã hoàn tác bằng phím). Bấm xong là đóng thông báo nên không bấm lần hai được.
+      const after = editorStore.getState().doc;
+      // Nút Hoàn tác chỉ hoàn tác đúng bước này. Còn ở đúng trang này và nó vẫn là bước cuối thì undo. Đã sang trang khác
+      // thì trang đó đã lưu bản AI: đưa các sửa tay về qua đường khôi phục trang không active (rebase lên bản server, ghi
+      // thẳng) — không đụng trang đang mở. Đã sửa tiếp / hoàn tác bằng phím ở đúng trang này thì thôi.
+      // Bấm xong là đóng thông báo nên không bấm lần hai được.
       const step = editorStore.getState().history.past.at(-1);
+      const restoreSaved = async () => {
+        if (!before || !after) return;
+        try {
+          const how = await session.session.restoreOther({
+            pageId: page.id,
+            baseVersion: chapterStore.getState().cache[page.id]?.version ?? 0,
+            ops: diffStates(after, before),
+            updatedAt: Date.now(),
+          });
+          notify({
+            tone: how === "deferred" ? "warn" : "info",
+            text:
+              how === "deferred"
+                ? `Trang ${page.ord + 1} đang bận hoặc có thay đổi khác: sửa tay sẽ được khôi phục khi bạn mở trang này.`
+                : `Đã khôi phục sửa tay trên trang ${page.ord + 1}.`,
+          });
+        } catch (e) {
+          notify({ tone: "danger", text: `Không khôi phục được sửa tay trang ${page.ord + 1}: ${errorMessage(e)}` });
+        }
+      };
       notify({
         tone: "info",
         text: `Đã bỏ chỉnh sửa tay trên trang ${page.ord + 1}, dùng lại bản AI.`,
@@ -861,14 +913,15 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
             label: "Hoàn tác",
             run: () => {
               const now = editorStore.getState();
-              if (step && now.pageId === page.id && now.history.past.at(-1) === step) now.undo();
               notify(null);
+              if (now.pageId !== page.id) void restoreSaved();
+              else if (step && now.history.past.at(-1) === step) now.undo();
             },
           },
         ],
       });
     },
-    [notify],
+    [notify, session.session],
   );
 
   const stepSourceBy = (dir: -1 | 1) => {
@@ -979,6 +1032,7 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
       selection: !!st.selection || !!currentRow,
     });
     if (next.tool !== tool) editorStore.getState().setTool(next.tool);
+    collapsedByTool.current = panel === "tool" && next.panel === null && next.tool !== "select";
     setPanel(next.panel);
   };
 
@@ -1168,6 +1222,7 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
         onClose={() => {
           // Nút thu nằm trong panel sắp ẩn → đưa focus về nút rail của panel đó (không rơi về <body>).
           document.querySelector<HTMLButtonElement>('.cw-toolrail [aria-pressed="true"]')?.focus();
+          collapsedByTool.current = false;
           // Thu Văn bản khi còn nội dung phải xử lý (AI mới, xung đột) → về panel khối thay vì giấu nội dung đó.
           setPanel(panel === "doc" && hasToolContent(editorStore.getState()) ? "tool" : null);
         }}
@@ -1192,7 +1247,7 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
             />
           </div>
         )}
-        {/* Mỗi tab đã mở giữ mount (chỉ ẩn khi chuyển): bảng Bản dịch, kết quả xem trước Tìm/Thay, hộp xác nhận Hiệu đính. */}
+        {/* Mỗi tab đã mở giữ mount (chỉ ẩn khi chuyển): bảng Bản dịch, kết quả xem trước Tìm/Thay (hộp xác nhận Hiệu đính đóng khi rời tab). */}
         {seenTabs.size > 0 && (
           <div className="cw-panel-doc" hidden={panel !== "doc"}>
             <DocTabs tab={tab} disabled={docDisabled} pendingProofread={pendingProofread} onSelect={setDocTab} />

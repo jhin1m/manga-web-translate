@@ -23,7 +23,7 @@ export const railTool = (t: Tool): Tool => (t === "eraser" ? "brush" : t);
 /**
  * `content`: panel khối đang có nội dung phải xử lý (AI có bản mới, xung đột khi lưu) — không được giấu: thu Văn bản
  * thì quay về panel khối, đổi sang công cụ không có panel thì giữ panel khối. `selection`: đang chọn một khối.
- * Chọn chỉ mở panel khi có khối đang chọn hoặc có nội dung (như phím V); không có gì thì không mở.
+ * Bấm Chọn là hành động mở rõ ràng: mở panel khi có khối đang chọn hoặc có nội dung, không có gì thì không mở. Phím V chặt hơn: chỉ mở lại panel vừa thu do đổi công cụ.
  */
 export type RailHas = { content: boolean; selection: boolean };
 

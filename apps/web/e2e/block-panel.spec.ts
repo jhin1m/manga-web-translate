@@ -46,6 +46,10 @@ async function readyChapter(page: Page, pagesPerSource = 1) {
   return { chapterId, pageIds: pages.map((p) => p.id), pageId: pages[0]?.id ?? "" };
 }
 
+const readyChapterIds = async (page: Page, chapterId: string) => ({
+  pageIds: (await progress(page, chapterId)).pages.sort((a, b) => a.ord - b.ord).map((p) => p.id),
+});
+
 /** `region` = vùng OCR gắn vào (t0 của worker giả) hoặc null = khối tự thêm. */
 const textBox = (id: string, b: Box, region: string | null = "t0") => ({
   id,
@@ -242,7 +246,7 @@ test("a save conflict is not lost behind the Văn bản panel after closing it",
   await expect(blockPanel(page).getByText("1 thay đổi chưa áp được")).toBeVisible();
 });
 
-test("clicking the selected block again reopens the collapsed panel (after the close button, or after B then V)", async ({
+test("clicking the selected block again reopens the collapsed panel; V reopens it only after a tool change, not after the close button", async ({
   page,
 }) => {
   await login(page);
@@ -261,14 +265,20 @@ test("clicking the selected block again reopens the collapsed panel (after the c
   await clickBlock(page, b);
   await expect(panel.getByRole("heading", { name: "Khối 1/1" })).toBeVisible();
 
-  // B rồi V: khối vẫn đang chọn nên V mở lại panel; thu bằng nút rồi bấm lại đúng khối cũng mở lại.
+  // B rồi V: panel thu do đổi công cụ nên V mở lại.
   await page.keyboard.press("b");
   await expect(panel).toBeHidden();
   await page.keyboard.press("v");
   await expect(panel.getByRole("heading", { name: "Khối 1/1" })).toBeVisible();
+
+  // × rồi V: khối vẫn đang chọn nhưng người dùng vừa tự thu panel → V không mở lại (đang là công cụ Chọn nên cũng không đổi gì).
+  await panel.getByRole("button", { name: "Thu panel" }).click();
+  await expect(panel).toBeHidden();
+  await page.keyboard.press("v");
+  await expect(panel).toBeHidden();
+  // B rồi V sau khi đã bấm ×: panel đã đóng sẵn trước khi đổi công cụ nên vẫn không mở.
   await page.keyboard.press("b");
   await page.keyboard.press("v");
-  await panel.getByRole("button", { name: "Thu panel" }).click();
   await expect(panel).toBeHidden();
   await page.waitForTimeout(DBLCLICK_GAP);
   await clickBlock(page, b);
@@ -304,12 +314,12 @@ test("the Chọn rail button opens the panel only with a selected block or conte
   await expect(panel.getByRole("heading", { name: "Khối 1/1" })).toBeVisible();
 });
 
-test("double-clicking a block at the left edge with the panel collapsed still edits the text on the image", async ({
+test("double-clicking a block under the future panel with the panel collapsed still edits the text on the image", async ({
   page,
 }) => {
   await login(page);
   const { chapterId, pageId } = await readyChapter(page);
-  const left: Box = { x: 8, y: 200, w: 120, h: 60 };
+  const left: Box = { x: 8, y: 200, w: 40, h: 60 };
   await writeState(page, chapterId, pageId, (s) => {
     s.text_boxes = [textBox("tb-left", left)];
   });
@@ -317,9 +327,12 @@ test("double-clicking a block at the left edge with the panel collapsed still ed
   await zoomButton(page).click();
   await expect(zoomButton(page)).toHaveText("100%");
   const at = await screenRect(page, left);
-  // Ở 100% khối nằm dưới chỗ panel sắp đè.
-  expect(at.x).toBeLessThan(48 + 272);
-  await page.mouse.dblclick(at.x + at.w / 2, at.y + at.h / 2);
+  const cx = at.x + at.w / 2;
+  // Tâm khối nằm dưới chỗ panel sắp đè (rail 48 + panel 272): lần bấm đầu chọn + mở panel thì khối bị che.
+  expect(cx).toBeLessThan(48 + 272);
+  await expect(blockPanel(page)).toBeHidden();
+  // Hai lần bấm cách nhau như người bấm (không phải hai sự kiện liền nhau).
+  await page.mouse.click(cx, at.y + at.h / 2, { clickCount: 2, delay: 80 });
   await expect(page.getByRole("textbox", { name: "Sửa chữ" })).toBeVisible();
 });
 
@@ -814,22 +827,29 @@ test("the Hoàn tác of 'Bỏ chỉnh sửa tay' only reverts that reset: once, 
   await expect(cell1).toHaveValue("Sửa hai");
   await expect(toast).toHaveCount(0);
 
-  // Đổi trang rồi mới bấm: không hoàn tác nhầm bước sửa của trang 2, trang 1 giữ bản AI.
+  // Đổi trang rồi mới bấm: bản đã lưu của trang 1 được khôi phục (qua API), trang 2 đang mở không bị đụng.
   await more.click();
   await page.getByRole("menuitem", { name: "Bỏ chỉnh sửa tay trang 1" }).click();
   await expect(cell1).toHaveValue("Xin chào");
   await pageThumb(page, 2).click();
   await expect(pageThumb(page, 2)).toHaveAttribute("aria-current", "page");
   await cell2.fill("Trang hai mới");
+  const { pageIds } = await readyChapterIds(page, chapterId);
+  const saved1 = async () =>
+    ((await (await page.request.get(`/api/pages/${pageIds[0]}`)).json()) as PageBody).state.regions[0]?.translation;
+  await expect.poll(saved1).toBe("Xin chào");
   await toast.getByRole("button", { name: "Hoàn tác" }).click();
   await expect(toast).toHaveCount(0);
+  await expect.poll(saved1).toBe("Sửa hai");
   // Đọc thẳng trang đang mở: ô bảng giữ chữ đang gõ nên không phản ánh ngay một lần undo nhầm.
   const open2 = await page.evaluate(async () => {
     const m = await import(/* @vite-ignore */ "/src/features/editor/store.ts");
     return m.editorStore.getState().doc?.regions[0]?.translation;
   });
   expect(open2).toBe("Trang hai mới");
-  await expect(cell1).toHaveValue("Xin chào");
+  // Về trang 1: thấy bản khôi phục, không bị đưa về bản AI lần nữa.
+  await pageThumb(page, 1).click();
+  await expect(cell1).toHaveValue("Sửa hai");
   await expect(toast).toHaveCount(0);
 });
 

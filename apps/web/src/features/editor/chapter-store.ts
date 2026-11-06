@@ -7,7 +7,15 @@ import type { PageState } from "@mtl/shared";
 import { useStore } from "zustand";
 import { createStore } from "zustand/vanilla";
 import type { PageStatus } from "../chapter/status.ts";
-import { clampView, contentBox, pageStartView, revealBlockView, type Size, viewAtY } from "./page-layout.ts";
+import {
+  clampView,
+  contentBox,
+  pageStartView,
+  REVEAL_MARGIN,
+  revealBlockView,
+  type Size,
+  viewAtY,
+} from "./page-layout.ts";
 import { editorStore } from "./store.ts";
 
 export type PageMeta = {
@@ -223,4 +231,13 @@ export function revealSelection() {
   const c = contentBox({ w: meta.width, h: meta.height }, cs.viewMode === "split");
   const next = revealBlockView(box, s.view, cs.box, cs.cover, c, c.x);
   if (next) s.setView(next);
+}
+
+/** Khối đang chọn (page active) có nằm dưới dải `cover` px mép trái canvas — chỗ panel sắp đè — không. */
+export function selectionUnderCover(cover: number): boolean {
+  const s = editorStore.getState();
+  const cs = chapterStore.getState();
+  const box = s.selection ? s.doc?.text_boxes.find((b) => b.id === s.selection) : undefined;
+  if (!box || s.pageId !== cs.activePageId || cs.box.w === 0) return false;
+  return s.view.x + box.x * s.view.scale < cover + REVEAL_MARGIN;
 }

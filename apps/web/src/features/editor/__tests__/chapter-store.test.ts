@@ -62,6 +62,23 @@ describe("chapter store", () => {
     expect(editorStore.getState().view).toEqual({ scale: 0.5, x: 400, y: EDGE });
   });
 
+  it("setCover(0): a view that already fits stays put, a view shifted aside for the panel is clamped back", () => {
+    const s = createChapterStore();
+    s.getState().setPages([meta("a", 1000)]);
+    s.getState().setBox({ w: 1200, h: 800 });
+    s.getState().setActive("a");
+    s.getState().fitView(1);
+    const fitted = { ...editorStore.getState().view };
+    s.getState().setCover(272);
+    s.getState().setCover(0);
+    expect(editorStore.getState().view).toEqual(fitted);
+
+    s.getState().setCover(272);
+    editorStore.getState().setView({ ...fitted, x: fitted.x + 272 });
+    s.getState().setCover(0);
+    expect(editorStore.getState().view).toEqual(fitted);
+  });
+
   it("setStates ignores an older version of the active page (late response)", () => {
     const s = createChapterStore();
     s.getState().setActive("a");
