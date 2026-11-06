@@ -17,7 +17,7 @@ import Konva from "konva";
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { Stage as KStage, Layer } from "react-konva";
 import { addBox, editText, newTextBox } from "../actions.ts";
-import { chapterStore, effectiveMode, useChapterStore } from "../chapter-store.ts";
+import { chapterStore, effectiveMode, revealSelection, useChapterStore } from "../chapter-store.ts";
 import { canvasFont, type FontKit } from "../fonts.ts";
 import { lineStep, verticalOffset } from "../measure.ts";
 import {
@@ -123,7 +123,7 @@ export const ChapterCanvas = memo(function ChapterCanvas(props: {
     setFitted(true);
   }, [fitted, size, page]);
 
-  // Khung đổi cỡ sau khi người dùng đã động vào khung nhìn (thu/mở panel, panel 288 ↔ 560, đổi trang rồi mới đổi cỡ):
+  // Khung đổi cỡ sau khi người dùng đã động vào khung nhìn (thu/mở panel Văn bản 560px, đổi trang rồi mới đổi cỡ):
   // chưa tự zoom → vừa lại theo bề rộng mới, giữ điểm page đang ở mép trên; đã zoom → giữ mức, chỉ kẹp/căn giữa lại.
   const lastSize = useRef(size);
   useEffect(() => {
@@ -135,7 +135,7 @@ export const ChapterCanvas = memo(function ChapterCanvas(props: {
     if (!fitted || size.w === 0 || page.w === 0 || v === lastFit.current) return;
     const c = contentBox(page, chapterStore.getState().viewMode === "split");
     if (chapterStore.getState().zoomed) {
-      editorStore.getState().setView(clampView(v, c, size, c.x));
+      editorStore.getState().setView(clampView(v, c, size, c.x, chapterStore.getState().cover));
       return;
     }
     const topY = (FIT_EDGE - v.y) / v.scale;
@@ -155,6 +155,13 @@ export const ChapterCanvas = memo(function ChapterCanvas(props: {
     const scale = chapterStore.getState().zoomed ? v.scale : fitScale(c, page, size, MIN_SCALE);
     editorStore.getState().setView(clampView({ scale, x: 0, y: size.h / 2 - midY * scale }, c, size, c.x));
   }, [fitted, split, size, page]);
+
+  // Khung đổi cỡ / bật chia đôi vừa căn lại trang mà không biết panel đè mép trái: lộ lại khối đang chọn (chạy sau các
+  // effect đặt khung nhìn ở trên).
+  // biome-ignore lint/correctness/useExhaustiveDependencies: chạy lại khi khung hoặc chế độ chia đôi đổi.
+  useEffect(() => {
+    revealSelection();
+  }, [size, split]);
 
   useEffect(() => {
     const isField = (t: EventTarget | null) =>
@@ -202,7 +209,8 @@ export const ChapterCanvas = memo(function ChapterCanvas(props: {
     return () => removeEventListener("keydown", on, true);
   }, [proposal, props.onOcr]);
 
-  const setView = (v: View) => editorStore.getState().setView(clampView(v, content, size, content.x));
+  const setView = (v: View) =>
+    editorStore.getState().setView(clampView(v, content, size, content.x, chapterStore.getState().cover));
   /** Toạ độ màn hình → toạ độ trong page active. */
   const toPage = (p: { x: number; y: number }) => screenToPage(p, view);
 

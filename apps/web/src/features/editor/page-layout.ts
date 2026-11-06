@@ -33,20 +33,30 @@ export const contentBox = (page: Size, split: boolean): Size & { x: number } =>
  */
 export const fitsAxis = (len: number, box: number) => len + 2 * FIT_EDGE <= box + 0.5;
 
-/** Một chiều: vừa với lề `EDGE` → ghim `EDGE`/căn giữa; chỉ vừa với `FIT_EDGE` → căn giữa; còn lại kẹp trong tầm cuộn. */
-const clampAxis = (pos: number, len: number, box: number, centered: boolean) =>
-  centered ? (box - len) / 2 : Math.min(EDGE, Math.max(box - len - EDGE, pos));
+/**
+ * Một chiều: vừa với lề `EDGE` → ghim `EDGE`/căn giữa; chỉ vừa với `FIT_EDGE` → căn giữa; còn lại kẹp trong tầm cuộn.
+ * `slack` nới thêm phía đầu (px): nội dung được phép nằm lệch về cuối chừng đó (chừa chỗ cho panel đè lên mép đầu).
+ */
+const clampAxis = (pos: number, len: number, box: number, centered: boolean, slack: number) => {
+  if (centered) {
+    const mid = (box - len) / 2;
+    return Math.min(mid + slack, Math.max(mid, pos));
+  }
+  return Math.min(EDGE + slack, Math.max(box - len - EDGE, pos));
+};
 
 /**
  * Giữ nội dung (rộng `content.w`, mép trái tại `x0` toạ độ page) trong tầm: hẹp hơn khung → căn giữa ngang; không
  * cuộn quá đầu/cuối page. Page vừa khung (lề `FIT_EDGE`) coi là nằm trọn: đứng yên giữa khung, không cuộn được.
+ * `coverLeft`: bề ngang mép trái canvas đang bị panel đè — nội dung được lệch sang phải tối đa chừng đó để khối sát
+ * mép trái vẫn lộ ra được; không lệch thì căn như thường.
  */
-export function clampView(v: View, content: Size, box: Size, x0 = 0): View {
+export function clampView(v: View, content: Size, box: Size, x0 = 0, coverLeft = 0): View {
   const pw = content.w * v.scale;
   const ph = content.h * v.scale;
   const left = v.x + x0 * v.scale;
-  const l = clampAxis(left, pw, box.w, fitsAxis(pw, box.w));
-  const y = ph + 2 * EDGE <= box.h ? EDGE : clampAxis(v.y, ph, box.h, fitsAxis(ph, box.h));
+  const l = clampAxis(left, pw, box.w, fitsAxis(pw, box.w), coverLeft);
+  const y = ph + 2 * EDGE <= box.h ? EDGE : clampAxis(v.y, ph, box.h, fitsAxis(ph, box.h), 0);
   return { scale: v.scale, x: l - x0 * v.scale, y };
 }
 
@@ -72,6 +82,54 @@ export function blockBarPos(
     top: Math.max(gap, Math.min(below ? top + box.h * v.scale + gap : up, frame.h - bar.h - gap)),
     below,
   };
+}
+
+/** Chừa quanh khối khi cuộn cho lộ ra khỏi panel (px màn hình). */
+export const REVEAL_MARGIN = 24;
+
+/**
+ * Khung nhìn mới để khối `rect` (toạ độ page) lộ trọn trong phần canvas không bị panel che — ngang: từ `coverLeft`
+ * tới mép phải khung `box`; dọc: cả chiều cao khung. Chỉ dịch khi khối đang bị che / ra ngoài (khối rộng hơn phần
+ * lộ thì ưu tiên mép trái). Kết quả qua `clampView` (cùng quy tắc cuộn của canvas, panel che mép trái được nới thêm
+ * `coverLeft`); trả `null` khi khối đã lộ sẵn hoặc không dịch được thêm.
+ */
+export function revealBlockView(
+  rect: { x: number; y: number; w: number; h: number },
+  v: View,
+  box: Size,
+  coverLeft: number,
+  content: Size,
+  x0 = 0,
+  margin = REVEAL_MARGIN,
+): View | null {
+  if (box.w <= 0 || box.h <= 0) return null;
+  const l = v.x + rect.x * v.scale;
+  const r = l + rect.w * v.scale;
+  const t = v.y + rect.y * v.scale;
+  const b = t + rect.h * v.scale;
+  const shift = (a: number, z: number, lo: number, hi: number) => {
+    if (z - a >= hi - lo) return a < lo || z > hi ? lo - a : 0;
+    if (a < lo) return lo - a;
+    if (z > hi) return hi - z;
+    return 0;
+  };
+  const dx = shift(l, r, coverLeft + margin, box.w - margin);
+  const dy = shift(t, b, margin, box.h - margin);
+  if (dx === 0 && dy === 0) return null;
+  const next = clampView({ ...v, x: v.x + dx, y: v.y + dy }, content, box, x0, coverLeft);
+  return next.x === v.x && next.y === v.y ? null : next;
+}
+
+/** Panel mở ra có dời khung nhìn để lộ khối `rect` không (ngang hoặc dọc) — như `revealBlockView` trả khác null. */
+export function revealWouldMove(
+  rect: { x: number; y: number; w: number; h: number },
+  v: View,
+  box: Size,
+  coverLeft: number,
+  content: Size,
+  x0 = 0,
+): boolean {
+  return coverLeft > 0 && revealBlockView(rect, v, box, coverLeft, content, x0) !== null;
 }
 
 /** Page cao hơn `PAGE_RATIO_MAX` × rộng (webtoon cắt dải) không vừa theo chiều cao — chữ sẽ quá nhỏ để đọc. */

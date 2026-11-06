@@ -1,11 +1,11 @@
 /**
  * Luồng chính: thả ZIP 10 trang ở home → mở thẳng màn chương (series duy nhất, số chương từ tên ZIP) trong khi ảnh
  * còn đang upload; cột thumbnail hiện 10 ảnh gốc ngay, bấm ảnh → xem lớn → upload xong xoá 1 ảnh qua menu chuột phải
- * (hoàn tác được), xoá lại bằng nút panel Chọn → menu ⋯ "Chỉ xoá chữ + OCR" → worker giả → dừng ở "Chờ dịch" →
+ * (hoàn tác được), xoá lại bằng nút góc thumbnail → menu ⋯ "Chỉ xoá chữ + OCR" → worker giả → dừng ở "Chờ dịch" →
  * Ctrl/Shift-click chọn 3 trang → "Dịch 3 trang" chỉ dịch 3 trang đó → "Dịch chương" dịch nốt → 9 trang "Xong".
  * Thêm: drawer
  * Hoạt động ở home khi đang upload; màn series (3 ảnh lẻ = 1 chương nháp số kế tiếp) + đổi số chương / series trên thanh trên +
- * glossary thêm nhanh; ảnh credit "Luôn bỏ ở series này" tự bỏ ở chương sau; file lỗi → dòng xác nhận cũ báo lỗi. Test đầu đăng nhập bằng form `/login` (các spec khác
+ * glossary thêm từ trong modal; ảnh credit "Luôn bỏ ở series này" tự bỏ ở chương sau; file lỗi → dòng xác nhận cũ báo lỗi. Test đầu đăng nhập bằng form `/login` (các spec khác
  * dùng dev auto-login).
  */
 import { expect, type Route, test } from "@playwright/test";
@@ -13,7 +13,7 @@ import { zipSync } from "fflate";
 import { WEB_URL } from "./env.ts";
 import { PNG_1PX, runFakeWorker } from "./fake-worker.ts";
 import { grayPng } from "./gray-png.ts";
-import { login, loginWithForm, openPanel, pageThumbs, state } from "./helpers.ts";
+import { login, loginWithForm, pageThumbs, state } from "./helpers.ts";
 
 const s = state.seriesId;
 
@@ -55,7 +55,9 @@ test("drop a 10-page ZIP on home, open the chapter while uploading, prepare it, 
   const sources = page.getByRole("complementary", { name: "Danh sách ảnh gốc" });
   await expect(sources.locator("img")).toHaveCount(10);
   await expect(sources.locator("img").first()).toHaveAttribute("src", /^blob:/);
-  await expect(sources.getByText("Đang tải").first()).toBeVisible();
+  // "Đang tải" không còn là chữ dưới thumbnail: cờ ở góc có tên truy cập + tooltip.
+  await expect(sources.getByRole("img", { name: "Đang tải" }).first()).toBeVisible();
+  await expect(sources.getByRole("img", { name: "Đang tải" }).first()).toHaveAttribute("title", "Đang tải");
   // Canvas hiện ảnh đầu; bấm Ảnh 3 trên rail → xem ảnh 3, ← về ảnh 2.
   await expect(page.getByRole("img", { name: "Ảnh gốc 1" })).toBeVisible();
   await sources.getByRole("button", { name: /^Ảnh 3/ }).click();
@@ -104,27 +106,25 @@ test("drop a 10-page ZIP on home, open the chapter while uploading, prepare it, 
   // Kéo-thả: ảnh 1 thả vào nửa dưới ảnh 3 → nằm sau ảnh 3 (vị trí 3); Hoàn tác trả về đầu.
   const first = await fileOf(0);
   const items = sources.locator(".cw-thumb-item");
-  await items.nth(0).dragTo(items.nth(2), { targetPosition: { x: 20, y: 90 } });
+  await items.nth(0).dragTo(items.nth(2), { targetPosition: { x: 20, y: 62 } });
   await expect.poll(() => fileOf(2)).toBe(first);
   await page.getByRole("status").filter({ hasText: "Đã đổi thứ tự" }).getByRole("button", { name: "Hoàn tác" }).click();
   await expect.poll(() => fileOf(0)).toBe(first);
-  // Xoá ảnh 2 (chuột phải thumbnail) → mờ + "Đã xoá", đếm đã bỏ; Hoàn tác khôi phục; xoá lại bằng nút panel Chọn
+  // Xoá ảnh 2 (chuột phải thumbnail) → mờ + "Đã xoá", đếm đã bỏ; Hoàn tác khôi phục; xoá lại bằng nút góc thumbnail
   // để lúc cắt trang bỏ qua nó.
   const thumb2 = sources.getByRole("button", { name: /^Ảnh 2/ });
   await thumb2.click({ button: "right" });
   await page.getByRole("menuitem", { name: "Xoá ảnh 2" }).click();
   await expect(sources).toContainText("đã bỏ 1");
-  await expect(sources.getByText("Đã xoá")).toBeVisible();
   await expect(thumb2).toHaveAccessibleName("Ảnh 2 · Đã xoá");
+  await expect(thumb2).toHaveAttribute("title", /^Đã xoá/);
   await page.getByRole("status").filter({ hasText: "Đã xoá ảnh 2" }).getByRole("button", { name: "Hoàn tác" }).click();
   await expect(thumb2).toHaveAccessibleName("Ảnh 2");
   await expect(sources).not.toContainText("đã bỏ");
   await thumb2.click();
-  const panel = await openPanel(page, "select");
-  await expect(panel).toContainText("Ảnh 2");
-  await panel.getByRole("button", { name: "Xoá ảnh này" }).click();
+  await sources.getByRole("button", { name: "Xoá ảnh 2", exact: true }).click();
   await expect(thumb2).toHaveAccessibleName("Ảnh 2 · Đã xoá");
-  await expect(panel.getByRole("button", { name: "Khôi phục ảnh này" })).toBeVisible();
+  await expect(sources.getByRole("button", { name: "Khôi phục ảnh 2", exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Thêm thao tác" }).click();
   await page.getByRole("menuitem", { name: "Chỉ xoá chữ + OCR (soát trước)" }).click();
 
@@ -153,10 +153,11 @@ test("drop a 10-page ZIP on home, open the chapter while uploading, prepare it, 
   // Thumbnail là ảnh sạch ký qua FILES_DOMAIN.
   await expect(rail.locator("img").first()).toHaveAttribute("src", /localhost:9100\/.*\/clean\//);
 
-  // Màn series: hàng chương vừa dịch báo "Chờ sửa", icon Sửa mở lại màn chương.
+  // Màn series: hàng chương vừa dịch báo "Chờ sửa"; bấm hàng mở lại màn chương (không còn icon Sửa riêng).
   await page.getByRole("link", { name: "Series e2e" }).click();
   await expect(page.getByRole("link", { name: "Mở chương 501", exact: true })).toContainText("Chờ sửa");
-  await page.getByRole("link", { name: "Sửa chương 501", exact: true }).click();
+  await expect(page.getByRole("link", { name: "Sửa chương 501" })).toHaveCount(0);
+  await page.getByRole("link", { name: "Mở chương 501", exact: true }).click();
   await expect(page.getByRole("heading", { name: /^Chương 501/ })).toBeVisible();
 });
 
@@ -174,7 +175,7 @@ test("series page: 3 loose images = 1 draft chapter waiting for Dịch chương;
 
   await page.goto(`/s/${s}`);
   const zone = page.getByRole("region", { name: "Thêm chương tiếp theo" });
-  const next = Number((await zone.getByText(/^Thả strip của Chương \d+/).textContent())?.match(/\d+/)?.[0]);
+  const next = Number((await zone.getByText(/^Thả Ch\.\d+/).textContent())?.match(/\d+/)?.[0]);
   expect(next).toBeGreaterThan(0);
   await zone
     .locator('input[type="file"]')
@@ -201,10 +202,11 @@ test("series page: 3 loose images = 1 draft chapter waiting for Dịch chương;
   await expect(page.locator(".cw-back")).toHaveText("Series phụ e2e");
 
   await page.goto(`/s/${s}`);
-  const glossary = page.getByRole("region", { name: "Glossary của series" });
-  await glossary.getByLabel("Từ gốc").fill("김준");
-  await glossary.getByLabel("Bản dịch").fill("Kim Jun");
-  await glossary.getByRole("button", { name: "Thêm" }).click();
+  await page.getByRole("link", { name: /^Glossary/ }).click();
+  const glossary = page.getByRole("dialog", { name: "Glossary của series" });
+  await glossary.getByLabel("Từ gốc mới").fill("김준");
+  await glossary.getByLabel("Bản dịch mới").fill("Kim Jun");
+  await glossary.getByRole("button", { name: "Thêm", exact: true }).click();
   await expect(glossary.getByRole("cell", { name: "Kim Jun" })).toBeVisible();
 });
 
@@ -242,16 +244,17 @@ test("a credit deleted with “Luôn bỏ ở series này” is skipped in the n
   let sources = await dropChapter();
   const last = sources.locator(".cw-thumb-item").nth(2);
   // Ảnh cuối lệch khổ → chỉ gợi ý, không tự bỏ.
-  await expect(last).toContainText("Có thể là credit");
+  await expect(last.getByRole("img", { name: "Có thể là credit" })).toBeVisible();
+  await expect(sources.getByRole("button", { name: /^Ảnh 3/ })).toHaveAccessibleName("Ảnh 3 · Có thể là credit");
   await sources.getByRole("button", { name: /^Ảnh 3/ }).click({ button: "right" });
   await page.getByRole("menuitem", { name: "Xoá ảnh 3" }).click();
   await page.getByRole("button", { name: "Luôn bỏ ở series này" }).click();
   await expect(page.getByText("Đã học 1 ảnh")).toBeVisible();
 
   sources = await dropChapter();
-  await expect(sources.locator(".cw-thumb-item").nth(2)).toContainText("Credit · tự bỏ");
+  await expect(sources.getByRole("button", { name: /^Ảnh 3/ })).toHaveAccessibleName("Ảnh 3 · Credit · tự bỏ");
   await expect(sources).toContainText("đã bỏ 1");
-  await expect(sources.locator(".cw-thumb-item").nth(0)).not.toContainText("Credit");
+  await expect(sources.getByRole("button", { name: /^Ảnh 1/ })).not.toHaveAccessibleName(/Credit/);
   await sources.getByRole("button", { name: /^Ảnh 3/ }).click({ button: "right" });
   await page.getByRole("menuitem", { name: "Khôi phục ảnh 3" }).click();
   await expect(sources.getByRole("button", { name: /^Ảnh 3/ })).not.toHaveAccessibleName(/Credit · tự bỏ|Đã xoá/);
@@ -259,6 +262,7 @@ test("a credit deleted with “Luôn bỏ ở series này” is skipped in the n
 
   // Cài đặt series: ảnh đã học, xoá khỏi danh sách.
   await page.goto(`/s/${sid}?tab=settings`);
+  await page.getByRole("dialog", { name: "Cài đặt dịch" }).getByText("Ảnh tự bỏ", { exact: true }).click();
   const learned = page.getByRole("group", { name: "Ảnh tự bỏ" });
   await expect(learned.getByRole("img", { name: "Ảnh tự bỏ 1" })).toBeVisible();
   await learned.getByRole("button", { name: "Xoá ảnh tự bỏ 1" }).click();
@@ -275,4 +279,61 @@ test("files the app cannot take as-is fall back to the confirm row with the prob
   await expect(confirm.getByText("1 file không hợp lệ — bỏ chúng trước khi upload.")).toBeVisible();
   await expect(confirm.getByRole("button", { name: "Tạo và mở chương" })).toBeDisabled();
   await expect(page).toHaveURL(/\/$/);
+});
+
+test("shell activity button shows only while an upload has failed, and its drawer retries the upload to completion", async ({
+  page,
+}) => {
+  await login(page);
+  await page.goto(`/s/${s}`);
+  await expect(page.getByRole("region", { name: "Thêm chương tiếp theo" })).toBeVisible();
+  // Chưa có upload nào trong tab → không có nút Hoạt động trên shell.
+  await expect(page.getByRole("button", { name: /^Hoạt động/ })).toHaveCount(0);
+
+  // Chặn POST lên storage (presigned): trả 500 tới khi mở lại route. Mỗi file thử tối đa 3 lần → upload thất bại thật.
+  let storageOpen = false;
+  let rejected = 0;
+  await page.route(
+    (url) => !url.href.startsWith(WEB_URL),
+    (route) => {
+      if (route.request().method() !== "POST" || storageOpen) {
+        void route.continue();
+        return;
+      }
+      rejected++;
+      void route.fulfill({ status: 500, headers: { "access-control-allow-origin": WEB_URL }, body: "storage down" });
+    },
+  );
+
+  await page
+    .getByRole("region", { name: "Thêm chương tiếp theo" })
+    .locator('input[type="file"]')
+    .setInputFiles(["p1.png", "p2.png"].map((name) => ({ name, mimeType: "image/png", buffer: PNG_1PX })));
+  await expect(page).toHaveURL(new RegExp(`/s/${s}/c/[0-9a-f-]{36}$`), { timeout: 30_000 });
+  const chapterId = new URL(page.url()).pathname.split("/").at(-1) ?? "";
+  await expect.poll(() => rejected, { timeout: 30_000 }).toBeGreaterThanOrEqual(6);
+
+  // Về màn series (shell): upload lỗi → nút Hoạt động hiện dù không còn file nào đang chạy.
+  await page.getByRole("link", { name: "Series e2e" }).click();
+  await expect(page).toHaveURL(new RegExp(`/s/${s}$`));
+  const shellActivity = page.getByRole("button", { name: /^Hoạt động/ });
+  await expect(shellActivity).toBeVisible({ timeout: 30_000 });
+  await shellActivity.click();
+
+  const activity = page.getByRole("dialog", { name: "Hoạt động" });
+  const item = activity.locator(`.drawer-item[data-chapter="${chapterId}"]`);
+  await expect(item).toContainText("Lỗi 2 ảnh · đã tải 0/2");
+  const retry = item.getByRole("button", { name: "Thử lại", exact: true });
+  await expect(retry).toBeVisible();
+
+  // Mở lại route rồi bấm Thử lại: upload hoàn tất → phase "đã tải xong", nút Thử lại biến mất.
+  storageOpen = true;
+  await retry.click();
+  await expect(item).toContainText("Đã tải xong 2 ảnh", { timeout: 30_000 });
+  await expect(retry).toHaveCount(0);
+
+  // Đóng drawer: không còn lỗi hay việc đang chạy → nút Hoạt động ẩn lại.
+  await activity.getByRole("button", { name: "Đóng", exact: true }).click();
+  await expect(activity).toBeHidden();
+  await expect(shellActivity).toHaveCount(0);
 });

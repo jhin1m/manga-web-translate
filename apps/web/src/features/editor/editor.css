@@ -155,9 +155,6 @@ label.ed-check {
 .ed-new {
   color: var(--c-fg);
 }
-.ed-mask input[type="range"] {
-  width: 100%;
-}
 /* Thanh xác nhận OCR vùng: nổi cạnh khung vừa kéo (OcrSelect.tsx `OcrConfirmBar`), cùng kiểu thanh nổi khối. */
 .ed-ocrbar {
   position: absolute;
@@ -171,12 +168,4 @@ label.ed-check {
   border-radius: 6px;
   box-shadow: 0 2px 6px rgb(0 0 0 / 0.12);
   white-space: nowrap;
-}
-/* Hướng dẫn từng bước trong panel công cụ (OCR, Mask). */
-.ed-steps {
-  margin: 0 0 8px;
-  padding-left: 18px;
-}
-.ed-steps li + li {
-  margin-top: 2px;
 }

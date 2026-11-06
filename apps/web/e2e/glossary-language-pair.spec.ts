@@ -58,14 +58,14 @@ test("changing a series language warns about its own glossary and switches the i
   const settings = page.getByRole("dialog", { name: "Cài đặt dịch" });
   const warning = settings.getByRole("status").filter({ hasText: "Glossary riêng của series" });
   await expect(warning).toHaveCount(0);
-  await settings.getByLabel("Ngôn ngữ đích").selectOption("en");
+  await settings.getByLabel("Sang", { exact: true }).selectOption("en");
   await expect(warning).toHaveText(
     "Glossary riêng của series có 1 từ viết cho Hàn → Việt — kiểm lại sau khi đổi ngôn ngữ. " +
       "Glossary chung sẽ chuyển sang cặp Hàn → Anh.",
   );
   // Cảnh báo không chặn lưu.
-  await settings.getByRole("button", { name: "Lưu cài đặt" }).click();
-  await expect(page.getByText(/Hàn → Anh · /)).toBeVisible();
+  await settings.getByRole("button", { name: "Lưu", exact: true }).click();
+  await expect(page.locator(".series-head").getByText(/Hàn → Anh/)).toBeVisible();
   await settings.getByRole("button", { name: "Đóng" }).click();
   await expect(settings).toHaveCount(0);
 

@@ -1,4 +1,4 @@
-/* Home + Series: vùng thả, dòng xác nhận inline, danh sách hàng gọn, tab của series. */
+/* Home + Series: dải thả, dòng "Vừa thả" inline, danh sách hàng một dòng, cài đặt series. */
 .home {
   max-width: 1080px;
   margin: 0 auto;
@@ -23,6 +23,16 @@
   padding: var(--sp-4) 20px;
   gap: var(--sp-4);
 }
+/* Dải 56px một dòng: icon + "Thả ..." + "chọn file". */
+.dropzone[data-size="strip"] {
+  min-height: 56px;
+  padding: 0 var(--sp-4);
+  justify-content: center;
+  flex-wrap: nowrap;
+  gap: var(--sp-2);
+  border-width: 1px;
+  border-radius: var(--radius);
+}
 .dropzone[data-over="true"] {
   border-color: var(--c-accent);
   background: var(--c-accent-weak);
@@ -38,12 +48,23 @@
   flex-direction: column;
   gap: var(--sp-1);
 }
+.dropzone[data-size="strip"] .dropzone-text {
+  flex: 0 1 auto;
+  min-width: 0;
+}
 .dropzone-title {
   font-weight: 600;
   font-size: 17px;
 }
 .dropzone[data-size="md"] .dropzone-title {
   font-size: 15px;
+}
+.dropzone[data-size="strip"] .dropzone-title {
+  font-size: var(--fs-md);
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .dropzone-hint {
   color: var(--c-fg-muted);
@@ -70,115 +91,72 @@ label.file-pick.dashed {
   border-style: dashed;
   border-color: var(--c-fg-subtle);
 }
+/* "chọn file" trong dải thả: chữ gạch chân, không viền. */
+label.file-pick.link {
+  height: 32px;
+  padding: 0 var(--sp-1);
+  border-color: transparent;
+  background: none;
+  color: var(--c-accent-hover);
+  font-size: var(--fs-md);
+  font-weight: 400;
+  text-decoration: underline;
+}
 label.file-pick input {
   display: none;
 }
 
-/* ---- Thẻ cột phải màn series ---- */
-.card {
-  border: 1px solid var(--c-line);
-  border-radius: 6px;
-  padding: var(--sp-4);
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-3);
-}
-.card-head {
-  display: flex;
-  align-items: center;
-}
-.card-head h2 {
-  font-size: 15px;
-  flex: 1;
-}
-.card dl {
-  margin: 0;
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--sp-2) var(--sp-3);
-  font-size: var(--fs-sm);
-}
-.card dt {
-  color: var(--c-fg-muted);
-}
-.card dd {
-  margin: 0;
-  overflow-wrap: anywhere;
-}
-.card form {
-  display: flex;
-  gap: 6px;
-}
-.card form input {
-  height: 32px;
-  font-size: var(--fs-sm);
-}
-.card table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: var(--fs-sm);
-}
-.card td {
-  border-top: 1px solid var(--c-surface-2);
-  padding: 6px 0;
-}
-
-/* ---- Dòng xác nhận sau khi thả ---- */
+/* ---- Dòng "Vừa thả" sau khi thả ---- */
 .confirm-row {
   border: 1px solid var(--c-line-strong);
   border-radius: 6px;
-  padding: var(--sp-4) 20px;
+  padding: var(--sp-2) var(--sp-3);
   margin-top: -14px;
   display: flex;
   flex-direction: column;
-  gap: var(--sp-3);
+  gap: var(--sp-2);
 }
 .confirm-fields {
   display: flex;
-  align-items: flex-end;
-  gap: var(--sp-4);
+  align-items: center;
+  gap: var(--sp-2);
   flex-wrap: wrap;
 }
-.confirm-fields .field {
-  display: flex;
-  flex-direction: column;
+.confirm-fields select,
+.confirm-fields input:not([type="file"]) {
+  width: auto;
+  height: 32px;
+}
+.confirm-fields select {
+  min-width: 160px;
+  max-width: 240px;
+}
+.confirm-fields input.num {
+  width: 72px;
+}
+.confirm-number {
+  display: inline-flex;
+  align-items: center;
   gap: var(--sp-1);
   margin: 0;
-  font-size: var(--fs-xs);
   color: var(--c-fg-muted);
 }
-.confirm-fields .field select,
-.confirm-fields .field input {
-  height: 36px;
-  font-size: var(--fs-md);
-  color: var(--c-fg);
-}
-.confirm-fields .field select {
-  min-width: 220px;
-}
-.confirm-fields .field input.num {
-  width: 90px;
-}
 .confirm-file {
-  min-width: 220px;
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-1);
+  flex: 1;
+  min-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .confirm-file b {
   font-weight: 600;
-  word-break: break-all;
-}
-.confirm-row .spacer {
-  flex: 1;
 }
 .confirm-row button {
-  height: 36px;
-  padding: 0 14px;
-  font-size: var(--fs-md);
+  height: 32px;
 }
-.confirm-row button.btn-primary {
-  padding: 0 18px;
+.confirm-row button.icon-btn {
+  width: 32px;
+  padding: 0;
 }
 .confirm-modes {
   display: flex;
@@ -204,51 +182,37 @@ label.file-pick input {
   display: flex;
   align-items: center;
   gap: var(--sp-3);
-  flex-wrap: wrap;
-}
-.block-head h2 {
-  font-size: var(--fs-lg);
-}
-.block-head .spacer {
-  flex: 1;
 }
 .block-head input[type="search"] {
-  width: 240px;
+  flex: 1;
   height: 32px;
 }
-/* Form "+ Series mới": khối riêng dưới tiêu đề, các ô xếp ngang, xuống dòng khi hẹp. */
-.new-series {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
-  gap: var(--sp-3) var(--sp-4);
-  padding: var(--sp-4);
-  border: 1px solid var(--c-line-strong);
-  border-radius: 6px;
-  background: var(--c-surface);
+.block-head button {
+  height: 32px;
 }
-.new-series-field {
+/* Form "+ Series" / tạo series: một dòng — tên, loại truyện, Tạo, ✕. */
+.inline-form {
   display: flex;
-  flex-direction: column;
-  gap: var(--sp-1);
-  margin: 0;
-  font-size: var(--fs-xs);
-  color: var(--c-fg-muted);
-}
-.new-series .new-series-field input {
-  width: 280px;
-  max-width: 100%;
-  height: 36px;
-  font-size: var(--fs-md);
-  color: var(--c-fg);
-}
-.new-series-actions {
-  display: flex;
+  align-items: center;
   gap: var(--sp-2);
+  flex-wrap: wrap;
 }
-.new-series-actions button {
-  height: 36px;
-  padding: 0 14px;
+.inline-form input:not([type="file"]) {
+  flex: 1;
+  min-width: 160px;
+  width: auto;
+  height: 32px;
+}
+.inline-form select {
+  width: auto;
+  height: 32px;
+}
+.inline-form button {
+  height: 32px;
+}
+.inline-form button.icon-btn {
+  width: 32px;
+  padding: 0;
 }
 .rows {
   border: 1px solid var(--c-line);
@@ -259,10 +223,12 @@ label.file-pick input {
   color: var(--c-fg-muted);
 }
 .row-item {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: var(--sp-4);
-  padding: var(--sp-3) var(--sp-4);
+  gap: var(--sp-2);
+  min-height: 44px;
+  padding: var(--sp-1) var(--sp-2) var(--sp-1) var(--sp-3);
   flex-wrap: wrap;
 }
 .row-item + .row-item {
@@ -275,60 +241,20 @@ label.file-pick input {
   flex: 1;
   min-width: 140px;
 }
-/* Tên series dài cắt "…" (title của .row-name hiện tên đầy đủ), không đè cột trạng thái. */
-.row-title {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  flex: 0 1 240px;
-  min-width: 0;
-}
-.row-title a {
-  font-weight: 600;
-  color: var(--c-fg);
-}
-.row-sub {
-  font-size: var(--fs-xs);
-  color: var(--c-fg-muted);
-}
-.row-name,
-.row-sub {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
 .row-error {
   flex-basis: 100%;
   font-size: var(--fs-sm);
   color: var(--c-danger);
 }
-/* Ô chữ cái đầu của series (chưa có ảnh bìa). */
-.cover {
-  width: 36px;
-  height: 48px;
-  background: var(--c-surface-2);
-  border-radius: var(--radius);
-  flex-shrink: 0;
-  display: grid;
-  place-items: center;
-  font-weight: 600;
-  color: var(--c-fg-muted);
-}
-.cover.lg {
-  width: 48px;
-  height: 64px;
-  font-size: 20px;
-}
-
-/* Hàng series ở home: phần bìa + tên + trạng thái là link mở series (bấm cả vùng), icon Sửa/Xoá bên phải. */
+/* Hàng series ở home: tên + trạng thái + số chương là link mở series (bấm cả vùng), icon Sửa/Xoá bên phải. Tên dài cắt "…" (title hiện tên đầy đủ), không đè cột trạng thái. */
 .row-open {
   flex: 1;
   min-width: 260px;
   display: flex;
   align-items: center;
-  gap: var(--sp-4);
+  gap: var(--sp-3);
   color: inherit;
-  margin: calc(-1 * var(--sp-2)) 0;
+  margin: calc(-1 * var(--sp-1)) 0;
   padding: var(--sp-2) 0;
   border-radius: var(--radius);
 }
@@ -339,10 +265,24 @@ label.file-pick input {
   background: var(--c-surface);
 }
 .row-name {
+  flex: 0 1 280px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-weight: 600;
+  color: var(--c-fg);
 }
 .row-open:hover .row-name {
   color: var(--c-accent-hover);
+}
+.row-open .grow {
+  flex-wrap: nowrap;
+  min-width: 0;
+}
+.row-count {
+  flex: none;
+  font-variant-numeric: tabular-nums;
 }
 
 /* Chấm trạng thái 10px. */
@@ -366,59 +306,53 @@ label.file-pick input {
   background: var(--c-danger);
 }
 
-/* ---- Series: 2 cột (cột phải xuống dưới khi hẹp) ---- */
-.series-layout {
-  max-width: 1280px;
-  margin: 0 auto;
-  padding: var(--sp-5);
-  display: flex;
-  gap: var(--sp-5);
-  flex-wrap: wrap;
-  align-items: flex-start;
-}
+/* ---- Series: một cột ---- */
 .series-main {
-  flex: 999 1 640px;
-  min-width: 0;
+  max-width: 880px;
+  margin: 0 auto;
+  padding: var(--sp-5) var(--sp-4);
   display: flex;
   flex-direction: column;
-  gap: 18px;
-}
-.series-side {
-  flex: 1 1 340px;
-  max-width: 400px;
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-4);
+  gap: var(--sp-3);
 }
 .series-head {
   display: flex;
   align-items: center;
-  gap: var(--sp-4);
+  gap: var(--sp-2);
   flex-wrap: wrap;
 }
-.series-head-text {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  flex: 1;
-  min-width: 0;
+.series-head .btn {
+  height: 32px;
+}
+.series-head .icon-btn {
+  width: 32px;
+  border: 1px solid var(--c-line-strong);
+  color: var(--c-fg);
+}
+.series-head > a[aria-label="Về trang chủ"] {
+  border-color: transparent;
 }
 /* Tên series dài cắt "…" trên 1 dòng; tên đầy đủ ở `title`. */
 .series-head h1 {
-  font-size: 22px;
+  flex: 1 1 120px;
+  min-width: 0;
+  font-size: var(--fs-xl);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-/* Hàng chương: phần số + trạng thái là link mở chương (bấm cả vùng). */
+.series-pair {
+  flex: none;
+}
+/* Hàng chương một dòng: số, chấm + trạng thái, thời gian là link mở chương (bấm cả vùng); Xoá bên phải. */
 .ch-open {
   flex: 1;
   min-width: 260px;
   display: flex;
   align-items: center;
-  gap: var(--sp-4);
+  gap: var(--sp-3);
   color: inherit;
-  margin: calc(-1 * var(--sp-2)) 0;
+  margin: calc(-1 * var(--sp-1)) 0;
   padding: var(--sp-2) 0;
   border-radius: var(--radius);
 }
@@ -429,41 +363,31 @@ label.file-pick input {
   background: var(--c-surface);
 }
 .ch-num {
-  width: 84px;
-  font-weight: 600;
-  font-size: 15px;
+  width: 64px;
+  flex: none;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
 }
 .ch-open:hover .ch-num {
   color: var(--c-accent-hover);
 }
-.ch-body {
+.ch-state {
   flex: 1;
-  min-width: 260px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-.ch-line {
+  min-width: 0;
   display: flex;
   align-items: center;
-  gap: var(--sp-2);
-  flex-wrap: wrap;
+  gap: 6px;
 }
-.ch-line .bar {
-  width: 200px;
-  height: 4px;
+.ch-time {
+  flex: none;
 }
-.ch-line .bar > span[data-tone="ok"] {
-  background: var(--c-ok);
-}
-.ch-line .bar > span[data-tone="warn"] {
-  background: var(--c-warn);
-}
-.ch-line .bar > span[data-tone="danger"] {
-  background: var(--c-danger);
-}
-.ch-line .bar > span[data-tone="idle"] {
-  background: var(--c-fg-subtle);
+/* Vạch tiến độ 2px sát đáy hàng, chỉ có ở chương đang chạy. */
+.row-progress {
+  position: absolute;
+  left: 0;
+  bottom: -1px;
+  height: 2px;
+  background: var(--c-info);
 }
 
 /* Nút chỉ có icon (xoá chương…): vùng bấm 34px. */
@@ -515,11 +439,6 @@ label.file-pick input {
   font-size: var(--fs-xs);
   color: var(--c-fg-muted);
 }
-.settings-form {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-4);
-}
 .settings-group {
   border: 1px solid var(--c-line);
   border-radius: 6px;
@@ -552,15 +471,134 @@ label.file-pick input {
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 0 var(--sp-4);
 }
-.settings-save {
+/* Modal Cài đặt dịch hẹp hơn modal mặc định (620px). */
+.drawer.modal:has(.settings-dialog) {
+  width: min(620px, calc(100vw - 32px));
+}
+.settings-dialog {
+  display: flex;
+  flex-direction: column;
+}
+.settings-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+.settings-form label,
+.fold-body label {
+  margin: 0 0 var(--sp-1);
+}
+.settings-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--sp-3);
+}
+.field-head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+  margin: 0 0 var(--sp-1);
+  font-size: var(--fs-sm);
+  color: var(--c-fg-muted);
+}
+.field-head label {
+  margin: 0;
+}
+/* Nhóm thu gọn: tên bên trái, tóm tắt một dòng bên phải, mũi tên xoay khi mở. */
+.settings-folds {
+  display: flex;
+  flex-direction: column;
+  margin-top: var(--sp-1);
+}
+.settings-fold {
+  border-top: 1px solid var(--c-line);
+}
+.settings-dialog > .settings-fold {
+  border-bottom: 1px solid var(--c-line);
+}
+.settings-fold > summary {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  min-height: 44px;
+  padding: 0 var(--sp-1);
+  cursor: pointer;
+  list-style: none;
+}
+.settings-fold > summary::-webkit-details-marker {
+  display: none;
+}
+.fold-title {
+  flex: none;
+  font-weight: 500;
+}
+.fold-sum {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: right;
+  color: var(--c-fg-muted);
+}
+.fold-sum[data-invalid] {
+  color: var(--c-danger);
+  font-weight: 500;
+}
+.fold-chevron {
+  flex: none;
+  color: var(--c-fg-subtle);
+  transition: transform 0.12s;
+}
+.settings-fold[open] > summary .fold-chevron {
+  transform: rotate(180deg);
+}
+.fold-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding: var(--sp-1) var(--sp-1) var(--sp-3);
+}
+.fold-body table.data {
+  margin: 0;
+}
+/* Đáy modal: link Xoá series (trái), trạng thái + Lưu (phải); ô xác nhận xoá nằm trên hàng này. */
+.settings-foot {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+.settings-foot-row {
   display: flex;
   align-items: center;
   gap: var(--sp-3);
   flex-wrap: wrap;
 }
-.settings-save .btn-primary {
+.settings-foot-row .spacer {
+  flex: 1;
+}
+.settings-foot-row .btn-primary {
   height: 36px;
-  padding: 0 18px;
+  padding: 0 20px;
+}
+button.link-danger {
+  height: 32px;
+  padding: 0 var(--sp-1);
+  border-color: transparent;
+  background: none;
+  color: var(--c-danger);
+  font-weight: 400;
+}
+button.link-danger:hover {
+  background: none;
+  text-decoration: underline;
+}
+.skip-images {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
 }
 /* Ảnh tự bỏ của series: lưới thumbnail, icon Xoá góc trên phải. */
 .skip-images-grid {
@@ -593,18 +631,23 @@ label.file-pick input {
 .danger-zone {
   border: 1px solid var(--c-danger);
   border-radius: 6px;
-  padding: var(--sp-4);
+  padding: var(--sp-3);
   display: flex;
   flex-direction: column;
   gap: var(--sp-2);
 }
-.danger-zone h2 {
-  font-size: 15px;
-  color: var(--c-danger);
-}
 .danger-zone p,
 .danger-zone label {
   margin: 0;
+}
+.danger-zone .row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+.danger-zone .row input {
+  flex: 1;
+  height: 32px;
 }
 
 /* ---- Glossary ---- */
@@ -674,10 +717,17 @@ label.file-pick input {
 
 @media (max-width: 640px) {
   .home,
-  .series-layout {
+  .series-main {
     padding-inline: var(--sp-4);
   }
-  .row-title {
-    flex-basis: auto;
+  .settings-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .row-open,
+  .ch-open {
+    min-width: 0;
+  }
+  .row-name {
+    flex-basis: 96px;
   }
 }

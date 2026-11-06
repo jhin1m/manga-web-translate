@@ -46,6 +46,8 @@ export type EditorState = {
   ai: AiInfo;
   history: History;
   selection: string | null;
+  /** Tăng mỗi lần chọn lại đúng khối đang chọn: `selection` không đổi nên người nghe cần dấu hiệu riêng. */
+  reselects: number;
   tool: Tool;
   showOriginal: boolean;
   readOnly: ReadOnlyReason;
@@ -116,6 +118,7 @@ const initial = (): EditorState => ({
   ai: { state: null, rev: 0, available: false },
   history: emptyHistory(),
   selection: null,
+  reselects: 0,
   tool: "select",
   showOriginal: false,
   readOnly: "loading",
@@ -193,7 +196,8 @@ export function createEditorStore() {
       });
     },
 
-    select: (selection) => set({ selection }),
+    select: (selection) =>
+      set((s) => (selection && selection === s.selection ? { reselects: s.reselects + 1 } : { selection })),
     setTool: (tool) => set({ tool }),
     setShowOriginal: (showOriginal) => set({ showOriginal }),
     setLayout: (layout) => set({ layout }),

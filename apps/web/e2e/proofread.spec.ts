@@ -1,10 +1,10 @@
 /**
- * AI hiệu đính: panel "Hiệu đính" trên rail → chạy (job chapter.proofread qua worker giả) → gợi ý cũ → mới + lý do →
+ * AI hiệu đính: tab "Hiệu đính" của panel Văn bản → chạy (job chapter.proofread qua worker giả) → gợi ý cũ → mới + lý do →
  * Nhận = sửa bản dịch như gõ tay (autosave, version) → hoàn tác trả gợi ý về "Chờ duyệt" → Bỏ thì gợi ý biến mất.
  */
 import { expect, test } from "@playwright/test";
 import { runFakeWorker } from "./fake-worker.ts";
-import { apiReadyChapter, login, openPanel, state } from "./helpers.ts";
+import { apiReadyChapter, docTab, login, openPanel, state } from "./helpers.ts";
 
 test("run AI proofread, accept a suggestion through the normal edit path, undo, dismiss", async ({ page }) => {
   const pageErrors: string[] = [];
@@ -26,10 +26,13 @@ test("run AI proofread, accept a suggestion through the normal edit path, undo, 
   await expect(page.locator(".ed-canvas canvas").first()).toBeVisible();
   const panel = await openPanel(page, "proofread");
   await panel.getByRole("button", { name: "Chạy AI hiệu đính" }).click();
-  // Xác nhận trước khi chạy: thấy ước tính trang / chi phí / ảnh gửi lên AI.
+  // Xác nhận trước khi chạy: 1 dòng trang · giá · thời gian; dữ liệu gửi lên AI nằm ở ⓘ cạnh nút Chạy.
   const confirm = panel.getByRole("region", { name: "Xác nhận chạy AI hiệu đính" });
-  await expect(confirm).toContainText("Chi phí ước tính");
-  await expect(confirm).toContainText("ảnh từng trang");
+  await expect(confirm).toContainText(/\d+ trang · (dưới \$0\.01|\$[\d.]+ – \$[\d.]+).* · (khoảng|dưới) /);
+  await expect(confirm.locator("p")).toHaveCount(1);
+  const tip = confirm.getByRole("button", { name: "Dữ liệu gửi lên AI" });
+  await tip.focus();
+  await expect(confirm.getByRole("tooltip")).toContainText("ảnh từng trang");
   await confirm.getByRole("button", { name: "Chạy hiệu đính" }).click();
 
   let stop = false;
@@ -45,17 +48,21 @@ test("run AI proofread, accept a suggestion through the normal edit path, undo, 
   await expect(item).toContainText("Xin chào, cậu khoẻ không?");
   await expect(item).toContainText("thiếu câu hỏi thăm theo ngữ cảnh");
   await expect(item).toContainText("Chờ duyệt");
+  // Nhãn tab đếm gợi ý chờ duyệt.
+  await expect(docTab(page, "proofread")).toHaveText("Hiệu đính · 1");
   // Gợi ý không tự ghi đè bản dịch.
   expect(await translation()).toBe("Xin chào");
 
   await item.getByRole("button", { name: "Nhận" }).click();
   await expect(item).toContainText("Đã nhận");
-  await expect(page.locator(".status", { hasText: "Đã lưu" })).toBeVisible({ timeout: 10_000 });
+  await expect(docTab(page, "proofread")).toHaveText("Hiệu đính");
+  await expect(page.getByRole("status", { name: "Khoá chương" })).toContainText("Đã lưu", { timeout: 10_000 });
   await expect.poll(translation, { timeout: 10_000 }).toBe("Xin chào, cậu khoẻ không?");
 
   // Hoàn tác (undo của editor) → bản cũ, gợi ý lại "Chờ duyệt".
   await page.keyboard.press("ControlOrMeta+z");
   await expect(item).toContainText("Chờ duyệt");
+  await expect(docTab(page, "proofread")).toHaveText("Hiệu đính · 1");
   await expect.poll(translation, { timeout: 10_000 }).toBe("Xin chào");
 
   await item.getByRole("button", { name: "Bỏ" }).click();

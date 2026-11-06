@@ -6,6 +6,7 @@ import {
   nextQuotaReset,
   pageRanges,
   providerWait,
+  providerWaitShort,
   providerWaitText,
 } from "./job-error.ts";
 
@@ -39,7 +40,7 @@ describe("job error text", () => {
     const d = describeJobError(job({ status: "failed", error_class: "schema", error: "bad json" }));
     expect(d?.waiting).toBe(false);
     expect(d?.text).toContain("AI trả sai định dạng");
-    expect(d?.text).toContain("Dịch lại trang này");
+    expect(d?.text).toContain("Dịch lại trang");
     expect(describeJobError(job({ status: "failed" }))?.text).toContain("đã thử lại nhiều lần");
   });
 
@@ -80,6 +81,8 @@ describe("provider wait band", () => {
     if (!w) throw new Error("expected wait");
     expect(providerWaitText(w)).toContain(`trang 1, 2, 3 đang chờ, tự thử lại lúc ${clock(w.next ?? "")}`);
     expect(providerWaitText(w)).toContain("Huỷ xử lý");
+    expect(providerWaitShort(w)).toBe("AI hết hạn mức, trang 1, 2, 3 tự thử lại");
+    expect(providerWaitShort({ ...w, rateLimited: false })).toBe("AI lỗi tạm thời, trang 1, 2, 3 tự thử lại");
   });
 
   it("is null when no page is waiting on the provider", () => {
@@ -115,6 +118,21 @@ describe("failed pages summary", () => {
     expect(g[0]?.hint).toContain("Cài đặt › AI");
     expect(g[0]?.raw).toContain("401");
     expect(g[1]?.hint).toBeNull();
+  });
+
+  it("keeps every raw error of a group, merged by content with its page ranges, for the technical details", () => {
+    const f = (ord: number, error: string | null) => ({ ord, job: { error_class: "provider", error } });
+    const g = failedPageGroups([
+      f(1, "gemini 503"),
+      f(2, "gemini 503"),
+      f(3, "gemini 503"),
+      f(5, "gemini 500"),
+      f(6, null),
+    ]);
+    expect(g[0]?.details).toEqual([
+      { pages: "2–4", error: "gemini 503" },
+      { pages: "6", error: "gemini 500" },
+    ]);
   });
 
   it("a failed job whose API key was rejected says to fix the key, not just retry", () => {

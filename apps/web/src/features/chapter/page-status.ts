@@ -132,9 +132,31 @@ const IS_MAC =
 /** Gợi ý chọn trang ở cột trang: macOS Ctrl-click là chuột phải (mở menu Ẩn trang) → chỉ ⌘ chọn được. */
 export const selectHint = (mac = IS_MAC) => `${mac ? "⌘" : "Ctrl"}-click hoặc Shift-click: chọn để dịch riêng`;
 
-/** Title thumbnail: câu lỗi job (nếu có) hoặc cờ chi tiết; trang hiện thêm gợi ý menu chuột phải + chọn trang. */
-export function thumbTitle(p: ThumbPage, overflow: boolean, mac = IS_MAC): string {
+/** Cờ góc thumbnail: "!" cần xem / chờ AI, "×" lỗi. `text` = tên truy cập + tooltip ("Lỗi: <câu lỗi job>"). */
+export type ThumbFlag = { glyph: "!" | "×"; tone: "warn" | "danger"; text: string };
+
+export function thumbFlag(p: ThumbPage, overflow: boolean): ThumbFlag | null {
+  const mark = thumbMark(p, overflow);
+  if (mark?.tone !== "warn" && mark?.tone !== "danger") return null;
+  const detail = describeJobError(p.job)?.text ?? thumbFlags(p, overflow).join(", ");
+  return {
+    glyph: mark.tone === "danger" ? "×" : "!",
+    tone: mark.tone,
+    // Câu lỗi job đã mở đầu bằng "Lỗi:" → không lặp nhãn.
+    text: !detail ? mark.label : detail.startsWith(`${mark.label}:`) ? detail : `${mark.label}: ${detail}`,
+  };
+}
+
+/**
+ * Title thumbnail: bước đang chạy (nhãn thumbnail không còn chữ), câu lỗi job hoặc cờ chi tiết; kèm gợi ý thao tác.
+ * Trang đang mở có nút ⋯ nên gợi ý menu trang; trang khác chỉ ẩn được bằng chuột phải.
+ */
+export function thumbTitle(p: ThumbPage, overflow: boolean, mac = IS_MAC, active = false): string {
+  const mark = thumbMark(p, overflow);
+  const step = mark?.tone === "busy" ? mark.label : null;
   const detail = describeJobError(p.job)?.text ?? thumbFlags(p, overflow).join(" · ");
-  const hint = p.skipped ? "Bấm hoặc chuột phải: khôi phục trang" : `Chuột phải: xoá (ẩn) trang · ${selectHint(mac)}`;
-  return detail ? `${detail}\n${hint}` : hint;
+  const hint = p.skipped
+    ? "Bấm hoặc chuột phải: khôi phục trang"
+    : `${active ? "Chuột phải hoặc nút ⋯: thao tác trang" : "Chuột phải: ẩn trang"} · ${selectHint(mac)}`;
+  return [step, detail, hint].filter(Boolean).join("\n");
 }

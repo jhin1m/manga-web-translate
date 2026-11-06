@@ -27,7 +27,7 @@ test("series, chapter, glossary and settings open at their own URLs; old /w/ pat
   await page.goto(`/s/${s}?tab=settings`);
   const settings = page.getByRole("dialog", { name: "Cài đặt dịch" });
   await expect(settings).toBeVisible();
-  await expect(settings.getByLabel("Ngôn ngữ đích")).toBeVisible();
+  await expect(settings.getByLabel("Sang", { exact: true })).toBeVisible();
   await settings.getByRole("button", { name: "Đóng" }).click();
   await expect(settings).toHaveCount(0);
   await expect(page).toHaveURL(`${WEB_URL}/s/${s}`);

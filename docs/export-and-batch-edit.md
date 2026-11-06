@@ -1,8 +1,8 @@
 # Xuất chương + sửa hàng loạt (find/replace, áp glossary)
 
-Trên UI (màn chương, xem [editor.md](./editor.md)): **Xuất** là drawer phải (`features/chapter/export-drawer.tsx`; mở
-bằng nút chính "Xuất", nút "Xuất" phụ hoặc `?drawer=export`; chi tiết ở [Drawer Xuất chương](#drawer-xuất-chương); tải qua 302 bên dưới). **Tìm / Thay** và **Áp glossary** là 2 đoạn của
-panel **Tìm** trên rail công cụ (segmented "Tìm / Thay" | "Glossary", panel rộng 560px; Ctrl/Cmd+F mở thẳng "Tìm /
+Trên UI (màn chương, xem [editor.md](./editor.md)): **Xuất** là menu dưới nút Xuất (`features/chapter/export-menu.tsx`; mở
+bằng nút chính "Xuất", mục "Xuất" trong menu ⋯ khi chương có trang lỗi, hoặc `?drawer=export`; chi tiết ở [Menu Xuất chương](#menu-xuất-chương); tải qua 302 bên dưới). **Tìm / Thay** và **Áp glossary** là 2 tab
+của panel **Văn bản** trên rail công cụ (tab "Tìm / Thay" | "Glossary", panel rộng 560px; Ctrl/Cmd+F mở thẳng "Tìm /
 Thay"), không có hộp thoại modal; chỉ dùng được khi chương đã dịch xong. Trước khi gọi `apply` UI lưu hết sửa chưa lưu (`beforeWrite`). Apply / hoàn tác
 chỉ chạy khi chương không đang cắt trang / xử lý (409 `chapter_busy`).
 
@@ -39,17 +39,18 @@ Render phía server bằng chính `worker/mtl_pipeline/render.py` (một rendere
 - **Xoá sau 7 ngày**: lifecycle MinIO lọc theo tag (`minio-init` trong `infra/docker-compose.dev.yml`,
   `mc ilm import`); production phải cấu hình rule tương đương trên bucket.
 
-## Drawer Xuất chương
+## Menu Xuất chương
 
 Một nút, ít lựa chọn (`export-panel.tsx`, nhãn/trạng thái thuần ở `export-options.ts`, cảnh báo ở `export-warnings.ts`):
 
-- **Cảnh báo "Trước khi xuất"** — mỗi câu nói hậu quả trong file; có cảnh báo vẫn xuất được:
+- **Cảnh báo "Trước khi xuất"** — hiện thành 1 dòng "N chỗ cần xem" (bấm mở danh sách; không có cảnh báo thì không có dòng);
+  mỗi câu trong danh sách nói hậu quả trong file; có cảnh báo vẫn xuất được:
   - "N trang chưa dịch → không có trong file" (trang không `ready`: lỗi, đang chạy, chờ dịch; **ẩn** khi bật "Đưa cả
     trang chưa dịch vào");
   - "N khối chưa dịch → để trống chữ" (bản dịch trống, bỏ SFX);
   - "N trang AI có bản mới → xuất bản đang hiện";
   - "N khối tràn khung → chữ có thể bị cắt".
-  Trang đã ẩn không tính. "Xem N chỗ này" (khối tràn / chưa dịch / AI có bản mới) mở panel Bản dịch lọc "Chỉ khối cần xem".
+  Trang đã ẩn không tính. "Xem N chỗ này" (khối tràn / chưa dịch / AI có bản mới) mở tab Bản dịch (panel Văn bản) lọc "Chỉ khối cần xem".
 - **"Tuỳ chọn"** (thu gọn, kèm dòng tóm tắt, VD "Ảnh .zip · 96 ảnh như lúc tải lên", ".cbz · 30 trang đã cắt · Cao · gồm
   trang chưa dịch"):
   - Định dạng: "Ảnh trong .zip — để đăng web" (`png_zip`) / ".cbz — đọc bằng app đọc truyện" (`cbz`).
@@ -59,11 +60,13 @@ Một nút, ít lựa chọn (`export-panel.tsx`, nhãn/trạng thái thuần �
   - "Đưa cả trang chưa dịch vào (ảnh gốc, chưa có bản dịch)" (`include_untranslated`).
 - **Nút "Tải chương (.zip|.cbz)"**: lưu sửa chưa lưu → `POST …/export` → tiến độ ngay tại nút ("Đang xuất 40%…") → xong tự tải đúng
   1 lần qua link có xác thực, kèm link "Tải xuống" tại chỗ phòng trình duyệt chặn tự tải. Bấm lại sau khi xong = xuất mới.
-  Mở lại drawer khi còn lượt đang chạy → theo dõi tiếp lượt đó (và tự tải khi xong). Drawer đóng lúc xong → thông báo "Đã
-  xuất xong." + "Tải xuống". Hết ngân sách → nút "Tạm dừng — hết ngân sách", tự xuất tiếp khi có lại.
-- **"Lượt xuất trước (n)"** (thu gọn): các lượt gần đây (nhãn như ".zip · như lúc tải lên · Cao"), tải lại, huỷ lượt đang chạy.
+  Mở lại menu khi còn lượt đang chạy → theo dõi tiếp lượt đó (và tự tải khi xong). Menu đóng lúc xong → thông báo "Đã
+  xuất xong." + "Tải xuống". Hết ngân sách → nút "Tạm dừng — hết ngân sách", tự xuất tiếp khi có lại. Link hết hạn →
+  "Link đã hết hạn — bấm tải lại để xuất mới".
+- **"Lần trước · 2 giờ trước · …" + "Tải lại"** (khi không có lượt đang theo dõi; hết hạn thì nói rõ): lượt xuất thành công gần
+  nhất. Danh sách các lượt gần đây (nhãn như ".zip · như lúc tải lên · Cao") và huỷ lượt đang chạy nằm ở drawer Hoạt động.
 
-## Find/replace và áp glossary (panel Tìm: "Tìm / Thay", "Glossary")
+## Find/replace và áp glossary (panel Văn bản: tab "Tìm / Thay", "Glossary")
 
 Chữ thường (không regex), phạm vi trong 1 chương, thay trong `region.translation` và `text_box.text`; box bị đổi có
 `lines: []` (renderer ngắt lại).
@@ -80,7 +83,7 @@ Apply = 1 transaction: mỗi page ghi bản cũ vào `page_state_history` với 
 `state_origin = user` (job AI sau đó không ghi đè, xem luật AI-không-ghi-đè). Undo khôi phục khi version hiện tại =
 version lúc áp + 1. History giữ 50 bản/page — batch quá cũ có thể không còn (404).
 
-"Áp kiểu cho khối cùng loại" (panel Chọn) cũng ghi theo `batch_id` nhưng client tự tính state (layout trình duyệt) và gửi
+"Áp kiểu cho khối cùng loại" (panel khối) cũng ghi theo `batch_id` nhưng client tự tính state (layout trình duyệt) và gửi
 `PUT /api/chapters/:id/states {pages: [{page_id, version, state}]}` (1 transaction; khoá 423, `chapter_busy`, page ẩn /
 bận / khác chương / sai kích thước bị từ chối, version lệch → 409 `version_conflict` kèm `pages`, không ghi page nào);
 hoàn tác qua `find-replace/undo` với `conflicts: "skip"` từ toast (trang đã sửa tiếp được giữ nguyên, toast nêu số trang đã hoàn tác + các trang bị bỏ qua; bỏ qua hết → báo không hoàn tác được).

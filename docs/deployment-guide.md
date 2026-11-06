@@ -167,7 +167,7 @@ dữ liệu gắn `user_id`. Release này không có đường lên mượt từ
 6. Rollback: **không** lùi bằng down DB. Lùi = reset DB + MinIO và checkout bản cũ (cũng mất dữ liệu).
 
 **Checklist nâng cấp lên pipeline 0.7.0 (dịch theo chuỗi lô)** (migration 0019 `jobs_progress_counts` + 0020 `translate_chain`):
-dịch chương theo chuỗi job lô, tiến độ từng trang, drawer Xuất một nút.
+dịch chương theo chuỗi job lô, tiến độ từng trang, menu Xuất một nút.
 
 1. **Worker lên 0.7.0 TRƯỚC API**: cập nhật worker Mac (`PIPELINE_VERSION` 0.7.0; thử `uv run mtl-worker --once`) rồi
    `modal deploy modal_app.py`. Worker 0.7.0 vẫn đọc payload cũ (không có `carry`) nên lên trước không hại gì. Đảo thứ tự

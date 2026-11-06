@@ -91,6 +91,21 @@ export function fmtDurationRange(r: { low: number; high: number }): string {
 export const PROOFREAD_DATA_NOTICE =
   "Gửi lên nhà cung cấp AI: ảnh từng trang (thu nhỏ) + chữ gốc, bản dịch, glossary, quy tắc xưng hô.";
 
+/** Một dòng gọn trong hộp xác nhận: "12 trang · $0.012 – $0.050 · khoảng 2–7 phút". Giá tính theo mức cao nhất thì nói rõ. */
+export function estimateSummary(e: ProofreadEstimate): string {
+  const price = `${fmtUsdRange(e.usd)}${e.price_known ? "" : " (giá cao nhất)"}`;
+  return `${e.pages} trang · ${price} · ${fmtDurationRange(e.seconds)}`;
+}
+
+/** Số gợi ý còn chờ duyệt (bản dịch hiện tại của khối vẫn là bản AI đã đọc); `translationOf` = bản dịch hiện tại theo khoá khối. */
+export function pendingCount(
+  suggestions: Pick<Suggestion, "page_id" | "region_id" | "old" | "suggestion">[],
+  translationOf: (key: string) => string | undefined,
+): number {
+  return suggestions.filter((s) => suggestionState(s, translationOf(`${s.page_id}:${s.region_id}`)) === "pending")
+    .length;
+}
+
 /** Các dòng ước tính trước khi chạy hiệu đính (trang, model, giá, thời gian, cơ sở ước tính). */
 export function estimateLines(e: ProofreadEstimate): string[] {
   const model = e.model ? `${e.provider ?? "?"} · ${e.model}` : "model mặc định của worker (chưa gán slot Hiệu đính)";

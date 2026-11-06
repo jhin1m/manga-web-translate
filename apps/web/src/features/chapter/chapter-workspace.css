@@ -1,13 +1,14 @@
 /*
- * Màn chương gộp (docs/design-guidelines.md, hướng A): thanh trên + băng cảnh báo (chỉ khi có) | rail công cụ 64px ·
- * panel ngữ cảnh (288px, 560px cho Bản dịch / Tìm; thu = cột về 0) · canvas · cột thumbnail trang 112px. Toàn màn hình (ngoài app
- * shell). Canvas nền ấm trung tính để nhìn ảnh.
+ * Màn chương gộp (docs/design-guidelines.md, hướng A): thanh trên + băng cảnh báo (chỉ khi có) | rail công cụ 48px ·
+ * panel ngữ cảnh (560px cho Văn bản, thu = cột về 0; panel khối 272px đè lên canvas, không chiếm cột)
+ * · canvas · cột thumbnail trang 72px. Toàn màn hình (ngoài app shell). Canvas nền ấm trung tính để nhìn ảnh.
  */
 .cw {
+  --cw-overlay-w: 272px;
   position: fixed;
   inset: 0;
   display: grid;
-  grid-template-columns: 64px auto minmax(0, 1fr) 112px;
+  grid-template-columns: 48px auto minmax(0, 1fr) 72px;
   grid-template-rows: 52px auto minmax(0, 1fr);
   grid-template-areas:
     "top top top top"
@@ -24,14 +25,47 @@
   padding: 0 var(--sp-4);
   border-bottom: 1px solid var(--c-line);
   min-width: 0;
+  position: relative;
 }
 .cw-top .spacer {
   flex: 1;
 }
-.cw-top-sep {
-  width: 1px;
-  height: 20px;
-  background: var(--c-line);
+/* Tiến độ chương đang chạy: vạch 2px ở đáy thanh trên; chưa đo được thì vạch chạy qua lại. */
+.cw-progress {
+  position: absolute;
+  left: 0;
+  bottom: -1px;
+  height: 2px;
+  background: var(--c-accent);
+  transition: width 0.3s ease;
+}
+.cw-progress[data-indeterminate="true"] {
+  width: 30%;
+  animation: cw-progress-slide 1.4s ease-in-out infinite alternate;
+}
+@keyframes cw-progress-slide {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(233%);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cw-progress[data-indeterminate="true"] {
+    width: 100%;
+    animation: none;
+    opacity: 0.5;
+  }
+  .cw-progress {
+    transition: none;
+  }
+}
+/* Chip trạng thái + chỉ báo lưu: co lại khi hẹp (chữ cắt "…", title/aria-label giữ đủ). */
+.cw-state {
+  display: flex;
+  align-items: center;
+  min-width: 0;
 }
 .cw-back {
   display: flex;
@@ -42,6 +76,9 @@
   white-space: nowrap;
 }
 /* Tên series dài cắt "…" (title của link hiện tên đầy đủ); icon ‹ không bị cắt. */
+.cw-back svg {
+  flex-shrink: 0;
+}
 .cw-back-name {
   max-width: 240px;
   overflow: hidden;
@@ -55,15 +92,34 @@
   display: flex;
   min-width: 0;
 }
-.cw-chip > .status {
+.cw-chip > .cw-chip-btn {
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  border-radius: 999px;
+  cursor: pointer;
+}
+.cw-chip-btn > .status {
   font-size: var(--fs-sm);
+  max-width: 100%;
+}
+.cw-chip-btn > .status::before {
+  flex-shrink: 0;
+}
+.cw-chip-label {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+.cw-chip-btn:hover {
+  opacity: 0.8;
 }
 /* Chỉ báo sửa/lưu: nhỏ, sau chip; chấm màu thay bằng icon khoá khi đang giữ khoá. */
 .cw-edit {
   position: relative;
   gap: 4px;
+  margin-left: var(--sp-2);
 }
 .cw-edit:has(svg)::before {
   display: none;
@@ -75,32 +131,6 @@
   display: flex;
   align-items: center;
   gap: 2px;
-}
-.cw-seg {
-  border: 0;
-  margin: 0;
-  min-width: 0;
-}
-.cw-seg {
-  display: flex;
-  padding: 0;
-}
-.cw-seg > * {
-  border-radius: 0;
-}
-.cw-seg > :first-child {
-  border-radius: var(--radius) 0 0 var(--radius);
-}
-.cw-seg > :last-child {
-  border-radius: 0 var(--radius) var(--radius) 0;
-}
-.cw-seg > * + * {
-  margin-left: -1px;
-}
-.cw-seg [aria-pressed="true"] {
-  background: var(--c-accent);
-  border-color: var(--c-accent);
-  color: #fff;
 }
 .cw-band {
   grid-area: band;
@@ -123,34 +153,34 @@
   min-height: 0;
 }
 
-/* Rail công cụ: nút 52×52 icon + nhãn 11px. Đang mở panel của nó = nền nhấn; công cụ đang chọn (panel thu) = chữ nhấn. */
+/* Rail công cụ 48px: nút 40×40 chỉ icon, tên + phím ở tooltip (hiện khi rê chuột hoặc focus bàn phím). Đang mở panel của nó
+   = nền nhấn; công cụ đang chọn (panel thu) = icon nhấn. Không cuộn riêng: tooltip phải tràn ra ngoài rail. */
 .cw-toolrail {
   grid-area: tools;
+  position: relative;
+  z-index: 20;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 4px;
   padding: var(--sp-2) 0;
   border-right: 1px solid var(--c-line);
+  background: var(--c-bg);
   min-height: 0;
-  overflow-y: auto;
 }
 .cw-toolbtn {
+  position: relative;
   flex: none;
-  width: 52px;
-  height: 52px;
+  width: 40px;
+  height: 40px;
   padding: 0;
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 2px;
   border: 0;
   border-radius: 6px;
   background: none;
   color: var(--c-fg-muted);
-  font-size: 11px;
-  line-height: 1.1;
 }
 .cw-toolbtn:hover {
   background: var(--c-surface-2);
@@ -162,11 +192,44 @@
 .cw-toolbtn[aria-pressed="true"] {
   background: var(--c-accent-weak);
   color: var(--c-accent-hover);
-  font-weight: 500;
+}
+.cw-toolbtn .cw-tip {
+  display: none;
+  position: absolute;
+  left: calc(100% + 8px);
+  top: 50%;
+  transform: translateY(-50%);
+  align-items: baseline;
+  gap: var(--sp-2);
+  width: max-content;
+  max-width: 240px;
+  padding: 4px var(--sp-2);
+  border: 1px solid var(--c-line-strong);
+  border-radius: var(--radius);
+  background: var(--c-bg);
+  color: var(--c-fg);
+  font-size: var(--fs-xs);
+  line-height: var(--lh);
+  white-space: nowrap;
+  box-shadow: 0 2px 8px rgb(42 38 32 / 0.12);
+  pointer-events: none;
+}
+.cw-toolbtn .cw-tip kbd {
+  color: var(--c-fg-muted);
+  font: inherit;
+}
+.cw-toolbtn .cw-tip em {
+  font-style: normal;
+  color: var(--c-fg-muted);
+  white-space: normal;
+}
+.cw-toolbtn:hover .cw-tip,
+.cw-toolbtn:focus-visible .cw-tip {
+  display: flex;
 }
 .cw-toolrail-sep {
   flex: none;
-  width: 32px;
+  width: 28px;
   height: 1px;
   margin: 4px 0;
   background: var(--c-line);
@@ -185,6 +248,16 @@
 }
 .cw-panel[data-wide] {
   width: 560px;
+}
+/* Panel khối: nằm cùng ô lưới với canvas, đè lên mép trái — canvas không đổi bề ngang khi panel đóng mở. */
+.cw-panel[data-overlay] {
+  grid-area: main;
+  justify-self: start;
+  position: relative;
+  z-index: 10;
+  width: var(--cw-overlay-w);
+  max-width: 100%;
+  box-shadow: 2px 0 8px rgb(0 0 0 / 0.1);
 }
 .cw-panel[hidden] {
   display: none;
@@ -254,17 +327,53 @@
   padding: var(--sp-2) var(--sp-4);
   border-bottom: 1px solid var(--c-surface-2);
 }
+/* Panel Văn bản: dải tab + các tab đã mở (chỉ ẩn khi chuyển, giữ nội dung đã mount). */
+.cw-panel-doc {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.cw-panel-doc > [hidden] {
+  display: none;
+}
+.cw-doctabs {
+  flex: none;
+  display: flex;
+  gap: 2px;
+  padding: 0 var(--sp-2);
+  border-bottom: 1px solid var(--c-line);
+}
+.cw-doctabs button {
+  min-height: 36px;
+  padding: 0 var(--sp-3);
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  background: none;
+  color: var(--c-fg-muted);
+  white-space: nowrap;
+}
+.cw-doctabs button:hover:not(:disabled) {
+  color: var(--c-fg);
+  background: none;
+}
+.cw-doctabs button[aria-selected="true"] {
+  border-bottom-color: var(--c-accent);
+  color: var(--c-accent-hover);
+  font-weight: 600;
+}
+.cw-panel-proofread {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
 .cw-panel-find {
   flex: 1;
   min-height: 0;
   overflow: auto;
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-3);
   padding: var(--sp-4);
-}
-.cw-panel-find > [hidden] {
-  display: none;
 }
 .cw-find-part {
   min-width: 0;
@@ -272,12 +381,8 @@
   padding: 0;
   border: 0;
 }
-.cw-seg-full > * {
-  flex: 1;
-  justify-content: center;
-}
 
-/* Cột thumbnail trang / ảnh gốc: chỉ ảnh + số; trạng thái = viền + nhãn ngắn khi có vấn đề. */
+/* Cột thumbnail trang / ảnh gốc (72px): chỉ ảnh + số; trạng thái = viền + cờ ở góc (tên đầy đủ trong tooltip). */
 .cw-thumbs {
   grid-area: thumbs;
   display: flex;
@@ -299,16 +404,6 @@
   color: var(--c-fg-muted);
   text-align: center;
 }
-.cw-thumbs-head button {
-  min-height: 32px;
-  padding: 0 var(--sp-2);
-  font-size: var(--fs-xs);
-}
-.cw-thumbs-head [aria-pressed="true"] {
-  border-color: var(--c-accent);
-  background: var(--c-accent-weak);
-  color: var(--c-accent-hover);
-}
 /* Thanh "Dịch N trang · Bỏ chọn" khi có trang chọn (⌘/Ctrl/Shift-click thumbnail). */
 .cw-thumbs-sel {
   flex: none;
@@ -324,6 +419,8 @@
   min-height: 32px;
   padding: 0 var(--sp-1);
   font-size: var(--fs-xs);
+  line-height: 1.2;
+  white-space: normal;
 }
 .cw-thumbs-list {
   flex: 1;
@@ -365,8 +462,8 @@
 }
 .cw-thumb {
   position: relative;
-  width: 72px;
-  height: 100px;
+  width: 52px;
+  height: 72px;
   padding: 0;
   overflow: hidden;
   background: #fff;
@@ -397,15 +494,14 @@
 .cw-thumb[data-tone="busy"] {
   border: 2px solid var(--c-info);
 }
-/* Trang chọn để dịch riêng: phủ màu nhấn + dấu ✓ góc trên (không đè viền trạng thái). */
+/* Trang chọn để dịch riêng: phủ màu nhấn + dấu ✓ giữa thumbnail (không đè cờ góc, viền trạng thái). */
 .cw-thumb[data-selected]::after {
   content: "✓";
   position: absolute;
   inset: 0;
   display: flex;
-  align-items: flex-start;
-  justify-content: flex-start;
-  padding: 2px 4px;
+  align-items: center;
+  justify-content: center;
   background: color-mix(in srgb, var(--c-accent) 22%, transparent);
   color: #fff;
   font-size: var(--fs-xs);
@@ -446,28 +542,34 @@
   line-height: 16px;
   text-align: center;
 }
-.cw-thumb-mark {
-  max-width: 100px;
-  padding: 1px 6px;
-  border-radius: 3px;
-  font-size: 11px;
-  line-height: 1.35;
-  text-align: center;
-  color: var(--c-fg-muted);
+/* Cờ góc trên-trái thumbnail: "!" cần xem / chờ AI, "×" lỗi, "…" đang tải (cột ảnh gốc). */
+.cw-thumb-flag {
+  position: absolute;
+  top: 3px;
+  left: calc(50% - 24px);
+  min-width: 18px;
+  height: 18px;
+  padding: 0 3px;
+  display: grid;
+  place-items: center;
+  border-radius: 9px;
+  background: var(--c-fg-muted);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1;
 }
-.cw-thumb-mark[data-tone="danger"] {
-  color: var(--c-danger);
-  background: var(--c-danger-weak);
+.cw-thumb-flag[data-tone="danger"] {
+  background: var(--c-danger);
 }
-.cw-thumb-mark[data-tone="warn"] {
-  color: var(--c-warn);
-  background: var(--c-warn-weak);
+.cw-thumb-flag[data-tone="warn"] {
+  background: var(--c-warn);
 }
-.cw-thumb-mark[data-tone="busy"] {
-  color: var(--c-info);
+.cw-thumb-flag[data-tone="busy"] {
+  background: var(--c-info);
 }
-.cw-thumb-mark[data-tone="ok"] {
-  color: var(--c-ok);
+.cw-thumb-flag[data-tone="ok"] {
+  background: var(--c-ok);
 }
 .cw-thumbs-busy {
   color: var(--c-info);
@@ -487,7 +589,7 @@
   bottom: 0;
 }
 .cw-thumbs-head .cw-thumb-bar {
-  width: 72px;
+  width: 52px;
   height: 3px;
   border-radius: 2px;
   overflow: hidden;
@@ -516,12 +618,12 @@
   }
 }
 
-/* Nút xoá / khôi phục ở góc trên thumbnail: hiện khi rê chuột hoặc focus trong mục; màn cảm ứng luôn hiện. */
+/* Nút ở góc trên-phải thumbnail: xoá / khôi phục ảnh gốc (hiện khi rê chuột hoặc focus trong mục; màn cảm ứng luôn hiện); ⋯ của trang đang mở luôn hiện. */
 .cw-thumb-act {
   position: absolute;
   top: 4px;
-  /* Mục có thể rộng hơn thumbnail 72px (nhãn dưới) và thumbnail canh giữa → bám mép phải thumbnail. */
-  right: calc(50% - 32px);
+  /* Thumbnail 52px canh giữa cột → bám mép phải thumbnail. */
+  right: calc(50% - 26px);
   width: 24px;
   height: 24px;
   min-height: 0;
@@ -535,7 +637,9 @@
   opacity: 0;
 }
 .cw-thumb-item:hover .cw-thumb-act,
-.cw-thumb-item:focus-within .cw-thumb-act {
+.cw-thumb-item:focus-within .cw-thumb-act,
+.cw-thumb-act[data-always],
+.cw-thumb-act[aria-expanded="true"] {
   opacity: 1;
 }
 @media (hover: none) {
@@ -619,11 +723,12 @@
 .cw-canvas .ed-canvas {
   background: var(--c-canvas);
 }
-/* Điều khiển nổi góc dưới canvas: ‹ Trang n / M › (trái), Vừa khung · 100% · zoom (phải). */
-.cw-pager,
-.cw-zoom {
+/* Một cụm nổi giữa đáy canvas: ‹ 3/12 › · 62%. Panel khối đè mép trái → căn giữa phần canvas còn lộ để không bị che. */
+.cw-pager {
   position: absolute;
   bottom: 14px;
+  left: 50%;
+  transform: translateX(-50%);
   z-index: 5;
   display: flex;
   align-items: center;
@@ -634,8 +739,8 @@
   border-radius: 6px;
   font-size: var(--fs-xs);
 }
-.cw-pager {
-  left: 16px;
+.cw[data-cover] .cw-pager {
+  left: calc(50% + var(--cw-overlay-w) / 2);
 }
 .cw-pager > span {
   padding: 0 6px;
@@ -645,52 +750,59 @@
   width: 32px;
   height: 32px;
 }
-.cw-zoom {
-  right: 16px;
-}
-.cw-zoom > button {
+.cw-zoom-btn {
+  min-width: 52px;
   min-height: 32px;
-  padding: 0 10px;
+  padding: 0 8px;
   border: 0;
+  border-left: 1px solid var(--c-line);
+  border-radius: 0 4px 4px 0;
   background: none;
   font-size: var(--fs-xs);
-}
-.cw-zoom > button[aria-pressed="true"] {
-  background: var(--c-accent-weak);
-  color: var(--c-accent-hover);
-}
-.cw-zoom > .mono {
-  min-width: 44px;
-  padding: 0 6px;
-  text-align: right;
   color: var(--c-fg-muted);
 }
-/* Thanh thao tác nổi cạnh khối đang chọn. */
-.cw-blockbar {
+.cw-zoom-btn:hover {
+  color: var(--c-fg);
+}
+/* Thanh phụ của công cụ Chữ / Tẩy chữ / Quét chữ: nổi giữa mép trên canvas, tự xuống dòng khi hẹp. */
+.cw-toolbar {
   position: absolute;
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%);
   z-index: 6;
+  max-width: calc(100% - 16px);
+  box-sizing: border-box;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 2px;
-  padding: 3px;
+  justify-content: center;
+  gap: var(--sp-2) var(--sp-3);
+  padding: 4px 12px;
   background: var(--c-bg);
   border: 1px solid var(--c-line);
   border-radius: 6px;
   box-shadow: 0 2px 6px rgb(0 0 0 / 0.12);
+  font-size: var(--fs-sm);
+  white-space: nowrap;
 }
-.cw-blockbar .icon-btn {
-  width: 32px;
-  height: 32px;
+.cw-toolbar > strong {
+  font-weight: 500;
+}
+.cw-toolbar .ed-seg button {
+  min-height: 30px;
+  padding: 0 10px;
+}
+.cw-toolbar input[type="range"] {
+  width: 96px;
+}
+.cw-toolbar-value {
+  min-width: 2.5ch;
+  font-variant-numeric: tabular-nums;
   color: var(--c-fg-muted);
 }
-.cw-blockbar .icon-btn[data-danger] {
-  color: var(--c-danger);
-}
-.cw-blockbar-sep {
-  width: 1px;
-  height: 18px;
-  margin: 0 2px;
-  background: var(--c-line);
+.cw-toolbar p {
+  margin: 0;
 }
 /* Nút "Xem gốc" thanh trên: bật = nền nhấn nhạt. */
 .cw-orig {
@@ -771,7 +883,7 @@
 }
 .cw-tr {
   display: grid;
-  grid-template-columns: 28px 32px minmax(0, 1fr) minmax(0, 1.2fr) 52px 84px;
+  grid-template-columns: 44px minmax(0, 1fr) minmax(0, 1.2fr) 22px;
   align-items: center;
   gap: var(--sp-2);
   padding: 0 var(--sp-3);
@@ -806,8 +918,7 @@
   background: var(--c-accent-weak);
   box-shadow: inset 3px 0 0 var(--c-accent);
 }
-.cw-src,
-.cw-kind {
+.cw-src {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -824,10 +935,21 @@
 .cw-tr textarea[readonly] {
   background: var(--c-surface);
 }
-.cw-tr .status {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.cw-rowflag {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--c-warn);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+}
+.cw-rowflag[data-tone="busy"] {
+  background: var(--c-accent);
 }
 
 /* Tab Tìm/Thay, Áp glossary. */
@@ -883,30 +1005,14 @@ label.cw-field-head {
 .cw-field textarea {
   font-size: var(--fs-md);
 }
-.cw-panel-sub {
-  font-size: var(--fs-xs);
-  color: var(--c-fg-muted);
-}
-.cw-page-line {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-2);
-  font-size: var(--fs-sm);
-  color: var(--c-fg);
-}
-.cw-flags {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-1);
-  margin: 0;
-  padding-left: var(--sp-4);
-  font-size: var(--fs-sm);
-}
-.cw-flags .danger {
-  color: var(--c-danger);
+/* Font + Cỡ: ô cỡ hẹp (số 3 chữ số). */
+.cw-block .ed-row-font {
+  grid-template-columns: minmax(0, 1fr) 72px;
 }
 .cw-warn {
-  padding: var(--sp-2) 10px;
+  width: fit-content;
+  cursor: help;
+  padding: 2px var(--sp-2);
   border-radius: var(--radius);
   background: var(--c-warn-weak);
   color: var(--c-warn);
@@ -932,6 +1038,14 @@ label.cw-field-head {
 .cw-wide {
   width: 100%;
   justify-content: center;
+  white-space: normal;
+}
+/* Xung đột khi lưu trong panel hẹp: nút xuống dòng dưới nội dung thay vì bóp chữ. */
+.cw-panel .ed-conflicts li {
+  flex-wrap: wrap;
+}
+.cw-panel .ed-conflicts li > div {
+  flex: 1 1 100%;
 }
 /* Lỗi thô của provider (JSON dài) — thu gọn, không tràn panel. */
 .cw-error-raw {
@@ -949,8 +1063,13 @@ label.cw-field-head {
 /* Tên chương bấm được → popover đổi series / số chương. */
 .cw-meta {
   position: relative;
+  flex-shrink: 0;
 }
 .cw-meta-toggle {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font: inherit;
   font-weight: inherit;
   border-color: transparent;
@@ -991,7 +1110,26 @@ label.cw-field-head {
   min-height: 32px;
   display: flex;
   align-items: center;
-  color: var(--c-fg-muted);
+  justify-content: space-between;
+  padding: 0 var(--sp-2);
+  border-radius: var(--radius);
+  background: var(--c-surface-2);
+  color: var(--c-fg);
+  list-style: none;
+}
+.cw-adv > summary::-webkit-details-marker {
+  display: none;
+}
+.cw-adv > summary::after {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: translateY(-2px) rotate(45deg);
+}
+.cw-adv[open] > summary::after {
+  transform: translateY(2px) rotate(-135deg);
 }
 .cw-adv[open] > summary {
   margin-bottom: var(--sp-2);

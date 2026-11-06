@@ -53,7 +53,9 @@ test("drop a strip on home → translate → edit → export", async ({ page }) 
   await expect(chip).toHaveText("Nháp");
   await translate.click();
   await expect(chip).toHaveText("Đang cắt trang", { timeout: 30_000 });
-  await expect(page.getByRole("button", { name: "Export", exact: true })).toBeDisabled();
+  // Đang chạy: nút chính là Huỷ, chưa có gì để xuất.
+  await expect(page.getByRole("button", { name: "Huỷ", exact: true })).toBeEnabled();
+  await expect(page.getByRole("button", { name: "Xuất", exact: true })).toHaveCount(0);
   await expect(page.getByText(/Bắt đầu dịch|Đang dịch \d+ ảnh/)).toHaveCount(0);
 
   let ready = false;
@@ -65,7 +67,7 @@ test("drop a strip on home → translate → edit → export", async ({ page }) 
   const rail = pageThumbs(page);
   // 1 click chạy tới hết: không dừng ở "Chờ dịch", không cần bấm thêm.
   await expect(rail.getByRole("button", { name: /· Xong$/ })).toHaveCount(3, { timeout: 30_000 });
-  const primary = page.getByRole("button", { name: "Export", exact: true });
+  const primary = page.getByRole("button", { name: "Xuất", exact: true });
   await expect(primary).toBeEnabled({ timeout: 15_000 });
   await expect(chip).toHaveText(/^Chờ duyệt/);
   await expect(page.getByRole("status", { name: "Khoá chương" })).toContainText("Bạn đang giữ khoá chương");
@@ -80,7 +82,8 @@ test("drop a strip on home → translate → edit → export", async ({ page }) 
   await cell.click();
   await expect(cell).not.toHaveAttribute("readonly");
   await cell.fill("Chào cậu");
-  await expect(page.locator(".status", { hasText: "Đã lưu" })).toBeVisible({ timeout: 10_000 });
+  // Đã lưu không hiện chữ trên thanh trên, chỉ vùng trạng thái (trình đọc màn hình) nói.
+  await expect(page.getByRole("status", { name: "Khoá chương" })).toContainText("Đã lưu", { timeout: 10_000 });
   await expect
     .poll(async () => {
       const r = (await (await page.request.get(`/api/pages/${p2}`)).json()) as {
@@ -95,7 +98,7 @@ test("drop a strip on home → translate → edit → export", async ({ page }) 
   ready = true;
   await worker;
   await primary.click();
-  const dlg = page.getByRole("dialog", { name: "Export chương" });
+  const dlg = page.getByRole("dialog", { name: "Xuất chương" });
   await expect(dlg).toBeVisible();
   await expect(dlg.getByRole("region", { name: "Trước khi xuất" })).toHaveCount(0);
   await dlg.getByRole("button", { name: "Tải chương (.zip)", exact: true }).click();

@@ -1,6 +1,6 @@
 /**
  * Nút chính (+ menu phụ) của màn chương theo trạng thái: Tải ảnh → Dịch chương (cắt trang → xoá chữ + OCR → dịch theo
- * lô, chạy nối một mạch; menu ⋯ "Chỉ xoá chữ + OCR" dừng ở Chờ dịch để soát trước) → (đang chạy: Xuất khoá) → Xuất.
+ * lô, chạy nối một mạch; menu ⋯ "Chỉ xoá chữ + OCR" dừng ở Chờ dịch để soát trước) → (đang chạy: Huỷ) → Xuất.
  * Tiến độ nằm ở chip trạng thái (status.ts chapterChip), nút chính chỉ là bước tiếp theo.
  * Thuần: nhận trạng thái chương, upload phía client và số trang; không gọi API.
  */
@@ -89,11 +89,11 @@ export function primaryAction(input: {
   }
   if (status === "ingesting" || status === "processing") {
     return {
-      command: "export",
-      label: "Export",
-      disabled: true,
-      title: status === "ingesting" ? "Đang cắt trang — dịch xong mới xuất được" : "Dịch xong mới xuất được",
-      menu: [{ command: "cancel", label: "Huỷ xử lý" }],
+      command: "cancel",
+      label: "Huỷ",
+      disabled: false,
+      title: status === "ingesting" ? "Huỷ cắt trang" : "Huỷ xử lý chương",
+      menu: [],
     };
   }
   if (status === "partial_failed") {
@@ -115,15 +115,16 @@ export function primaryAction(input: {
     }
     return {
       command: "retry",
-      label: "Chạy lại trang lỗi",
+      label: input.failed > 0 ? `Chạy lại ${input.failed} trang` : "Chạy lại trang lỗi",
       disabled: false,
-      menu: [{ command: "export", label: "Export" }, retranslate],
+      title: "Chạy lại các trang lỗi (dùng AI)",
+      menu: [{ command: "export", label: "Xuất" }, retranslate],
     };
   }
   // review / done
   return {
     command: "export",
-    label: "Export",
+    label: "Xuất",
     disabled: input.pages === 0,
     menu: input.pages > 0 ? [retranslate] : [],
   };

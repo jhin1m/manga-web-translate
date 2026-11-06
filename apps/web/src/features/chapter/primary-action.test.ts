@@ -69,20 +69,28 @@ describe("primary action", () => {
     ]);
   });
 
-  it("ingesting / processing → Xuất disabled (progress lives in the status chip), cancel in the menu", () => {
+  it("ingesting / processing → a single enabled Huỷ (progress lives in the status chip), nothing else", () => {
     const p = primaryAction({ ...base, status: "processing" });
-    expect(p).toMatchObject({ command: "export", label: "Export", disabled: true });
-    expect(p.menu.map((m) => m.command)).toEqual(["cancel"]);
+    expect(p).toMatchObject({ command: "cancel", label: "Huỷ", disabled: false, menu: [] });
     expect(primaryAction({ ...base, status: "ingesting", pages: 0 })).toMatchObject({
-      command: "export",
-      disabled: true,
+      command: "cancel",
+      label: "Huỷ",
+      disabled: false,
+      menu: [],
     });
   });
 
-  it("partial_failed → Chạy lại trang lỗi; menu Xuất + Dịch lại", () => {
-    const p = primaryAction({ ...base, status: "partial_failed" });
-    expect(p).toMatchObject({ command: "retry", label: "Chạy lại trang lỗi" });
-    expect(p.menu.map((m) => m.command)).toEqual(["export", "retranslate"]);
+  it("partial_failed → Chạy lại N trang; menu Xuất + Dịch lại", () => {
+    const p = primaryAction({ ...base, status: "partial_failed", failed: 2 });
+    expect(p).toMatchObject({ command: "retry", label: "Chạy lại 2 trang" });
+    expect(p.menu).toEqual([
+      { command: "export", label: "Xuất" },
+      { command: "retranslate", label: "Dịch lại cả chương" },
+    ]);
+  });
+
+  it("partial_failed without a failed count falls back to a generic label", () => {
+    expect(primaryAction({ ...base, status: "partial_failed", failed: 0 }).label).toBe("Chạy lại trang lỗi");
   });
 
   it("partial_failed without pages (ingest failed) → Cắt lại trang (commit lại), not the no-op retry", () => {
@@ -95,8 +103,23 @@ describe("primary action", () => {
   it("review / done → Xuất; menu Dịch lại cả chương", () => {
     for (const status of ["review", "done"] as const) {
       const p = primaryAction({ ...base, status });
-      expect(p).toMatchObject({ command: "export", label: "Export", disabled: false });
+      expect(p).toMatchObject({ command: "export", label: "Xuất", disabled: false });
       expect(p.menu.map((m) => m.command)).toEqual(["retranslate"]);
+    }
+  });
+
+  it("no English Export label remains", () => {
+    for (const status of [
+      "draft",
+      "ingesting",
+      "processing",
+      "prepared",
+      "partial_failed",
+      "review",
+      "done",
+    ] as const) {
+      const p = primaryAction({ ...base, status, failed: 1 });
+      for (const text of [p.label, p.title ?? "", ...p.menu.map((m) => m.label)]) expect(text).not.toMatch(/Export/);
     }
   });
 

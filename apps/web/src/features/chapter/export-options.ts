@@ -1,5 +1,5 @@
 /**
- * Nhãn + trạng thái của drawer "Xuất chương" (thuần, không gọi API): tên định dạng/chất lượng theo lời người dùng
+ * Nhãn + trạng thái của menu "Xuất chương" (thuần, không gọi API): tên định dạng/chất lượng theo lời người dùng
  * (không lộ "slice", "ZIP PNG"), dòng tóm tắt tuỳ chọn khi thu gọn, và pha của lượt xuất vừa gửi để nút chính
  * biết đang chạy / tự tải / lỗi.
  */
@@ -10,7 +10,7 @@ export const EXPORT_POLL_MS = 1500;
 
 export const isExportActive = (s: ExportStatus) => s === "queued" || s === "running";
 
-/** Lượt xuất mới nhất còn chạy (danh sách mới trước) — drawer mở lại thì theo dõi tiếp lượt này. */
+/** Lượt xuất mới nhất còn chạy (danh sách mới trước) — menu mở lại thì theo dõi tiếp lượt này. */
 export const latestActiveExport = (list: ExportView[] | undefined) =>
   list?.find((e) => isExportActive(e.status)) ?? null;
 

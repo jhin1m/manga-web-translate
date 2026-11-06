@@ -21,7 +21,7 @@ test("a regular user has no Settings link, is redirected from /settings and can 
   await page.getByLabel("Email").fill(state.plain.email);
   await page.getByLabel("Mật khẩu").fill(state.plain.password);
   await page.getByRole("button", { name: "Đăng nhập" }).click();
-  await expect(page.getByRole("heading", { name: "Series", exact: true })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Series", exact: true })).toBeVisible();
 
   await page.getByLabel("Tài khoản", { exact: true }).click();
   await expect(page.getByRole("link", { name: "Font của tôi" })).toBeVisible();
@@ -148,7 +148,7 @@ test("admin disables a user: their open tab falls back to login at the next acti
   await victim.getByLabel("Email").fill(E2E_VICTIM.email);
   await victim.getByLabel("Mật khẩu").fill(E2E_VICTIM.password);
   await victim.getByRole("button", { name: "Đăng nhập" }).click();
-  await expect(victim.getByRole("heading", { name: "Series", exact: true })).toBeVisible();
+  await expect(victim.getByRole("region", { name: "Series", exact: true })).toBeVisible();
 
   await login(page);
   await page.goto("/settings?section=users");

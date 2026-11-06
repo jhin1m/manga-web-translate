@@ -40,10 +40,10 @@ test("upload a font, make it the series default, use it in the editor, then dele
 
   // Chọn làm font thoại mặc định ở cài đặt series.
   await page.goto(`/s/${state.seriesId}?tab=settings`);
-  const slot = page.getByLabel("Thoại", { exact: true });
+  const slot = page.getByLabel("Font thoại", { exact: true });
   await expect(slot.locator("optgroup[label='Font của bạn'] option")).toHaveText([font.name]);
   await slot.selectOption(font.id);
-  await page.getByRole("button", { name: "Lưu cài đặt" }).click();
+  await page.getByRole("button", { name: "Lưu", exact: true }).click();
   // Lưu đổi settings_rev → form dựng lại; kiểm kết quả ở server.
   await expect
     .poll(async () => {
@@ -151,7 +151,7 @@ test("admin uploads a system font: another user picks it for a series and the ed
   await user.getByLabel("Email").fill(state.plain.email);
   await user.getByLabel("Mật khẩu").fill(state.plain.password);
   await user.getByRole("button", { name: "Đăng nhập" }).click();
-  await expect(user.getByRole("heading", { name: "Series", exact: true })).toBeVisible();
+  await expect(user.getByRole("region", { name: "Series", exact: true })).toBeVisible();
   await user.goto("/fonts");
   await expect(user.getByText("Bạn chưa có font riêng.")).toBeVisible();
   await expect(user.getByRole("row", { name: /Itim/ })).toHaveCount(0);
@@ -160,11 +160,11 @@ test("admin uploads a system font: another user picks it for a series and the ed
   expect(created.status()).toBe(201);
   const userSeries = ((await created.json()) as { id: string }).id;
   await user.goto(`/s/${userSeries}?tab=settings`);
-  const slot = user.getByLabel("Thoại", { exact: true });
+  const slot = user.getByLabel("Font thoại", { exact: true });
   await expect(slot.locator("optgroup[label='Font hệ thống'] option")).toHaveText([font.name]);
   await expect(slot.locator("optgroup[label='Font của bạn']")).toHaveCount(0);
   await slot.selectOption(font.id);
-  await user.getByRole("button", { name: "Lưu cài đặt" }).click();
+  await user.getByRole("button", { name: "Lưu", exact: true }).click();
   await expect
     .poll(async () => {
       const s = (await (await user.request.get(`/api/series/${userSeries}`)).json()) as {

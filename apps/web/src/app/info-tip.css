@@ -1,0 +1,40 @@
+.info-tip {
+  position: relative;
+  display: inline-flex;
+  vertical-align: middle;
+}
+.info-tip-btn {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  justify-content: center;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  color: var(--c-fg-subtle);
+}
+.info-tip-btn:hover {
+  color: var(--c-accent-hover);
+  background: none;
+}
+.info-tip-text {
+  position: absolute;
+  z-index: 60;
+  top: calc(100% + 4px);
+  left: 0;
+  width: max-content;
+  max-width: min(280px, 70vw);
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid var(--c-line-strong);
+  border-radius: var(--radius);
+  background: var(--c-bg);
+  color: var(--c-fg);
+  font-size: var(--fs-xs);
+  font-weight: 400;
+  line-height: var(--lh);
+  white-space: normal;
+  box-shadow: 0 2px 8px rgb(42 38 32 / 0.12);
+}
+.info-tip-text[hidden] {
+  display: none;
+}

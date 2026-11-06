@@ -32,11 +32,11 @@ export function langChangeWarning(saved: Pair, form: Pair, ownTerms: number | un
   );
 }
 
-/** Nhãn loại truyện ở form tạo series: tên + gợi ý ngôn ngữ / cách xử lý. */
-export const COMIC_KIND_LABELS: Record<ComicKind, { name: string; hint: string }> = {
-  manga: { name: "Manga", hint: "Nhật · từng trang, dịch thẳng" },
-  manhwa: { name: "Manhwa", hint: "Hàn · cuộn dọc" },
-  manhua: { name: "Manhua", hint: "Trung · cuộn dọc" },
+/** Nhãn loại truyện ở ô chọn khi tạo series. */
+export const COMIC_KIND_LABELS: Record<ComicKind, string> = {
+  manga: "Manga",
+  manhwa: "Manhwa",
+  manhua: "Manhua",
 };
 
 export const PAGE_FORMAT_LABELS: Record<PageFormat, string> = {

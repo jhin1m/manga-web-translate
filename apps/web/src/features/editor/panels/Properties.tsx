@@ -1,7 +1,8 @@
 /**
- * Kiểu chữ của box đang chọn (chữ sửa ở ô "Bản dịch" của panel Chọn), chia 2 phần:
- * - `BasicStyle`: font, cỡ (tắt khi tự khớp), tự khớp cỡ chữ vào khung — luôn hiện.
- * - `AdvancedStyle`: giãn dòng, lề, căn lề, màu chữ, màu viền, viền ngoài, ẩn khi xuất — trong "Kiểu chữ nâng cao".
+ * Kiểu chữ của box đang chọn (chữ sửa ở ô "Bản dịch" của panel khối), chia 2 phần:
+ * - `BasicStyle`: font + cỡ (tắt khi tự khớp) — luôn hiện.
+ * - `AdvancedStyle`: loại chữ, tự khớp cỡ chữ vào khung, giãn dòng, lề, căn lề, màu chữ, màu viền, viền ngoài, ẩn khi
+ *   xuất — trong nhóm "Kiểu chữ" thu gọn.
  * Thay đổi liên tục cùng trường (gõ số, kéo màu) gộp 1 bước undo qua key `style:<field>:<id>`.
  */
 import type { Region, TextBox, TextStyle } from "@mtl/shared";
@@ -154,21 +155,18 @@ export function BasicStyle({
   fonts,
   customFonts = [],
   knows = () => false,
-  textStyle,
 }: {
   fonts: string[];
   customFonts?: { id: string; name: string; system?: boolean }[];
   /** Font có thật nhưng không nằm trong `fonts` (đã lọc theo ngôn ngữ đích) → ghi "không hợp ngôn ngữ", không phải "thiếu". */
   knows?: (id: string) => boolean;
-  /** Có slot font Suy nghĩ/Ghi chú ở series → hiện select "Loại chữ" dưới ô Font. */
-  textStyle?: TextStyleConfig;
 }) {
   const { box, readOnly, style } = useBoxStyle();
   if (!box) return null;
   const listed = fonts.includes(box.font_family) || customFonts.some((f) => f.id === box.font_family);
   return (
     <fieldset className="ed-props" disabled={readOnly}>
-      <div className="ed-row">
+      <div className="ed-row ed-row-font">
         <div>
           <label htmlFor="ed-font">Font</label>
           <select
@@ -190,10 +188,11 @@ export function BasicStyle({
             ))}
             <CustomFontGroups fonts={customFonts} />
           </select>
-          {textStyle && hasTextStyleSlot(textStyle.slots) && <TextStyleSelect box={box} config={textStyle} />}
         </div>
         <div>
-          <label htmlFor="ed-size">Cỡ chữ (px)</label>
+          <label htmlFor="ed-size" title="Cỡ chữ (px)">
+            Cỡ
+          </label>
           <NumberInput
             key={box.id}
             id="ed-size"
@@ -207,6 +206,20 @@ export function BasicStyle({
           />
         </div>
       </div>
+    </fieldset>
+  );
+}
+
+/**
+ * `textStyle`: có slot font Suy nghĩ/Ghi chú ở series → hiện select "Loại chữ". `children`: thao tác thêm ở cuối (VD
+ * "Áp kiểu này cho khối cùng loại").
+ */
+export function AdvancedStyle({ children, textStyle }: { children?: ReactNode; textStyle?: TextStyleConfig }) {
+  const { box, readOnly, style } = useBoxStyle();
+  if (!box) return null;
+  return (
+    <fieldset className="ed-props" disabled={readOnly}>
+      {textStyle && hasTextStyleSlot(textStyle.slots) && <TextStyleSelect box={box} config={textStyle} />}
       <label className="ed-check">
         <input
           type="checkbox"
@@ -215,16 +228,6 @@ export function BasicStyle({
         />
         Tự khớp cỡ chữ vào khung
       </label>
-    </fieldset>
-  );
-}
-
-/** `children`: thao tác thêm ở cuối (VD "Áp kiểu này cho khối cùng loại"). */
-export function AdvancedStyle({ children }: { children?: ReactNode }) {
-  const { box, readOnly, style } = useBoxStyle();
-  if (!box) return null;
-  return (
-    <fieldset className="ed-props" disabled={readOnly}>
       <div className="ed-row">
         <div>
           <label htmlFor="ed-lh">Giãn dòng</label>

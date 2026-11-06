@@ -21,11 +21,7 @@ export type PageStatus = "pending" | "preparing" | "prepared" | "translating" | 
 export const isChapterSettled = (s: ChapterStatus | undefined) =>
   s === "draft" || s === "prepared" || s === "review" || s === "partial_failed" || s === "done";
 
-/**
- * Chip trạng thái ở thanh trên màn chương — chỗ duy nhất nói chương đang ở đâu ("Đang dịch · 4/33 trang · lô 2/9",
- * "Chờ duyệt · 2 cần xem", "Xong"); rail chỉ giữ trạng thái theo trang. Thuần.
- */
-export function chapterChip(input: {
+type ChipInput = {
   status: ChapterStatus;
   pages: number;
   ready: number;
@@ -37,7 +33,82 @@ export function chapterChip(input: {
   upload: UploadView | null;
   /** Lượt dịch đang mở (progress `chapter.run`). */
   run?: ChapterRun | null;
-}): { label: string; tone: Tone } {
+};
+
+/** Nhãn + tiến độ (0..1) của chương đang xử lý; xem chapterChip. */
+function processingView(input: ChipInput): { label: string; fraction: number | null } {
+  const { pages, run } = input;
+  const ratio = (done: number, total: number) => (total > 0 ? Math.min(1, Math.max(0, done / total)) : null);
+  const prep = {
+    label: `Xoá chữ + OCR ${pages - input.preparing}/${pages}`,
+    fraction: ratio(pages - input.preparing, pages),
+  };
+  // Lượt "Chỉ xoá chữ + OCR" không dịch gì.
+  if (run?.target === "prepared") return prep;
+  // Lô dịch đầu chạy khi trang sau còn xoá chữ → nói về lượt dịch; chưa có lô nào → còn đang xoá chữ.
+  if (run && (run.batch > 0 || input.preparing === 0)) {
+    const lot = run.batches > 1 ? ` · lô ${run.batch}/${run.batches}` : "";
+    const done = run.total - run.remaining;
+    return { label: `Đang dịch · ${done}/${run.total} trang${lot}`, fraction: ratio(done, run.total) };
+  }
+  if (input.preparing > 0) return prep;
+  return {
+    label: pages ? `Đang dịch ${input.ready}/${pages}` : "Đang dịch",
+    fraction: ratio(input.ready, pages),
+  };
+}
+
+/**
+ * Tiến độ 0..1 cho thanh 2px dưới thanh trên: `null` = đang chạy nhưng chưa đo được (vạch chạy qua lại),
+ * `undefined` = không có gì đang chạy ở chương này (không vẽ thanh).
+ */
+export function chapterProgress(input: ChipInput): number | null | undefined {
+  const { status, upload } = input;
+  if (status === "ingesting") return null;
+  if (status === "processing") return processingView(input).fraction;
+  if (status === "draft" && upload?.phase === "uploading") return upload.total > 0 ? upload.done / upload.total : null;
+  return undefined;
+}
+
+/**
+ * Chip phản ánh cả việc ngoài chương: lượt xuất của chương này và upload của chương khác trong tab (chương này
+ * đang tải ảnh thì chip đã nói rồi). Chương yên thì chip chuyển sang "đang chạy".
+ */
+export function chipWithActivity(
+  chip: { label: string; tone: Tone },
+  extra: { exports: number; uploads: number },
+): { label: string; tone: Tone } {
+  const parts = [extra.exports > 0 && "đang xuất", extra.uploads > 0 && "chương khác đang tải ảnh"].filter(Boolean);
+  if (!parts.length) return chip;
+  return {
+    label: [chip.label, ...parts].join(" · "),
+    tone: chip.tone === "idle" || chip.tone === "ok" ? "busy" : chip.tone,
+  };
+}
+
+/**
+ * Trang cần xem kế tiếp sau trang đang mở (vòng lại từ đầu, bỏ qua chính trang đang mở); null khi không còn
+ * trang nào khác cần xem. `ids` theo thứ tự trang.
+ */
+export function nextReviewPage(
+  ids: readonly string[],
+  activeId: string | null | undefined,
+  needsReview: (id: string) => boolean,
+): string | null {
+  const n = ids.length;
+  const start = activeId ? ids.indexOf(activeId) : -1;
+  for (let i = 1; i <= n; i++) {
+    const id = ids[(start + i + n) % n];
+    if (id !== undefined && id !== activeId && needsReview(id)) return id;
+  }
+  return null;
+}
+
+/**
+ * Chip trạng thái ở thanh trên màn chương — chỗ duy nhất nói chương đang ở đâu ("Đang dịch · 4/33 trang · lô 2/9",
+ * "Chờ duyệt · 2 cần xem", "Xong"); rail chỉ giữ trạng thái theo trang. Thuần.
+ */
+export function chapterChip(input: ChipInput): { label: string; tone: Tone } {
   const { status, pages, upload } = input;
   const review = input.review ? ` · ${input.review} cần xem` : "";
   switch (status) {
@@ -48,19 +119,8 @@ export function chapterChip(input: {
       return { label: "Nháp", tone: "idle" };
     case "ingesting":
       return { label: "Đang cắt trang", tone: "busy" };
-    case "processing": {
-      const run = input.run;
-      const prep = { label: `Xoá chữ + OCR ${pages - input.preparing}/${pages}`, tone: "busy" as const };
-      // Lượt "Chỉ xoá chữ + OCR" không dịch gì.
-      if (run?.target === "prepared") return prep;
-      // Lô dịch đầu chạy khi trang sau còn xoá chữ → nói về lượt dịch; chưa có lô nào → còn đang xoá chữ.
-      if (run && (run.batch > 0 || input.preparing === 0)) {
-        const lot = run.batches > 1 ? ` · lô ${run.batch}/${run.batches}` : "";
-        return { label: `Đang dịch · ${run.total - run.remaining}/${run.total} trang${lot}`, tone: "busy" };
-      }
-      if (input.preparing > 0) return prep;
-      return { label: pages ? `Đang dịch ${input.ready}/${pages}` : "Đang dịch", tone: "busy" };
-    }
+    case "processing":
+      return { label: processingView(input).label, tone: "busy" };
     case "prepared":
       return {
         label: `Chờ dịch${input.failed ? ` · lỗi ${input.failed} trang` : ""}`,

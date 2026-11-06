@@ -9,6 +9,14 @@ import { WEB_URL } from "./env.ts";
 import { PNG_1PX } from "./fake-worker.ts";
 import { apiReadyChapter, login, state } from "./helpers.ts";
 
+const headers = { origin: WEB_URL };
+
+async function apiSeries(page: import("@playwright/test").Page, title: string) {
+  const created = await page.request.post(`/api/series`, { headers, data: { title } });
+  expect(created.status()).toBe(201);
+  return ((await created.json()) as { id: string }).id;
+}
+
 test("delete a whole series from its home row, after an explicit confirm", async ({ page }) => {
   await login(page);
   const created = await page.request.post(`/api/series`, {
@@ -103,34 +111,35 @@ test("new series picks the comic kind (source language); settings edit target la
 }) => {
   await login(page);
   await page.goto("/");
-  await page.getByRole("button", { name: "+ Series mới" }).click();
+  await page.getByRole("button", { name: "+ Series" }).click();
   const form = page.getByRole("form", { name: "Tạo series mới" });
   await form.getByLabel("Tên series").fill("Manga Nhật e2e");
-  await form.getByText("Nhật · từng trang, dịch thẳng").click();
-  await expect(form.getByRole("radio", { name: /^Manga Nhật/ })).toBeChecked();
+  await form.getByLabel("Loại truyện").selectOption({ label: "Manga" });
   await page.getByRole("button", { name: "Tạo series" }).click();
   await expect(page.getByRole("heading", { level: 1, name: "Manga Nhật e2e" })).toBeVisible();
-  await expect(page.getByText(/Nhật → Việt/)).toBeVisible();
+  const head = page.locator(".series-head");
+  await expect(head.getByText(/Nhật → Việt/)).toBeVisible();
 
   // Cài đặt dịch là modal trên màn series: form nằm trong dialog, save giữ modal mở.
   await page.getByRole("main").getByRole("link", { name: "Cài đặt dịch" }).click();
   const settings = page.getByRole("dialog", { name: "Cài đặt dịch" });
   // ja → server tự chọn "Từng trang".
-  await expect(settings.getByLabel("Định dạng truyện")).toHaveValue("pages");
-  await settings.getByLabel("Ngôn ngữ đích").selectOption("en");
-  await settings.getByLabel("Định dạng truyện").selectOption("strip");
-  await settings.getByRole("button", { name: "Lưu cài đặt" }).click();
+  await expect(settings.getByLabel("Định dạng", { exact: true })).toHaveValue("pages");
+  await settings.getByLabel("Sang", { exact: true }).selectOption("en");
+  await settings.getByLabel("Định dạng", { exact: true }).selectOption("strip");
+  await settings.getByRole("button", { name: "Lưu", exact: true }).click();
   // Lưu đổi settings_rev → form dựng lại theo giá trị mới từ server.
-  await expect(page.getByText(/Nhật → Anh/)).toBeVisible();
-  await expect(settings.getByLabel("Định dạng truyện")).toHaveValue("strip");
+  await expect(head.getByText(/Nhật → Anh/)).toBeVisible();
+  await expect(settings.getByLabel("Định dạng", { exact: true })).toHaveValue("strip");
 
   // Chữ bỏ qua (watermark): dòng quá ngắn báo lỗi tại dòng, chặn lưu; sửa xong lưu được, mục trùng gộp lại.
+  await settings.getByText("Chữ bỏ qua", { exact: true }).click();
   const ignore = settings.getByLabel("Chữ bỏ qua (watermark)");
   await ignore.fill("discord.gg/nhom\nab");
   await expect(settings.getByText("Dòng 2: mỗi mục 3–100 ký tự (không tính http:// và dấu cách).")).toBeVisible();
-  await expect(settings.getByRole("button", { name: "Lưu cài đặt" })).toBeDisabled();
+  await expect(settings.getByRole("button", { name: "Lưu", exact: true })).toBeDisabled();
   await ignore.fill("discord.gg/nhom\nDISCORD.GG/NHOM\nNhóm Mèo");
-  await settings.getByRole("button", { name: "Lưu cài đặt" }).click();
+  await settings.getByRole("button", { name: "Lưu", exact: true }).click();
   await expect(settings.getByRole("status").filter({ hasText: "Đã lưu" })).toBeVisible();
   await expect(ignore).toHaveValue("discord.gg/nhom\nNhóm Mèo");
   await settings.getByRole("button", { name: "Đóng" }).click();
@@ -213,6 +222,7 @@ test("ignored text hides matching boxes of translated chapters after a preview, 
     // Fake worker OCR "안녕하세요": mục có dấu cách chen giữa vẫn khớp (so khớp bỏ dấu cách).
     expect((await setIgnore(["안녕 하세요"])).status()).toBe(200);
     await page.goto(`/s/${state.seriesId}?tab=settings`);
+    await page.getByRole("dialog", { name: "Cài đặt dịch" }).getByText("Chữ bỏ qua", { exact: true }).click();
     const section = page.getByRole("region", { name: "Ẩn chữ khớp trong chương đã dịch" });
     await section.getByRole("button", { name: "Ẩn chữ khớp trong chương đã dịch…" }).click();
     await expect(section.getByText(/^Sẽ ẩn \d+ box ở \d+ chương/)).toBeVisible();
@@ -294,4 +304,146 @@ test("a very long series name is truncated with a full-name title and never over
   await page.goto("/");
   const del = await page.request.delete(`/api/series/${s.id}`, { headers: { origin: WEB_URL } });
   expect(del.ok()).toBe(true);
+});
+
+test("settings groups are collapsed with a summary; a missing pronoun field opens its group and focuses the field", async ({
+  page,
+}) => {
+  await login(page);
+  const id = await apiSeries(page, "Series xưng hô e2e");
+  try {
+    await page.goto(`/s/${id}?tab=settings`);
+    const settings = page.getByRole("dialog", { name: "Cài đặt dịch" });
+    // Luôn hiện: Tên, Dịch từ, Sang, Định dạng, Font thoại. Còn lại thu gọn.
+    for (const label of ["Tên series", "Dịch từ", "Sang", "Định dạng", "Font thoại"]) {
+      await expect(settings.getByLabel(label, { exact: true })).toBeVisible();
+    }
+    const pronouns = settings.locator("details", { has: page.getByText("Xưng hô", { exact: true }) });
+    await expect(pronouns).not.toHaveAttribute("open", "");
+    await expect(pronouns.locator("summary")).toContainText("Chưa có");
+    await expect(settings.getByLabel("Giọng văn", { exact: true })).toBeHidden();
+
+    // Thêm quy tắc rồi bỏ trống, đóng nhóm lại, bấm Lưu → nhóm tự mở, ô trống đầu tiên được focus, không gọi PATCH.
+    await pronouns.locator("summary").click();
+    await pronouns.getByRole("button", { name: "+ Thêm quy tắc" }).click();
+    await pronouns.getByLabel("Người nói").fill("Minjun");
+    await pronouns.locator("summary").click();
+    await expect(pronouns).not.toHaveAttribute("open", "");
+    await expect(pronouns.locator("summary")).toContainText("1 quy tắc");
+    let patched = 0;
+    page.on("request", (r) => r.method() === "PATCH" && r.url().includes(`/api/series/${id}`) && patched++);
+    await settings.getByRole("button", { name: "Lưu", exact: true }).click();
+    await expect(pronouns).toHaveAttribute("open", "");
+    await expect(pronouns.getByLabel("Người nghe")).toBeFocused();
+    await expect(pronouns.getByLabel("Người nghe")).toHaveAttribute("aria-invalid", "true");
+    await expect(pronouns.locator("summary")).toContainText("Thiếu thông tin");
+    expect(patched).toBe(0);
+
+    await pronouns.getByLabel("Người nghe").fill("Seoyeon");
+    await pronouns.getByLabel("Xưng / gọi").fill("anh/em");
+    await settings.getByRole("button", { name: "Lưu", exact: true }).click();
+    await expect(settings.getByRole("status").filter({ hasText: "Đã lưu" })).toBeVisible();
+    // Lưu xong giữ nguyên nhóm đang mở.
+    await expect(pronouns).toHaveAttribute("open", "");
+    const saved = (await (await page.request.get(`/api/series/${id}`)).json()) as {
+      pronoun_rules: { speaker: string; listener: string; address: string }[];
+    };
+    expect(saved.pronoun_rules).toMatchObject([{ speaker: "Minjun", listener: "Seoyeon", address: "anh/em" }]);
+  } finally {
+    await page.request.delete(`/api/series/${id}`, { headers });
+  }
+});
+
+test("settings: the hint opens from the keyboard, Ảnh tự bỏ says it saves by itself, and Xoá series asks for the name only after a click", async ({
+  page,
+}) => {
+  await login(page);
+  const id = await apiSeries(page, "Series xoá trong cài đặt e2e");
+  await page.goto(`/s/${id}?tab=settings`);
+  const settings = page.getByRole("dialog", { name: "Cài đặt dịch" });
+
+  // ⓘ: Tab tới nút thì lời giải thích hiện (và gắn vào nút qua aria-describedby).
+  const tip = settings.getByRole("button", { name: "Giải thích Định dạng" });
+  await tip.focus();
+  await expect(settings.getByRole("tooltip")).toContainText("Áp dụng cho chương upload sau khi lưu.");
+  await expect(tip).toHaveAccessibleDescription(/Áp dụng cho chương upload sau khi lưu/);
+  await settings.getByLabel("Tên series").focus();
+  await expect(settings.getByRole("tooltip")).toHaveCount(0);
+
+  // Ảnh tự bỏ nằm ngoài form và ghi rõ không phụ thuộc nút Lưu.
+  const skip = settings.locator("details", { has: page.getByText("Ảnh tự bỏ", { exact: true }) });
+  await expect(skip.locator("summary")).toContainText("tự lưu, không cần bấm Lưu");
+  await expect(settings.locator("form").getByText("Ảnh tự bỏ", { exact: true })).toHaveCount(0);
+
+  // Xoá series: chỉ có link đỏ; ô gõ tên chỉ hiện sau khi bấm; Huỷ ẩn lại; gõ đúng tên mới xoá được.
+  await expect(settings.getByLabel("Gõ tên series để xác nhận")).toHaveCount(0);
+  await settings.getByRole("button", { name: "Xoá series", exact: true }).click();
+  const name = settings.getByLabel("Gõ tên series để xác nhận");
+  const confirm = settings.getByRole("button", { name: "Xoá vĩnh viễn" });
+  await expect(confirm).toBeDisabled();
+  await settings.getByRole("button", { name: "Huỷ" }).click();
+  await expect(name).toHaveCount(0);
+  await settings.getByRole("button", { name: "Xoá series", exact: true }).click();
+  await name.fill("Series xoá trong cài đặt e2e");
+  await confirm.click();
+  await expect(page).toHaveURL(`${WEB_URL}/`);
+  expect((await page.request.get(`/api/series/${id}`)).status()).toBe(404);
+});
+
+test("home at 1280: drop strip is 56px, series rows are one line, Hoạt động is hidden while nothing uploads", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await login(page);
+  const strip = page.getByRole("region", { name: "Tạo chương mới" });
+  await expect(strip.getByText("Thả ảnh / ZIP")).toBeVisible();
+  await expect(page.getByText("tự tạo chương")).toHaveCount(0);
+  expect((await strip.boundingBox())?.height).toBeLessThanOrEqual(58);
+  const row = page.locator(`.row-item[data-series="${state.seriesId}"]`);
+  await expect(row).toBeVisible();
+  expect((await row.boundingBox())?.height).toBeLessThanOrEqual(56);
+  await expect(page.getByRole("button", { name: /^Hoạt động/ })).toHaveCount(0);
+  // Glossary chung, Font, (Cài đặt cho admin) vẫn ở menu tài khoản.
+  await page.locator("summary[aria-label='Tài khoản']").click();
+  await expect(page.getByRole("link", { name: "Glossary chung" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Font của tôi" })).toBeVisible();
+});
+
+test("dropping the files again onto an unfinished-upload chapter row resumes the upload", async ({ page }) => {
+  await login(page);
+  const created = await page.request.post(`/api/chapters`, {
+    headers,
+    data: {
+      series_id: state.seriesId,
+      number: "9302",
+      files: [{ name: "1.png", content_type: "image/png", bytes: PNG_1PX.length }],
+    },
+  });
+  expect(created.status()).toBe(201);
+  const { chapter } = (await created.json()) as { chapter: { id: string } };
+  try {
+    // Dấu "tab cũ đóng giữa chừng": chương nháp có ảnh khai báo nhưng chưa ảnh nào lên.
+    await page.evaluate(
+      (id) => localStorage.setItem(`mtl.upload.${id}`, JSON.stringify({ total: 1, done: [] })),
+      chapter.id,
+    );
+    await page.goto(`/s/${state.seriesId}`);
+    const row = page.locator(`.row-item[data-chapter="${chapter.id}"]`);
+    await expect(row).toContainText("Upload dở");
+    await expect(row).toContainText("thả lại file vào hàng này để tải tiếp");
+
+    const dataTransfer = await page.evaluateHandle(
+      (bytes) => {
+        const dt = new DataTransfer();
+        dt.items.add(new File([new Uint8Array(bytes)], "1.png", { type: "image/png" }));
+        return dt;
+      },
+      [...PNG_1PX],
+    );
+    await row.dispatchEvent("drop", { dataTransfer });
+    await expect(row).toContainText("Chưa xử lý", { timeout: 30_000 });
+    await expect(row).not.toContainText("Upload dở");
+  } finally {
+    await page.request.delete(`/api/chapters/${chapter.id}`, { headers });
+  }
 });

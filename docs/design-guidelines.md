@@ -10,7 +10,7 @@
 
 | Hướng | Mô tả | Hợp | Không hợp |
 |---|---|---|---|
-| **A. Bảng làm việc dày (đang dùng)** | Nền giấy ấm `#fbf9f4`, thang ấm trung tính, 1 màu nhấn cam đất `#c2501b`; bảng dày (13px), thanh trên 44px, trạng thái = chấm màu + chữ | Nhóm dịch xử lý hàng trăm trang/chương, cần quét nhanh trạng thái | Ít "cảm xúc" — chấp nhận, đây là công cụ |
+| **A. Bảng làm việc dày (đang dùng)** | Nền giấy ấm `#fbf9f4`, thang ấm trung tính, 1 màu nhấn cam đất `#c2501b`; bảng dày (13px), thanh trên màn chương 52px, trạng thái = chấm màu + chữ | Nhóm dịch xử lý hàng trăm trang/chương, cần quét nhanh trạng thái | Ít "cảm xúc" — chấp nhận, đây là công cụ |
 | B. Tài liệu thoáng | Cột giữa 720px, chữ 15–16px, nhiều khoảng trắng, thẻ thay bảng | Người mới, ít dữ liệu | Lưới 150 trang + glossary vài trăm dòng phải cuộn rất dài |
 | C. Tối kiểu IDE | Nền tối `#16161a`, panel chia cột, phím tắt nổi bật | Editor (Phase 5) làm việc lâu với ảnh | Màn quản lý (series, glossary) khó đọc bảng dày; ảnh manhwa nền trắng chói trên nền tối |
 
@@ -49,7 +49,8 @@ Font UI tự host qua `@fontsource/be-vietnam-pro` (400/500/600) — không gọ
 được CSS variable: màu khung chọn / khung OCR ở `features/editor/canvas/colors.ts`, phải khớp `--c-accent`.
 
 Quy tắc tương phản: chữ ≥ 4.5:1, icon/viền mang thông tin ≥ 3:1. Nút chỉ có icon có `aria-label`; tooltip ghi phím
-tắt nếu có; vùng bấm ≥ 32px trên desktop.
+tắt nếu có và mở được bằng phím (focus) chứ không chỉ rê chuột; vùng bấm ≥ 32px trên desktop. Trạng thái không chỉ truyền
+bằng màu (cờ có ký hiệu + tên truy cập + tooltip).
 
 ## Màn chương
 
@@ -57,55 +58,72 @@ Toàn màn hình (ngoài app shell), `chapter-workspace.css`. Nguyên tắc (own
 **mỗi lúc chỉ hiện thứ công cụ đang dùng cần đến** — 1 rail công cụ + 1 panel ngữ cảnh.
 
 ```
-┌ thanh trên 52px: ‹ series · Chương N · chip · Đã lưu ····· ↶ ↷ | Xem gốc · Hoạt động · ⋯ · [Huỷ][Xuất] [nút chính] ┐
-├ (băng cảnh báo — chỉ khi có)                                                                                     ┤
-├ rail công cụ 64px ┬ panel 288px (560: Bản dịch, Tìm) ┬ canvas (vừa khung, ‹ Trang n/M ›, Vừa khung|100%) ┬ thumbnail 112px ┤
+┌ thanh trên 52px: ‹ series · Ch.N · chip trạng thái · (lưu/khoá khi cần) ····· ↶ ↷ | Gốc · ⋯ · [nút chính] ┐
+├ (băng cảnh báo — chỉ khi có)                                                                              ┤
+├ rail 48px ┬ panel Văn bản 560px (chiếm cột) ┬ canvas (cụm giữa đáy ‹ n/M › · 62%) ┬ thumbnail 72px ┤
+│            └ panel khối 272px: đè lên mép trái canvas, không chiếm cột                                    │
 ```
+
+Khung 1280×800, không chọn gì: canvas rộng 1160px (1280 − rail 48 − cột trang 72), thanh trên tối đa 8 mục bấm được.
 
 | Vùng | Nội dung |
 |---|---|
-| Thanh trên 52px | ‹ series (tên dài cắt "…", `title` đủ tên) · tên chương · chip trạng thái · khoá/lưu · Hoàn tác / Làm lại (icon) · **Xem gốc** (bật/tắt, `aria-pressed`) · Hoạt động · menu **⋯** (Chia đôi gốc / dịch, Dịch lại cả chương, Chạy lại trang lỗi, Phím tắt) · Huỷ xử lý / Xuất phụ khi có · nút chính |
-| Rail công cụ trái 64px | Chọn (V) · Chữ (T) · Mask (B; Tẩy nét mask E là chế độ của Mask, không có nút riêng) · OCR (R) · ── · Bản dịch · Tìm · Hiệu đính. Icon 20px + nhãn 11px, nút 52×52. Nút đang mở panel của nó: nền `--c-accent-weak`; công cụ đang chọn mà panel thu: chỉ chữ màu nhấn |
-| Panel ngữ cảnh 288px | Theo công cụ: **Chọn** (có khối: Gốc, Bản dịch, tràn khung, font/cỡ, "Kiểu chữ nâng cao" thu gọn, Dịch lại khối, Xoá khối; chưa có khối: trang + trạng thái + cờ + Dịch lại trang này / Ẩn trang này; chưa có page: ảnh gốc đang xem), **Chữ**, **Mask** (Tô ↔ Tẩy nét, cỡ bút, xoá chữ vùng đã tô), **OCR**. Bấm lại icon đang mở → thu panel, canvas rộng ra. Nhớ theo trình duyệt (`localStorage mtl.layout`) |
-| Panel rộng 560px | **Bản dịch** (bảng văn bản cả chương: #, Tr., Gốc, Dịch sửa tại chỗ, Loại, Tình trạng), **Tìm** (segmented "Tìm / Thay" \| "Glossary") và **Hiệu đính** (gợi ý AI theo khối: cũ → mới, lý do, Nhận / Bỏ) |
-| Canvas | Trang active, mặc định **Vừa khung**; nút 100% (giữ khi đổi trang); pager "‹ Trang n / M ›" góc dưới trái; thanh nổi cạnh khối đang chọn (Sửa chữ · Dịch lại khối · Nhân đôi · Xoá đỏ) — đặt trên khối, khối sát mép trên thì dưới |
-| Cột thumbnail phải 112px | Chỉ ảnh 72×100 + số trang. Trạng thái = viền + nhãn ngắn khi có vấn đề: "Đã ẩn" (mờ, viền đứt) · "Lỗi" (viền đỏ) · "Chờ AI" / "Cần xem" (viền cam); trang bình thường không chữ (trạng thái ở `aria-label`). Trang đang mở: outline màu nhấn. Ẩn / khôi phục trang, xoá / khôi phục ảnh gốc: menu chuột phải (Shift+F10) hoặc nút panel Chọn. Có trang cần xem → nút lọc "Cần xem k" |
+| Thanh trên 52px | ‹ series (tên dài cắt "…", `title` đủ tên) · "Ch.N" bấm được (popover: đổi series, số chương, ngôn ngữ Dịch từ / Sang + Lưu) · **chip trạng thái** (nút: có trang cần xem → nhảy tới trang đó, không thì mở Hoạt động; chip nói cả lượt xuất đang chạy) · chỉ báo khoá/lưu **chỉ khi đang lưu / chưa lưu / lỗi / chỉ xem** · Hoàn tác / Làm lại (icon) · **Gốc** (bật/tắt, `aria-pressed`) · menu **⋯** (Chia đôi gốc / dịch, Xuất khi chương có trang lỗi, Dịch lại cả chương, Hoạt động kèm số việc đang chạy, Phím tắt) · nút chính. Đang chạy: nút chính là **Huỷ** + vạch tiến độ 2px ở đáy thanh. Chương có trang lỗi: nút chính "Chạy lại N trang". Không còn chữ "Export": luôn "Xuất" |
+| Rail công cụ trái 48px | 5 nút chỉ icon 20px (nút 40×40): Chọn (V) · Chữ (T) · Tẩy chữ (B; Tẩy nét E là chế độ của Tẩy chữ, không có nút riêng) · Quét chữ (R) · ── · Văn bản. Tên + phím ở tooltip (rê chuột **và** focus bàn phím) + `aria-label`; nút đang mở panel của nó / công cụ có thanh phụ đang dùng: nền `--c-accent-weak` + `aria-pressed`; công cụ đang chọn mà panel thu: chỉ icon màu nhấn (`aria-current`). Nếu dùng thật thấy khó đoán icon → bật nhãn 11px, rail 64px |
+| Panel khối 272px | Đóng mặc định, **đè lên mép trái canvas** (canvas không đổi bề ngang), tự mở khi chọn khối hoặc khi có nội dung phải xử lý (AI có bản mới, xung đột khi lưu), đóng khi bỏ chọn nếu hết nội dung. Rail Chọn chỉ mở khi có khối đang chọn hoặc có nội dung; thu panel khi còn nội dung → băng cảnh báo có nút Xem. Đầu panel "Khối i/N" + 3 icon (Dịch lại · Nhân đôi · Xoá); thân: Gốc, Dịch, cảnh báo ngắn "Tràn 12px", Font + Cỡ, nhóm "Kiểu chữ" thu gọn (Loại chữ, Tự khớp, nâng cao, Áp kiểu). Khối bị panel che thì canvas tự cuộn lộ ra. Không nhớ theo trình duyệt |
+| Thanh phụ trên canvas | **Chữ** / **Tẩy chữ** (Tô ↔ Tẩy nét, cỡ bút, Bỏ nét, Xoá chữ vùng tô) / **Quét chữ** (Xoá chữ gốc; đang quét: n vùng + Huỷ) không có panel riêng: 1 dòng nổi giữa mép trên canvas |
+| Panel Văn bản 560px | Một nút rail, 4 tab (`role="tablist"`, ←/→/Home/End): **Bản dịch** (bảng văn bản cả chương, 4 cột: Vị trí "trang·khối", Gốc, Dịch sửa tại chỗ, cờ — cờ "!" cần xem / "↻" AI có bản mới, có tên truy cập + tooltip; Loại khối ở panel khối) · **Tìm / Thay** · **Glossary** · **Hiệu đính · N** (N = gợi ý chờ duyệt, ẩn khi 0). Tab đã mở giữ nội dung (kết quả xem trước Tìm/Thay; hộp xác nhận hiệu đính đóng khi rời tab vì giá ước tính sẽ cũ); đóng mặc định, không nhớ qua tải lại. Ctrl/⌘+F mở tab Tìm / Thay và focus ô tìm. Chiếm cột bên cạnh canvas (không đè). Hiệu đính: hộp xác nhận 1 dòng "N trang · giá · thời gian" + nút Chạy + ⓘ (dữ liệu gửi lên nhà cung cấp AI) |
+| Canvas | Trang active, mặc định **Vừa khung**; một cụm giữa đáy "‹ n/M › · 62%" (căn giữa phần canvas còn lộ khi panel khối đè nên không bị che); nút % đổi Vừa khung ↔ 100% (100% giữ khi đổi trang), zoom khác bằng Ctrl/⌘+cuộn; không còn thanh nổi cạnh khối — thao tác khối ở đầu panel khối |
+| Cột thumbnail phải 72px | Chỉ ảnh 52×72 + số trang, không chữ, không đầu cột (tổng trang ở pager, nhảy trang cần xem ở chip). Trạng thái = viền + cờ ở góc, tên đầy đủ trong tooltip và `aria-label`: "×" (viền đỏ) lỗi · "!" (viền cam) cần xem / chờ AI · thanh % khi AI đang chạy · trang ẩn mờ + viền đứt; trang bình thường không cờ. Trang đang mở: outline màu nhấn + nút ⋯ luôn hiện. Thao tác trang là **một menu**: nút ⋯ (trang đang mở) hoặc chuột phải / Shift+F10 mở cùng menu — Dịch / Dịch lại trang, Bỏ chỉnh sửa tay (chỉ khi khác bản AI, không hỏi lại: Ctrl/⌘+Z hoặc toast Hoàn tác), Ẩn trang. Trang khác: chuột phải chỉ có Ẩn trang; trang ẩn bấm hoặc chuột phải → Khôi phục. Không có nút thùng rác khi rê chuột. Cột ảnh gốc (chưa cắt trang) cùng cỡ: cờ ở góc thay nhãn "Đang tải" / "Tải lỗi"…, nút xoá / khôi phục ở góc thumbnail |
 
-- **Tên chương** ("Chương N") bấm được → popover đổi series (select) / số chương (`chapter-meta-popover.tsx`,
-  `PATCH /chapters/:id`; trùng số → báo lỗi tại chỗ; đổi series → URL theo series mới).
+- **Tên chương** ("Ch.N", tên truy cập "Chương N") bấm được → popover đổi series (select) / số chương / ngôn ngữ
+  Dịch từ – Sang của series (`chapter-meta-popover.tsx`, `PATCH /series/:id` rồi `PATCH /chapters/:id`; trùng số →
+  báo lỗi tại chỗ; đổi series → URL theo series mới).
 - **Trạng thái chương ở 1 chỗ**: chip cạnh tên chương (`status.ts` `chapterChip`, `role="status"`, aria-live
-  polite): "Đang tải ảnh 2/5", "Đang dịch 3/5", "Chờ duyệt · 2 cần xem", "Xong". Cột thumbnail chỉ giữ trạng thái
-  theo trang. Cạnh chip: chỉ báo nhỏ khoá + lưu (icon khoá + Đã lưu / Đang lưu…, hoặc "Chỉ xem").
-- **Băng cảnh báo** (`LockBand`, `role="alert"`): chỉ hiện khi người dùng phải biết/làm — chương đang mở ở tab khác (Thử
-  lại), lỗi khoá, mất khoá, khôi phục thay đổi từ phiên trước, lỗi lưu, trang đang chờ AI tự thử lại (provider lỗi
-  tạm / 429 hết hạn mức: "trang 1, 2 đang chờ, tự thử lại lúc HH:MM … muốn dừng thì bấm Huỷ xử lý"). Trạng thái bình
-  thường không chiếm dải.
-- **Lỗi job viết cho người** (`job-error.ts`): thumbnail (title) / panel Chọn / Hoạt động nói loại lỗi + việc cần làm
-  ("Dịch lại trang này", "Chạy lại trang lỗi"); lỗi thô của provider (JSON dài) chỉ nằm trong "Chi tiết kỹ thuật" thu
-  gọn ở panel Chọn.
+  polite): "Đang tải ảnh 2/5", "Đang dịch 3/5", "Chờ duyệt · 2 cần xem", "Xong", kèm "· đang xuất" khi có lượt xuất.
+  Cột thumbnail chỉ giữ trạng thái theo trang. Cạnh chip: chỉ báo khoá + lưu **chỉ hiện khi cần** (Đang lưu… / Chưa
+  lưu / Lỗi lưu / Chỉ xem / Mất khoá); bình thường chỉ còn chữ cho trình đọc màn hình ("Bạn đang giữ khoá chương").
+- **Băng cảnh báo** (`LockBand`, `role="alert"`): chỉ hiện khi người dùng phải biết/làm — mỗi mục là câu ngắn + nút
+  ("Chương đang mở ở tab khác · Thử lại", "Thay đổi chưa lưu ở trang 3, 4 · Khôi phục · Bỏ", "Lỗi lưu, chưa ghi được",
+  "AI hết hạn mức, trang 1, 2 tự thử lại", "n thay đổi chưa áp được · Xem"); lý do dài nằm trong tooltip (và đọc được bằng
+  trình đọc màn hình). Trạng thái bình thường không chiếm dải.
+- **Lỗi job viết cho người** (`job-error.ts`): thumbnail (title) / Hoạt động nói loại lỗi + việc cần làm
+  ("Dịch lại trang" ở menu trang, "Chạy lại trang lỗi"); lỗi thô của provider (JSON dài) chỉ nằm trong "Chi tiết kỹ thuật" thu
+  gọn ở Hoạt động.
 - **Thông báo kết quả** (dịch lại, áp kiểu, lỗi thao tác): nổi trên canvas, không đẩy bố cục; info tự ẩn sau 6s.
   "Dịch chương" / "Chỉ xoá chữ + OCR" thành công không báo thêm (chip đã đổi); có ảnh bị loại → giữ thông báo tới khi
   chương xử lý xong.
-- **Menu nổi** (`context-menu.tsx`, dùng chung cho chuột phải thumbnail và "⋯"): `role="menu"`, ↑/↓, Esc trả focus về
-  nút mở; mục bật/tắt là `menuitemcheckbox`.
+- **Menu nổi** (`context-menu.tsx`, dùng chung cho chuột phải thumbnail, nút ⋯ của trang và "⋯" thanh trên): `role="menu"`,
+  ↑/↓, Esc trả focus về nút mở; mục bật/tắt là `menuitemcheckbox`.
+- **Menu Xuất** (`export-menu.tsx` + `export-panel.tsx`): popover `role="dialog"` ngay dưới nút Xuất (căn mép phải theo
+  nút; mở từ mục Xuất trong ⋯ thì căn theo nút ⋯), không có lớp phủ — editor phía sau vẫn thấy. Đóng bằng Esc / bấm ra
+  ngoài / bấm lại nút, trả focus về nút. Cao tối đa tới đáy cửa sổ, nội dung dài cuộn trong menu. Từ trên xuống: 1 dòng
+  "N chỗ cần xem" (bấm mở hậu quả + "Xem N chỗ này") → nút **Tải chương (.zip|.cbz)** (tiến độ ngay tại nút) →
+  "Tuỳ chọn" thu gọn kèm tóm tắt → "Lần trước · … + Tải lại" (hết hạn: nói rõ và nút Tải xuất lượt mới).
 
 - **Nút chính** (1 nút, theo trạng thái chương, `primary-action.ts`): Tải ảnh → **Dịch chương** (= commit:
   ghép + cắt trang, xoá chữ, OCR rồi dịch + chèn chữ theo chuỗi lô, nối một mạch; khoá tới khi upload xong, không bao giờ
   tự chạy). Menu "⋯" của nút có "Chỉ xoá chữ + OCR (soát trước)": dừng ở "Chờ dịch" (soát ảnh sạch, sửa mask) rồi bấm "Dịch
-  chương" tiếp; lựa chọn này không nhớ theo series. Trong lúc chạy "Xuất" khoá, tiến độ ở chip ("Đang cắt trang", "Xoá chữ +
-  OCR x/N", "Đang dịch · x/y trang · lô k/n") → Xuất. Chương có trang lỗi: "Chạy lại trang lỗi";
-  "Dịch lại cả chương" / "Chạy lại trang lỗi" (khi có) nằm trong menu "⋯".
-- **Drawer phải 420px** (`app/drawer.tsx`): Xuất (cảnh báo "Trước khi xuất", định dạng, tải) và Hoạt động (upload +
-  job chương + lượt xuất). Không dùng modal cho thao tác chính. Chi tiết: [editor.md](./editor.md).
-- **Home** (`/`): vùng thả file lớn (đoán được series → tạo chương nháp + upload + mở màn chương, chờ bấm "Dịch chương"; không
-  đoán được / file lỗi → dòng xác nhận "Sau khi thả file"; chọn "+ Series mới…" thì có thêm select ngôn ngữ gốc) →
-  hàng series (tên dài cắt "…" + `title`, không đè cột trạng thái; bấm hàng để mở, icon Sửa → tab Cài đặt,
-  icon Xoá xác nhận tại chỗ rồi xoá cả series). **Series**: đầu trang +
-  tab Chương / Glossary / Cài đặt dịch (`?tab=`) dùng chung; tab Chương = vùng thả cho chương kế (series cố định, cũng
-  tự tạo chương nháp) + hàng chương (bấm cả hàng hoặc icon Sửa để mở, icon Xoá xác nhận tại chỗ). Hàng danh sách không
-  có nút "bước tiếp theo" — dịch / xuất / chạy lại làm trong màn chương. Ngoài icon Xoá ở home, cuối tab Cài
-  đặt cũng xoá được series (gõ tên để xác nhận). Tạo series (home) = tên + select ngôn ngữ gốc; tab Cài đặt sửa
-  ngôn ngữ gốc / đích và định dạng truyện (Cuộn dọc / Từng trang — áp cho chương upload sau khi lưu).
+  chương" tiếp; lựa chọn này không nhớ theo series. Trong lúc chạy nút chính là **Huỷ**, tiến độ ở chip ("Đang cắt trang", "Xoá chữ +
+  OCR x/N", "Đang dịch · x/y trang · lô k/n") → Xuất. Chương có trang lỗi: nút chính "Chạy lại N trang", "Xuất" và
+  "Dịch lại cả chương" nằm trong menu "⋯"; Xuất mở cùng menu dưới nút ⋯.
+- **Drawer phải 420px** (`app/drawer.tsx`): Hoạt động (upload + job chương + lượt xuất, kèm "Chi tiết kỹ thuật" của lỗi) và
+  Phím tắt. Cùng component có biến thể `modal` (hộp giữa màn) cho Glossary / Cài đặt dịch của series. Không dùng modal
+  cho thao tác chính của màn chương. Chi tiết: [editor.md](./editor.md).
+- **Home** (`/`): dải thả 56px một dòng ("Thả ảnh / ZIP" · chọn file; chưa có series nào thì vùng lớn; thả bất kỳ đâu trên
+  trang cũng được). Đoán được series → tạo chương nháp + upload + mở màn chương, chờ bấm "Dịch chương" (không tự chạy);
+  không đoán được / file lỗi → dòng "Vừa thả" một dòng (file, series, số chương, Tạo; chọn "+ Series mới…" thì thêm
+  ô tên + ngôn ngữ gốc). Dưới đó: ô tìm + "+ Series" (form một dòng: tên, loại truyện — select, Tạo series) và hàng series
+  một dòng (tên dài cắt "…" + `title`, chấm + trạng thái, "N ch"; bấm hàng để mở, icon Sửa → modal Cài đặt dịch,
+  icon Xoá xác nhận tại chỗ rồi xoá cả series). Không có tiêu đề "Series · N". Nút Hoạt động của app shell chỉ hiện
+  khi có chương đang tải ảnh; menu tài khoản giữ Glossary chung / Font / Cài đặt.
+- **Series** (một cột): ‹ về home (không breadcrumb), tên, cặp ngôn ngữ, "Glossary · N" và icon Cài đặt (cả hai mở modal,
+  `?tab=` giữ trạng thái modal); dải thả "Thả Ch.{next}" (series cố định, cũng tự tạo chương nháp); hàng chương một dòng
+  (số chương, chấm + trạng thái, thời gian, icon Xoá xác nhận tại chỗ; bấm cả hàng để mở — **không** có icon Sửa; vạch
+  2px chỉ khi đang chạy). Hàng danh sách không có nút "bước tiếp theo": dịch / xuất / chạy lại làm trong màn chương.
+  **Cài đặt dịch** (modal): luôn hiện Tên, Dịch từ, Sang, Định dạng (Cuộn dọc / Từng trang — áp cho chương upload sau
+  khi lưu), Font thoại; các nhóm thu gọn kèm tóm tắt: Giọng văn, Kính ngữ, Xưng hô, Font khác, Chữ bỏ qua, Ảnh tự bỏ (tự
+  lưu). Hint dưới trường nằm trong ⓘ; **Lưu** dính ở footer, tách khỏi "Xoá series" (link đỏ, bấm mới hiện ô gõ tên).
 
 ## Thành phần
 
@@ -114,6 +132,7 @@ Toàn màn hình (ngoài app shell), `chapter-workspace.css`. Nguyên tắc (own
 - **Trạng thái**: `<span class="status" data-tone="ok|busy|warn|danger|idle">` — chấm màu + chữ. Nhãn chương/page ở `features/chapter/status.ts`.
 - **Thông báo**: `.notice` (+ `.info`, `.danger`) — viền trái màu, nền surface. Lỗi API hiện message server.
 - **Tiến độ**: `.bar > span` cao 3px.
+- **Giải thích ngắn**: ⓘ (`app/info-tip.tsx`) thay cho dòng hint dưới trường — hiện khi rê chuột, focus bàn phím hoặc bấm; nội dung gắn vào nút qua `aria-describedby`.
 - **Bố cục**: `.page` (+ `.page-narrow` 880px cho form), `.page-head` (tiêu đề + spacer + nút), `.crumbs`, `.grid-2`, `.section`.
 
 ## Cài đặt admin (`/settings`)
@@ -136,6 +155,10 @@ Toàn màn hình (ngoài app shell), `chapter-workspace.css`. Nguyên tắc (own
 - Đã chốt 23/10/2026: màn chương "rail công cụ + 1 panel" và bảng màu "Giấy ấm" thay bố cục 4 vùng / nền trắng +
   xanh — brief `plans/261023-0042-chapter-workspace-tool-rail-warm-theme/brief.md`, mockup
   `plans/261023-0042-chapter-workspace-tool-rail-warm-theme/design/chapter-workspace-mockup.dc.html`. Các điểm tự quyết
-  khi làm (panel Tìm 560px, "Loại" chỉ đọc, thumbnail 72×100…) ghi ở mục "Câu hỏi mở" của plan cùng thư mục.
+  khi làm ghi ở mục "Câu hỏi mở" của plan cùng thư mục.
+- Đã chốt 06/11/2026: rút gọn UI theo wireframe — panel khối đè canvas tự mở khi chọn khối (không làm thẻ nổi), bỏ icon
+  Sửa ở hàng chương (thay quyết định 21/10; icon Sửa ở hàng series giữ, mở cài đặt), rail 5 nút chỉ icon + tooltip, panel
+  Văn bản 4 tab, Xuất thành menu dưới nút Xuất. Mục "Màn chương" ở trên mô tả bản này; plan
+  `plans/261106-1519-ui-simplify-wireframe/`.
 - Ngoài phạm vi đợt này: dark mode / chọn theme; bỏ cột phải "Cài đặt dịch" + "Glossary" ở trang series.
 - Ngoài phạm vi: thumbnail do server sinh; sắp xếp tay thứ tự file khi upload (file tự xếp theo tên, natural sort).
