@@ -1,9 +1,10 @@
 /*
  * Màn chương gộp (docs/design-guidelines.md, hướng A): thanh trên + băng cảnh báo (chỉ khi có) | rail công cụ 64px ·
- * panel ngữ cảnh (288px, 560px cho Bản dịch / Tìm; thu = cột về 0) · canvas · cột thumbnail trang 112px. Toàn màn hình (ngoài app
- * shell). Canvas nền ấm trung tính để nhìn ảnh.
+ * panel ngữ cảnh (560px cho Bản dịch / Tìm / Hiệu đính, thu = cột về 0; panel khối 272px đè lên canvas, không chiếm cột)
+ * · canvas · cột thumbnail trang 112px. Toàn màn hình (ngoài app shell). Canvas nền ấm trung tính để nhìn ảnh.
  */
 .cw {
+  --cw-overlay-w: 272px;
   position: fixed;
   inset: 0;
   display: grid;
@@ -240,6 +241,16 @@
 }
 .cw-panel[data-wide] {
   width: 560px;
+}
+/* Panel khối: nằm cùng ô lưới với canvas, đè lên mép trái — canvas không đổi bề ngang khi panel đóng mở. */
+.cw-panel[data-overlay] {
+  grid-area: main;
+  justify-self: start;
+  position: relative;
+  z-index: 10;
+  width: var(--cw-overlay-w);
+  max-width: 100%;
+  box-shadow: 2px 0 8px rgb(0 0 0 / 0.1);
 }
 .cw-panel[hidden] {
   display: none;
@@ -720,32 +731,49 @@
   text-align: right;
   color: var(--c-fg-muted);
 }
-/* Thanh thao tác nổi cạnh khối đang chọn. */
-.cw-blockbar {
+/* Panel khối đè lên mép trái canvas: pager dời sang phải để không nằm dưới panel. */
+.cw[data-cover] .cw-pager {
+  left: calc(var(--cw-overlay-w) + 16px);
+}
+/* Thanh phụ của công cụ Chữ / Tẩy chữ / Quét chữ: nổi giữa mép trên canvas, tự xuống dòng khi hẹp. */
+.cw-toolbar {
   position: absolute;
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%);
   z-index: 6;
+  max-width: calc(100% - 16px);
+  box-sizing: border-box;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 2px;
-  padding: 3px;
+  justify-content: center;
+  gap: var(--sp-2) var(--sp-3);
+  padding: 4px 12px;
   background: var(--c-bg);
   border: 1px solid var(--c-line);
   border-radius: 6px;
   box-shadow: 0 2px 6px rgb(0 0 0 / 0.12);
+  font-size: var(--fs-sm);
+  white-space: nowrap;
 }
-.cw-blockbar .icon-btn {
-  width: 32px;
-  height: 32px;
+.cw-toolbar > strong {
+  font-weight: 500;
+}
+.cw-toolbar .ed-seg button {
+  min-height: 30px;
+  padding: 0 10px;
+}
+.cw-toolbar input[type="range"] {
+  width: 96px;
+}
+.cw-toolbar-value {
+  min-width: 2.5ch;
+  font-variant-numeric: tabular-nums;
   color: var(--c-fg-muted);
 }
-.cw-blockbar .icon-btn[data-danger] {
-  color: var(--c-danger);
-}
-.cw-blockbar-sep {
-  width: 1px;
-  height: 18px;
-  margin: 0 2px;
-  background: var(--c-line);
+.cw-toolbar p {
+  margin: 0;
 }
 /* Nút "Xem gốc" thanh trên: bật = nền nhấn nhạt. */
 .cw-orig {
@@ -960,8 +988,14 @@ label.cw-field-head {
 .cw-flags .danger {
   color: var(--c-danger);
 }
+/* Font + Cỡ: ô cỡ hẹp (số 3 chữ số). */
+.cw-block .ed-row-font {
+  grid-template-columns: minmax(0, 1fr) 72px;
+}
 .cw-warn {
-  padding: var(--sp-2) 10px;
+  width: fit-content;
+  cursor: help;
+  padding: 2px var(--sp-2);
   border-radius: var(--radius);
   background: var(--c-warn-weak);
   color: var(--c-warn);
@@ -987,6 +1021,14 @@ label.cw-field-head {
 .cw-wide {
   width: 100%;
   justify-content: center;
+  white-space: normal;
+}
+/* Xung đột khi lưu trong panel hẹp: nút xuống dòng dưới nội dung thay vì bóp chữ. */
+.cw-panel .ed-conflicts li {
+  flex-wrap: wrap;
+}
+.cw-panel .ed-conflicts li > div {
+  flex: 1 1 100%;
 }
 /* Lỗi thô của provider (JSON dài) — thu gọn, không tràn panel. */
 .cw-error-raw {
@@ -1051,7 +1093,26 @@ label.cw-field-head {
   min-height: 32px;
   display: flex;
   align-items: center;
-  color: var(--c-fg-muted);
+  justify-content: space-between;
+  padding: 0 var(--sp-2);
+  border-radius: var(--radius);
+  background: var(--c-surface-2);
+  color: var(--c-fg);
+  list-style: none;
+}
+.cw-adv > summary::-webkit-details-marker {
+  display: none;
+}
+.cw-adv > summary::after {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: translateY(-2px) rotate(45deg);
+}
+.cw-adv[open] > summary::after {
+  transform: translateY(2px) rotate(-135deg);
 }
 .cw-adv[open] > summary {
   margin-bottom: var(--sp-2);

@@ -6,11 +6,12 @@
  * ⌘-click (macOS) / Ctrl-click / Shift-click = chọn trang để dịch riêng (page-selection.ts), có chọn → thanh "Dịch N trang · Bỏ chọn"
  * ở đầu cột. Xoá (ẩn) / khôi phục trang bằng nút góc
  * thumbnail (hiện khi rê chuột / focus, khi sửa được) hoặc menu chuột phải (Shift+F10 / phím Menu), bấm trang ẩn cũng mở
- * menu. Số trang giữ số gốc (ord + 1) — trang ẩn để lại lỗ số, khớp bảng văn bản và Tìm/Thay.
+ * menu. Menu trang còn "Dịch / Dịch lại trang" và (trang đang mở, đã sửa tay) "Bỏ chỉnh sửa tay". Số trang giữ số gốc (ord + 1) — trang ẩn để lại lỗ số, khớp bảng văn bản và Tìm/Thay.
  */
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import type { PageImage, ProgressPage } from "./api.ts";
-import { ContextMenu, isMenuKey, type MenuAt, menuAtElement } from "./context-menu.tsx";
+import { ContextMenu, isMenuKey, type MenuAt, type MenuItem, menuAtElement } from "./context-menu.tsx";
+import { selectablePage } from "./page-selection.ts";
 import { needsReview, thumbAria, thumbMark, thumbTitle } from "./page-status.ts";
 import { TrashIcon, UndoIcon } from "./tool-icons.tsx";
 
@@ -36,6 +37,12 @@ export const PageRail = memo(function PageRail(props: {
   onSelect(pageId: string, mod: { shift: boolean; toggle: boolean }): void;
   onTranslateSelected(): void;
   onClearSelection(): void;
+  /** Dịch (trang chờ dịch) / dịch lại riêng 1 trang; `retranslateOff` = lý do đang tắt. */
+  onRetranslate(page: ProgressPage): void;
+  retranslateOff?: string;
+  /** Trang này có chỉnh sửa tay để bỏ không (chỉ trang đang mở). Gọi lúc mở menu nên đọc state mới nhất. */
+  canResetEdits(page: ProgressPage): boolean;
+  onResetEdits(page: ProgressPage): void;
 }) {
   const [reviewOnly, setReviewOnly] = useState(false);
   const [menu, setMenu] = useState<{ page: ProgressPage; at: MenuAt; anchor: HTMLElement } | null>(null);
@@ -69,7 +76,29 @@ export const PageRail = memo(function PageRail(props: {
       ];
     // Trang cuối còn hiện không ẩn được (API 409 last_page).
     const reason = !props.editable ? LOCK_HINT : props.pages.length <= 1 ? "Không ẩn được trang cuối cùng" : undefined;
+    const items: MenuItem[] = [];
+    if (selectablePage(p)) {
+      const first = p.status === "prepared";
+      items.push({
+        label: first ? `Dịch trang ${n}` : `Dịch lại trang ${n}`,
+        disabled: !!props.retranslateOff,
+        title:
+          props.retranslateOff ??
+          (first
+            ? "Dịch + chèn chữ riêng trang này bằng AI"
+            : "Dịch lại riêng trang này bằng AI (chỉnh sửa tay được giữ, bản AI mới hiện để chọn áp)"),
+        run: () => props.onRetranslate(p),
+      });
+    }
+    if (props.canResetEdits(p)) {
+      items.push({
+        label: `Bỏ chỉnh sửa tay trang ${n}`,
+        title: "Thay chỉnh sửa tay (bản dịch, khung, kiểu chữ) của trang này bằng bản AI dịch — hoàn tác được",
+        run: () => props.onResetEdits(p),
+      });
+    }
     return [
+      ...items,
       {
         label: `Ẩn trang ${n}`,
         danger: true,

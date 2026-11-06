@@ -203,10 +203,22 @@ function ChapterSection(props: {
               {failed.length ? ` · ${failed.length} lỗi` : ""}
             </span>
             {groups.map((g) => (
-              <span key={g.cls} className="small error" title={g.raw ?? undefined}>
-                {g.count} trang lỗi · {g.label}: trang {g.pages}
-                {g.hint ? `. ${g.hint}` : ""}
-              </span>
+              <div key={g.cls} className="small">
+                <span className="error">
+                  {g.count} trang lỗi · {g.label}: trang {g.pages}
+                  {g.hint ? `. ${g.hint}` : ""}
+                </span>
+                {g.details.length > 0 && (
+                  <details className="cw-error-raw">
+                    <summary>Chi tiết kỹ thuật</summary>
+                    {g.details.map((d) => (
+                      <p key={d.error}>
+                        <strong>Trang {d.pages}:</strong> {d.error}
+                      </p>
+                    ))}
+                  </details>
+                )}
+              </div>
             ))}
             {wait && <span className="small warn-text">{providerWaitText(wait)}</span>}
           </div>

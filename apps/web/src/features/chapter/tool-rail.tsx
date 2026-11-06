@@ -1,6 +1,7 @@
 /**
- * Rail công cụ trái màn chương (64px): Chọn · Chữ · Mask · OCR · ── · Bản dịch · Tìm · Hiệu đính. Icon + nhãn 11px; nút đang mở
- * panel của nó có nền nhấn (`aria-pressed`), công cụ đang chọn mà panel thu / đang ở panel khác chỉ chữ màu nhấn.
+ * Rail công cụ trái màn chương (64px): Chọn · Chữ · Tẩy chữ · Quét chữ · ── · Bản dịch · Tìm · Hiệu đính. Icon + nhãn 11px; nút đang mở
+ * panel của nó (Chọn: panel khối; Bản dịch / Tìm / Hiệu đính) hoặc công cụ có thanh phụ đang dùng (Chữ, Tẩy chữ, Quét
+ * chữ) có nền nhấn (`aria-pressed`); Chọn đang chọn mà panel thu / đang ở panel khác chỉ chữ màu nhấn.
  * Hành vi bấm: tool-rail-model.ts `railClick`.
  */
 import type { ReactNode } from "react";
@@ -13,8 +14,8 @@ type Item = { id: RailTarget; label: string; title: string; icon: ReactNode };
 const TOOLS: Item[] = [
   { id: "select", label: "Chọn", title: "Chọn (V)", icon: <SelectIcon /> },
   { id: "text", label: "Chữ", title: "Chữ (T)", icon: <TextIcon /> },
-  { id: "brush", label: "Mask", title: "Mask xoá chữ (B)", icon: <MaskIcon /> },
-  { id: "ocr", label: "OCR", title: "OCR vùng (R)", icon: <OcrIcon /> },
+  { id: "brush", label: "Tẩy chữ", title: "Tẩy chữ (B)", icon: <MaskIcon /> },
+  { id: "ocr", label: "Quét chữ", title: "Quét chữ (R)", icon: <OcrIcon /> },
 ];
 const PANELS: Item[] = [
   { id: "table", label: "Bản dịch", title: "Bản dịch cả chương", icon: <TableIcon /> },
@@ -33,7 +34,12 @@ export function ToolRail(props: {
   const tool = railTool(props.tool);
   const button = (it: Item) => {
     const isTool = !isPanelOnly(it.id);
-    const open = isTool ? panel === "tool" && tool === it.id : panel === it.id;
+    // Công cụ có thanh phụ trên canvas (Chữ, Tẩy chữ, Quét chữ) không có panel: đang dùng = đang bật.
+    const open = isTool
+      ? it.id === "select"
+        ? panel === "tool" && tool === "select"
+        : tool === it.id
+      : panel === it.id;
     const reason = props.disabled[it.id];
     return (
       <button

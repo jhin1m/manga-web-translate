@@ -78,27 +78,40 @@ export async function apiReadyChapter(page: Page, number: string, opts: FakeWork
   return chapter.id;
 }
 
-/** Nút rail công cụ màn chương → tiêu đề panel nó mở (tên của `complementary`). */
+/**
+ * Nút rail công cụ màn chương → vùng nó mở: tên của `complementary` (panel khối, Bản dịch, Tìm, Hiệu đính) hoặc của
+ * `toolbar` thanh phụ trên canvas (Chữ, Tẩy chữ, Quét chữ).
+ */
 const PANELS = {
-  select: ["Chọn (V)", "Chọn & sửa"],
-  text: ["Chữ (T)", "Thêm chữ"],
-  table: ["Bản dịch cả chương", "Bản dịch cả chương"],
-  find: ["Tìm / Thay · Glossary (Ctrl+F)", "Tìm / Thay · Glossary"],
-  proofread: ["AI hiệu đính", "AI hiệu đính"],
-  ocr: ["OCR vùng (R)", "OCR vùng"],
+  select: ["Chọn (V)", "Chọn & sửa", "complementary"],
+  text: ["Chữ (T)", "Thêm chữ", "toolbar"],
+  brush: ["Tẩy chữ (B)", "Tuỳ chọn Tẩy chữ", "toolbar"],
+  table: ["Bản dịch cả chương", "Bản dịch cả chương", "complementary"],
+  find: ["Tìm / Thay · Glossary (Ctrl+F)", "Tìm / Thay · Glossary", "complementary"],
+  proofread: ["AI hiệu đính", "AI hiệu đính", "complementary"],
+  ocr: ["Quét chữ (R)", "Quét chữ", "toolbar"],
 } as const;
 
 /** Nút trên rail công cụ màn chương. */
 export const railButton = (page: Page, panel: keyof typeof PANELS) =>
   page.getByRole("navigation", { name: "Công cụ" }).getByRole("button", { name: PANELS[panel][0], exact: true });
 
-/** Mở panel qua rail công cụ (đang mở thì giữ — bấm lại sẽ thu) → vùng panel. */
+/** Panel khối (aside "Chọn & sửa"): đóng mặc định, tự mở khi chọn khối. */
+export const blockPanel = (page: Page) => page.getByRole("complementary", { name: "Chọn & sửa", exact: true });
+
+/** Thanh phụ của công cụ đang dùng trên canvas. */
+export const toolBar = (page: Page, name: string) => page.getByRole("toolbar", { name, exact: true });
+
+/**
+ * Mở panel / bật công cụ qua rail (đang mở thì giữ — bấm lại sẽ thu) → vùng của nó (panel hoặc thanh phụ trên canvas).
+ */
 export async function openPanel(page: Page, panel: keyof typeof PANELS) {
   const btn = railButton(page, panel);
   await expect(btn).toBeEnabled({ timeout: 15_000 });
   if ((await btn.getAttribute("aria-pressed")) !== "true") await btn.click();
   await expect(btn).toHaveAttribute("aria-pressed", "true");
-  return page.getByRole("complementary", { name: PANELS[panel][1], exact: true });
+  const [, name, role] = PANELS[panel];
+  return page.getByRole(role, { name, exact: true });
 }
 
 /** Panel Tìm, đoạn "Tìm / Thay" hoặc "Áp glossary" → vùng của đoạn đó. */

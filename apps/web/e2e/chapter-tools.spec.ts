@@ -144,7 +144,7 @@ test.describe("công cụ chương", () => {
     await expect(dlg).toBeVisible();
     await tableCell(page);
     await expect(page.locator(`[data-row="${pageId}:t0"]`)).toHaveClass(/\bon\b/);
-    await expect(await openPanel(page, "select")).toContainText("Khối 1 / 1 · Thoại");
+    await expect(await openPanel(page, "select")).toContainText("Khối 1/1");
 
     await openFind(page, "Tìm / Thay");
     await dlg.getByRole("button", { name: "Hoàn tác", exact: true }).click();
@@ -318,13 +318,13 @@ test("hide a page from the thumbnail column (undo, then restore from its menu)",
 
   // Chuột phải thumbnail → menu; Esc đóng, focus về thumbnail.
   await pageThumb(page, 2).click({ button: "right" });
-  await expect(page.getByRole("menuitem", { name: "Ẩn trang 2" })).toBeFocused();
+  await expect(page.getByRole("menuitem").first()).toBeFocused();
   await page.keyboard.press("Escape");
   await expect(page.getByRole("menu")).toHaveCount(0);
   await expect(pageThumb(page, 2)).toBeFocused();
   // Tab trong menu: đóng menu, focus đi tiếp (không rơi về <body>).
   await pageThumb(page, 2).click({ button: "right" });
-  await expect(page.getByRole("menuitem", { name: "Ẩn trang 2" })).toBeFocused();
+  await expect(page.getByRole("menuitem").first()).toBeFocused();
   await page.keyboard.press("Tab");
   await expect(page.getByRole("menu")).toHaveCount(0);
   await expect(page.locator("body")).not.toBeFocused();

@@ -1,7 +1,7 @@
 /**
  * Luồng chính: thả ZIP 10 trang ở home → mở thẳng màn chương (series duy nhất, số chương từ tên ZIP) trong khi ảnh
  * còn đang upload; cột thumbnail hiện 10 ảnh gốc ngay, bấm ảnh → xem lớn → upload xong xoá 1 ảnh qua menu chuột phải
- * (hoàn tác được), xoá lại bằng nút panel Chọn → menu ⋯ "Chỉ xoá chữ + OCR" → worker giả → dừng ở "Chờ dịch" →
+ * (hoàn tác được), xoá lại bằng nút góc thumbnail → menu ⋯ "Chỉ xoá chữ + OCR" → worker giả → dừng ở "Chờ dịch" →
  * Ctrl/Shift-click chọn 3 trang → "Dịch 3 trang" chỉ dịch 3 trang đó → "Dịch chương" dịch nốt → 9 trang "Xong".
  * Thêm: drawer
  * Hoạt động ở home khi đang upload; màn series (3 ảnh lẻ = 1 chương nháp số kế tiếp) + đổi số chương / series trên thanh trên +
@@ -13,7 +13,7 @@ import { zipSync } from "fflate";
 import { WEB_URL } from "./env.ts";
 import { PNG_1PX, runFakeWorker } from "./fake-worker.ts";
 import { grayPng } from "./gray-png.ts";
-import { login, loginWithForm, openPanel, pageThumbs, state } from "./helpers.ts";
+import { login, loginWithForm, pageThumbs, state } from "./helpers.ts";
 
 const s = state.seriesId;
 
@@ -108,7 +108,7 @@ test("drop a 10-page ZIP on home, open the chapter while uploading, prepare it, 
   await expect.poll(() => fileOf(2)).toBe(first);
   await page.getByRole("status").filter({ hasText: "Đã đổi thứ tự" }).getByRole("button", { name: "Hoàn tác" }).click();
   await expect.poll(() => fileOf(0)).toBe(first);
-  // Xoá ảnh 2 (chuột phải thumbnail) → mờ + "Đã xoá", đếm đã bỏ; Hoàn tác khôi phục; xoá lại bằng nút panel Chọn
+  // Xoá ảnh 2 (chuột phải thumbnail) → mờ + "Đã xoá", đếm đã bỏ; Hoàn tác khôi phục; xoá lại bằng nút góc thumbnail
   // để lúc cắt trang bỏ qua nó.
   const thumb2 = sources.getByRole("button", { name: /^Ảnh 2/ });
   await thumb2.click({ button: "right" });
@@ -120,11 +120,9 @@ test("drop a 10-page ZIP on home, open the chapter while uploading, prepare it, 
   await expect(thumb2).toHaveAccessibleName("Ảnh 2");
   await expect(sources).not.toContainText("đã bỏ");
   await thumb2.click();
-  const panel = await openPanel(page, "select");
-  await expect(panel).toContainText("Ảnh 2");
-  await panel.getByRole("button", { name: "Xoá ảnh này" }).click();
+  await sources.getByRole("button", { name: "Xoá ảnh 2", exact: true }).click();
   await expect(thumb2).toHaveAccessibleName("Ảnh 2 · Đã xoá");
-  await expect(panel.getByRole("button", { name: "Khôi phục ảnh này" })).toBeVisible();
+  await expect(sources.getByRole("button", { name: "Khôi phục ảnh 2", exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Thêm thao tác" }).click();
   await page.getByRole("menuitem", { name: "Chỉ xoá chữ + OCR (soát trước)" }).click();
 

@@ -1,5 +1,5 @@
 /**
- * Panel công cụ Mask (B) / Tẩy nét mask (E): đổi Tô ↔ Tẩy nét, cỡ bút, bỏ nét, gửi xoá chữ. Luồng reinpaint: PNG
+ * Nội dung thanh phụ công cụ Tẩy chữ (B) / Tẩy nét (E) trên canvas (khung thanh: chapter/tool-panels.tsx): đổi Tô ↔ Tẩy nét, cỡ bút, bỏ nét, gửi xoá chữ. Luồng reinpaint: PNG
  * theo vùng có nét → presigned POST (≤ 5MB) → POST /reinpaint {user_mask_key, offset, base_clean_rev} → poll job →
  * báo `onDone` để tải lại page (layer clean chuyển sang clean_rev mới). Nét mask không vào undo/page_state.
  */
@@ -9,7 +9,7 @@ import { requestMaskUpload, startReinpaint, uploadMask, waitJob } from "../api.t
 import { renderMaskPng } from "../canvas/MaskLayer.tsx";
 import { editorStore, useEditor } from "../store.ts";
 
-export function MaskPanel(props: {
+export function MaskToolBar(props: {
   pageId: string;
   cleanRev: number | null;
   page: { w: number; h: number };
@@ -55,68 +55,68 @@ export function MaskPanel(props: {
   };
 
   return (
-    <section className="ed-mask">
-      <ol className="small muted ed-steps">
-        <li>Tô (đỏ) lên chữ còn sót trên ảnh. Vòng tròn theo chuột là cỡ bút.</li>
-        <li>Tô lố thì chọn "Tẩy nét" và kéo qua phần đỏ thừa — chỉ xoá nét tô, không đụng ảnh.</li>
-        <li>Bấm "Xoá chữ vùng đã tô" — AI xoá chữ trong vùng đỏ.</li>
-      </ol>
+    <>
       <fieldset className="ed-seg" aria-label="Chế độ bút">
         <button
           type="button"
+          title="Tô (B)"
           aria-pressed={tool === "brush"}
           className={tool === "brush" ? "on" : undefined}
           onClick={() => editorStore.getState().setTool("brush")}
         >
-          Tô (B)
+          Tô
         </button>
         <button
           type="button"
+          title="Tẩy nét (E) — xoá nét tô thừa, không đụng ảnh"
           aria-pressed={tool === "eraser"}
           className={tool === "eraser" ? "on" : undefined}
           onClick={() => editorStore.getState().setTool("eraser")}
         >
-          Tẩy nét (E)
+          Tẩy nét
         </button>
       </fieldset>
-      {tool === "eraser" && !hasPaint && (
-        <p className="small muted">Chưa có nét tô nào để tẩy — chọn "Tô (B)" và tô lên chữ trước.</p>
-      )}
-      <label htmlFor="ed-brush">Cỡ bút: {size}px</label>
-      <input
-        id="ed-brush"
-        type="range"
-        min={4}
-        max={160}
-        value={size}
-        onChange={(e) => editorStore.getState().setMask({ size: Number(e.target.value) })}
-      />
-      <div className="ed-actions">
-        <button
-          type="button"
-          className="btn-primary"
-          disabled={!!busy || readOnly || !hasPaint}
-          title={hasPaint ? undefined : "Tô lên ảnh trước"}
-          onClick={() => void run()}
-        >
-          Xoá chữ vùng đã tô
-        </button>
-        <button
-          type="button"
-          disabled={!!busy || strokes.length === 0}
-          onClick={() => editorStore.getState().setMask({ strokes: [] })}
-        >
-          Bỏ nét
-        </button>
-      </div>
+      <label className="cw-check" htmlFor="ed-brush">
+        Cỡ
+        <input
+          id="ed-brush"
+          type="range"
+          min={4}
+          max={160}
+          value={size}
+          title="Cỡ bút — vòng tròn theo chuột trên ảnh"
+          onChange={(e) => editorStore.getState().setMask({ size: Number(e.target.value) })}
+        />
+        <span className="cw-toolbar-value">{size}</span>
+      </label>
+      {tool === "eraser" && !hasPaint && <span className="muted">Chưa có nét tô để tẩy</span>}
+      <button
+        type="button"
+        className="btn-ghost"
+        disabled={!!busy || strokes.length === 0}
+        onClick={() => editorStore.getState().setMask({ strokes: [] })}
+      >
+        Bỏ nét
+      </button>
+      <button
+        type="button"
+        className="btn-primary"
+        disabled={!!busy || readOnly || !hasPaint}
+        title={hasPaint ? "AI xoá chữ trong vùng đã tô" : "Tô lên chữ còn sót trên ảnh trước"}
+        onClick={() => void run()}
+      >
+        Xoá chữ vùng tô
+      </button>
       {busy && (
-        <p className="small">
-          <span className="status" data-tone="busy">
-            {busy}
-          </span>
-        </p>
+        <span className="status" data-tone="busy" role="status">
+          {busy}
+        </span>
       )}
-      {error && <p className="error small">{error}</p>}
-    </section>
+      {error && (
+        <span className="error" role="alert">
+          {error}
+        </span>
+      )}
+    </>
   );
 }

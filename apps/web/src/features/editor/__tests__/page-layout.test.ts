@@ -8,6 +8,8 @@ import {
   fitScale,
   fitsAxis,
   pageStartView,
+  REVEAL_MARGIN,
+  revealBlockView,
   SPLIT_GAP,
 } from "../page-layout.ts";
 
@@ -164,5 +166,113 @@ describe("page layout", () => {
       expect(fitScale(portrait, undefined, box)).toBe(1);
       expect(fitScale({ w: 100_000, h: 10 }, undefined, box)).toBe(0.1);
     });
+  });
+});
+
+describe("reveal a block from under the overlay panel", () => {
+  const box = { w: 1104, h: 700 };
+  const panel = 272;
+  const page = { w: 800, h: 3000 };
+  const tall = { w: 800, h: 3000 };
+
+  it("slides a block at the left edge out from under the panel (zoom 100%, page centered)", () => {
+    const centered = (box.w - 800) / 2;
+    const v = { scale: 1, x: centered, y: 40 };
+    const next = revealBlockView({ x: 10, y: 100, w: 100, h: 60 }, v, box, panel, page);
+    expect(next).toEqual({ scale: 1, x: panel + REVEAL_MARGIN - 10, y: 40 });
+  });
+
+  it("leaves the view alone when the block is already clear of the panel", () => {
+    const v = { scale: 1, x: (box.w - 800) / 2, y: 40 };
+    expect(revealBlockView({ x: 300, y: 100, w: 100, h: 60 }, v, box, panel, page)).toBeNull();
+  });
+
+  it("does not move when no panel covers the canvas", () => {
+    const v = { scale: 1, x: (box.w - 800) / 2, y: 40 };
+    expect(revealBlockView({ x: 10, y: 100, w: 100, h: 60 }, v, box, 0, page)).toBeNull();
+  });
+
+  it("measures against the given frame, not a fixed width", () => {
+    const narrow = { w: 700, h: 700 };
+    const v = { scale: 1, x: 0, y: 40 };
+    // Page 800px rộng hơn khung 700: không căn giữa; khối ở x=600 ra ngoài mép phải khung.
+    const next = revealBlockView({ x: 600, y: 100, w: 100, h: 60 }, v, narrow, 0, page);
+    expect(next?.x).toBe(narrow.w - REVEAL_MARGIN - 700);
+  });
+
+  it("scrolls a block near the bottom of the view up into sight, within the page scroll range", () => {
+    const v = { scale: 1, x: (box.w - 800) / 2, y: -2000 };
+    const next = revealBlockView({ x: 300, y: 2650, w: 100, h: 80 }, v, box, panel, tall);
+    // Đáy khối ở 2730 − 2000 = 730 > 700 − 24 → kéo lên 54px.
+    expect(next?.y).toBe(-2054);
+    expect(next?.x).toBe(v.x);
+  });
+
+  it("never scrolls past the end of the page", () => {
+    const end = box.h - 3000 - 40;
+    const v = { scale: 1, x: (box.w - 800) / 2, y: end };
+    expect(revealBlockView({ x: 300, y: 2990, w: 100, h: 10 }, v, box, panel, tall)).toBeNull();
+  });
+
+  it("follows the zoom: a block that is small on screen still gets the margin", () => {
+    const small = { w: 500, h: 700 };
+    const v = { scale: 0.5, x: 50, y: 40 };
+    const next = revealBlockView({ x: 20, y: 100, w: 100, h: 60 }, v, small, panel, page);
+    // Trái khối ở 50 + 10 = 60 → lên panel + margin.
+    expect(next?.x).toBe(v.x + (panel + REVEAL_MARGIN - 60));
+  });
+
+  it("aligns the left edge when the block is wider than the visible area", () => {
+    const v = { scale: 1, x: 100, y: 40 };
+    const next = revealBlockView({ x: 0, y: 100, w: 900, h: 60 }, v, box, panel, page);
+    expect(next?.x).toBe(panel + REVEAL_MARGIN);
+  });
+
+  it("split view: reveals a block of the translated column, honoring the original column offset", () => {
+    const content = contentBox(page, true);
+    expect(content.x).toBe(-(800 + SPLIT_GAP));
+    // Cột Dịch bắt đầu ở 100: khối x=20 nằm dưới panel.
+    const next = revealBlockView(
+      { x: 20, y: 100, w: 100, h: 60 },
+      { scale: 1, x: 100, y: 40 },
+      box,
+      panel,
+      content,
+      content.x,
+    );
+    expect(next?.x).toBe(panel + REVEAL_MARGIN - 20);
+    // Khối ở mép phải khung: kéo sang trái, vẫn trong tầm cuộn của cả hai cột.
+    const right = revealBlockView(
+      { x: 300, y: 100, w: 150, h: 60 },
+      { scale: 1, x: 700, y: 40 },
+      box,
+      panel,
+      content,
+      content.x,
+    );
+    expect(right?.x).toBe(700 - (1000 + 150 - (box.w - REVEAL_MARGIN)));
+  });
+
+  it("returns null while the frame is not measured yet", () => {
+    expect(
+      revealBlockView({ x: 0, y: 0, w: 10, h: 10 }, { scale: 1, x: 0, y: 0 }, { w: 0, h: 0 }, panel, page),
+    ).toBeNull();
+  });
+});
+
+describe("clampView with an overlay panel", () => {
+  const box = { w: 1104, h: 700 };
+  it("lets a centered page sit shifted right by up to the covered width, never left of center", () => {
+    const mid = (box.w - 800) / 2;
+    const c = { w: 800, h: 3000 };
+    expect(clampView({ scale: 1, x: mid + 100, y: 0 }, c, box, 0, 272).x).toBe(mid + 100);
+    expect(clampView({ scale: 1, x: mid + 500, y: 0 }, c, box, 0, 272).x).toBe(mid + 272);
+    expect(clampView({ scale: 1, x: mid - 50, y: 0 }, c, box, 0, 272).x).toBe(mid);
+    expect(clampView({ scale: 1, x: mid + 100, y: 0 }, c, box, 0, 0).x).toBe(mid);
+  });
+  it("widens the left limit of a page wider than the frame", () => {
+    const c = { w: 2000, h: 3000 };
+    expect(clampView({ scale: 1, x: 500, y: 0 }, c, box, 0, 272).x).toBe(40 + 272);
+    expect(clampView({ scale: 1, x: 500, y: 0 }, c, box, 0, 0).x).toBe(40);
   });
 });

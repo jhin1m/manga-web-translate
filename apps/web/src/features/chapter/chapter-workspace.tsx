@@ -6,13 +6,18 @@
  * tự chạy: "Dịch chương" = cắt trang → xoá chữ + OCR → dịch theo lô, nối một mạch; menu ⋯ "Chỉ xoá chữ + OCR" dừng ở
  * "Chờ dịch" (xem ảnh sạch, sửa mask) tới khi bấm "Dịch chương". ⌘/Ctrl/Shift-click thumbnail chọn trang → "Dịch N trang".
  *
+ * Panel khối (rail "Chọn"): đóng mặc định, đè lên canvas (canvas không đổi bề ngang), tự mở khi chọn khối hoặc khi có
+ * nội dung phải xử lý (AI có bản mới, xung đột khi lưu), đóng khi bỏ chọn nếu hết nội dung; khối bị panel che thì canvas
+ * tự cuộn lộ ra (`revealBlockView`). Chữ / Tẩy chữ / Quét chữ dùng thanh phụ nổi trên canvas thay panel.
+ *
  * Trạng thái chương chỉ ở chip thanh trên (+ rail theo trang). Kết quả thao tác (dịch lại, áp kiểu…) là thông báo nổi
  * trên canvas, tự ẩn; "Dịch chương" thành công không báo gì thêm (chip đã đổi), chỉ báo khi có ảnh bị loại. Lượt xuất
  * xong lúc drawer Xuất đã đóng → thông báo kèm nút "Tải xuống".
  *
  * Drawer phải: Xuất (nút "Xuất" hoặc `?drawer=export` từ "Xuất lại" ở home), Hoạt động, Phím tắt (`?`). Chế độ xem
- * (chapterStore.viewMode): nút "Xem gốc" + giữ `O`, Chia đôi trong menu ⋯. Thanh nổi cạnh khối đang chọn (Sửa chữ ·
- * Dịch lại khối · Nhân đôi · Xoá). Phím tắt: `editor/shortcuts.ts` (1 listener).
+ * (chapterStore.viewMode): nút "Xem gốc" + giữ `O`, Chia đôi trong menu ⋯. Thao tác khối (Dịch lại · Nhân đôi · Xoá) ở
+ * đầu panel khối; thao tác trang (Dịch / Dịch lại, Bỏ chỉnh sửa tay, Ẩn) ở menu chuột phải cột trang. Phím tắt:
+ * `editor/shortcuts.ts` (1 listener).
  *
  * Page đang sửa (active) = page canvas đang hiện; đổi khi chọn ở cột trang, nút ‹ › góc dưới canvas, phím ←/→/A/D, focus 1
  * dòng của bảng hoặc `?page=` đổi từ ngoài; page active ghi lại vào `?page=` (replace, gộp 400ms). Khối đang chọn
@@ -24,7 +29,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ApiError, errorMessage } from "../../lib/api.ts";
-import { deleteBox, setStyleMany } from "../editor/actions.ts";
+import { deleteBox, resetToAI, setStyleMany } from "../editor/actions.ts";
 import { ChapterCanvas } from "../editor/canvas/ChapterCanvas.tsx";
 import { type PageRect, useOcrRegion } from "../editor/canvas/OcrSelect.tsx";
 import type { SlotImages, SlotProcessing } from "../editor/canvas/PageSlot.tsx";
@@ -32,10 +37,11 @@ import { chapterStore, revealRect } from "../editor/chapter-store.ts";
 import { readAutoErase, writeAutoErase } from "../editor/erase-queue.ts";
 import { dialogueFont } from "../editor/fonts.ts";
 import { batchOnTop } from "../editor/history.ts";
+import { contentBox, revealBlockView } from "../editor/page-layout.ts";
 import { ConflictList } from "../editor/panels/ConflictList.tsx";
-import { MaskPanel } from "../editor/panels/MaskPanel.tsx";
+import { MaskToolBar } from "../editor/panels/MaskToolBar.tsx";
 import type { ShortcutAction } from "../editor/shortcuts.ts";
-import { editorStore, useEditor } from "../editor/store.ts";
+import { type EditorState, editorStore, useEditor } from "../editor/store.ts";
 import { resetChapterSession, useChapterSession } from "../editor/use-chapter-session.ts";
 import { useShortcuts } from "../editor/use-shortcuts.ts";
 import { ApplyGlossaryPanel } from "../glossary/ApplyGlossary.tsx";
@@ -57,7 +63,6 @@ import {
   translatePrepared,
   undoBatch,
 } from "./api.ts";
-import { BlockToolbar } from "./block-toolbar.tsx";
 import { CanvasPager, CanvasZoom } from "./canvas-controls.tsx";
 import { ChapterTopbar, type EditAccess, LockBand } from "./chapter-topbar.tsx";
 import { ContextPanel, type FocusRequest } from "./context-panel.tsx";
@@ -66,13 +71,13 @@ import { isExportActive } from "./export-options.ts";
 import { triggerDownload, useExports } from "./export-panel.tsx";
 import { type BatchHooks, FindReplacePanel } from "./FindReplace.tsx";
 import { providerWait, providerWaitText } from "./job-error.ts";
-import { readPanel, writePanel } from "./layout-prefs.ts";
+import { clearLegacyLayout } from "./layout-prefs.ts";
 import { PageRail } from "./page-rail.tsx";
 import { clickSelect, EMPTY_SELECTION, pruneSelection, type Selection, selectionIds } from "./page-selection.ts";
 import { isPageBusy, needsReview, pageLevel } from "./page-status.ts";
 import { type ChapterCommand, primaryAction } from "./primary-action.ts";
 import { ProofreadPanel } from "./proofread-panel.tsx";
-import { SelectPanel } from "./select-panel.tsx";
+import { BlockActions, SelectPanel } from "./select-panel.tsx";
 import { ShortcutHelp } from "./shortcut-help.tsx";
 import { SourceRail } from "./source-rail.tsx";
 import { type IngestView, moveItem, type SourceItem, sourceCounts, stepSource } from "./source-rail-model.ts";
@@ -82,7 +87,7 @@ import { chapterChip, chapterProgress, chipWithActivity, isChapterSettled, nextR
 import { filterRows, KIND_LABEL, type Row, rowKeyOfBox, sameKindBoxIds, type TableFilter } from "./text-table/rows.ts";
 import { TableFilters, TextTable, useChapterRows } from "./text-table/text-table.tsx";
 import { describeWriteError } from "./text-utils.ts";
-import { OcrToolView, TextToolView } from "./tool-panels.tsx";
+import { CanvasToolBar, OcrToolBar, TextToolBar } from "./tool-panels.tsx";
 import { ToolRail } from "./tool-rail.tsx";
 import { isWidePanel, PANEL_TITLE, type PanelId, type RailTarget, railClick } from "./tool-rail-model.ts";
 import { undoStyleText } from "./undo-style-text.ts";
@@ -98,6 +103,13 @@ type DrawerKind = "export" | "activity" | "help";
 type Props = { seriesId: string; chapterId: string; page?: string; drawer?: "export" };
 /** Mảng rỗng cố định (series chưa tải) — không đổi tham chiếu mỗi lần render. */
 const NO_IGNORE: readonly string[] = [];
+
+/**
+ * Có nội dung phải xử lý ở panel khối dù không chọn khối: xung đột khi lưu, hoặc AI có bản mới cho trang đang mở. Còn
+ * nội dung này thì panel tự mở và không tự đóng.
+ */
+const hasToolContent = (s: Pick<EditorState, "conflicts" | "ai" | "doc" | "pageId">) =>
+  s.conflicts.length > 0 || (s.ai.available && !!s.ai.state && !!s.doc && !!s.pageId);
 /**
  * `untilStable`: giữ tới khi chương chạy xong lượt xử lý vừa bắt đầu (ảnh bị loại khi Dịch chương). `sticky`: info
  * không tự ẩn (VD "Đã xuất xong" + nút tải). `actions`: nút kèm thông báo (vd. "Hoàn tác", "Luôn bỏ ở series này" sau
@@ -171,9 +183,10 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
   const [drawer, setDrawer] = useState<DrawerKind | null>(searchDrawer ?? null);
   // ---- Rail công cụ + panel ngữ cảnh ----
   const tool = useEditor((s) => s.tool);
-  const [panel, setPanelState] = useState<PanelId | null>(readPanel);
+  // Panel đóng mặc định; mở theo ngữ cảnh (chọn khối, nội dung phải xử lý) hoặc bằng rail.
+  const [panel, setPanelState] = useState<PanelId | null>(null);
   // Panel Bản dịch / Tìm mount lần đầu khi mở, sau đó chỉ ẩn (giữ kết quả xem trước Tìm/Thay, vị trí cuộn bảng).
-  const [seen, setSeen] = useState<ReadonlySet<PanelId>>(() => new Set(panel ? [panel] : []));
+  const [seen, setSeen] = useState<ReadonlySet<PanelId>>(() => new Set());
   const [findTab, setFindTab] = useState<"find" | "glossary">("find");
   const [focusReq, setFocusReq] = useState<FocusRequest | null>(null);
   const panelRef = useRef(panel);
@@ -182,7 +195,8 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
     setPanelState(p);
     if (p) setSeen((s) => (s.has(p) ? s : new Set(s).add(p)));
   }, []);
-  useEffect(() => writePanel(panel), [panel]);
+  // Khoá bố cục của bản cũ nhớ panel đang mở: bỏ để mặc định đóng có hiệu lực.
+  useEffect(() => clearLegacyLayout(), []);
 
   // Cache page active có version mới (AI dịch xong, tìm & thay…) → nạp lại nếu chưa sửa gì.
   useEffect(
@@ -278,19 +292,8 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
     },
     [session.session, setError],
   );
-  // Lưu bị xung đột khi panel đang thu → mở panel (danh sách xung đột ở đầu panel, đổi trang là mất).
-  useEffect(
-    () =>
-      editorStore.subscribe((s, prev) => {
-        if (s.conflicts.length > 0 && prev.conflicts.length === 0 && panelRef.current === null) setPanel("tool");
-      }),
-    [setPanel],
-  );
-  // Chọn box trên canvas → dòng tương ứng thành dòng hiện tại (bảng cuộn tới); panel đang thu → mở panel công cụ (đang
-  // ở Bản dịch / Tìm thì giữ). Bỏ chọn box (bấm nền, Esc) → bỏ dòng hiện tại để panel về thông tin trang; trừ dòng
-  // không có box (vùng chưa có khung: chọn từ bảng).
-  // Khối được chọn ngay lúc nhấn chuột (có thể đang bắt đầu kéo): mở panel lúc đó làm canvas vừa lại giữa chừng kéo →
-  // khối lệch khỏi chỗ thả. Đang nhấn chuột thì hoãn tới khi nhả.
+  // Khối được chọn ngay lúc nhấn chuột (có thể đang bắt đầu kéo): panel đè lên canvas ngay lúc đó sẽ chắn con trỏ giữa
+  // chừng kéo, và cuộn lộ khối làm khối lệch khỏi chỗ thả. Đang nhấn chuột thì hoãn tới khi nhả.
   const pointerDown = useRef(false);
   useEffect(() => {
     const down = () => {
@@ -308,22 +311,37 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
       removeEventListener("pointercancel", up, true);
     };
   }, []);
+  // Panel khối tự mở/đóng theo ngữ cảnh. Mở: chọn khối trên canvas ở công cụ Chọn (panel đang thu; đang ở Bản dịch / Tìm thì giữ), hoặc
+  // có nội dung phải xử lý mà không chọn khối (AI có bản mới, xung đột khi lưu — đổi trang là mất danh sách xung đột).
+  // Đóng: bỏ chọn khối (bấm nền, Esc, đổi trang) khi hết nội dung — còn xung đột / AI mới thì panel ở lại. Đổi sang công
+  // cụ có thanh phụ cũng thu panel khi hết nội dung. Chọn khối cũng đặt dòng bảng tương ứng thành dòng hiện tại (bảng cuộn
+  // tới); bỏ chọn → bỏ dòng hiện tại, trừ dòng không có box (vùng chưa có khung: chọn từ bảng).
   useEffect(() => {
     const openToolPanel = () => {
-      if (panelRef.current === null && editorStore.getState().selection) setPanel("tool");
+      const s = editorStore.getState();
+      if (panelRef.current === null && ((s.selection && s.tool === "select") || hasToolContent(s))) setPanel("tool");
     };
     return editorStore.subscribe((s, prev) => {
-      if (s.selection === prev.selection || !s.pageId || !s.doc) return;
-      if (!s.selection) {
-        setCurrent((c) => (rowsRef.current.find((r) => r.key === c)?.boxId ? null : c));
-        return;
+      const content = hasToolContent(s);
+      if (content && !hasToolContent(prev) && panelRef.current === null) setPanel("tool");
+      if (s.selection !== prev.selection && s.pageId && s.doc) {
+        if (!s.selection) {
+          setCurrent((c) => (rowsRef.current.find((r) => r.key === c)?.boxId ? null : c));
+        } else {
+          if (panelRef.current === null && s.tool === "select") {
+            if (pointerDown.current) addEventListener("pointerup", openToolPanel, { once: true });
+            else openToolPanel();
+          }
+          const box = s.doc.text_boxes.find((b) => b.id === s.selection);
+          if (box) setCurrent(rowKeyOfBox(s.pageId, box, s.doc));
+        }
       }
-      if (panelRef.current === null) {
-        if (pointerDown.current) addEventListener("pointerup", openToolPanel, { once: true });
-        else openToolPanel();
+      if (panelRef.current === "tool" && !content) {
+        const deselected = !!prev.selection && !s.selection;
+        const contentGone = hasToolContent(prev) && !s.selection;
+        const toolLeft = s.tool !== prev.tool && s.tool !== "select";
+        if (deselected || contentGone || toolLeft) setPanel(null);
       }
-      const box = s.doc.text_boxes.find((b) => b.id === s.selection);
-      if (box) setCurrent(rowKeyOfBox(s.pageId, box, s.doc));
     });
   }, [setPanel]);
   /** Bấm 1 kết quả Tìm/Thay hoặc Áp glossary → nhảy tới khối đó (panel Tìm giữ nguyên). */
@@ -336,7 +354,6 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
   // Giữ nguyên object Set khi tập page tràn không đổi (rail memo không render lại mỗi lần gõ).
   const overflowKey = [...new Set(allRows.filter((r) => r.flags.includes("overflow")).map((r) => r.pageId))].join(",");
   const overflowPages = useMemo(() => new Set(overflowKey ? overflowKey.split(",") : []), [overflowKey]);
-  const activeOverflow = allRows.filter((r) => r.pageId === activeId && r.flags.includes("overflow")).length;
   const activeBlocks = allRows.filter((r) => r.pageId === activeId).length;
 
   // ---- Thao tác chương ----
@@ -424,30 +441,28 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
       kind:
         | "retry"
         | "retranslate"
-        | "retranslate-page"
         | "translate-pages"
         | "cancel"
         | "commit"
         | "prepare_only"
-        | "translate",
+        | "translate"
+        | { retranslatePage: ProgressPage },
     ): Promise<Notice | null> => {
       const info = (text: string): Notice => ({ tone: "info", text });
+      if (typeof kind === "object") {
+        const page = kind.retranslatePage;
+        await runAi(() => retranslate(chapterId, [page.id]));
+        const n = page.ord + 1;
+        return info(
+          page.status === "prepared"
+            ? `Đã xếp dịch trang ${n}.`
+            : `Đã xếp dịch lại trang ${n} (chỉnh sửa tay được giữ nguyên).`,
+        );
+      }
       if (kind === "cancel") return info(`Đã huỷ ${(await cancelChapter(chapterId)).cancelled} job.`);
       if (kind === "retry") {
         const r = await runAi(() => retryFailed(chapterId));
         return info(r.jobs.length ? `Đã xếp lại ${r.jobs.length} job cho trang lỗi.` : "Không có trang lỗi.");
-      }
-      if (kind === "retranslate-page") {
-        const id = editorStore.getState().pageId;
-        const page = pages.find((p) => p.id === id);
-        if (!id) return info("Chưa chọn trang.");
-        await runAi(() => retranslate(chapterId, [id]));
-        const n = (page?.ord ?? 0) + 1;
-        return info(
-          page?.status === "prepared"
-            ? `Đã xếp dịch trang ${n}.`
-            : `Đã xếp dịch lại trang ${n} (chỉnh sửa tay được giữ nguyên).`,
-        );
       }
       if (kind === "translate-pages") {
         if (!selectedIds.length) return info("Chưa chọn trang.");
@@ -802,6 +817,30 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
     [pages, go, pageSkip.mutate],
   );
 
+  // Menu trang: dịch / dịch lại riêng 1 trang, bỏ chỉnh sửa tay trang đang mở (hoàn tác được bằng toast hoặc Ctrl/Cmd+Z).
+  const retranslateOne = useCallback((page: ProgressPage) => runAction({ retranslatePage: page }), [runAction]);
+  const canResetEdits = useCallback((page: ProgressPage) => {
+    const s = editorStore.getState();
+    if (page.id !== s.pageId || !s.doc || !s.ai.state || s.readOnly) return false;
+    return (
+      JSON.stringify([s.doc.regions, s.doc.text_boxes]) !== JSON.stringify([s.ai.state.regions, s.ai.state.text_boxes])
+    );
+  }, []);
+  const resetEdits = useCallback(
+    (page: ProgressPage) => {
+      const s = editorStore.getState();
+      const ai = s.ai.state;
+      if (page.id !== s.pageId || !ai || s.readOnly) return;
+      s.apply(resetToAI(ai));
+      notify({
+        tone: "info",
+        text: `Đã bỏ chỉnh sửa tay trên trang ${page.ord + 1}, dùng lại bản AI.`,
+        actions: [{ label: "Hoàn tác", run: () => editorStore.getState().undo() }],
+      });
+    },
+    [notify],
+  );
+
   const stepSourceBy = (dir: -1 | 1) => {
     const next = stepSource(sources, sourceId, dir);
     if (next) setSourcePick(next);
@@ -848,11 +887,6 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
   );
   const ocrStart = ocr.start;
   const onOcr = useCallback((r: PageRect) => void ocrStart(r), [ocrStart]);
-  /** "Sửa chữ" ở thanh nổi: mở panel Chọn + focus ô Bản dịch. */
-  const editBlock = () => {
-    setPanel("tool");
-    setFocusReq((r) => ({ seq: (r?.seq ?? 0) + 1, selector: "#cw-translation" }));
-  };
   /** "Dịch lại khối" = nhận dạng + dịch lại vùng OCR của khối (khối tự thêm không có vùng → bỏ qua). */
   const reocrRow = (row: Pick<Row, "regionId">) => {
     const [x, y, w, h] = editorStore.getState().doc?.regions.find((r) => r.id === row.regionId)?.bbox ?? [];
@@ -874,7 +908,15 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
   const aiWait = aiWaitInfo ? providerWaitText(aiWaitInfo) : null;
 
   const readOnly = useEditor((s) => !!s.readOnly);
+  const readOnlyReason = useEditor((s) => s.readOnly);
   const conflictCount = useEditor((s) => s.conflicts.length);
+  // Dịch lại trang khác vẫn được khi trang đang mở bận; các lý do chỉ xem còn lại (khoá, đang tải, khôi phục) thì không.
+  const retranslateOff =
+    readOnlyReason && readOnlyReason !== "page_busy" && readOnlyReason !== "processing"
+      ? "Đang chỉ xem"
+      : action.isPending
+        ? "Đang gửi yêu cầu…"
+        : undefined;
   const railDisabled: Partial<Record<RailTarget, string>> = {};
   for (const t of ["text", "brush", "ocr"] as const) {
     if (sourceMode) railDisabled[t] = "Dùng được khi chương đã cắt trang";
@@ -882,13 +924,45 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
   }
   if (!canTools) railDisabled.find = "Dùng được khi chương dịch xong";
   if (!canTools) railDisabled.proofread = "Dùng được khi chương đã dịch";
-  // Panel Tìm / Hiệu đính nhớ từ lần trước nhưng chương chưa dịch xong → hiện panel công cụ (không đổi lựa chọn đã nhớ).
-  const view = (panel === "find" || panel === "proofread") && !canTools ? "tool" : panel;
+  // Panel Tìm / Hiệu đính đang mở mà chương không còn dịch xong (VD chạy lại) → không hiện panel nào.
+  const view = (panel === "find" || panel === "proofread") && !canTools ? null : panel;
+  const toolOpen = view === "tool";
   const onRail = (t: RailTarget) => {
-    const next = railClick({ panel: view, tool }, t);
+    const next = railClick({ panel: view, tool }, t, hasToolContent(editorStore.getState()));
     if (next.tool !== tool) editorStore.getState().setTool(next.tool);
     setPanel(next.panel);
   };
+
+  // Panel khối đè lên mép trái canvas: báo bề ngang nó che để khung nhìn được lệch thêm chừng đó (không bị kẹp về giữa
+  // khi cuộn), và cuộn lộ khối đang chọn nếu nằm dưới panel. Đo theo khung canvas thật (`chapterStore.box`) và bề
+  // ngang panel thật, không dùng số cố định.
+  const panelEl = useRef<HTMLElement | null>(null);
+  useLayoutEffect(() => {
+    chapterStore.getState().setCover(toolOpen ? (panelEl.current?.offsetWidth ?? 0) : 0);
+    return () => chapterStore.getState().setCover(0);
+  }, [toolOpen]);
+  useEffect(() => {
+    if (!toolOpen) return;
+    const reveal = () => {
+      const s = editorStore.getState();
+      const cs = chapterStore.getState();
+      const box = s.selection ? s.doc?.text_boxes.find((b) => b.id === s.selection) : undefined;
+      const meta = cs.pages.find((p) => p.id === cs.activePageId);
+      if (!box || !meta || s.pageId !== meta.id) return;
+      const c = contentBox({ w: meta.width, h: meta.height }, cs.viewMode === "split");
+      const next = revealBlockView(box, s.view, cs.box, cs.cover, c, c.x);
+      if (next) s.setView(next);
+    };
+    // Khối vừa chọn có thể đang bắt đầu kéo: cuộn giữa chừng làm khối lệch khỏi chỗ thả → đợi nhả chuột.
+    const schedule = () => {
+      if (pointerDown.current) addEventListener("pointerup", reveal, { once: true });
+      else reveal();
+    };
+    schedule();
+    return editorStore.subscribe((s, prev) => {
+      if (s.selection && s.selection !== prev.selection) schedule();
+    });
+  }, [toolOpen]);
 
   // ---- Phím tắt (1 listener, bảng ở editor/shortcuts.ts) ----
   const drawerRef = useRef(drawer);
@@ -999,7 +1073,7 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
   const closeDrawer = useCallback(() => setDrawer(null), []);
 
   return (
-    <div className="cw">
+    <div className="cw" data-cover={toolOpen || undefined}>
       <ChapterTopbar
         seriesId={seriesId}
         series={series.data}
@@ -1040,9 +1114,17 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
       />
       <ToolRail panel={view} tool={tool} disabled={railDisabled} onClick={onRail} />
       <ContextPanel
-        title={PANEL_TITLE[view === "tool" || !view ? tool : view]}
+        title={PANEL_TITLE[view === "tool" || !view ? "select" : view]}
+        heading={toolOpen && currentRow ? `Khối ${currentRow.index}/${activeBlocks}` : undefined}
+        actions={
+          toolOpen && currentRow ? (
+            <BlockActions row={currentRow} ocrBusy={ocr.pending.length > 0} onReocr={reocrRow} />
+          ) : undefined
+        }
         open={view !== null}
         wide={isWidePanel(view)}
+        overlay={toolOpen}
+        elRef={panelEl}
         onClose={() => {
           // Nút thu nằm trong panel sắp ẩn → đưa focus về nút rail của panel đó (không rơi về <body>).
           document.querySelector<HTMLButtonElement>('.cw-toolrail [aria-pressed="true"]')?.focus();
@@ -1054,68 +1136,19 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
         <div className="cw-panel-conflicts">
           <ConflictList />
         </div>
-        {view === "tool" && (
+        {toolOpen && (
           <div className="cw-panel-tool">
-            {tool === "select" || sourceMode ? (
-              <SelectPanel
-                page={activeMeta}
-                row={currentRow}
-                blockTotal={activeBlocks}
-                overflowCount={activeOverflow}
-                kit={kit}
-                targetLang={series.data?.target_lang}
-                defaultFonts={series.data?.default_fonts}
-                busy={{
-                  retranslate: action.isPending,
-                  ocr: ocr.pending.length > 0,
-                  applyKind: applyKind.isPending,
-                }}
-                onRetranslatePage={() => action.mutate("retranslate-page")}
-                ocrRetry={ocr.retry}
-                onCancelOcr={ocr.cancel}
-                onReocr={reocrRow}
-                onApplyKind={(row) => applyKind.mutate(row)}
-                onHidePage={() => activeMeta && skipPage(activeMeta, true)}
-                hideDisabled={
-                  !pagesEditable || pageSkip.isPending
-                    ? "Cần giữ khoá chương (chương không đang chạy)"
-                    : pages.length <= 1
-                      ? "Không ẩn được trang cuối cùng"
-                      : undefined
-                }
-                source={
-                  sourceMode
-                    ? {
-                        item: sources[sourceIdx],
-                        ...sourceCounts(sources),
-                        editable: sourcesEditable,
-                        onSkip: skipSource,
-                      }
-                    : undefined
-                }
-              />
-            ) : tool === "text" ? (
-              <TextToolView font={defaultFont} />
-            ) : tool === "ocr" ? (
-              <OcrToolView
-                lang={series.data?.source_lang}
-                pending={ocr.pending.length}
-                retry={ocr.retry}
-                onCancel={ocr.cancel}
-                autoErase={autoErase}
-                onAutoErase={toggleAutoErase}
-                erasing={ocr.erasing}
-              />
-            ) : activeMeta ? (
-              <MaskPanel
-                pageId={activeMeta.id}
-                cleanRev={activeMeta.clean_rev}
-                page={{ w: activeMeta.width, h: activeMeta.height }}
-                onDone={data.refresh}
-              />
-            ) : (
-              <p className="muted small cw-pad">Chưa có trang để sửa.</p>
-            )}
+            <SelectPanel
+              page={sourceMode ? undefined : activeMeta}
+              row={currentRow}
+              kit={kit}
+              targetLang={series.data?.target_lang}
+              defaultFonts={series.data?.default_fonts}
+              busy={{ ocr: ocr.pending.length > 0, applyKind: applyKind.isPending }}
+              ocrRetry={ocr.retry}
+              onCancelOcr={ocr.cancel}
+              onApplyKind={(row) => applyKind.mutate(row)}
+            />
           </div>
         )}
         {seen.has("table") && (
@@ -1231,12 +1264,27 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
                 <span className="muted">Đang tải…</span>
               </div>
             )}
-            <BlockToolbar
-              processing={!!activeId && processing.has(activeId)}
-              ocrBusy={ocr.pending.length > 0}
-              onEdit={editBlock}
-              onRetranslate={(regionId) => reocrRow({ regionId })}
-            />
+            {tool === "text" && <TextToolBar />}
+            {tool === "ocr" && (
+              <OcrToolBar
+                pending={ocr.pending.length}
+                retry={ocr.retry}
+                onCancel={ocr.cancel}
+                autoErase={autoErase}
+                onAutoErase={toggleAutoErase}
+                erasing={ocr.erasing}
+              />
+            )}
+            {(tool === "brush" || tool === "eraser") && activeMeta && (
+              <CanvasToolBar label="Tuỳ chọn Tẩy chữ">
+                <MaskToolBar
+                  pageId={activeMeta.id}
+                  cleanRev={activeMeta.clean_rev}
+                  page={{ w: activeMeta.width, h: activeMeta.height }}
+                  onDone={data.refresh}
+                />
+              </CanvasToolBar>
+            )}
             <CanvasPager onStep={(dir) => go(pages[idx + dir]?.id)} />
             <CanvasZoom />
           </div>
@@ -1267,6 +1315,10 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
           onSelect={onSelectPage}
           onTranslateSelected={translateSelected}
           onClearSelection={clearSelection}
+          onRetranslate={retranslateOne}
+          retranslateOff={retranslateOff}
+          canResetEdits={canResetEdits}
+          onResetEdits={resetEdits}
         />
       )}
       {drawer === "export" && (

@@ -65,11 +65,12 @@ Toàn màn hình (ngoài app shell), `chapter-workspace.css`. Nguyên tắc (own
 | Vùng | Nội dung |
 |---|---|
 | Thanh trên 52px | ‹ series (tên dài cắt "…", `title` đủ tên) · tên chương · chip trạng thái · khoá/lưu · Hoàn tác / Làm lại (icon) · **Xem gốc** (bật/tắt, `aria-pressed`) · Hoạt động · menu **⋯** (Chia đôi gốc / dịch, Dịch lại cả chương, Chạy lại trang lỗi, Phím tắt) · Huỷ xử lý / Xuất phụ khi có · nút chính |
-| Rail công cụ trái 64px | Chọn (V) · Chữ (T) · Mask (B; Tẩy nét mask E là chế độ của Mask, không có nút riêng) · OCR (R) · ── · Bản dịch · Tìm · Hiệu đính. Icon 20px + nhãn 11px, nút 52×52. Nút đang mở panel của nó: nền `--c-accent-weak`; công cụ đang chọn mà panel thu: chỉ chữ màu nhấn |
-| Panel ngữ cảnh 288px | Theo công cụ: **Chọn** (có khối: Gốc, Bản dịch, tràn khung, font/cỡ, "Kiểu chữ nâng cao" thu gọn, Dịch lại khối, Xoá khối; chưa có khối: trang + trạng thái + cờ + Dịch lại trang này / Ẩn trang này; chưa có page: ảnh gốc đang xem), **Chữ**, **Mask** (Tô ↔ Tẩy nét, cỡ bút, xoá chữ vùng đã tô), **OCR**. Bấm lại icon đang mở → thu panel, canvas rộng ra. Nhớ theo trình duyệt (`localStorage mtl.layout`) |
+| Rail công cụ trái 64px | Chọn (V) · Chữ (T) · Tẩy chữ (B; Tẩy nét E là chế độ của Tẩy chữ, không có nút riêng) · Quét chữ (R) · ── · Bản dịch · Tìm · Hiệu đính. Icon 20px + nhãn 11px, nút 52×52. Nút đang mở panel của nó: nền `--c-accent-weak`; công cụ đang chọn mà panel thu: chỉ chữ màu nhấn |
+| Panel khối 272px | Đóng mặc định, **đè lên mép trái canvas** (canvas không đổi bề ngang), tự mở khi chọn khối hoặc khi có nội dung phải xử lý (AI có bản mới, xung đột khi lưu), đóng khi bỏ chọn nếu hết nội dung. Đầu panel "Khối i/N" + 3 icon (Dịch lại · Nhân đôi · Xoá); thân: Gốc, Dịch, cảnh báo ngắn "Tràn 12px", Font + Cỡ, nhóm "Kiểu chữ" thu gọn (Loại chữ, Tự khớp, nâng cao, Áp kiểu). Khối bị panel che thì canvas tự cuộn lộ ra. Không nhớ theo trình duyệt |
+| Thanh phụ trên canvas | **Chữ** / **Tẩy chữ** (Tô ↔ Tẩy nét, cỡ bút, Bỏ nét, Xoá chữ vùng tô) / **Quét chữ** (Xoá chữ gốc; đang quét: n vùng + Huỷ) không có panel riêng: 1 dòng nổi giữa mép trên canvas |
 | Panel rộng 560px | **Bản dịch** (bảng văn bản cả chương: #, Tr., Gốc, Dịch sửa tại chỗ, Loại, Tình trạng), **Tìm** (segmented "Tìm / Thay" \| "Glossary") và **Hiệu đính** (gợi ý AI theo khối: cũ → mới, lý do, Nhận / Bỏ) |
-| Canvas | Trang active, mặc định **Vừa khung**; nút 100% (giữ khi đổi trang); pager "‹ Trang n / M ›" góc dưới trái; thanh nổi cạnh khối đang chọn (Sửa chữ · Dịch lại khối · Nhân đôi · Xoá đỏ) — đặt trên khối, khối sát mép trên thì dưới |
-| Cột thumbnail phải 112px | Chỉ ảnh 72×100 + số trang. Trạng thái = viền + nhãn ngắn khi có vấn đề: "Đã ẩn" (mờ, viền đứt) · "Lỗi" (viền đỏ) · "Chờ AI" / "Cần xem" (viền cam); trang bình thường không chữ (trạng thái ở `aria-label`). Trang đang mở: outline màu nhấn. Ẩn / khôi phục trang, xoá / khôi phục ảnh gốc: menu chuột phải (Shift+F10) hoặc nút panel Chọn. Có trang cần xem → nút lọc "Cần xem k" |
+| Canvas | Trang active, mặc định **Vừa khung**; nút 100% (giữ khi đổi trang); pager "‹ Trang n / M ›" góc dưới trái (dời sang phải khi panel khối mở); không còn thanh nổi cạnh khối — thao tác khối ở đầu panel khối |
+| Cột thumbnail phải 112px | Chỉ ảnh 72×100 + số trang. Trạng thái = viền + nhãn ngắn khi có vấn đề: "Đã ẩn" (mờ, viền đứt) · "Lỗi" (viền đỏ) · "Chờ AI" / "Cần xem" (viền cam); trang bình thường không chữ (trạng thái ở `aria-label`). Trang đang mở: outline màu nhấn. Ẩn / khôi phục trang, Dịch / Dịch lại trang, Bỏ chỉnh sửa tay, xoá / khôi phục ảnh gốc: menu chuột phải (Shift+F10) hoặc nút góc thumbnail. Có trang cần xem → nút lọc "Cần xem k" |
 
 - **Tên chương** ("Chương N") bấm được → popover đổi series (select) / số chương (`chapter-meta-popover.tsx`,
   `PATCH /chapters/:id`; trùng số → báo lỗi tại chỗ; đổi series → URL theo series mới).
@@ -80,9 +81,9 @@ Toàn màn hình (ngoài app shell), `chapter-workspace.css`. Nguyên tắc (own
   lại), lỗi khoá, mất khoá, khôi phục thay đổi từ phiên trước, lỗi lưu, trang đang chờ AI tự thử lại (provider lỗi
   tạm / 429 hết hạn mức: "trang 1, 2 đang chờ, tự thử lại lúc HH:MM … muốn dừng thì bấm Huỷ xử lý"). Trạng thái bình
   thường không chiếm dải.
-- **Lỗi job viết cho người** (`job-error.ts`): thumbnail (title) / panel Chọn / Hoạt động nói loại lỗi + việc cần làm
-  ("Dịch lại trang này", "Chạy lại trang lỗi"); lỗi thô của provider (JSON dài) chỉ nằm trong "Chi tiết kỹ thuật" thu
-  gọn ở panel Chọn.
+- **Lỗi job viết cho người** (`job-error.ts`): thumbnail (title) / Hoạt động nói loại lỗi + việc cần làm
+  ("Dịch lại trang" ở menu trang, "Chạy lại trang lỗi"); lỗi thô của provider (JSON dài) chỉ nằm trong "Chi tiết kỹ thuật" thu
+  gọn ở Hoạt động.
 - **Thông báo kết quả** (dịch lại, áp kiểu, lỗi thao tác): nổi trên canvas, không đẩy bố cục; info tự ẩn sau 6s.
   "Dịch chương" / "Chỉ xoá chữ + OCR" thành công không báo thêm (chip đã đổi); có ảnh bị loại → giữ thông báo tới khi
   chương xử lý xong.

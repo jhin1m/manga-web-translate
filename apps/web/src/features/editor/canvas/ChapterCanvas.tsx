@@ -202,7 +202,8 @@ export const ChapterCanvas = memo(function ChapterCanvas(props: {
     return () => removeEventListener("keydown", on, true);
   }, [proposal, props.onOcr]);
 
-  const setView = (v: View) => editorStore.getState().setView(clampView(v, content, size, content.x));
+  const setView = (v: View) =>
+    editorStore.getState().setView(clampView(v, content, size, content.x, chapterStore.getState().cover));
   /** Toạ độ màn hình → toạ độ trong page active. */
   const toPage = (p: { x: number; y: number }) => screenToPage(p, view);
 

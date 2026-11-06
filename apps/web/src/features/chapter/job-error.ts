@@ -14,7 +14,7 @@ export const ERROR_CLASS: Record<string, string> = {
   internal: "lỗi hệ thống",
 };
 
-const RETRY_HINT = 'Bấm "Dịch lại trang này" hoặc "Chạy lại trang lỗi" để thử lại.';
+const RETRY_HINT = 'Chuột phải trang → "Dịch lại trang", hoặc bấm "Chạy lại trang lỗi" để thử lại.';
 /** Khoá API sai thì bấm chạy lại cũng hỏng tiếp — nói rõ phải sửa cấu hình trước. */
 const AUTH_HINT =
   'Khoá API AI sai, hết hạn mức hoặc chưa cấu hình — admin sửa ở Cài đặt › AI › Nhà cung cấp (hoặc key env của worker) rồi bấm "Chạy lại trang lỗi".';
@@ -85,9 +85,20 @@ export function pageRanges(ords: number[]): string {
 
 type FailedPage = { ord: number; job: Pick<JobView, "error_class" | "error"> | null };
 
+/** Lỗi thô của các trang trong 1 nhóm, gom theo nội dung: [{ pages: "2–4", error }]. */
+function rawErrors(pages: FailedPage[]) {
+  const by = new Map<string, number[]>();
+  for (const p of pages) {
+    const e = p.job?.error;
+    if (e) by.set(e, [...(by.get(e) ?? []), p.ord + 1]);
+  }
+  return [...by].map(([error, ords]) => ({ pages: pageRanges(ords), error }));
+}
+
 /**
  * Trang lỗi gom theo nguyên nhân (nhiều trang nhất trước) → 1 dòng mỗi nguyên nhân thay vì liệt kê từng trang.
- * `hint` = việc cần làm khi chạy lại thôi chưa đủ; `raw` = lỗi thô đầu tiên (để xem chi tiết khi rê chuột).
+ * `hint` = việc cần làm khi chạy lại thôi chưa đủ; `raw` = lỗi thô đầu tiên; `details` = mọi lỗi thô của nhóm (theo
+ * nội dung, kèm số trang) để đọc ở "Chi tiết kỹ thuật".
  */
 export function failedPageGroups(failed: FailedPage[]) {
   const by = new Map<string, FailedPage[]>();
@@ -104,5 +115,6 @@ export function failedPageGroups(failed: FailedPage[]) {
       pages: pageRanges(ps.map((p) => p.ord + 1)),
       hint: cls === "auth" ? AUTH_HINT : null,
       raw: ps.find((p) => p.job?.error)?.job?.error ?? null,
+      details: rawErrors(ps),
     }));
 }

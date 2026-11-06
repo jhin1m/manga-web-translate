@@ -80,7 +80,7 @@ Apply = 1 transaction: mỗi page ghi bản cũ vào `page_state_history` với 
 `state_origin = user` (job AI sau đó không ghi đè, xem luật AI-không-ghi-đè). Undo khôi phục khi version hiện tại =
 version lúc áp + 1. History giữ 50 bản/page — batch quá cũ có thể không còn (404).
 
-"Áp kiểu cho khối cùng loại" (panel Chọn) cũng ghi theo `batch_id` nhưng client tự tính state (layout trình duyệt) và gửi
+"Áp kiểu cho khối cùng loại" (panel khối) cũng ghi theo `batch_id` nhưng client tự tính state (layout trình duyệt) và gửi
 `PUT /api/chapters/:id/states {pages: [{page_id, version, state}]}` (1 transaction; khoá 423, `chapter_busy`, page ẩn /
 bận / khác chương / sai kích thước bị từ chối, version lệch → 409 `version_conflict` kèm `pages`, không ghi page nào);
 hoàn tác qua `find-replace/undo` với `conflicts: "skip"` từ toast (trang đã sửa tiếp được giữ nguyên, toast nêu số trang đã hoàn tác + các trang bị bỏ qua; bỏ qua hết → báo không hoàn tác được).

@@ -3,20 +3,22 @@
  * nối lưu rồi đóng tab giữa chừng → mở lại đề nghị khôi phục từ IndexedDB → khôi phục → lưu lên server. Thêm:
  * nhiều trang (pager canvas, cột thumbnail ↔ `?page=`) và chính sách khoá (đang dịch không giữ khoá → AI ghi được
  * bản dịch), panel Bản dịch cả chương (click dòng ↔ trang active, sửa tại chỗ, Enter sang dòng sau xuyên trang, cờ
- * tràn khung + lọc "Chỉ khối cần xem"), nút Xem gốc + Chia đôi trong menu ⋯ + giữ O, rail công cụ thu/mở panel,
- * thanh nổi cạnh khối (Sửa chữ, Nhân đôi, Xoá), drawer Hoạt động khi chương đang dịch. Chương tạo qua API + worker giả.
+ * tràn khung + lọc "Chỉ khối cần xem"), nút Xem gốc + Chia đôi trong menu ⋯ + giữ O, rail công cụ,
+ * panel khối (Dịch lại, Nhân đôi, Xoá), drawer Hoạt động khi chương đang dịch. Chương tạo qua API + worker giả.
  */
 import { expect, type Page, test } from "@playwright/test";
 import { WEB_URL } from "./env.ts";
 import { type FakeWorkerOptions, PNG_1PX, runFakeWorker } from "./fake-worker.ts";
 import {
   apiReadyChapter,
+  blockPanel,
   login,
   openPanel,
   pageThumb,
   pageThumbs,
   railButton,
   state,
+  toolBar,
   translateIfPrepared,
 } from "./helpers.ts";
 
@@ -121,6 +123,7 @@ test("edit translation → autosave → reload keeps it; crash mid-edit → rest
   await cell(page).fill("Chào cậu, ệ ẫ ữ");
   await expect(page.getByRole("status", { name: "Khoá chương" })).toContainText("Đã lưu", { timeout: 10_000 });
   await page.reload();
+  await openTable(page);
   await expect(cell(page)).toHaveValue("Chào cậu, ệ ẫ ữ");
   const saved = (await (await page.request.get(`/api/pages/${pageId}`)).json()) as {
     version: number;
@@ -206,6 +209,7 @@ test("edit translation → autosave → reload keeps it; crash mid-edit → rest
   // Lượt lưu cuối tới server trước lệnh nhả khoá (không có PUT nào bị 423).
   expect(lockedPuts).toEqual([]);
   await page.goto(chapterUrl(chapterId));
+  await openTable(page);
   await cell(page).fill("Chào cậu, ệ ẫ ữ");
   await expect(page.getByRole("status", { name: "Khoá chương" })).toContainText("Đã lưu", { timeout: 10_000 });
   const beforeCrash = (await (await page.request.get(`/api/pages/${pageId}`)).json()) as typeof saved;
@@ -229,9 +233,7 @@ test("edit translation → autosave → reload keeps it; crash mid-edit → rest
   expect(after.version).toBeGreaterThan(beforeCrash.version);
 });
 
-test("3 pages shown one at a time: pager and thumbnails stay in sync with ?page= and the select panel", async ({
-  page,
-}) => {
+test("3 pages shown one at a time: pager and thumbnails stay in sync with ?page=", async ({ page }) => {
   const pageErrors: string[] = [];
   page.on("pageerror", (e) => pageErrors.push(e.message));
   await login(page);
@@ -246,7 +248,7 @@ test("3 pages shown one at a time: pager and thumbnails stay in sync with ?page=
   await expect(pager(page)).toContainText("Trang 1 / 3");
   await expect(pageThumbs(page).getByText("3 trang", { exact: true })).toBeVisible();
 
-  // Nút ‹ › góc dưới canvas đổi trang: thumbnail, panel Chọn và `?page=` cùng theo.
+  // Nút ‹ › góc dưới canvas đổi trang: thumbnail và `?page=` cùng theo.
   const foot = pager(page);
   await expect(foot.getByRole("button", { name: "Trang trước (←)" })).toBeDisabled();
   await foot.getByRole("button", { name: "Trang sau (→)" }).click();
@@ -257,12 +259,10 @@ test("3 pages shown one at a time: pager and thumbnails stay in sync with ?page=
   await expect(pageThumb(page, 3)).toHaveAttribute("aria-current", "page");
   await expect(pageThumb(page, 3)).toHaveAccessibleName("Trang 3 · Xong");
   await expect(page).toHaveURL(new RegExp(`\\?page=${pageIds[2]}$`));
-  await expect(await openPanel(page, "select")).toContainText("Trang 3");
 
   await pageThumb(page, 2).click();
   await expect(foot).toContainText("Trang 2 / 3");
   await expect(pageThumb(page, 2)).toHaveAttribute("aria-current", "page");
-  await expect(page.getByRole("complementary", { name: "Chọn & sửa" })).toContainText("Trang 2");
   await openTable(page);
   await expect(cell(page, 2)).toHaveValue("Xin chào");
 
@@ -386,12 +386,12 @@ test("text table: row click activates its page; edit in place autosaves; Enter m
   await openTable(page);
   await expect(page.getByRole("status", { name: "Khoá chương" })).toContainText("Bạn đang giữ khoá chương");
 
-  // Click dòng trang 2 → thumbnail + pager trang 2, dòng sáng; panel Chọn "Trang 2 · Khối 1 / 1 · Thoại".
+  // Click dòng trang 2 → thumbnail + pager trang 2, dòng sáng; panel khối "Khối 1/1".
   await page.locator(`[data-row="${p2}:t0"] .cw-src`).click();
   await expect(pageThumb(page, 2)).toHaveAttribute("aria-current", "page");
   await expect(pager(page)).toContainText("Trang 2 / 2");
   await expect(page.locator(`[data-row="${p2}:t0"]`)).toHaveClass(/\bon\b/);
-  await expect(await openPanel(page, "select")).toContainText("Trang 2 · Khối 1 / 1 · Thoại");
+  await expect(await openPanel(page, "select")).toContainText("Khối 1/1");
   await openTable(page);
 
   // Sửa ô Dịch dòng 1 (trang 1) → lưu. Ô của trang chưa active chỉ đọc tới khi focus kích hoạt xong trang đó.
@@ -481,7 +481,7 @@ test("overflowing box is flagged in the table and thumbnails; 'Chỉ khối cầ
 
   // Chọn dòng → panel Chọn cảnh báo tràn khung.
   await rows.first().locator(".cw-src").click();
-  await expect(await openPanel(page, "select")).toContainText(/Tràn khung \d+px/);
+  await expect(await openPanel(page, "select")).toContainText(/Tràn \d+px/);
 });
 
 test("back/forward straight to another chapter still saves the last edit of the one left", async ({ page }) => {
@@ -518,45 +518,58 @@ test("back/forward straight to another chapter still saves the last edit of the 
   expect(renderUpdates).toEqual([]);
 });
 
-test("tool rail: clicking the open tool collapses the panel and widens the canvas; clicking again reopens it", async ({
+test("block panel is closed by default and overlays the canvas: opening or closing it never changes the canvas width", async ({
   page,
 }) => {
   await login(page);
   const { chapterId } = await readyChapter(page);
+  // Khoá bố cục của bản cũ đang nhớ panel mở: bị bỏ, panel vẫn đóng mặc định.
+  await page.addInitScript(() => localStorage.setItem("mtl.layout", JSON.stringify({ panel: "tool" })));
   await page.goto(chapterUrl(chapterId));
   await expect(page.locator(".ed-canvas canvas").first()).toBeVisible();
-  const panel = page.getByRole("complementary", { name: "Chọn & sửa" });
+  const panel = blockPanel(page);
   const select = railButton(page, "select");
-  await expect(panel).toBeVisible();
-  await expect(select).toHaveAttribute("aria-pressed", "true");
-  const width = async () => (await page.locator(".ed-canvas").boundingBox())?.width ?? 0;
-  const open = await width();
-
-  await select.click();
   await expect(panel).toBeHidden();
   await expect(select).toHaveAttribute("aria-pressed", "false");
-  await expect.poll(width).toBeGreaterThan(open + 200);
-  // Công cụ vẫn là Chọn khi panel thu; tải lại trang nhớ panel thu.
-  await page.reload();
-  await expect(page.locator(".ed-canvas canvas").first()).toBeVisible();
-  await expect(panel).toBeHidden();
+  expect(await page.evaluate(() => localStorage.getItem("mtl.layout"))).toBeNull();
+  const width = async () => (await page.locator(".ed-canvas").boundingBox())?.width ?? 0;
+  const closed = await width();
+  expect(closed).toBeGreaterThan(0);
 
+  // Bấm Chọn mở panel (đè lên canvas, canvas giữ nguyên bề ngang); bấm lại thu panel, công cụ vẫn là Chọn.
   await select.click();
   await expect(panel).toBeVisible();
-  await expect.poll(width).toBeLessThan(open + 1);
+  await expect(select).toHaveAttribute("aria-pressed", "true");
+  expect(await width()).toBe(closed);
+  const canvasBox = await page.locator(".ed-canvas").boundingBox();
+  const panelBox = await panel.boundingBox();
+  if (!canvasBox || !panelBox) throw new Error("no boxes");
+  expect(panelBox.x).toBeCloseTo(canvasBox.x, 0);
+  expect(panelBox.x + panelBox.width).toBeLessThan(canvasBox.x + canvasBox.width);
   // Thu bằng nút "Thu panel" (bàn phím) → focus về nút rail của panel vừa thu, không rơi về <body>.
   await panel.getByRole("button", { name: "Thu panel" }).focus();
   await page.keyboard.press("Enter");
   await expect(panel).toBeHidden();
   await expect(select).toBeFocused();
+  expect(await width()).toBe(closed);
   await select.click();
   await expect(panel).toBeVisible();
-  // Phím T đổi nội dung panel đang mở sang công cụ Chữ.
-  await page.locator(".ed-canvas").click({ position: { x: 5, y: 5 } });
-  await page.keyboard.press("t");
-  await expect(page.getByRole("complementary", { name: "Thêm chữ" })).toBeVisible();
-  await page.keyboard.press("v");
+  await select.click();
+  await expect(panel).toBeHidden();
+  await select.click();
   await expect(panel).toBeVisible();
+
+  // Phím T chuyển sang công cụ Chữ: thanh phụ trên canvas thay panel (panel khối thu lại), V quay về Chọn.
+  // Bấm nền canvas ngoài vùng panel đè (panel đang mở, chưa chọn khối) để phím rơi vào canvas.
+  await page.locator(".ed-canvas").click({ position: { x: panelBox.width + 100, y: 10 } });
+  await page.keyboard.press("t");
+  await expect(toolBar(page, "Thêm chữ")).toBeVisible();
+  await expect(panel).toBeHidden();
+  await expect(railButton(page, "text")).toHaveAttribute("aria-pressed", "true");
+  expect(await width()).toBe(closed);
+  await page.keyboard.press("v");
+  await expect(toolBar(page, "Thêm chữ")).toHaveCount(0);
+  await expect(panel).toBeHidden();
 
   // Ctrl/Cmd+F → panel Tìm, đoạn "Tìm / Thay", focus ô tìm.
   await page.keyboard.press("ControlOrMeta+f");
@@ -612,7 +625,18 @@ async function seedTextBox(page: Page, chapterId: string, pageId: string) {
   expect((await page.request.delete(`/api/chapters/${chapterId}/lock`, { headers })).ok()).toBe(true);
 }
 
-test("floating block toolbar: edit focuses the translation, duplicate adds a free box (undoable), delete removes it", async ({
+/** Tâm khối (toạ độ page) trên màn hình theo khung nhìn hiện tại của canvas. */
+async function blockCenter(page: Page, b: { x: number; y: number; w: number; h: number }) {
+  const view = await viewOf(page);
+  const frame = await page.locator(".ed-canvas").boundingBox();
+  if (!frame) throw new Error("no canvas");
+  return {
+    x: frame.x + view.x + (b.x + b.w / 2) * view.scale,
+    y: frame.y + view.y + (b.y + b.h / 2) * view.scale,
+  };
+}
+
+test("block panel head: Dịch lại · Nhân đôi · Xoá; duplicate adds a free box (undoable), delete removes it and closes the panel", async ({
   page,
 }) => {
   await login(page);
@@ -624,18 +648,17 @@ test("floating block toolbar: edit focuses the translation, duplicate adds a fre
   await expect(page.getByRole("status", { name: "Khoá chương" })).toContainText("Bạn đang giữ khoá chương");
   const rows = page.locator(".cw-tbody [data-row]");
   await expect(rows).toHaveCount(1);
-  const bar = page.getByRole("toolbar", { name: "Thao tác khối" });
-  await expect(bar).toHaveCount(0);
 
-  // Chọn khối (dòng bảng) → thanh nổi hiện; "Sửa chữ" mở panel Chọn + focus ô Bản dịch.
+  // Chọn khối (dòng bảng) → mở panel khối: đầu panel "Khối 1/1" + 3 icon; không còn thanh nổi cạnh khối.
   await rows.first().locator(".cw-src").click();
-  await expect(bar).toBeVisible();
-  await bar.getByRole("button", { name: "Sửa chữ" }).click();
-  await expect(page.getByRole("complementary", { name: "Chọn & sửa" })).toBeVisible();
-  await expect(page.locator("#cw-translation")).toBeFocused();
+  const panel = await openPanel(page, "select");
+  await expect(panel.getByRole("heading", { name: "Khối 1/1" })).toBeVisible();
+  await expect(page.getByRole("toolbar", { name: "Thao tác khối" })).toHaveCount(0);
+  await expect(panel.getByRole("button", { name: "Dịch lại khối" })).toBeVisible();
+  await expect(panel.locator("#cw-translation")).toHaveValue("Xin chào");
 
-  // Nhân đôi → thêm 1 dòng "Tự thêm"; Ctrl+Z bỏ.
-  await bar.getByRole("button", { name: "Nhân đôi khối" }).click();
+  // Nhân đôi → thêm 1 dòng "Tự thêm" (khối mới được chọn); Ctrl+Z bỏ.
+  await panel.getByRole("button", { name: "Nhân đôi khối" }).click();
   await openTable(page);
   await expect(rows).toHaveCount(2);
   await expect(page.locator('.cw-tbody [data-row][title*="Tự thêm"]')).toHaveCount(1);
@@ -643,11 +666,81 @@ test("floating block toolbar: edit focuses the translation, duplicate adds a fre
   await page.keyboard.press("ControlOrMeta+z");
   await expect(rows).toHaveCount(1);
 
-  // Xoá khối → khung mất (dòng vùng OCR còn, không còn box), lưu lên server.
+  // Xoá khối → khung mất (dòng vùng OCR còn, không còn box), panel đóng, lưu lên server.
   await rows.first().locator(".cw-src").click();
-  await expect(bar).toBeVisible();
-  await bar.getByRole("button", { name: "Xoá khối" }).click();
-  await expect(bar).toHaveCount(0);
+  const again = await openPanel(page, "select");
+  await again.getByRole("button", { name: "Xoá khối" }).click();
+  await expect(again).toBeHidden();
+  await expect(page.getByRole("status", { name: "Khoá chương" })).toContainText("Đã lưu", { timeout: 10_000 });
+  await expect
+    .poll(
+      async () =>
+        (
+          (await (await page.request.get(`/api/pages/${pageId}`)).json()) as {
+            state: { text_boxes: unknown[] };
+          }
+        ).state.text_boxes.length,
+    )
+    .toBe(0);
+});
+
+test("selecting a block on the canvas opens the panel; Esc closes it; typing in the translation never switches tool; Enter / double-click edit on the image; Delete removes the block", async ({
+  page,
+}) => {
+  await login(page);
+  const { chapterId, pageId } = await readyChapter(page);
+  await seedTextBox(page, chapterId, pageId);
+  await page.goto(chapterUrl(chapterId));
+  await expect(page.locator(".ed-canvas canvas").first()).toBeVisible();
+  await expect(page.getByRole("status", { name: "Khoá chương" })).toContainText("Bạn đang giữ khoá chương");
+  const panel = blockPanel(page);
+  await expect(panel).toBeHidden();
+  const tb = { x: 40, y: 120, w: 200, h: 80 };
+
+  // Bấm khối trên canvas → panel tự mở với khối đó; Esc bỏ chọn → panel đóng.
+  let at = await blockCenter(page, tb);
+  await page.mouse.click(at.x, at.y);
+  await expect(panel).toBeVisible();
+  await expect(panel.locator("#cw-translation")).toHaveValue("Xin chào");
+  await page.keyboard.press("Escape");
+  await expect(panel).toBeHidden();
+
+  // Gõ trong ô Dịch: các chữ t / b / r / e / v / o và Delete không kích hoạt công cụ hay xoá khối.
+  at = await blockCenter(page, tb);
+  await page.mouse.click(at.x, at.y);
+  const field = panel.locator("#cw-translation");
+  await expect(field).toBeVisible();
+  await field.click();
+  await field.press("End");
+  await field.pressSequentially(" tbreov");
+  await field.press("Backspace");
+  await expect(field).toHaveValue("Xin chào tbreo");
+  await expect(toolBar(page, "Thêm chữ")).toHaveCount(0);
+  await expect(toolBar(page, "Quét chữ")).toHaveCount(0);
+  await expect(railButton(page, "select")).toHaveAttribute("aria-pressed", "true");
+  await expect(panel).toBeVisible();
+  await field.fill("Xin chào");
+
+  // Enter (focus ở canvas) và nhấp đúp sửa chữ ngay trên ảnh.
+  await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+  await page.keyboard.press("Enter");
+  const edit = page.getByRole("textbox", { name: "Sửa chữ" });
+  await expect(edit).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(edit).toHaveCount(0);
+  await page.keyboard.press("Escape");
+  await expect(panel).toBeHidden();
+  at = await blockCenter(page, tb);
+  await page.mouse.dblclick(at.x, at.y);
+  await expect(edit).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(edit).toHaveCount(0);
+
+  // Delete (focus ở canvas) xoá khối đang chọn và đóng panel.
+  await expect(panel).toBeVisible();
+  await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+  await page.keyboard.press("Delete");
+  await expect(panel).toBeHidden();
   await expect(page.getByRole("status", { name: "Khoá chương" })).toContainText("Đã lưu", { timeout: 10_000 });
   await expect
     .poll(
@@ -701,7 +794,6 @@ test("dragging a block while the panel is collapsed moves it only by the drag di
   await page.goto(chapterUrl(chapterId));
   await expect(page.locator(".ed-canvas canvas").first()).toBeVisible();
   await expect(page.getByRole("status", { name: "Khoá chương" })).toContainText("Bạn đang giữ khoá chương");
-  await railButton(page, "select").click();
   await expect(page.getByRole("complementary", { name: "Chọn & sửa" })).toBeHidden();
   await page.waitForTimeout(300);
 
@@ -787,17 +879,17 @@ async function applyStyleFromFirstBlock(page: Page, chapterId: string) {
   await page.locator(".cw-tbody [data-row]").first().locator(".cw-src").click();
   const panel = await openPanel(page, "select");
   // Gõ từng phím "18" đè cỡ 22: phím "1" (< min 6) không được kẹp ngay thành 6 rồi ghép "8" thành 68.
-  const size = panel.getByLabel("Cỡ chữ (px)");
+  const size = panel.getByLabel("Cỡ", { exact: true });
   await size.selectText();
   await size.pressSequentially("18");
   await size.press("Enter");
   await expect(size).toHaveValue("18");
-  await panel.getByText("Kiểu chữ nâng cao").click();
-  await panel.getByRole("button", { name: /Áp kiểu này cho khối/ }).click();
+  await panel.getByText("Kiểu chữ", { exact: true }).click();
+  await panel.getByRole("button", { name: /^Áp kiểu cho khối/ }).click();
   const toast = page.locator(".cw-toasts .notice", { hasText: "Đã áp kiểu cho 2 khối" });
   await expect(toast).toContainText("trên 2 trang");
   // Trang đang mở nạp bản mới nhưng vẫn giữ khối đang chọn (panel Chọn không nhảy về trang).
-  await expect(panel.getByRole("button", { name: /Áp kiểu này cho khối/ })).toBeVisible();
+  await expect(panel.getByRole("button", { name: /^Áp kiểu cho khối/ })).toBeVisible();
 
   return { toast, panel };
 }
@@ -845,7 +937,7 @@ test("vertical alignment toggle saves valign and 'Áp kiểu này' copies it to 
   await expect(page.getByRole("status", { name: "Khoá chương" })).toContainText("Bạn đang giữ khoá chương");
   await page.locator(".cw-tbody [data-row]").first().locator(".cw-src").click();
   const panel = await openPanel(page, "select");
-  await panel.getByText("Kiểu chữ nâng cao").click();
+  await panel.getByText("Kiểu chữ", { exact: true }).click();
   // Khối lưu từ trước (không có valign) hiện "Trên".
   const top = panel.getByRole("button", { name: "Căn dọc: sát mép trên" });
   const middle = panel.getByRole("button", { name: "Căn dọc: giữa khung" });
@@ -855,7 +947,7 @@ test("vertical alignment toggle saves valign and 'Áp kiểu này' copies it to 
   await expect.poll(async () => (await valigns())[0]).toBe("src:middle");
   expect(await valigns()).toEqual(["src:middle", "same-page:-", "src:-"]);
 
-  await panel.getByRole("button", { name: /Áp kiểu này cho khối/ }).click();
+  await panel.getByRole("button", { name: /^Áp kiểu cho khối/ }).click();
   await expect(page.locator(".cw-toasts .notice", { hasText: "Đã áp kiểu cho 2 khối" })).toBeVisible();
   expect(await valigns()).toEqual(["src:middle", "same-page:middle", "src:middle"]);
 });
@@ -877,7 +969,7 @@ test("Cmd+Z right after apply style undoes the whole batch, then the next Cmd+Z 
   expect(await aligns()).toEqual(["src:left:18", "same-page:center:22", "src:center:22"]);
 
   // Cmd+Z tiếp theo hoàn tác sửa cỡ chữ (22 → 18) trước lượt, trên trang đang mở; lượt không bị hoàn tác lần 2.
-  const size = panel.getByLabel("Cỡ chữ (px)");
+  const size = panel.getByLabel("Cỡ", { exact: true });
   await expect(size).toHaveValue("18");
   await page.keyboard.press("ControlOrMeta+z");
   await expect(size).toHaveValue("22");
@@ -891,7 +983,7 @@ test("apply style, edit the open page, Cmd+Z the edit, Cmd+Z again: the batch is
 }) => {
   const { chapterId, aligns } = await seedStyleChapter(page);
   const { toast, panel } = await applyStyleFromFirstBlock(page, chapterId);
-  const size = panel.getByLabel("Cỡ chữ (px)");
+  const size = panel.getByLabel("Cỡ", { exact: true });
   await size.selectText();
   await size.pressSequentially("20");
   await size.press("Enter");
@@ -918,7 +1010,7 @@ test("apply style then edit one page: Hoàn tác restores the other pages and na
   expect(await aligns()).toEqual(["src:left:18", "same-page:left:18", "src:left:18"]);
 
   // Sửa tiếp trang đang mở (trang 1) sau khi áp → trang 1 bị bỏ qua, trang 2 vẫn khôi phục.
-  const size = panel.getByLabel("Cỡ chữ (px)");
+  const size = panel.getByLabel("Cỡ", { exact: true });
   await size.selectText();
   await size.pressSequentially("20");
   await size.press("Enter");
@@ -954,10 +1046,11 @@ test("cancelling a block's re-OCR while its job is still queued restores the but
   await panel.getByRole("button", { name: "Dịch lại khối" }).click();
   const jobId = ((await (await started).json()) as { job: { id: string } }).job.id;
 
-  await expect(panel.getByRole("button", { name: "Đang OCR…" })).toBeVisible();
+  await expect(panel.getByText("Đang OCR…")).toBeVisible();
+  await expect(panel.getByRole("button", { name: "Dịch lại khối" })).toBeDisabled();
   await panel.getByRole("button", { name: "Huỷ OCR" }).click();
 
-  await expect(panel.getByRole("button", { name: "Dịch lại khối" })).toBeVisible();
+  await expect(panel.getByRole("button", { name: "Dịch lại khối" })).toBeEnabled();
   await expect(panel.getByRole("button", { name: "Huỷ OCR" })).toHaveCount(0);
   await expect(page.getByRole("alert")).toHaveCount(0);
   await expect
@@ -977,7 +1070,7 @@ test("leaving the chapter while a block's re-OCR is queued cancels the job on th
   const started = page.waitForResponse((r) => r.url().includes("/ocr-region") && r.request().method() === "POST");
   await panel.getByRole("button", { name: "Dịch lại khối" }).click();
   const jobId = ((await (await started).json()) as { job: { id: string } }).job.id;
-  await expect(panel.getByRole("button", { name: "Đang OCR…" })).toBeVisible();
+  await expect(panel.getByText("Đang OCR…")).toBeVisible();
 
   // Rời editor trong app (không tải lại trang) → kết quả bị bỏ, job trên server cũng phải dừng.
   await page.locator(".cw-back").click();
@@ -1205,7 +1298,8 @@ test("region OCR erases the source text inside the box; unticking the option onl
   });
   await page.goto(chapterUrl(chapterId));
   const panel = await openPanel(page, "ocr");
-  const erase = panel.getByRole("checkbox", { name: "Xoá chữ gốc trong khung" });
+  await expect(panel).toContainText("Kéo khung quanh chữ");
+  const erase = panel.getByRole("checkbox", { name: "Xoá chữ gốc" });
   await expect(erase).toBeChecked();
 
   const { bbox } = await confirmOcrBox(page);
@@ -1235,15 +1329,16 @@ test("region OCR erases the source text inside the box; unticking the option onl
     async () =>
       ((await (await page.request.get(`/api/jobs/${reocrId}`)).json()) as { status: string }).status === "succeeded",
   );
-  await expect(select.getByRole("button", { name: "Dịch lại khối" })).toBeVisible();
+  // Nút trở lại bấm được khi lượt OCR xong và kết quả đã áp.
+  await expect(select.getByRole("button", { name: "Dịch lại khối" })).toBeEnabled();
   expect(reinpaints).toHaveLength(1);
 
   // Tắt lựa chọn (nhớ qua reload) → chỉ OCR + dịch, ảnh sạch giữ nguyên.
   const ocrPanel = await openPanel(page, "ocr");
-  await ocrPanel.getByRole("checkbox", { name: "Xoá chữ gốc trong khung" }).uncheck();
+  await ocrPanel.getByRole("checkbox", { name: "Xoá chữ gốc" }).uncheck();
   await page.reload();
   const again = await openPanel(page, "ocr");
-  await expect(again.getByRole("checkbox", { name: "Xoá chữ gốc trong khung" })).not.toBeChecked();
+  await expect(again.getByRole("checkbox", { name: "Xoá chữ gốc" })).not.toBeChecked();
   const rev1 = await cleanRevOf(page, pageId);
   const ocrJob = page.waitForResponse((r) => r.url().includes("/ocr-region") && r.request().method() === "POST");
   await confirmOcrBox(page);

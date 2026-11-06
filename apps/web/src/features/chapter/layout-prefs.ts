@@ -1,26 +1,22 @@
 /**
- * Panel ngữ cảnh đang mở (hoặc thu) nhớ theo trình duyệt: localStorage `mtl.layout` = `{ panel }`. Khoá cũ của bảng
- * dưới (`bottomOpen`, `bottomH`) bị bỏ qua. Không đọc/ghi được (chế độ riêng tư) → mặc định mở panel công cụ.
+ * Bố cục màn chương không nhớ panel nào đang mở: panel đóng mặc định và tự mở theo ngữ cảnh (chọn khối, AI có bản
+ * mới, xung đột khi lưu). Khoá `mtl.layout` của bản cũ ({ panel } — luôn mở lại panel đã nhớ) bị xoá khi vào màn chương
+ * để mặc định đóng có hiệu lực.
  */
-import type { PanelId } from "./tool-rail-model.ts";
+const LEGACY_LAYOUT_KEY = "mtl.layout";
 
-const LAYOUT_KEY = "mtl.layout";
-const PANELS: readonly (PanelId | null)[] = ["tool", "table", "find", "proofread", null];
-
-export function readPanel(): PanelId | null {
+export function clearLegacyLayout(storage: Pick<Storage, "removeItem"> | undefined = safeStorage()) {
   try {
-    const raw = localStorage.getItem(LAYOUT_KEY);
-    const v = raw ? (JSON.parse(raw) as { panel?: unknown }) : null;
-    return v && PANELS.includes(v.panel as PanelId | null) ? (v.panel as PanelId | null) : "tool";
+    storage?.removeItem(LEGACY_LAYOUT_KEY);
   } catch {
-    return "tool";
+    // Không ghi được (chế độ riêng tư) → không có gì để dọn.
   }
 }
 
-export function writePanel(panel: PanelId | null) {
+function safeStorage(): Storage | undefined {
   try {
-    localStorage.setItem(LAYOUT_KEY, JSON.stringify({ panel }));
+    return typeof localStorage === "undefined" ? undefined : localStorage;
   } catch {
-    // Không lưu được → chỉ mất ghi nhớ bố cục.
+    return undefined;
   }
 }

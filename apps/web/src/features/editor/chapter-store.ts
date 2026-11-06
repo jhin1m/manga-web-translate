@@ -39,6 +39,8 @@ export type ChapterState = {
   activePageId: string | null;
   /** Kích thước khung canvas (px màn hình) — để đặt khung nhìn khi đổi page / cuộn tới khối từ ngoài canvas. */
   box: Size;
+  /** Bề ngang mép trái canvas đang bị panel đè (px màn hình; 0 = không panel đè) — khung nhìn được lệch chừng đó để lộ khối sát mép trái. */
+  cover: number;
   /** Người dùng đã tự zoom → đổi page giữ zoom; chưa → mỗi page vừa khung theo chính nó. */
   zoomed: boolean;
   viewMode: ViewMode;
@@ -55,6 +57,7 @@ export type ChapterActions = {
   /** Đổi page active; page khác page cũ → khung nhìn về đầu page mới (vừa khung, căn giữa). */
   setActive(pageId: string | null): void;
   setBox(box: Size): void;
+  setCover(cover: number): void;
   setZoomed(zoomed: boolean): void;
   /**
    * Khung nhìn mở trang của page active: không `scale` = "Vừa khung" (bỏ cờ đã zoom); có `scale` (VD 1 = 100%) = đầu
@@ -71,6 +74,7 @@ const initial = (chapterId: string | null): ChapterState => ({
   cache: {},
   activePageId: null,
   box: { w: 0, h: 0 },
+  cover: 0,
   zoomed: false,
   viewMode: "translated",
   holdOriginal: false,
@@ -148,6 +152,9 @@ export function createChapterStore() {
       );
     },
     setBox: (box) => set({ box }),
+    setCover: (cover) => {
+      if (get().cover !== cover) set({ cover });
+    },
     setZoomed: (zoomed) => set({ zoomed }),
     fitView: (scale) => {
       const s = get();
@@ -189,5 +196,5 @@ export function revealRect(pageId: string, rect: { y: number; h: number }, margi
   if (s.box.h > 0 && rect.y >= vTop && rect.y + rect.h <= vBottom) return;
   const v = viewAtY(e.view, rect.y);
   const c = contentBox({ w: p.width, h: p.height }, s.viewMode === "split");
-  e.setView(clampView({ ...v, y: v.y + margin }, c, s.box, c.x));
+  e.setView(clampView({ ...v, y: v.y + margin }, c, s.box, c.x, s.cover));
 }
