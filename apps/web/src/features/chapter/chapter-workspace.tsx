@@ -78,7 +78,7 @@ import { SourceRail } from "./source-rail.tsx";
 import { type IngestView, moveItem, type SourceItem, sourceCounts, stepSource } from "./source-rail-model.ts";
 import { SourceViewer } from "./source-viewer.tsx";
 import { stageLabel } from "./stage-labels.ts";
-import { chapterChip, isChapterSettled } from "./status.ts";
+import { chapterChip, chapterProgress, chipWithActivity, isChapterSettled, nextReviewPage } from "./status.ts";
 import { filterRows, KIND_LABEL, type Row, rowKeyOfBox, sameKindBoxIds, type TableFilter } from "./text-table/rows.ts";
 import { TableFilters, TextTable, useChapterRows } from "./text-table/text-table.tsx";
 import { describeWriteError } from "./text-utils.ts";
@@ -360,19 +360,19 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
         failed: counts.failed ?? 0,
       })
     : null;
-  const review = pages.filter((p) => needsReview(p, overflowPages.has(p.id))).length;
-  const chip = status
-    ? chapterChip({
-        status,
-        pages: pages.length,
-        ready,
-        failed: counts.failed ?? 0,
-        review,
-        preparing: (counts.pending ?? 0) + (counts.preparing ?? 0),
-        upload,
-        run: data.progress?.chapter.run,
-      })
-    : null;
+  const reviewIds = new Set(pages.filter((p) => needsReview(p, overflowPages.has(p.id))).map((p) => p.id));
+  const review = reviewIds.size;
+  const chipInput = status && {
+    status,
+    pages: pages.length,
+    ready,
+    failed: counts.failed ?? 0,
+    review,
+    preparing: (counts.pending ?? 0) + (counts.preparing ?? 0),
+    upload,
+    run: data.progress?.chapter.run,
+  };
+  const chip = chipInput ? chapterChip(chipInput) : null;
   const access: EditAccess = {
     lock: session.lock.state,
     lockEnabled: session.lockEnabled,
@@ -981,6 +981,21 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
     }
   }, [exportList, notify]);
   const activityCount = uploadCount + chapterActivityCount(data.progress, exportsActive);
+  // Chip nói cả lượt xuất của chương và upload chương khác (upload của chính chương này đã có trong chip).
+  const topChip =
+    chip &&
+    chipWithActivity(chip, {
+      exports: exportsActive,
+      uploads: Math.max(0, uploadCount - (upload?.phase === "uploading" ? 1 : 0)),
+    });
+  // Chương đang chạy thì chip dẫn tới Hoạt động; yên mà còn trang cần xem thì nhảy tới trang đó (qua đổi trang
+  // thường: lưu trang đang sửa trước).
+  const reviewTarget =
+    chip && chip.tone !== "busy" ? nextReviewPage(pageIds, activeId, (id) => reviewIds.has(id)) : null;
+  const onChip = () => {
+    if (reviewTarget) pickPage(reviewTarget);
+    else setDrawer("activity");
+  };
   const closeDrawer = useCallback(() => setDrawer(null), []);
 
   return (
@@ -989,7 +1004,10 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
         seriesId={seriesId}
         series={series.data}
         detail={data.detail}
-        chip={chip}
+        chip={topChip}
+        chipJumps={!!reviewTarget}
+        onChip={onChip}
+        progress={chipInput ? chapterProgress(chipInput) : undefined}
         access={access}
         primary={primary}
         pending={action.isPending}

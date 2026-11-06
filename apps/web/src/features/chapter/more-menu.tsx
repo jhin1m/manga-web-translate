@@ -1,6 +1,6 @@
 /**
- * Thanh trên màn chương: nút bật/tắt "Xem gốc" (thay `[Gốc | Dịch | Chia đôi]`) và menu "⋯" (Chia đôi gốc / dịch,
- * thao tác phụ theo trạng thái chương — Dịch lại cả chương, Chạy lại trang lỗi —, Phím tắt).
+ * Thanh trên màn chương: nút bật/tắt "Gốc" (xem ảnh gốc; thay `[Gốc | Dịch | Chia đôi]`) và menu "⋯" (Chia đôi gốc /
+ * dịch, thao tác phụ theo trạng thái chương — Xuất, Dịch lại cả chương, Chạy lại trang lỗi —, Hoạt động, Phím tắt).
  */
 import { useRef, useState } from "react";
 import { chapterStore, effectiveMode, useChapterStore } from "../editor/chapter-store.ts";
@@ -19,6 +19,7 @@ export function OriginalToggle() {
       type="button"
       className="cw-orig"
       aria-pressed={on}
+      aria-label="Xem gốc"
       title="Xem ảnh gốc (giữ O · \ đổi Gốc/Dịch)"
       onClick={() => {
         const s = chapterStore.getState();
@@ -26,16 +27,20 @@ export function OriginalToggle() {
       }}
     >
       <EyeIcon size={16} />
-      Xem gốc
+      Gốc
     </button>
   );
 }
 
 export function MoreMenu(props: {
-  /** Mục phụ của nút chính (primary-action.ts) đưa vào menu — đã bỏ "Huỷ xử lý" / "Xuất" (nút riêng trên thanh). */
+  /** Mục phụ của nút chính (primary-action.ts) đưa vào menu. */
   commands: { command: ChapterCommand; label: string }[];
   pending: boolean;
   onCommand(cmd: ChapterCommand): void;
+  /** Mở Hoạt động — lối vào cố định (nút riêng đã bỏ khỏi thanh trên). */
+  onActivity(): void;
+  /** Số việc đang chạy (upload, job chương, xuất) — ghi cạnh mục Hoạt động. */
+  activityCount: number;
   onHelp(): void;
 }) {
   const split = useChapterStore((s) => s.viewMode === "split");
@@ -49,6 +54,10 @@ export function MoreMenu(props: {
       run: () => chapterStore.getState().setViewMode(split ? "translated" : "split"),
     },
     ...props.commands.map((m) => ({ label: m.label, disabled: props.pending, run: () => props.onCommand(m.command) })),
+    {
+      label: props.activityCount > 0 ? `Hoạt động (${props.activityCount} đang chạy)` : "Hoạt động",
+      run: props.onActivity,
+    },
     { label: "Phím tắt (?)", run: props.onHelp },
   ];
   return (
@@ -58,7 +67,7 @@ export function MoreMenu(props: {
         type="button"
         className="icon-btn"
         aria-label="Thêm thao tác"
-        title="Chia đôi · Dịch lại · Phím tắt"
+        title="Thêm thao tác"
         aria-haspopup="menu"
         aria-expanded={!!at}
         onClick={(e) => {

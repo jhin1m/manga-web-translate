@@ -50,7 +50,7 @@ test("run AI proofread, accept a suggestion through the normal edit path, undo, 
 
   await item.getByRole("button", { name: "Nhận" }).click();
   await expect(item).toContainText("Đã nhận");
-  await expect(page.locator(".status", { hasText: "Đã lưu" })).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByRole("status", { name: "Khoá chương" })).toContainText("Đã lưu", { timeout: 10_000 });
   await expect.poll(translation, { timeout: 10_000 }).toBe("Xin chào, cậu khoẻ không?");
 
   // Hoàn tác (undo của editor) → bản cũ, gợi ý lại "Chờ duyệt".

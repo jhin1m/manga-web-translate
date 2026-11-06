@@ -119,7 +119,7 @@ test("edit translation → autosave → reload keeps it; crash mid-edit → rest
   await expect(railButton(page, "text")).toBeEnabled();
 
   await cell(page).fill("Chào cậu, ệ ẫ ữ");
-  await expect(page.locator(".status", { hasText: "Đã lưu" })).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByRole("status", { name: "Khoá chương" })).toContainText("Đã lưu", { timeout: 10_000 });
   await page.reload();
   await expect(cell(page)).toHaveValue("Chào cậu, ệ ẫ ữ");
   const saved = (await (await page.request.get(`/api/pages/${pageId}`)).json()) as {
@@ -175,10 +175,10 @@ test("edit translation → autosave → reload keeps it; crash mid-edit → rest
   // Chia đôi: sửa ô Dịch vẫn lưu.
   await toggleSplit(true);
   await cell(page).fill("Chia đôi vẫn lưu");
-  await expect(page.locator(".status", { hasText: "Đã lưu" })).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByRole("status", { name: "Khoá chương" })).toContainText("Đã lưu", { timeout: 10_000 });
   await expect.poll(() => translationOf(page, pageId)).toBe("Chia đôi vẫn lưu");
   await cell(page).fill("Chào cậu, ệ ẫ ữ");
-  await expect(page.locator(".status", { hasText: "Đã lưu" })).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByRole("status", { name: "Khoá chương" })).toContainText("Đã lưu", { timeout: 10_000 });
   await toggleSplit(false);
   expect(pageErrors).toEqual([]);
 
@@ -187,7 +187,7 @@ test("edit translation → autosave → reload keeps it; crash mid-edit → rest
   await page.locator(".ed-canvas").click({ position: { x: 5, y: 5 } });
   await page.keyboard.press("ControlOrMeta+z");
   await expect(cell(page)).toHaveValue("Chào cậu, ệ ẫ ữ");
-  await expect(page.locator(".status", { hasText: "Đã lưu" })).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByRole("status", { name: "Khoá chương" })).toContainText("Đã lưu", { timeout: 10_000 });
 
   // Rời màn chương ngay sau khi sửa (trước debounce 2s) → vẫn lưu trước khi nhả khoá.
   const lockedPuts: number[] = [];
@@ -207,7 +207,7 @@ test("edit translation → autosave → reload keeps it; crash mid-edit → rest
   expect(lockedPuts).toEqual([]);
   await page.goto(chapterUrl(chapterId));
   await cell(page).fill("Chào cậu, ệ ẫ ữ");
-  await expect(page.locator(".status", { hasText: "Đã lưu" })).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByRole("status", { name: "Khoá chương" })).toContainText("Đã lưu", { timeout: 10_000 });
   const beforeCrash = (await (await page.request.get(`/api/pages/${pageId}`)).json()) as typeof saved;
 
   // "Crash": PUT không tới server, đóng tab khi đang có thay đổi chưa lưu.
@@ -223,7 +223,7 @@ test("edit translation → autosave → reload keeps it; crash mid-edit → rest
   await expect(cell(again)).toHaveValue("Chào cậu, ệ ẫ ữ");
   await again.getByRole("button", { name: "Khôi phục" }).click();
   await expect(cell(again)).toHaveValue("Chưa kịp lưu");
-  await expect(again.locator(".status", { hasText: "Đã lưu" })).toBeVisible({ timeout: 10_000 });
+  await expect(again.getByRole("status", { name: "Khoá chương" })).toContainText("Đã lưu", { timeout: 10_000 });
   const after = (await (await again.request.get(`/api/pages/${pageId}`)).json()) as typeof saved;
   expect(after.state.regions[0]?.translation).toBe("Chưa kịp lưu");
   expect(after.version).toBeGreaterThan(beforeCrash.version);
@@ -304,12 +304,18 @@ test("opening a chapter while it translates holds the lock; the busy page is rea
   await expect.poll(async () => (await detail()).lock).not.toBeNull();
   expect((await detail()).status).toBe("processing");
 
-  // Drawer Hoạt động liệt kê job dịch chương đang chờ.
-  await page.getByRole("button", { name: /^Hoạt động/ }).click();
+  // Drawer Hoạt động (mở từ menu ⋯, luôn có) liệt kê job dịch chương đang chờ.
+  await page.getByRole("button", { name: "Thêm thao tác" }).click();
+  await page.getByRole("menuitem", { name: /^Hoạt động/ }).click();
   const activity = page.getByRole("dialog", { name: "Hoạt động" });
   await expect(activity.locator('[data-job-type="chapter.translate"]')).toContainText("Dịch lô trang", {
     timeout: 15_000,
   });
+  await page.keyboard.press("Escape");
+  await expect(activity).toBeHidden();
+  // Chương đang chạy: bấm chip trạng thái cũng mở Hoạt động.
+  await page.getByRole("status", { name: "Trạng thái chương" }).getByRole("button").click();
+  await expect(activity).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(activity).toBeHidden();
 
@@ -325,7 +331,7 @@ test("opening a chapter while it translates holds the lock; the busy page is rea
   expect(st).toMatchObject({ state_origin: "ai", ai_update_available: false });
 
   await cell(page).fill("Sửa sau khi dịch");
-  await expect(page.locator(".status", { hasText: "Đã lưu" })).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByRole("status", { name: "Khoá chương" })).toContainText("Đã lưu", { timeout: 10_000 });
   await expect.poll(() => translationOf(page, pageId)).toBe("Sửa sau khi dịch");
 });
 
@@ -393,7 +399,7 @@ test("text table: row click activates its page; edit in place autosaves; Enter m
   await cell(page, 1).click();
   await cell(page, 1).fill("Trang một mới");
   await expect(pager(page)).toContainText("Trang 1 / 2");
-  await expect(page.locator(".status", { hasText: "Đã lưu" })).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByRole("status", { name: "Khoá chương" })).toContainText("Đã lưu", { timeout: 10_000 });
   await expect.poll(() => translationOf(page, p1)).toBe("Trang một mới");
 
   // Enter ở dòng cuối trang 1 → ô Dịch dòng đầu trang 2; gõ → lưu vào trang 2, không PUT lại trang 1.
@@ -642,7 +648,7 @@ test("floating block toolbar: edit focuses the translation, duplicate adds a fre
   await expect(bar).toBeVisible();
   await bar.getByRole("button", { name: "Xoá khối" }).click();
   await expect(bar).toHaveCount(0);
-  await expect(page.locator(".status", { hasText: "Đã lưu" })).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByRole("status", { name: "Khoá chương" })).toContainText("Đã lưu", { timeout: 10_000 });
   await expect
     .poll(
       async () =>
@@ -709,7 +715,7 @@ test("dragging a block while the panel is collapsed moves it only by the drag di
   await page.mouse.up();
   // Thả xong panel Chọn mở (khối đã chọn).
   await expect(page.getByRole("complementary", { name: "Chọn & sửa" })).toBeVisible();
-  await expect(page.locator(".status", { hasText: "Đã lưu" })).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByRole("status", { name: "Khoá chương" })).toContainText("Đã lưu", { timeout: 10_000 });
   const boxX = async () =>
     (
       (await (await page.request.get(`/api/pages/${pageId}`)).json()) as {
@@ -1085,7 +1091,7 @@ test("scrolling past the page edge turns the page; small, zoom, drag and reduced
   await page.mouse.move(box.x + box.width / 2, 4, { steps: 5 }); // ra ngoài Stage rồi mới thả
   await page.mouse.up();
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
-  await expect(page.locator(".status", { hasText: "Đã lưu" })).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByRole("status", { name: "Khoá chương" })).toContainText("Đã lưu", { timeout: 10_000 });
   await page.waitForTimeout(700);
 
   // Cuộn xuống quá mép dưới → trang 2, vào đầu trang. Hai wheel ngay sau (quán tính) gửi liền, không chờ API:

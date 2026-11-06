@@ -1,7 +1,7 @@
 /**
  * Drawer phải (420px) dùng ở màn chương + app shell: scrim xám (không blur), `role="dialog"` + `aria-labelledby`,
  * Esc / bấm scrim / nút Đóng = đóng. Mở → focus vào drawer, Tab vòng trong drawer; đóng → trả focus về phần tử
- * đang focus lúc mở (VD nút "Export"). Chỉ mount khi đang mở. `variant="modal"`: cùng hành vi nhưng là hộp giữa màn
+ * đang focus lúc mở (VD nút "Xuất"). Chỉ mount khi đang mở. `variant="modal"`: cùng hành vi nhưng là hộp giữa màn
  * (rộng hơn — cài đặt dịch / glossary của series).
  */
 import { type KeyboardEvent as ReactKeyboardEvent, type ReactNode, useEffect, useId, useRef } from "react";

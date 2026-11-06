@@ -1,9 +1,9 @@
 /**
- * Thanh trên màn chương: ‹ series, tên chương (bấm → đổi series / số chương), chip trạng thái chương (chỗ duy nhất
- * nói chương đang ở đâu), chỉ báo sửa/lưu thu nhỏ (giữ khoá · Đã lưu / Chỉ xem), chip ngôn ngữ "Hàn → Việt" (bấm →
- * đổi cặp ngôn ngữ của series) · Hoàn tác / Làm lại · Xem gốc ·
- * Hoạt động (+ số việc đang chạy) · menu ⋯ (Chia đôi, Dịch lại cả chương, Chạy lại trang lỗi, Phím tắt) · Huỷ xử lý
- * (khi đang chạy) · Export phụ · nút chính theo trạng thái (primary-action.ts; "Export" mở drawer).
+ * Thanh trên màn chương (tối đa 8 mục): ‹ series, "Ch.12" (bấm → đổi series / số chương / ngôn ngữ), chip trạng thái
+ * chương (nút: có trang cần xem → nhảy tới trang đó, không thì mở Hoạt động; chỗ duy nhất nói chương đang ở đâu),
+ * chỉ báo sửa/lưu (chỉ hiện khi đang lưu / lỗi / chưa lưu / chỉ xem) · Hoàn tác / Làm lại · Gốc · menu ⋯ (Chia đôi,
+ * Xuất, Dịch lại cả chương, Hoạt động, Phím tắt) · nút chính theo trạng thái (primary-action.ts; đang chạy = Huỷ,
+ * "Xuất" mở drawer). Thanh 2px ở đáy cho tiến độ chương đang chạy.
  * Dưới nó là băng cảnh báo — chỉ hiện khi người dùng phải biết/làm gì (khoá bị giữ/mất/lỗi, khôi phục, lỗi lưu, chờ AI).
  */
 import { Link } from "@tanstack/react-router";
@@ -14,10 +14,8 @@ import { type ReadOnlyReason, type SaveStatus, useEditor } from "../editor/store
 import type { RecoveryItem } from "../editor/use-chapter-session.ts";
 import type { Series } from "../series/api.ts";
 import { FilePickButton } from "../upload/drop-zone.tsx";
-import { ActivityButton } from "./activity-drawer.tsx";
 import type { ChapterDetail } from "./api.ts";
 import { ChapterMetaPopover } from "./chapter-meta-popover.tsx";
-import { LangPairPopover } from "./lang-pair-popover.tsx";
 import { MoreMenu, OriginalToggle } from "./more-menu.tsx";
 import type { ChapterCommand, PrimaryAction } from "./primary-action.ts";
 import type { Tone } from "./status.ts";
@@ -36,11 +34,16 @@ export type EditAccess = { lock: LockState; lockEnabled: boolean; hasPages: bool
 
 export function ChapterTopbar(props: {
   seriesId: string;
-  /** Chi tiết series (chip ngôn ngữ gốc → đích); chưa tải → ẩn chip. */
+  /** Chi tiết series (ô ngôn ngữ trong popover tên chương); chưa tải → popover không có ô đó. */
   series: Series | undefined;
   detail: ChapterDetail | undefined;
-  /** Chip trạng thái chương (status.ts chapterChip). */
+  /** Chip trạng thái chương (status.ts chapterChip + chipWithActivity). */
   chip: { label: string; tone: Tone } | null;
+  /** Bấm chip: true = nhảy tới trang cần xem kế tiếp, false = mở Hoạt động (do `onChip` làm). */
+  chipJumps: boolean;
+  onChip(): void;
+  /** Tiến độ chương đang chạy (status.ts chapterProgress): số 0..1, null = chưa đo được, undefined = không vẽ. */
+  progress: number | null | undefined;
   access: EditAccess;
   primary: PrimaryAction | null;
   pending: boolean;
@@ -50,7 +53,7 @@ export function ChapterTopbar(props: {
   onBack(): void;
   /** Đã chuyển chương sang series khác → điều hướng URL mới. */
   onMoved(seriesId: string): void;
-  /** Số việc đang chạy (upload, job chương, xuất). */
+  /** Số việc đang chạy (upload, job chương, xuất) — ghi cạnh mục Hoạt động của menu ⋯. */
   activityCount: number;
   onActivity(): void;
   onHelp(): void;
@@ -59,8 +62,6 @@ export function ChapterTopbar(props: {
   onRedo(): void;
 }) {
   const { detail, primary, chip } = props;
-  const menu = primary?.menu ?? [];
-  const has = (c: ChapterCommand) => menu.some((m) => m.command === c);
 
   return (
     <header className="cw-top">
@@ -88,38 +89,37 @@ export function ChapterTopbar(props: {
         </svg>
         <span className="cw-back-name">{detail?.series.title ?? "Series"}</span>
       </Link>
-      <ChapterMetaPopover detail={detail} onMoved={props.onMoved} />
-      {/* Luôn render vùng live (rỗng khi chưa tải) để trình đọc màn hình báo được lần đổi đầu tiên. */}
-      <span className="cw-chip" role="status" aria-live="polite" aria-label="Trạng thái chương">
-        {chip && (
-          <span className="status" data-tone={chip.tone}>
-            {chip.label}
-          </span>
-        )}
+      <ChapterMetaPopover detail={detail} series={props.series} onMoved={props.onMoved} />
+      <span className="cw-state">
+        {/* Luôn render vùng live (rỗng khi chưa tải) để trình đọc màn hình báo được lần đổi đầu tiên. */}
+        <span className="cw-chip" role="status" aria-live="polite" aria-label="Trạng thái chương">
+          {chip && (
+            <button
+              type="button"
+              className="cw-chip-btn"
+              aria-label={`${chip.label} — ${props.chipJumps ? "nhảy tới trang cần xem" : "mở Hoạt động"}`}
+              title={props.chipJumps ? "Nhảy tới trang cần xem tiếp theo" : "Mở Hoạt động"}
+              onClick={props.onChip}
+            >
+              <span className="status" data-tone={chip.tone}>
+                <span className="cw-chip-label">{chip.label}</span>
+              </span>
+            </button>
+          )}
+        </span>
+        <EditState {...props.access} />
       </span>
-      <EditState {...props.access} />
-      <LangPairPopover series={props.series} />
       <span className="spacer" />
       <UndoRedo onUndo={props.onUndo} onRedo={props.onRedo} />
-      <span className="cw-top-sep" />
       <OriginalToggle />
-      <ActivityButton icon count={props.activityCount} onClick={props.onActivity} />
       <MoreMenu
-        commands={menu.filter((m) => m.command !== "cancel" && m.command !== "export")}
+        commands={primary?.menu ?? []}
         pending={props.pending}
         onCommand={props.onCommand}
+        onActivity={props.onActivity}
+        activityCount={props.activityCount}
         onHelp={props.onHelp}
       />
-      {has("cancel") && (
-        <button type="button" className="btn-danger" disabled={props.pending} onClick={() => props.onCommand("cancel")}>
-          Huỷ xử lý
-        </button>
-      )}
-      {has("export") && (
-        <button type="button" onClick={() => props.onCommand("export")}>
-          Export
-        </button>
-      )}
       {primary &&
         (primary.command === "upload" ? (
           <FilePickButton className="btn-primary" onFiles={props.onUploadFiles}>
@@ -128,7 +128,7 @@ export function ChapterTopbar(props: {
         ) : (
           <button
             type="button"
-            className="btn-primary"
+            className={primary.command === "cancel" ? "btn-danger" : "btn-primary"}
             disabled={primary.disabled || props.pending}
             title={primary.title}
             onClick={() => props.onCommand(primary.command)}
@@ -136,6 +136,14 @@ export function ChapterTopbar(props: {
             {primary.label}
           </button>
         ))}
+      {props.progress !== undefined && (
+        <span
+          className="cw-progress"
+          data-indeterminate={props.progress === null}
+          aria-hidden="true"
+          style={props.progress === null ? undefined : { width: `${Math.round(props.progress * 100)}%` }}
+        />
+      )}
     </header>
   );
 }
@@ -179,14 +187,15 @@ const LockIcon = () => (
 );
 
 /**
- * Chỉ báo nhỏ cạnh chip: tab này sửa được không + trạng thái lưu. Chữ đầy đủ ("Bạn đang giữ khoá chương", lý do
- * chỉ xem) nằm trong title + phần chỉ trình đọc màn hình đọc; chữ hiện ra ngắn để không chiếm topbar.
+ * Chỉ báo nhỏ cạnh chip: tab này sửa được không + trạng thái lưu. Lúc bình thường (giữ khoá, đã lưu) không hiện gì
+ * — chỉ hiện khi đang lưu, lỗi lưu, chưa lưu, hoặc chỉ xem. Vùng `role="status"` luôn có trong DOM (rỗng hiển thị,
+ * chỉ còn chữ cho trình đọc màn hình) để lần đổi sau vẫn được đọc; chữ đầy đủ nằm ở title + phần chỉ trình đọc.
  */
 function EditState(props: EditAccess) {
   const readOnly = useEditor((s) => s.readOnly);
   const save = useEditor((s) => s.save);
-  if (!props.hasPages) return null;
-  let view: { short: ReactNode; long: string; tone: Tone };
+  if (!props.hasPages) return <span className="cw-edit-live" role="status" aria-label="Khoá chương" />;
+  let view: { short: ReactNode; long: string; tone: Tone } | null = null;
   if (!props.lockEnabled) view = { short: "Chỉ xem", long: "Đang cắt trang — sửa được khi xong", tone: "idle" };
   else if (props.lock.status === "acquiring")
     view = { short: "Đang lấy khoá…", long: "Đang lấy khoá chương…", tone: "busy" };
@@ -203,7 +212,7 @@ function EditState(props: EditAccess) {
       save.status === "saved"
         ? { short: "Chỉ xem", long: "Trang này đang dịch — sửa được khi xong", tone: "idle" }
         : { short: "Chờ lưu", long: PAGE_BUSY_SAVE_TEXT, tone: "warn" };
-  else
+  else if (save.status !== "saved")
     view = {
       short: (
         <>
@@ -214,16 +223,22 @@ function EditState(props: EditAccess) {
       long: "Bạn đang giữ khoá chương",
       tone: SAVE_TONE[save.status],
     };
+  if (!view)
+    return (
+      <span className="cw-edit-live" role="status" aria-label="Khoá chương">
+        <span className="sr-only">Bạn đang giữ khoá chương · {SAVE_LABEL[save.status]}</span>
+      </span>
+    );
   return (
-    <span
-      className="status cw-edit"
-      data-tone={view.tone}
-      role="status"
-      aria-label="Khoá chương"
-      title={save.error && save.error !== view.long ? `${view.long} · ${save.error}` : view.long}
-    >
-      <span className="sr-only">{view.long} · </span>
-      {view.short}
+    <span className="cw-edit-live" role="status" aria-label="Khoá chương">
+      <span
+        className="status cw-edit"
+        data-tone={view.tone}
+        title={save.error && save.error !== view.long ? `${view.long} · ${save.error}` : view.long}
+      >
+        <span className="sr-only">{view.long} · </span>
+        {view.short}
+      </span>
     </span>
   );
 }

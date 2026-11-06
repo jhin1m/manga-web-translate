@@ -46,7 +46,7 @@ const STATUS: Record<ExportStatus, { label: string; tone: Tone }> = {
   cancelled: { label: "Đã huỷ", tone: "idle" },
   paused_budget: { label: "Tạm dừng (hết ngân sách)", tone: "warn" },
 };
-/** Export gần đây của chương; poll khi còn lượt đang chạy. Dùng chung cho drawer Xuất, Hoạt động và số việc. */
+/** Lượt xuất gần đây của chương; poll khi còn lượt đang chạy. Dùng chung cho drawer Xuất, Hoạt động và số việc. */
 export function useExports(chapterId: string) {
   const qc = useQueryClient();
   const q = useQuery({

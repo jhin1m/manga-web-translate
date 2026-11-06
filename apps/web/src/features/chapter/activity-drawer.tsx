@@ -1,7 +1,7 @@
 /**
  * Drawer "Hoạt động": việc đang chạy/xong/lỗi gom 1 chỗ. Upload (mọi chương của tab, từ upload-manager) luôn có;
  * ở màn chương thêm job của chương đang mở (`progress.jobs` + số trang đang chạy/lỗi theo `error_class`, nút "Chạy
- * lại trang lỗi") và lượt xuất gần đây (tải lại, huỷ). Nút mở drawer kèm số việc đang chạy.
+ * lại trang lỗi") và lượt xuất gần đây (tải lại, huỷ). Ở màn chương mở từ chip trạng thái hoặc menu ⋯ (kèm số việc đang chạy).
  */
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
@@ -23,7 +23,7 @@ const JOB_LABEL: Record<string, string> = {
   "chapter.translate": "Dịch lô trang",
   "page.reinpaint": "Xoá chữ lại theo mask",
   "page.ocr_region": "OCR vùng",
-  "chapter.export": "Export",
+  "chapter.export": "Xuất",
   "chapter.proofread": "AI hiệu đính",
 };
 const JOB_STATUS: Record<string, { label: string; tone: string }> = {
@@ -58,31 +58,11 @@ export function chapterActivityCount(progress: Progress | undefined, exportsActi
   return exportsActive + Math.max(jobs, pagesBusy ? 1 : 0);
 }
 
-/** `icon`: chỉ biểu tượng + số (thanh trên màn chương, chật chỗ); tên đầy đủ ở aria-label/title. */
-export function ActivityButton({ count, onClick, icon }: { count: number; onClick(): void; icon?: boolean }) {
+/** Nút "Hoạt động" của app shell, kèm số việc đang chạy. Màn chương mở drawer qua chip trạng thái / menu ⋯. */
+function ActivityButton({ count, onClick }: { count: number; onClick(): void }) {
   return (
-    <button
-      type="button"
-      className={icon ? "btn-ghost" : undefined}
-      onClick={onClick}
-      aria-label={count ? `Hoạt động (${count} đang chạy)` : "Hoạt động"}
-      title={icon ? "Hoạt động" : undefined}
-    >
-      {icon ? (
-        <svg
-          width="16"
-          height="16"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          aria-hidden="true"
-        >
-          <path d="M3 12h4l3-8 4 16 3-8h4" />
-        </svg>
-      ) : (
-        "Hoạt động"
-      )}
+    <button type="button" onClick={onClick} aria-label={count ? `Hoạt động (${count} đang chạy)` : "Hoạt động"}>
+      Hoạt động
       {count > 0 && <span className="count-badge">{count}</span>}
     </button>
   );
@@ -268,8 +248,8 @@ function ExportSection({ chapterId }: { chapterId: string }) {
   const exports = q.data?.exports ?? [];
   const cancel = useMutation({ mutationFn: (id: string) => cancelJob(id), onSettled: refresh });
   return (
-    <section className="drawer-section" aria-label="Export gần đây">
-      <h3>Export gần đây</h3>
+    <section className="drawer-section" aria-label="Xuất gần đây">
+      <h3>Xuất gần đây</h3>
       {cancel.error && <p className="notice danger">{errorMessage(cancel.error)}</p>}
       {exports.length === 0 ? (
         <p className="muted small">{q.isLoading ? "Đang tải…" : "Chưa có lượt xuất nào."}</p>

@@ -256,15 +256,15 @@ test.describe("công cụ chương", () => {
 
     // "Xuất lại" ở home mở chương với `?drawer=export` → drawer mở sẵn.
     await page.goto(`/s/${state.seriesId}/c/${chapterId}?drawer=export`);
-    await expect(page.getByRole("dialog", { name: "Export chương" })).toBeVisible();
+    await expect(page.getByRole("dialog", { name: "Xuất chương" })).toBeVisible();
     await expect(page).not.toHaveURL(/drawer=export/);
     await page.keyboard.press("Escape");
-    await expect(page.getByRole("dialog", { name: "Export chương" })).toBeHidden();
+    await expect(page.getByRole("dialog", { name: "Xuất chương" })).toBeHidden();
 
     // Drawer Xuất (editor vẫn ở phía sau): tên file khớp tên server đặt khi tải.
-    const open = page.getByRole("button", { name: "Export", exact: true });
+    const open = page.getByRole("button", { name: "Xuất", exact: true });
     await open.click();
-    const dlg = page.getByRole("dialog", { name: "Export chương" });
+    const dlg = page.getByRole("dialog", { name: "Xuất chương" });
     await expect(dlg.getByText(`Series e2e-ch${number}.zip`)).toBeVisible();
     // 1 lần bấm: xong thì tự tải (đúng tên file server đặt); link "Tải xuống" tại chỗ phòng trình duyệt chặn.
     const download = page.waitForEvent("download", { timeout: 60_000 });

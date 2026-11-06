@@ -24,14 +24,47 @@
   padding: 0 var(--sp-4);
   border-bottom: 1px solid var(--c-line);
   min-width: 0;
+  position: relative;
 }
 .cw-top .spacer {
   flex: 1;
 }
-.cw-top-sep {
-  width: 1px;
-  height: 20px;
-  background: var(--c-line);
+/* Tiến độ chương đang chạy: vạch 2px ở đáy thanh trên; chưa đo được thì vạch chạy qua lại. */
+.cw-progress {
+  position: absolute;
+  left: 0;
+  bottom: -1px;
+  height: 2px;
+  background: var(--c-accent);
+  transition: width 0.3s ease;
+}
+.cw-progress[data-indeterminate="true"] {
+  width: 30%;
+  animation: cw-progress-slide 1.4s ease-in-out infinite alternate;
+}
+@keyframes cw-progress-slide {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(233%);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cw-progress[data-indeterminate="true"] {
+    width: 100%;
+    animation: none;
+    opacity: 0.5;
+  }
+  .cw-progress {
+    transition: none;
+  }
+}
+/* Chip trạng thái + chỉ báo lưu: co lại khi hẹp (chữ cắt "…", title/aria-label giữ đủ). */
+.cw-state {
+  display: flex;
+  align-items: center;
+  min-width: 0;
 }
 .cw-back {
   display: flex;
@@ -42,6 +75,9 @@
   white-space: nowrap;
 }
 /* Tên series dài cắt "…" (title của link hiện tên đầy đủ); icon ‹ không bị cắt. */
+.cw-back svg {
+  flex-shrink: 0;
+}
 .cw-back-name {
   max-width: 240px;
   overflow: hidden;
@@ -55,15 +91,34 @@
   display: flex;
   min-width: 0;
 }
-.cw-chip > .status {
+.cw-chip > .cw-chip-btn {
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  border-radius: 999px;
+  cursor: pointer;
+}
+.cw-chip-btn > .status {
   font-size: var(--fs-sm);
+  max-width: 100%;
+}
+.cw-chip-btn > .status::before {
+  flex-shrink: 0;
+}
+.cw-chip-label {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+.cw-chip-btn:hover {
+  opacity: 0.8;
 }
 /* Chỉ báo sửa/lưu: nhỏ, sau chip; chấm màu thay bằng icon khoá khi đang giữ khoá. */
 .cw-edit {
   position: relative;
   gap: 4px;
+  margin-left: var(--sp-2);
 }
 .cw-edit:has(svg)::before {
   display: none;
@@ -949,8 +1004,13 @@ label.cw-field-head {
 /* Tên chương bấm được → popover đổi series / số chương. */
 .cw-meta {
   position: relative;
+  flex-shrink: 0;
 }
 .cw-meta-toggle {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font: inherit;
   font-weight: inherit;
   border-color: transparent;
