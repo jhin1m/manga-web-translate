@@ -48,6 +48,8 @@ services:
     image: ghcr.io/jhin1m/mtl:${MTL_TAG:-latest}
     command: app
     restart: unless-stopped
+    # tini làm PID 1: chuyển SIGTERM tới node (node PID 1 không có handler lúc đang backup/migrate → bị SIGKILL).
+    init: true
     environment: *app-env
     volumes:
       - ./data/files:/data/files
@@ -73,6 +75,7 @@ services:
     image: ghcr.io/jhin1m/mtl:${MTL_TAG:-latest}
     command: jobs
     restart: unless-stopped
+    init: true
     environment: *app-env
     volumes:
       - ./data/files:/data/files

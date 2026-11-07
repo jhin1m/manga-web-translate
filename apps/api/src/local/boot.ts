@@ -1,5 +1,5 @@
 /**
- * Khởi động chế độ local (chỉ process `app`, trước khi listen): tạo thư mục dữ liệu → backup DB → migrate →
+ * Khởi động chế độ local (chỉ process `app`, trước khi listen): tạo thư mục dữ liệu → chặn hạ cấp → backup DB → migrate →
  * user local → file token worker. `jobs`/`worker` chỉ chạy sau khi app healthy (/readyz) nên thấy DB đã migrate.
  */
 import { mkdir } from "node:fs/promises";
@@ -9,6 +9,7 @@ import { db } from "../db.ts";
 import { env } from "../env.ts";
 import { backupBeforeMigrate } from "./boot-backup.ts";
 import { ensureLocalUser } from "./local-user.ts";
+import { assertSchemaNotNewer } from "./schema-guard.ts";
 import { ensureWorkerTokenFile } from "./worker-token-file.ts";
 
 export const workerTokenPath = (dataDir: string) => join(dataDir, "worker", "token");
@@ -18,6 +19,10 @@ export async function bootLocal(): Promise<void> {
   const backups = join(data, "backups");
   for (const d of [env.FILES_DIR, backups]) await mkdir(d, { recursive: true });
   await mkdir(join(data, "worker"), { recursive: true, mode: 0o700 });
+
+  // Trước backup: image cũ hơn DB → dừng mà không đụng DB, không dump. Đặt sau backup thì image cũ crash-loop
+  // (restart: unless-stopped) tạo 1 dump mỗi lần restart và xoay mất các bản dump tốt.
+  await assertSchemaNotNewer(env.DATABASE_URL);
 
   if (env.MTL_SKIP_BOOT_BACKUP) {
     console.warn("[boot] MTL_SKIP_BOOT_BACKUP=1 → bỏ qua backup trước migrate");

@@ -201,7 +201,15 @@ export function createDiskDriver({ root: rootIn, signingKey, now = () => Date.no
       await rm(tmp, { force: true });
       throw err;
     }
-    await commit(tmp, abs);
+    try {
+      await commit(tmp, abs);
+    } catch (err) {
+      // Sidecar đã commit mà dữ liệu thì không → xoá nếu không còn file dữ liệu nào ở đích (mồ côi; không job nào dọn).
+      // Đích đã có file cũ thì giữ sidecar: ghi đè cùng key gần như luôn cùng loại nội dung.
+      const existing = await stat(abs).catch(() => null);
+      if (!existing?.isFile()) await rm(abs + META_SUFFIX, { force: true });
+      throw err;
+    }
   }
 
   function openRead(key: string, range?: ByteRange): ReadableStream<Uint8Array> {

@@ -1,5 +1,5 @@
 /** Disk driver: bộ contract chung (như MinIO) + case riêng của đĩa (traversal, ghi atomic, sidecar, xoá/chép). */
-import { readdir } from "node:fs/promises";
+import { mkdir, readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { PNG, postUpload, runStorageContract, testKey } from "../storage-contract.ts";
@@ -43,6 +43,16 @@ describe("disk driver specifics", () => {
       contentType: "image/png",
       etag: expect.any(String),
     });
+  });
+
+  it("writeAtomic leaves no orphaned sidecar when the data commit fails", async () => {
+    const k = testKey();
+    // Đích là thư mục không rỗng → rename dữ liệu lỗi sau khi sidecar đã commit.
+    await mkdir(join(h.driver.resolveKey(k), "child"), { recursive: true });
+    await expect(h.driver.writeAtomic(k, new Uint8Array([1]), "image/png")).rejects.toThrow();
+    const name = k.split("/").at(-1);
+    expect(await readdir(join(h.root, k, ".."))).not.toContain(`${name}.meta.json`);
+    expect(await readdir(join(h.root, ".tmp"))).toEqual([]);
   });
 
   it("copyObject keeps the content type; deleteObject is idempotent", async () => {

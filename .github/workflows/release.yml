@@ -1,6 +1,13 @@
-# Build + đẩy image self-host lên GHCR khi push tag v* (vd v1.2.3 → :1.2.3, :1.2, :latest).
+# Build + đẩy image self-host lên GHCR khi push tag v* (vd v1.2.3 → :1.2.3, rồi :1.2 + :latest).
 # Image: ghcr.io/<owner>/mtl (app + jobs), ghcr.io/<owner>/mtl-worker. Xem docs/self-host.md.
 # Lần đầu push: package GHCR mặc định private — owner đặt public trên GitHub thì người dùng mới pull không cần login.
+#
+# 3 pha, để `latest` không bao giờ trỏ app mới + worker cũ (lệch MIN_PIPELINE_VERSION → mọi claim trả 426):
+#   test    → unit test API + pytest worker; kiểm tag đúng semver.
+#   image   → build + push MỖI image theo tag bất biến `:<version>` (không đụng tag trôi).
+#   promote → chỉ khi CẢ HAI image xanh: gắn `:<major>.<minor>` (mới nhất dòng đó) + `:latest` (bản ổn định mới nhất)
+#             bằng imagetools; tuần tự giữa các tag.
+# Action ghim theo commit SHA (comment = tag chính thức lúc ghim): tag có thể bị dời, SHA thì không.
 name: release
 
 on:
@@ -9,17 +16,58 @@ on:
 
 permissions:
   contents: read
-  packages: write
-
-concurrency:
-  group: release-${{ github.ref }}
-  cancel-in-progress: false
 
 jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+      minor: ${{ steps.v.outputs.minor }}
+      prerelease: ${{ steps.v.outputs.prerelease }}
+    steps:
+      - id: v
+        name: Tag phải là semver vX.Y.Z[-pre]
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          v="${TAG#v}"
+          if ! printf '%s' "$v" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'; then
+            echo "::error::tag $TAG không phải semver vX.Y.Z[-pre] → không ra image"
+            exit 1
+          fi
+          case "$v" in *-*) pre=true ;; *) pre=false ;; esac
+          {
+            echo "version=$v"
+            echo "minor=$(printf '%s' "$v" | cut -d. -f1,2)"
+            echo "prerelease=$pre"
+          } >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Unit test API (không cần Docker)
+        run: pnpm --filter @mtl/api test:unit
+      - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7.6.0
+        with:
+          # Ghim bản = worker.Dockerfile / máy dev.
+          version: "0.13.7"
+      - name: Pytest worker
+        working-directory: worker
+        run: uv run --frozen pytest -q
+
   image:
+    needs: test
     runs-on: ubuntu-latest
     timeout-minutes: 90
+    permissions:
+      contents: read
+      packages: write
     strategy:
+      # Không huỷ image kia khi 1 image lỗi → "Re-run failed jobs" chỉ build lại image hỏng; promote vẫn chờ cả hai.
       fail-fast: false
       matrix:
         include:
@@ -28,25 +76,22 @@ jobs:
           - name: mtl-worker
             dockerfile: infra/docker/worker.Dockerfile
     steps:
-      - uses: actions/checkout@v4
-      - uses: docker/setup-qemu-action@v3
-      - uses: docker/setup-buildx-action@v3
-      - uses: docker/login-action@v3
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3.7.0
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5.10.0
         with:
           images: ghcr.io/${{ github.repository_owner }}/${{ matrix.name }}
-          # latest=auto (mặc định): chỉ tag semver không phải prerelease mới trỏ :latest (v1.3.0-rc.1 thì không;
-          # tag không phải semver không ra image). Hotfix dòng cũ (vd v1.1.5 khi đã có v1.2.x) VẪN trỏ :latest →
-          # người dùng `pull` bị hạ cấp trên DB đã migrate: chỉ tag hotfix trên dòng mới nhất.
-          tags: |
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-      - uses: docker/build-push-action@v6
+          # Chỉ tag bất biến; :<major>.<minor> / :latest do job promote gắn sau khi cả hai image xanh.
+          flavor: latest=false
+          tags: type=raw,value=${{ needs.test.outputs.version }}
+      - uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
         with:
           context: .
           file: ${{ matrix.dockerfile }}
@@ -56,3 +101,58 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha,scope=${{ matrix.name }}
           cache-to: type=gha,mode=max,scope=${{ matrix.name }}
+
+  promote:
+    needs: [test, image]
+    # Prerelease (v1.3.0-rc.1) chỉ có tag bất biến.
+    if: needs.test.outputs.prerelease == 'false'
+    # Chỉ pha gắn tag trôi cần tuần tự giữa các tag (test/image ghi tag bất biến nên chạy song song được).
+    # GitHub giữ tối đa 1 run chờ mỗi nhóm: 3 tag push dồn trong ~1 phút → promote của tag ở giữa bị huỷ, re-run tay.
+    concurrency:
+      group: release-promote
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Gắn :<major>.<minor> + :latest cho cả hai image
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.test.outputs.version }}
+          MINOR: ${{ needs.test.outputs.minor }}
+          OWNER: ${{ github.repository_owner }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          owner="$(printf '%s' "$OWNER" | tr '[:upper:]' '[:lower:]')"
+          stable="$(gh api "repos/$GITHUB_REPOSITORY/git/matching-refs/tags/v" --paginate --jq '.[].ref' \
+            | sed 's#^refs/tags/v##' | { grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' || true; } | sort -V)"
+          # Chỉ dời tag trôi tới bản mới nhất của nó: re-run release cũ (vd 1.3.0 khi đã có 1.3.1) không kéo :1.3 lùi;
+          # hotfix dòng cũ (1.1.5 khi đã có 1.2.x) dời :1.1 nhưng không kéo :latest lùi (DB đã migrate bản mới; app cũng
+          # tự chặn khởi động khi DB mới hơn image).
+          newest="$(printf '%s\n' "$stable" | tail -n1)"
+          newest_minor="$(printf '%s\n' "$stable" | awk -v m="$MINOR." 'index($0, m) == 1' | tail -n1)"
+          if [ -z "$newest" ] || [ -z "$newest_minor" ]; then
+            echo "::error::không đọc được danh sách tag semver (gh api) → không gắn tag trôi"
+            exit 1
+          fi
+          for name in mtl mtl-worker; do
+            img="ghcr.io/$owner/$name"
+            tags=()
+            if [ "$VERSION" = "$newest_minor" ]; then tags+=(-t "$img:$MINOR"); fi
+            if [ "$VERSION" = "$newest" ]; then tags+=(-t "$img:latest"); fi
+            if [ ${#tags[@]} -gt 0 ]; then docker buildx imagetools create "${tags[@]}" "$img:$VERSION"; fi
+          done
+          if [ "$VERSION" != "$newest_minor" ]; then
+            echo "::notice::$VERSION không phải bản mới nhất dòng $MINOR ($newest_minor) → giữ nguyên :$MINOR, :latest"
+          elif [ "$VERSION" != "$newest" ]; then
+            echo "::notice::$VERSION không phải bản ổn định mới nhất ($newest) → giữ nguyên :latest"
+          fi

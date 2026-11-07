@@ -81,7 +81,7 @@ Sao lưu = dừng app rồi chép cả thư mục `./data` (trừ `models/` nế
 
 ```bash
 docker compose stop
-sudo cp -a data /nơi/khác/mtl-data-$(date +%F)    # Linux cần sudo: data/postgres thuộc user của Postgres (0700)
+sudo cp -a data /nơi/khác/mtl-data-$(date +%F)    # Linux cần sudo: postgres/files/secrets/backups đều 0700
 docker compose start
 ```
 
@@ -90,20 +90,26 @@ docker compose start
 Mỗi lần `app` khởi động (trừ lần đầu DB trống) tạo `data/backups/mtl-<UTC>-m<N>.dump` (`N` = số migration đã áp),
 giữ 5 bản mới nhất **cộng** bản mới nhất của mỗi phiên bản schema trong 3 phiên bản gần nhất → restart nhiều lần sau
 nâng cấp không xoá mất bản trước nâng cấp. Migrate lỗi khi nâng cấp → `app` restart lặp, bản backup vừa tạo vẫn còn.
+Image cũ hơn DB → `app` dừng trước khi backup (không tạo dump mới mỗi lần restart).
 
 Khôi phục (thay `<file>` bằng tên bản dump):
 
 ```bash
+sudo ls -l data/backups          # chọn bản dump
 docker compose stop app jobs worker
-docker compose exec -T postgres pg_restore --clean --if-exists --create -U mtl -d postgres < data/backups/<file>.dump
+sudo cat data/backups/<file>.dump | docker compose exec -T postgres pg_restore --clean --if-exists --create -U mtl -d postgres
 docker compose up -d
 ```
 
-`--create -d postgres` xoá hẳn database `mtl` rồi tạo lại từ bản dump — cần thiết khi khôi phục bản cũ hơn schema
+`data/backups` (và `data/files`, `data/secrets`) quyền 700, chủ uid 1000 — chặn user khác trên máy → trên Linux mọi
+lệnh đọc trong đó (`ls`, `cat`, `cp`) cần `sudo` nếu user của bạn không phải uid 1000; macOS/Windows (Docker Desktop)
+bỏ `sudo`. `--create -d postgres` xoá hẳn database `mtl` rồi tạo lại từ bản dump — cần thiết khi khôi phục bản cũ hơn schema
 hiện tại (chỉ `--clean` sẽ để sót bảng của migration mới, lần nâng cấp sau migrate lỗi). Phải dừng `app jobs worker`
 trước (database đang có kết nối thì không xoá được).
 
-Quay về bản cũ sau nâng cấp hỏng: khôi phục bản dump có `m<N>` của bản cũ **và** ghim `MTL_TAG=<bản cũ>` trước `up -d`.
+Quay về bản cũ sau nâng cấp hỏng: khôi phục bản dump tạo khi còn chạy bản cũ (`m<N>` không lớn hơn số migration của
+bản cũ) **và** ghim `MTL_TAG=<bản cũ>` trước `up -d`. Ghim bản cũ mà quên khôi phục → `app` từ chối khởi động (xem
+Xử lý sự cố) thay vì chạy code cũ trên schema mới.
 Backup DB không gồm ảnh (`files/`) — ảnh không bị migrate đụng tới.
 
 Postgres được ghim major 17; nâng lên major mới (18…) là thủ tục riêng (dump → đổi image → restore), không tự động.
@@ -117,7 +123,7 @@ Postgres được ghim major 17; nâng lên major mới (18…) là thủ tục 
   cần gì thêm; worker trong container khác gọi qua tên host khác (vd `host.docker.internal`) thì thêm tên đó vào
   `MTL_ALLOWED_HOSTS` (vd `MTL_ALLOWED_HOSTS=host.docker.internal docker compose up -d`). Thiếu bước này worker nhận
   403, coi là lỗi tạm và thử lại im lặng. Token: `data/worker/token` (quyền 600, chủ uid 1000 — worker chạy thẳng trên
-  Linux phải chạy bằng uid 1000 hoặc chép token ra file riêng `chmod 600` của user mình). Cổng chỉ bind `127.0.0.1` nên
+  Linux phải chạy bằng uid 1000 hoặc chép token ra file riêng của user mình: `sudo cat data/worker/token > ~/.mtl-token && chmod 600 ~/.mtl-token`). Cổng chỉ bind `127.0.0.1` nên
   máy khác không gọi được.
 
 ## Gỡ cài
@@ -136,6 +142,9 @@ sudo rm -rf data               # xoá hẳn dữ liệu (không lấy lại đư
   (đừng đụng `data/postgres` — thuộc user của Postgres).
 - **`app` không healthy, log báo `pg_dump` lỗi**: app cố ý dừng (không migrate khi chưa backup được). Xem nguyên nhân
   trong log; cần chạy gấp thì `MTL_SKIP_BOOT_BACKUP=1 docker compose up -d app` (sau đó bỏ biến này).
+- **`app` restart lặp, log báo `DB đã ở schema m<X>, mới hơn bản app đang chạy`**: đang chạy image cũ hơn bản đã
+  migrate DB (ghim `MTL_TAG` cũ, hoặc pull nhầm bản cũ). Dữ liệu chưa bị đụng. Dùng lại bản mới (bỏ `MTL_TAG` rồi
+  `docker compose pull && docker compose up -d`), hoặc khôi phục bản dump của bản cũ (mục Backup DB) rồi mới `up -d`.
 - **Worker restart lặp**: `docker compose logs worker` — tải model lỗi (mạng) sẽ tự thử lại; `401` = token bị thu hồi
   (xem mục Worker).
 - **Mở web báo "Không kết nối được máy chủ"**: `app` chưa chạy xong (lần đầu/sau cập nhật đang migrate) — đợi rồi bấm Thử lại.

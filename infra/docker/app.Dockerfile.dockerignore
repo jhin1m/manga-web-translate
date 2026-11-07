@@ -12,6 +12,9 @@
 plans
 docs
 golden
+# Dữ liệu self-host (./data cạnh docker-compose.yml): secrets, DB, dump không được lọt vào image.
+/data
+**/*.dump
 /*.png
 TODO.md
 apps/web/e2e

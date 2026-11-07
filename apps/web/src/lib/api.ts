@@ -82,7 +82,18 @@ export async function api<T>(path: string, init: Omit<RequestInit, "body"> & { b
 /** `GET /api/config` (public): chế độ chạy của server. `local_mode` = self-host 1 người dùng, không đăng nhập. */
 export type AppConfig = { local_mode: boolean };
 
-export const fetchAppConfig = () => api<AppConfig>("/api/config");
+/**
+ * API cũ chưa có route (web cập nhật trước API, hoặc rollback API) → bản nhiều người dùng: route lạ dưới /api trả 401
+ * khi chưa đăng nhập (requireUser chạy trước 404), 404 khi đã đăng nhập. Bản local luôn có route này và nó public.
+ * Chỉ lỗi mạng / 5xx (và mã khác) mới là "không biết chế độ" → màn lỗi ở AuthGate.
+ */
+export const fetchAppConfig = () =>
+  api<AppConfig>("/api/config").catch((err: unknown) => {
+    if (err instanceof ApiError && (err.status === 404 || err.status === 401)) {
+      return { local_mode: false } satisfies AppConfig;
+    }
+    throw err;
+  });
 
 /** Không đổi trong suốt vòng đời server → cache vô hạn (đổi chế độ = restart server = tải lại trang). */
 export const appConfigQuery = {

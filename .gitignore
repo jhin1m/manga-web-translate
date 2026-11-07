@@ -2,6 +2,9 @@ node_modules/
 .env*
 !.env.example
 golden/
+# Dữ liệu self-host (docker-compose.yml ở gốc repo bind ./data): secrets, DB, dump — không bao giờ commit.
+/data/
+*.dump
 worker/models/*.onnx
 worker/models/*.txt
 *.safetensors

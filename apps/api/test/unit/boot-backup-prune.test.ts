@@ -1,9 +1,9 @@
 /** Giữ N bản backup mới nhất + bản mới nhất của các schema gần nhất; file không đúng mẫu tên không bị đụng. */
-import { mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readdir, rm, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { BACKUP_RE, backupName, backupStamp, pruneBackups } from "../../src/local/boot-backup.ts";
+import { BACKUP_RE, backupName, backupStamp, pruneBackups, STALE_TMP_MS } from "../../src/local/boot-backup.ts";
 
 let dir: string;
 beforeEach(async () => {
@@ -51,6 +51,17 @@ describe("boot backup", () => {
     const names = [`${day(1)}-m21.dump`, `${day(2)}-m22.dump`, `${day(3)}-m23.dump`, `${day(4)}-m24.dump`];
     await touch(names);
     expect(await pruneBackups(dir, 1)).toEqual([`${day(1)}-m21.dump`]);
+  });
+
+  it("removes orphaned pg_dump temp files only once they are stale", async () => {
+    const stale = ".mtl-20261101T000000Z-m26.dump.tmp";
+    const fresh = ".mtl-20261107T000000Z-m26.dump.tmp";
+    await touch([stale, fresh, `${day(1)}-m26.dump`]);
+    const old = new Date(Date.now() - STALE_TMP_MS - 60_000);
+    await utimes(join(dir, stale), old, old);
+
+    expect(await pruneBackups(dir, 5)).toEqual([stale]);
+    expect((await readdir(dir)).sort()).toEqual([fresh, `${day(1)}-m26.dump`].sort());
   });
 
   it("does nothing when under the limit", async () => {

@@ -7,7 +7,7 @@
  * (hoặc crash loop) sau khi nâng cấp không xoá mất bản dump của schema TRƯỚC nâng cấp.
  */
 import { execFile } from "node:child_process";
-import { readdir, rename, rm } from "node:fs/promises";
+import { readdir, rename, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { createDb } from "@mtl/db";
@@ -16,6 +16,10 @@ import { sql } from "drizzle-orm";
 const exec = promisify(execFile);
 
 export const BACKUP_RE = /^mtl-(\d{8}T\d{6}Z)-m(\d+)\.dump$/;
+/** File tạm của pg_dump (`.mtl-…dump.tmp`): process bị kill giữa lúc dump để lại, catch không kịp xoá. */
+export const BACKUP_TMP_RE = /^\.mtl-.*\.dump\.tmp$/;
+/** File tạm cũ hơn mức này chắc chắn mồ côi (pg_dump tối đa `PG_DUMP_TIMEOUT_MS`; chỉ process app dump). */
+export const STALE_TMP_MS = 6 * 3600_000;
 /** Số phiên bản schema (gần nhất) luôn giữ ít nhất 1 bản dump. */
 export const SCHEMA_GENERATIONS = 3;
 /** pg_dump treo (chờ lock) → boot kẹt mãi, healthcheck không bao giờ xanh → giới hạn cứng. */
@@ -32,10 +36,16 @@ export const backupName = (d: Date, migrations: number) => `mtl-${backupStamp(d)
 
 /**
  * Xoá bản backup cũ: giữ `keep` bản mới nhất và bản mới nhất của mỗi phiên bản schema trong `SCHEMA_GENERATIONS`
- * phiên bản cao nhất. File không đúng mẫu tên không đụng.
+ * phiên bản cao nhất; xoá file tạm pg_dump mồ côi cũ hơn `STALE_TMP_MS`. File không đúng 2 mẫu tên không đụng.
  */
-export async function pruneBackups(dir: string, keep: number): Promise<string[]> {
-  const items = (await readdir(dir))
+export async function pruneBackups(dir: string, keep: number, now = Date.now()): Promise<string[]> {
+  const names = await readdir(dir);
+  const staleTmp: string[] = [];
+  for (const n of names.filter((x) => BACKUP_TMP_RE.test(x))) {
+    const s = await stat(join(dir, n)).catch(() => null);
+    if (s?.isFile() && now - s.mtimeMs > STALE_TMP_MS) staleTmp.push(n);
+  }
+  const items = names
     .map((name) => ({ name, m: BACKUP_RE.exec(name) }))
     .filter((x): x is { name: string; m: RegExpExecArray } => x.m !== null)
     .map(({ name, m }) => ({ name, stamp: m[1] ?? "", schema: Number(m[2]) }))
@@ -46,7 +56,7 @@ export async function pruneBackups(dir: string, keep: number): Promise<string[]>
     const newest = items.find((x) => x.schema === s);
     if (newest) keepNames.add(newest.name);
   }
-  const drop = items.filter((x) => !keepNames.has(x.name)).map((x) => x.name);
+  const drop = [...items.filter((x) => !keepNames.has(x.name)).map((x) => x.name), ...staleTmp];
   for (const n of drop) await rm(join(dir, n), { force: true });
   return drop.sort();
 }

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ApiError, api, DISABLED_LOGIN_PATH, errorMessage, sessionEffects, tabId } from "./api.ts";
+import { ApiError, api, DISABLED_LOGIN_PATH, errorMessage, fetchAppConfig, sessionEffects, tabId } from "./api.ts";
 
 describe("api helpers", () => {
   it("402 quota_exceeded → câu hạn mức kèm số đã dùng / hạn mức", () => {
@@ -62,6 +62,35 @@ describe("api helpers", () => {
       await expect(api("/api/x")).rejects.toMatchObject({ status: 409 });
       expect(notify).not.toHaveBeenCalled();
       expect(signOut).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("app config", () => {
+    const reply = (res: () => Response | Promise<Response>) =>
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async () => res()),
+      );
+
+    it("server reports its mode", async () => {
+      reply(() => Response.json({ local_mode: true }));
+      await expect(fetchAppConfig()).resolves.toEqual({ local_mode: true });
+    });
+
+    it("404 / 401 (older API without the route, signed in / signed out) → multi-user mode, not the error screen", async () => {
+      vi.spyOn(sessionEffects, "refetchSession").mockImplementation(() => undefined);
+      reply(() => Response.json({ error: "not_found" }, { status: 404 }));
+      await expect(fetchAppConfig()).resolves.toEqual({ local_mode: false });
+      reply(() => Response.json({ error: "unauthenticated" }, { status: 401 }));
+      await expect(fetchAppConfig()).resolves.toEqual({ local_mode: false });
+      vi.restoreAllMocks();
+    });
+
+    it("5xx and network errors still fail (mode unknown → error screen)", async () => {
+      reply(() => Response.json({ error: "internal" }, { status: 502 }));
+      await expect(fetchAppConfig()).rejects.toMatchObject({ status: 502 });
+      reply(() => Promise.reject(new TypeError("Failed to fetch")));
+      await expect(fetchAppConfig()).rejects.toBeInstanceOf(TypeError);
     });
   });
 });
