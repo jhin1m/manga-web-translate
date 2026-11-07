@@ -82,6 +82,14 @@ dịch active → không làm gì; gọi lặp / đồng thời vẫn ra đúng 
 - Dịch (`translate-prepared`), dịch lại (`translate`, cả chương hoặc `page_ids`), "Chạy lại trang lỗi" (`retry-failed`;
   trang lỗi xoá chữ + OCR chỉ vào lượt khi chương đã có trang `ready`, không thì dừng `prepared`) khi chương còn job dịch
   đang chạy/chờ → 409 `translate_running` (riêng `translate-prepared` khi chương đang `processing` → 409 `chapter_not_prepared`); trang ẩn → 409 `page_skipped`; trang chưa có OCR → 409 `page_not_prepared`.
+- **Quét lại trang** (`POST /chapters/:id/rescan {page_ids}`, menu trang "Quét lại trang n"): dịch lại chỉ dịch trên
+  `ocr_result` cũ nên không cứu được trang OCR đọc sai / gắn nhầm SFX. Rescan enqueue `page.prepare` (xoá chữ + OCR lại
+  từ ảnh gốc) cho các trang đã có OCR rồi mở lượt `translated` cho chúng — lô dịch chờ OCR mới. Bản dịch theo luật AI ghi
+  (trang đã sửa tay → `ai_update_available`). 409: `translate_running`, `page_skipped`, `page_busy` (đang Bước 1),
+  `page_not_prepared` (chưa có OCR → "Chạy lại trang lỗi"), `page_has_manual_cleanup` (`clean_rev ≠ mask_rev`: đã
+  tẩy / xoá chữ tay — ảnh sạch dựng lại từ gốc sẽ mất phần đó). `page.prepare` lỗi / huỷ trên trang đã có OCR giữ trang
+  như cũ (`ready` nếu đã dịch, không thì `prepared`) và bỏ trang khỏi lượt (không dịch lại OCR cũ); trang chưa từng có
+  OCR vẫn `failed`.
 
 Thứ tự khoá cố định job → chapter → pages ở mọi nhánh (claim, `applyResult`, `terminal`, advance) để không deadlock.
 `refreshChapter` coi chương bận khi còn trang `translate_queued` của lượt `translated`; lượt `prepared` hết bận thì đóng.

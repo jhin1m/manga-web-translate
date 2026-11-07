@@ -543,4 +543,66 @@ describe("translate chain", () => {
       env.USER_DAILY_USD = prev;
     }
   });
+  /** Chương đã qua Bước 1; chỉ trang thứ 3 đã dịch (ready, có bản AI). */
+  async function oneTranslated(label: string) {
+    const { S, ids, prep } = await ingested(label, { target: "prepared" });
+    await prepare(prep, range(0, N));
+    expect((await api(S, "/translate", { page_ids: [ids[2]] })).status).toBe(202);
+    expect((await doTranslate(token, await claimTranslate())).status).toBe(200);
+    expect((await pageRows(S.chapterId))[2]?.status).toBe("ready");
+    return { S, page: ids[2] as string };
+  }
+
+  async function claimPrepare() {
+    const [pj] = await claimJobs(token, { caps: ["page.prepare"] });
+    if (!pj) throw new Error("no prepare job to claim");
+    return pj;
+  }
+
+  it("rescanning a translated page re-runs step 1, then translates it", async () => {
+    const { S, page } = await oneTranslated("chain-rescan");
+    const res = await api(S, "/rescan", { page_ids: [page] });
+    expect(res.status, await res.clone().text()).toBe(202);
+    expect(((await res.json()) as { jobs: unknown[] }).jobs).toHaveLength(1);
+    let row = (await pageRows(S.chapterId))[2];
+    expect(row?.status).toBe("pending");
+    expect(row?.translateQueued).toBe(true);
+    // Dịch chờ OCR mới — không dịch lại OCR cũ.
+    expect(await translateJobs(S.chapterId)).toHaveLength(0);
+    await expectTranslateRunning(await api(S, "/translate", { page_ids: [page] }));
+
+    const pj = await claimPrepare();
+    expect(pj.payload.page_id).toBe(page);
+    expect((await doPrepare(token, pj)).status).toBe(200);
+    const [lot] = await translateJobs(S.chapterId);
+    expect(lot?.p.page_ids).toEqual([page]);
+    expect((await doTranslate(token, await claimTranslate(), "Bản mới")).status).toBe(200);
+    row = (await pageRows(S.chapterId))[2];
+    expect(row?.status).toBe("ready");
+    expect(row?.translateQueued).toBe(false);
+    expect((await chapterRow(S.chapterId)).runTarget).toBeNull();
+  });
+
+  it("a failed rescan keeps the translated page ready and does not translate the old OCR again", async () => {
+    const { S, page } = await oneTranslated("chain-rescan-fail");
+    expect((await api(S, "/rescan", { page_ids: [page] })).status).toBe(202);
+    expect((await failJob(token, await claimPrepare(), "invalid_input")).status).toBe(200);
+    const row = (await pageRows(S.chapterId))[2];
+    expect(row?.status).toBe("ready");
+    expect(row?.translateQueued).toBe(false);
+    expect(await translateJobs(S.chapterId)).toHaveLength(0);
+    expect((await chapterRow(S.chapterId)).runTarget).toBeNull();
+  });
+
+  it("rescan refuses a page whose image was cleaned by hand", async () => {
+    const { S, page } = await oneTranslated("chain-rescan-cleanup");
+    await db
+      .update(pages)
+      .set({ cleanRev: sql`${pages.maskRev} + 1` })
+      .where(eq(pages.id, page));
+    const res = await api(S, "/rescan", { page_ids: [page] });
+    expect(res.status).toBe(409);
+    expect(((await res.json()) as { error: string }).error).toBe("page_has_manual_cleanup");
+    expect((await pageRows(S.chapterId))[2]?.status).toBe("ready");
+  });
 });

@@ -576,9 +576,21 @@ export async function terminal(
           and(eq(chapters.id, p.chapter_id), eq(chapters.ingestRev, p.ingest_rev), eq(chapters.status, "ingesting")),
         );
       return;
-    case "page.prepare":
+    case "page.prepare": {
       if (job.chapterId) await lockChapter(t, owner, job.chapterId);
-      await t.update(pages).set({ status: "failed" }).where(eq(pages.id, p.page_id));
+      // Quét lại trang đã có OCR (kết quả cũ chưa bị thay): giữ trang dùng được như trước — đã dịch → ready, chưa →
+      // prepared. Chỉ trang chưa từng có OCR mới thành failed.
+      const [prev] = await t
+        .select({ ocr: pages.ocrResult, rev: pages.prepareInputRev, aiRev: pageStates.aiRev })
+        .from(pages)
+        .leftJoin(pageStates, eq(pageStates.pageId, pages.id))
+        .where(eq(pages.id, p.page_id));
+      const kept = prev?.ocr && prev.rev ? ((prev.aiRev ?? 0) > 0 ? "ready" : "prepared") : "failed";
+      // OCR không đổi → bỏ trang khỏi lượt (dịch lại đúng input cũ chỉ tốn tiền).
+      await t
+        .update(pages)
+        .set(kept === "failed" ? { status: kept } : { status: kept, translateQueued: false })
+        .where(eq(pages.id, p.page_id));
       // Huỷ page cuối của giai đoạn 1: page còn lại đã prepare → chương `prepared` (chờ "Dịch"), không kẹt processing.
       if (job.chapterId) {
         await refreshChapter(t, owner, job.chapterId);
@@ -587,6 +599,7 @@ export async function terminal(
         else await stopTranslateChain(t, owner, job.chapterId);
       }
       return;
+    }
     case "chapter.translate": {
       await lockChapter(t, owner, p.chapter_id);
       // Page đang chờ/đang dịch: đã có bản AI trước (dịch lại) → giữ `ready`; chưa có → `failed` chỉ khi lô đã

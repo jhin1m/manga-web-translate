@@ -296,6 +296,42 @@ export function retranslate(tx: DbLike, userId: string, chapterId: string, pageI
 }
 
 /**
+ * "Quét lại trang": chạy lại Bước 1 (xoá chữ + OCR từ ảnh gốc) cho các trang đã qua Bước 1 rồi dịch tiếp trong một lượt —
+ * cứu trang mà OCR đọc sai / bỏ sót (dịch lại chỉ dịch trên OCR cũ nên không sửa được). Bản dịch mới đi theo luật AI ghi:
+ * trang đã sửa tay nhận `ai_update_available`, không mất chỉnh sửa. Trang đã tẩy / xoá chữ tay trên ảnh
+ * (`clean_rev` ≠ `mask_rev`: reinpaint chỉ đổi clean) bị từ chối — ảnh sạch dựng lại từ gốc sẽ làm mất phần đó.
+ */
+export async function rescanPages(tx: DbLike, userId: string, chapterId: string, pageIds: string[]): Promise<Job[]> {
+  const ch = await lockChapter(tx, userId, chapterId);
+  await assertNoRun(tx, ch);
+  if (ch.status === "ingesting") throw conflict("chapter_busy", "chương đang tách trang — chờ xong rồi quét lại");
+  const rows = await tx
+    .select()
+    .from(pages)
+    .where(and(eq(pages.chapterId, ch.id), inArray(pages.id, pageIds)))
+    .orderBy(asc(pages.ord));
+  if (rows.length === 0 || rows.length !== new Set(pageIds).size) throw new NotFoundError("page");
+  if (rows.some((p) => p.skipped)) throw conflict("page_skipped", "trang đã xoá — khôi phục trước khi quét lại");
+  if (rows.some(inStep1)) throw conflict("page_busy", "trang đang xoá chữ + OCR — chờ xong");
+  if (rows.some((p) => !hasOcr(p)))
+    throw conflict("page_not_prepared", "trang chưa qua giai đoạn 1 — chạy lại trang lỗi");
+  if (rows.some((p) => p.cleanRev !== p.maskRev)) {
+    throw conflict("page_has_manual_cleanup", "trang đã tẩy / xoá chữ tay trên ảnh — quét lại sẽ mất phần đó");
+  }
+  const s = await seriesOf(tx, ch);
+  const pipeline = await systemPipeline(tx);
+  const created: Job[] = [];
+  for (const p of rows) created.push((await enqueuePrepare(tx, p, s, ch, pipeline)).job);
+  await openRun(
+    tx,
+    ch.id,
+    rows.map((p) => p.id),
+  );
+  await tx.update(chapters).set({ status: "processing" }).where(eq(chapters.id, ch.id));
+  return created;
+}
+
+/**
  * "Chạy lại trang lỗi" cấp chương: page lỗi giai đoạn 1 (chưa có OCR hợp lệ) → page.prepare; page lỗi giai đoạn 2 →
  * lượt dịch cho riêng chúng. Trang lỗi giai đoạn 1 cũng vào lượt (tự dịch khi prepare xong) chỉ khi chương đã có
  * trang dịch xong; chưa có thì dừng ở `prepared` như chương mới.

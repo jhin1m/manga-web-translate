@@ -13,7 +13,13 @@ import { v7 as uuidv7 } from "uuid";
 import { z } from "zod";
 import { assertQuota, userQuotaStatus } from "../billing/user-quota.ts";
 import { defaultRunTarget, enqueueIngest, inJobTx, lockChapter, prepareUsesLlm } from "../jobs/enqueue.ts";
-import { retranslate, retryFailedPages, stopTranslateChain, translatePrepared } from "../jobs/translate-chain.ts";
+import {
+  rescanPages,
+  retranslate,
+  retryFailedPages,
+  stopTranslateChain,
+  translatePrepared,
+} from "../jobs/translate-chain.ts";
 import {
   acquireChapterLock,
   activeLockHolder,
@@ -99,6 +105,7 @@ const RecentQuery = z.object({
   open: z.enum(["0", "1"]).default("0"),
 });
 const TranslateBody = z.object({ page_ids: z.array(z.string().uuid()).min(1).max(1000).optional() });
+const RescanBody = z.object({ page_ids: z.array(z.string().uuid()).min(1).max(1000) });
 
 type SourceFile = typeof sourceFiles.$inferSelect;
 type Chapter = typeof chapters.$inferSelect;
@@ -430,6 +437,20 @@ chapterRoutes.post("/chapters/:chapterId/translate", async (c) => {
     return retranslate(tx, c.get("userId"), ch.id, body.page_ids);
   });
   return c.json({ job: job ? jobView(job) : null, created }, 202);
+});
+
+/**
+ * Quét lại trang (`page_ids`): xoá chữ + OCR lại từ ảnh gốc rồi dịch tiếp trong một lượt. Lượt khác đang chạy → 409
+ * `translate_running`; trang đã tẩy chữ tay trên ảnh → 409 `page_has_manual_cleanup`.
+ */
+chapterRoutes.post("/chapters/:chapterId/rescan", async (c) => {
+  const body = await parseJson(c, RescanBody);
+  const ch = await c.get("sdb").byId(chapters, c.req.param("chapterId"), "chapter");
+  const created = await inJobTx(async (tx) => {
+    await assertQuota(tx, c.get("userId"));
+    return rescanPages(tx, c.get("userId"), ch.id, body.page_ids);
+  });
+  return c.json({ jobs: created.map(jobView) }, 202);
 });
 
 /** Huỷ mọi job đang hoạt động của chương. */
