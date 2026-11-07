@@ -1,7 +1,7 @@
 ---
 title: "Self-host chế độ local (Docker 1 lệnh, không MinIO, không tài khoản)"
 description: "MTL_LOCAL_MODE=1: driver lưu đĩa + /files ký HMAC, user local cố định, secret tự sinh, compose 4 service, image GHCR"
-status: in-progress
+status: completed
 priority: P1
 effort: 4d
 branch: feat/selfhost-local-mode
@@ -69,10 +69,10 @@ Không có plan đang mở nào đụng storage/auth/env/infra (đã quét `plan
 
 ## Acceptance (toàn plan)
 
-- [ ] `pnpm typecheck && pnpm lint && pnpm test` xanh (CI hiện có, S3 driver).
-- [ ] `pnpm --filter @mtl/api test:unit` xanh không cần Docker (disk driver + route `/files` + env local).
+- [x] `pnpm typecheck && pnpm lint && pnpm test` xanh (CI hiện có, S3 driver).
+- [x] `pnpm --filter @mtl/api test:unit` xanh không cần Docker (disk driver + route `/files` + env local).
 - [x] `infra/selfhost-smoke.sh` pass đủ 6 kiểm của phase 4 (`plans/reports/smoke-261107-2112-selfhost-local-mode-report.md`).
-- [ ] Bản VPS không đổi hành vi khi không đặt `MTL_LOCAL_MODE`/`STORAGE_DRIVER`.
+- [x] Bản VPS không đổi hành vi khi không đặt `MTL_LOCAL_MODE`/`STORAGE_DRIVER`.
 
 ## Ngoài phạm vi
 
