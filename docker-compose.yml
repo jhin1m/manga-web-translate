@@ -1,0 +1,112 @@
+# MTL self-host (1 người dùng, chạy trên máy cá nhân). Hướng dẫn đầy đủ: docs/self-host.md
+#
+#   Cài:        docker compose up -d            → mở http://localhost:8080 (lần đầu worker tải model ~1–2 GB)
+#   Cập nhật:   docker compose pull && docker compose up -d
+#   Ghim bản:   MTL_TAG=1.2.3 docker compose up -d        Đổi cổng: MTL_PORT=9090 docker compose up -d
+#   Dữ liệu:    ./data (postgres, files, secrets, backups, worker, models) — sao lưu cả thư mục này.
+#
+# CẢNH BÁO: chế độ local KHÔNG có đăng nhập — ai gọi được cổng là toàn quyền. Giữ nguyên bind 127.0.0.1,
+# không mở ra LAN/Internet, không đặt sau reverse proxy công khai.
+#
+# Không cần .env: mọi biến đều có mặc định. Biến tuỳ chọn: MTL_TAG, MTL_PORT, MTL_ALLOWED_HOSTS, MTL_SKIP_BOOT_BACKUP.
+name: mtl-local
+
+x-logging: &logging
+  driver: json-file
+  options: { max-size: "10m", max-file: "3" }
+
+x-app-env: &app-env
+  MTL_LOCAL_MODE: "1"
+  DATABASE_URL: postgres://mtl:mtl@postgres:5432/mtl
+  API_PORT: "8080"
+  BETTER_AUTH_URL: http://localhost:${MTL_PORT:-8080}
+  WEB_ORIGIN: http://localhost:${MTL_PORT:-8080}
+  # Tên host thêm (csv) được phép gọi API, vd worker chạy ngoài compose qua host.docker.internal.
+  MTL_ALLOWED_HOSTS: ${MTL_ALLOWED_HOSTS:-}
+  # Thoát hiểm khi pg_dump lỗi chặn khởi động: MTL_SKIP_BOOT_BACKUP=1 docker compose up -d app
+  MTL_SKIP_BOOT_BACKUP: ${MTL_SKIP_BOOT_BACKUP:-}
+
+services:
+  postgres:
+    image: postgres:17
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: mtl
+      POSTGRES_PASSWORD: mtl
+      POSTGRES_DB: mtl
+    volumes:
+      - ./data/postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mtl -d mtl"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+    networks: [internal]
+    logging: *logging
+
+  app:
+    image: ghcr.io/jhin1m/mtl:${MTL_TAG:-latest}
+    command: app
+    restart: unless-stopped
+    environment: *app-env
+    volumes:
+      - ./data/files:/data/files
+      - ./data/secrets:/data/secrets
+      - ./data/backups:/data/backups
+      - ./data/worker:/data/worker
+    ports:
+      - "127.0.0.1:${MTL_PORT:-8080}:8080"
+    depends_on:
+      postgres: { condition: service_healthy }
+    healthcheck:
+      # /readyz = DB + storage (không gồm runner — jobs đang chờ app healthy).
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8080/readyz').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      # Boot = backup DB + migrate trước khi listen; DB lớn cần thời gian.
+      start_period: 180s
+    networks: [internal, web]
+    logging: *logging
+
+  jobs:
+    image: ghcr.io/jhin1m/mtl:${MTL_TAG:-latest}
+    command: jobs
+    restart: unless-stopped
+    environment: *app-env
+    volumes:
+      - ./data/files:/data/files
+      - ./data/secrets:/data/secrets
+    depends_on:
+      # restart: true → khi cập nhật, compose dừng jobs TRƯỚC khi tạo lại app (app mới backup + migrate không bị
+      # code cũ chen vào), rồi chạy lại khi app mới healthy.
+      app: { condition: service_healthy, restart: true }
+    networks: [internal]
+    logging: *logging
+
+  worker:
+    image: ghcr.io/jhin1m/mtl-worker:${MTL_TAG:-latest}
+    restart: unless-stopped
+    environment:
+      MTL_API_URL: http://app:8080
+      MTL_TOKEN_FILE: /data/worker/token
+      MTL_PROVIDER: anthropic
+      MTL_WORKER_ID: local
+    # Dừng/cập nhật: worker chờ job đang chạy tối đa 90s (MTL_SHUTDOWN_GRACE_S mặc định), quá thì job bị đánh lỗi
+    # (fail internal). stop_grace_period lớn hơn 90s để Docker không SIGKILL trước khi worker kịp báo.
+    stop_grace_period: 100s
+    # tini làm PID 1: SIGTERM tới được tiến trình con cả lúc đang tải model (sh PID 1 bỏ qua SIGTERM).
+    init: true
+    volumes:
+      - ./data/worker:/data/worker:ro
+      - ./data/models:/data/models
+    depends_on:
+      app: { condition: service_healthy, restart: true }
+    # Cần Internet: tải model lần đầu + gọi API AI.
+    networks: [web]
+    logging: *logging
+
+networks:
+  internal:
+    internal: true
+  web: {}

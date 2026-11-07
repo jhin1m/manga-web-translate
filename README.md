@@ -67,7 +67,20 @@ OCR, dịch theo lô trang (giữ ngữ cảnh giữa các lô) + tự chèn ch�
 
 Storage private: trình duyệt chỉ nhận presigned URL TTL ngắn trên domain file riêng; key bất biến theo revision.
 
-## Bắt đầu nhanh
+## Tự host bằng Docker
+
+Bản cá nhân 1 người dùng, không cần `.env`, không tài khoản:
+
+```bash
+mkdir mtl && cd mtl
+curl -fsSLO https://raw.githubusercontent.com/jhin1m/manga-web-translate/main/docker-compose.yml
+docker compose up -d     # mở http://localhost:8080; cập nhật: docker compose pull && docker compose up -d
+```
+
+> **Không có đăng nhập** — chỉ dùng trên máy mình, đừng mở cổng ra LAN/Internet. Chi tiết (backup, khôi phục, sự cố):
+> [docs/self-host.md](./docs/self-host.md).
+
+## Bắt đầu nhanh (phát triển)
 
 Yêu cầu: Node 24, pnpm 12, Docker (Compose v2); worker cần Python + `uv`.
 
@@ -111,6 +124,7 @@ user khác → fail). Dev đang có DB cũ (còn workspace): reset DB trước k
 | [typeset-layout-contract.md](./docs/typeset-layout-contract.md) | Hợp đồng layout chữ Konva ↔ render.py |
 | [design-guidelines.md](./docs/design-guidelines.md) | Bố cục, nguyên tắc UI |
 | [deployment-guide.md](./docs/deployment-guide.md) | Production: VPS, Modal, backup, kill-switch |
+| [self-host.md](./docs/self-host.md) | Tự host bản cá nhân bằng Docker (1 lệnh, không đăng nhập) |
 | [benchmarks/](./docs/benchmarks/) | Gate chất lượng / chi phí (chưa có số đo thật) |
 
 ## Việc còn lại

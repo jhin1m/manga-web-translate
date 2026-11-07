@@ -25,7 +25,7 @@ Bối cảnh: memory `selfhost-local-mode-direction` (07/11/2026). Docs: `docs/d
 |---|-------|------|--------|--------|
 | 1 | Driver lưu đĩa + route `/files` + test 2 driver | [phase-01-disk-storage-driver.md](phase-01-disk-storage-driver.md) | completed | 1.5d |
 | 2 | Runtime chế độ local (auth, secret, token worker, backup+migrate, export cleanup, web) | [phase-02-local-mode-runtime.md](phase-02-local-mode-runtime.md) | completed | 1.5d |
-| 3 | Dockerfile API + worker, compose, release workflow, docs | [phase-03-docker-compose-release.md](phase-03-docker-compose-release.md) | pending | 0.75d |
+| 3 | Dockerfile API + worker, compose, release workflow, docs | [phase-03-docker-compose-release.md](phase-03-docker-compose-release.md) | completed | 0.75d |
 | 4 | Smoke end-to-end trên thư mục tạm | [phase-04-e2e-smoke.md](phase-04-e2e-smoke.md) | pending | 0.25d |
 
 Phụ thuộc: 2 ← 1 (driver + `STORAGE_DRIVER`), 3 ← 2 (entrypoint gọi boot local), 4 ← 3 (image + compose).

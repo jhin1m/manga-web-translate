@@ -1,7 +1,7 @@
 ---
 phase: 3
 title: "Dockerfile API + worker, docker-compose.yml, release workflow, docs"
-status: pending
+status: completed
 priority: P1
 effort: "0.75d"
 dependencies: [2]
@@ -96,11 +96,11 @@ host 127.0.0.1:8080 ──► app (node, uid 1000) ── internal ──► pos
 6. Kích thước image: ghi `docker images` vào báo cáo (mục tiêu app < 600 MB, worker < 1.5 GB không model).
 
 ## Success Criteria
-- [ ] Cả 2 image build được trên máy dev (arch hiện tại); `pg_dump --version` = 17.x trong image app.
-- [ ] `docker compose config` không lỗi khi không có `.env`.
-- [ ] `postgres` không publish cổng; `app` chỉ bind `127.0.0.1` (`docker compose ps` / `docker port`).
-- [ ] `release.yml` parse được, build 2 image `linux/amd64,linux/arm64`, chỉ chạy khi tag `v*`.
-- [ ] Docs có cảnh báo không auth + hướng dẫn khôi phục backup.
+- [x] Cả 2 image build được trên máy dev (arch hiện tại); `pg_dump --version` = 17.x trong image app.
+- [x] `docker compose config` không lỗi khi không có `.env`.
+- [x] `postgres` không publish cổng; `app` chỉ bind `127.0.0.1` (`docker compose ps` / `docker port`).
+- [x] `release.yml` parse được, build 2 image `linux/amd64,linux/arm64`, chỉ chạy khi tag `v*`.
+- [x] Docs có cảnh báo không auth + hướng dẫn khôi phục backup.
 
 ## Risk Assessment
 - **pnpm 12 chặn build script `re2`** → kiểm `pnpm-workspace.yaml`; test `import('re2')` trong image (bước 1).
@@ -110,3 +110,30 @@ host 127.0.0.1:8080 ──► app (node, uid 1000) ── internal ──► pos
 - **GHCR package mặc định private** → OPEN trong plan.md; docs ghi rõ nếu `pull` báo `denied`.
 - **Kích thước image worker lớn** (onnxruntime, opencv) → `--no-dev`, slim, không model.
 - Rollback: xoá file mới; không ảnh hưởng runtime VPS.
+
+## Quyết định khi implement (tự chốt)
+- **Nâng cấp khi jobs/worker cũ còn chạy**: `jobs`/`worker` dùng `depends_on: app: { condition: service_healthy, restart: true }`. Đã kiểm thực nghiệm (compose v5.1.2): khi `up -d` tạo lại `app`, compose **dừng jobs/worker trước**, tạo lại app, chờ healthy (backup + migrate xong) rồi mới chạy lại → code cũ không chen vào lúc dump/migrate, lệnh cập nhật vẫn là `pull && up -d`. Không cần bước tay.
+- **Worker dừng êm**: giữ mặc định worker `MTL_SHUTDOWN_GRACE_S=90` (không override), `stop_grace_period: 100s` (> 90s; mặc định 10s của Docker sẽ SIGKILL giữa job). Hết grace → worker `fail(internal)` (server requeue nếu còn lượt thử). Bản đầu đặt 25s/30s với comment sai "trả job về hàng đợi" — sửa theo yêu cầu user.
+- **Tên project compose `mtl-local`** (không phải `mtl` như brief): compose prod trên VPS dùng `-p mtl`; trùng tên mà lỡ chạy trên VPS thì compose coi postgres prod là cùng service → có thể tạo lại với bind mount khác. Container: `mtl-local-<service>-1`.
+- **Image app chỉ mang prod deps của cây `@mtl/api`**: stage `prod-deps` (`pnpm install --prod --frozen-lockfile --filter "@mtl/api..."`, chỉ từ manifest → cache tốt) + stage `build` (dev deps web, build SPA); runtime từ `node:24-bookworm-slim` (không pnpm) chép node_modules prod + source + `apps/web/dist`. Lý do: bản đầu (đủ dev deps + pnpm) 990 MB. **`tsx` chuyển từ `devDependencies` sang `dependencies` của `apps/api/package.json`** (NGOÀI ranh giới phase — lockfile chỉ dời 1 mục, không đổi version): prod chạy bằng tsx (cả systemd VPS) nên đúng ngữ nghĩa; review chỉ ra cách cũ `npm i tsx@X` để esbuild/get-tsconfig không ghim theo lockfile.
+- **Image app chứa `worker/fonts/manifest.json`** (dockerignore loại `worker` rồi `!worker/fonts/manifest.json`): `apps/api/src/lib/fonts.ts` đọc file này lúc chạy.
+- **Image worker giữ bố cục repo** `/app/worker` + `/app/packages/shared/json-schema` → `DEFAULT_SCHEMA_DIR`/`WORKER_DIR` trong code đúng, không cần `MTL_SCHEMA_DIR`. Thêm apt `libraqm0 libfribidi0 libharfbuzz0b` (như image Modal; build assert Pillow có raqm). `uv` 0.13.7 chỉ bind mount lúc build (không nằm trong image, −35 MB). Project cài editable (mặc định uv) → `models.lock.json`, `fonts/` resolve theo `/app/worker`.
+- **`pnpm-workspace.yaml` không đổi**: `allowBuilds.re2: true` đã có; re2 tải prebuilt `linux-arm64-137` trong build.
+- **Compose chuyển tiếp `MTL_ALLOWED_HOSTS`, `MTL_SKIP_BOOT_BACKUP`** (`${VAR:-}`, rỗng = tắt): không có thì lệnh thoát hiểm `MTL_SKIP_BOOT_BACKUP=1 docker compose up -d app` trong docs vô tác dụng. `BETTER_AUTH_URL`/`WEB_ORIGIN` theo `MTL_PORT`.
+- **Log rotation** `json-file` 10m×3 cho mọi service (Docker Desktop mặc định không xoay log; worker chạy lâu).
+- **Không có `HEALTHCHECK` trong Dockerfile app** (image dùng chung cho `jobs` — jobs không listen); healthcheck chỉ khai ở service `app` trong compose.
+- **Docs ghi các mục chuyển từ phase 2**: bảng env (`MTL_LOCAL_MODE`, `MTL_DATA_DIR`, `MTL_SKIP_BOOT_BACKUP`, `MTL_ALLOWED_HOSTS`, `SPA_DIR`, `API_PORT=8080`), dev đặt `MTL_LOCAL_MODE=1` phải kèm `MTL_DATA_DIR`, worker ngoài compose cần `MTL_ALLOWED_HOSTS`, thu hồi token ⇒ `docker compose restart app worker`, cơ chế nâng cấp an toàn.
+
+### Sau code review (7.5/10, không lỗi chặn — `plans/reports/from-code-reviewer-to-controller-261107-2043-selfhost-phase3-review-report.md`)
+- **`:latest` chỉ theo `latest=auto`** của metadata-action (bỏ `type=raw,value=latest`): prerelease không trỏ latest. Hotfix dòng cũ vẫn trỏ latest → comment trong workflow: chỉ tag hotfix trên dòng mới nhất.
+- **Khôi phục dùng `pg_restore --clean --if-exists --create -U mtl -d postgres`**: đã kiểm — `--clean -d mtl` để sót bảng của migration mới hơn bản dump (5 lỗi bị bỏ qua), `--create` khôi phục sạch.
+- **Docs**: sao lưu/gỡ cài dùng `sudo` + mỗi lệnh 1 dòng (data/postgres 0700 của uid Postgres); yêu cầu Compose ≥ 2.17 (`depends_on.restart`) và **Linux Docker Engine ≥ 28.3.3** (trước 28.0 LAN gọi thẳng được IP container; CVE-2025-54388 lộ cổng localhost khi reload firewalld) — app không auth nên bind 127.0.0.1 là lớp bảo vệ duy nhất; gỡ cài `down --rmi all`; worker ngoài compose trên Linux cần uid 1000 hoặc chép token; câu giữ backup ghi đủ "3 phiên bản schema".
+- **Worker `init: true`** (tini PID 1): `sh` PID 1 bỏ qua SIGTERM lúc đang tải model → trước đây đợi hết stop_grace_period rồi SIGKILL.
+- **`**/.env*`** trong cả 2 dockerignore (trước chỉ loại `.env*` ở gốc).
+- **Không làm**: URL cài đặt trỏ `main` (có thể đi trước image phát hành) — để phase phát hành/attach compose vào GitHub Release quyết; `.part` mồ côi khi bị kill giữa lúc tải — lần tải sau ghi đè cùng tên, không tích luỹ.
+
+## Kết quả (07/11/2026)
+- Build arm64 (OrbStack, Docker 29.4): `ghcr.io/jhin1m/mtl:smoke` ≈ 514 MB giải nén / 147 MB nén; `ghcr.io/jhin1m/mtl-worker:smoke` ≈ 546 MB giải nén / 175 MB nén (`docker images` của containerd store cộng cả blob nén nên hiện lớn hơn). Chưa build amd64/arm64 qua QEMU (để CI).
+- Image app: `pg_dump` 17.11, `require("re2")` OK (prebuilt linux-arm64), tsx 4.23.15 từ lockfile, không `.env`/`plans`/dev deps. Image worker: `import cv2, onnxruntime, mtl_worker` OK, Pillow có raqm.
+- Compose thử (`MTL_TAG=smoke`, thư mục tạm, model nạp sẵn): 4 service healthy/running; SPA 200, `/api/config` `{local_mode:true}`, `/readyz` + `/healthz` 200, Host lạ 403; postgres không publish cổng, app chỉ `127.0.0.1`; worker claim được (token qua `/data/worker` uid 1000); đổi cổng → jobs/worker dừng trước, app tạo lại, chạy lại sau healthy; boot 2 tạo backup; `MTL_SKIP_BOOT_BACKUP=1` bỏ backup; lệnh khôi phục chạy được; volume thuộc root → entrypoint chown + setpriv uid 1000.
+- `docker compose config` không `.env` OK; actionlint 1.7.7 OK; `pnpm lint` xanh; `pnpm --filter @mtl/api test:unit` 62/62.

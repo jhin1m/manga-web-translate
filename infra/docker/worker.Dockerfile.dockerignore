@@ -1,0 +1,20 @@
+# Chỉ cho image worker (BuildKit đọc file này khi build -f infra/docker/worker.Dockerfile). Danh sách trắng.
+*
+!worker
+!packages/shared/json-schema
+!infra/docker/worker-entrypoint.sh
+worker/.venv
+worker/.claude
+worker/models/*.onnx
+worker/models/*.txt
+worker/models/*.part
+worker/spikes
+worker/tests
+worker/launchd
+worker/modal_app.py
+**/__pycache__
+**/.pytest_cache
+**/.ruff_cache
+**/.mypy_cache
+**/.DS_Store
+**/.env*

@@ -1,0 +1,22 @@
+# Chỉ cho image app (BuildKit đọc file này thay .dockerignore khi build -f infra/docker/app.Dockerfile).
+**/node_modules
+**/dist
+**/coverage
+**/*.tsbuildinfo
+**/.DS_Store
+**/.env*
+.git
+.github
+.claude
+**/.claude
+plans
+docs
+golden
+/*.png
+TODO.md
+apps/web/e2e
+apps/web/test-results
+apps/web/playwright-report
+# API đọc worker/fonts/manifest.json lúc chạy (danh sách font gói sẵn) — chỉ giữ đúng file đó.
+worker
+!worker/fonts/manifest.json

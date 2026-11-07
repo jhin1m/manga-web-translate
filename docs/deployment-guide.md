@@ -1,5 +1,7 @@
 # Deploy production (MVP, tài khoản tạo tay) — runbook
 
+> Bản cá nhân 1 người dùng trên máy mình (Docker 1 lệnh, không đăng nhập, không MinIO): xem [self-host.md](./self-host.md).
+
 VPS chạy API + SPA tĩnh + Postgres + MinIO sau Cloudflare; worker GPU là Modal (serverless) hoặc Mac của người vận hành.
 Artifact trong repo: `infra/` (systemd, Caddy, compose prod, deploy/backup/restore/alert/smoke) và
 `worker/modal_app.py`. **Chưa deploy thật** — mọi bước dưới đây đã kiểm bằng Docker local (xem
