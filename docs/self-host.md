@@ -150,3 +150,12 @@ sudo rm -rf data               # xoá hẳn dữ liệu (không lấy lại đư
 - **Mở web báo "Không kết nối được máy chủ"**: `app` chưa chạy xong (lần đầu/sau cập nhật đang migrate) — đợi rồi bấm Thử lại.
 - **`403` khi mở bằng IP/tên máy**: chỉ `localhost`/`127.0.0.1` được phép (chống DNS rebinding) — mở đúng
   <http://localhost:8080>.
+
+## Dành cho người phát hành (maintainer)
+
+1. Merge vào `main` (link cài `docker-compose.yml` trong mục Cài đặt trỏ vào `main`).
+2. Lần đầu: push tag prerelease, VD `git tag v0.1.0-rc.1 && git push origin v0.1.0-rc.1` → `release.yml` chạy test rồi
+   build `ghcr.io/jhin1m/mtl:0.1.0-rc.1` và `ghcr.io/jhin1m/mtl-worker:0.1.0-rc.1` (prerelease không gắn `latest`).
+3. Sau lần push đầu, vào GitHub → Packages → `mtl` và `mtl-worker` → Package settings → đổi visibility thành **Public**
+   (mặc định private, người dùng `pull` sẽ báo `denied`).
+4. Thử bằng `MTL_TAG=0.1.0-rc.1 docker compose up -d` trên máy sạch; ổn thì push tag chính thức `v0.1.0` → gắn `0.1` + `latest`.

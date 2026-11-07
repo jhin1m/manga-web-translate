@@ -62,10 +62,15 @@ Phụ thuộc: 2 ← 1 (driver + `STORAGE_DRIVER`), 3 ← 2 (entrypoint gọi bo
 
 Không có plan đang mở nào đụng storage/auth/env/infra (đã quét `plans/*/plan.md` chưa completed) → không `blockedBy`.
 
-## OPEN — needs user
+## Đã chốt với user (07/11/2026)
 
-- **Tên image GHCR & quyền public**: `ghcr.io/jhin1m/mtl`, `ghcr.io/jhin1m/mtl-worker` theo brief; package GHCR mặc định private sau lần push đầu — owner phải đặt public trên GitHub thì người dùng mới `pull` được không cần login. Khó đảo ngược khi đã phát hành (người dùng ghim tên image).
-- **Rà license trước phát hành công khai** (ngoài phạm vi; GPL/weights trong image worker — ghi vào báo cáo cuối, xem `worker/THIRD_PARTY.md`).
+- **Tên image**: giữ `ghcr.io/jhin1m/mtl` và `ghcr.io/jhin1m/mtl-worker`. Sau lần push đầu, owner đặt 2 package GHCR thành public.
+- **Release đầu là prerelease**: push tag dạng `v0.1.0-rc.1` để chạy thử `release.yml` (test worker chạy trên CI lần đầu); không gắn `latest` cho tag prerelease.
+- **Repo public**: `jhin1m/manga-web-translate` đã public sẵn → link raw `docker-compose.yml` trong docs chạy khi merge vào `main`. Đã quét lịch sử git: không có key thật.
+
+## Còn mở
+
+- **Rà license trước phát hành công khai** (GPL/weights trong image worker — xem `worker/THIRD_PARTY.md`).
 
 ## Acceptance (toàn plan)
 
