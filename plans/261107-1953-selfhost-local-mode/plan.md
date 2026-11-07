@@ -26,7 +26,7 @@ Bối cảnh: memory `selfhost-local-mode-direction` (07/11/2026). Docs: `docs/d
 | 1 | Driver lưu đĩa + route `/files` + test 2 driver | [phase-01-disk-storage-driver.md](phase-01-disk-storage-driver.md) | completed | 1.5d |
 | 2 | Runtime chế độ local (auth, secret, token worker, backup+migrate, export cleanup, web) | [phase-02-local-mode-runtime.md](phase-02-local-mode-runtime.md) | completed | 1.5d |
 | 3 | Dockerfile API + worker, compose, release workflow, docs | [phase-03-docker-compose-release.md](phase-03-docker-compose-release.md) | completed | 0.75d |
-| 4 | Smoke end-to-end trên thư mục tạm | [phase-04-e2e-smoke.md](phase-04-e2e-smoke.md) | pending | 0.25d |
+| 4 | Smoke end-to-end trên thư mục tạm | [phase-04-e2e-smoke.md](phase-04-e2e-smoke.md) | completed | 0.25d |
 
 Phụ thuộc: 2 ← 1 (driver + `STORAGE_DRIVER`), 3 ← 2 (entrypoint gọi boot local), 4 ← 3 (image + compose).
 
@@ -71,7 +71,7 @@ Không có plan đang mở nào đụng storage/auth/env/infra (đã quét `plan
 
 - [ ] `pnpm typecheck && pnpm lint && pnpm test` xanh (CI hiện có, S3 driver).
 - [ ] `pnpm --filter @mtl/api test:unit` xanh không cần Docker (disk driver + route `/files` + env local).
-- [ ] `infra/selfhost-smoke.sh` pass đủ 6 kiểm của phase 4.
+- [x] `infra/selfhost-smoke.sh` pass đủ 6 kiểm của phase 4 (`plans/reports/smoke-261107-2112-selfhost-local-mode-report.md`).
 - [ ] Bản VPS không đổi hành vi khi không đặt `MTL_LOCAL_MODE`/`STORAGE_DRIVER`.
 
 ## Ngoài phạm vi

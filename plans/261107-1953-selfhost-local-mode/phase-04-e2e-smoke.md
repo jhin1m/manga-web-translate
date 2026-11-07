@@ -1,7 +1,7 @@
 ---
 phase: 4
 title: "Smoke end-to-end trên thư mục tạm"
-status: pending
+status: completed
 priority: P1
 effort: "0.25d"
 dependencies: [3]
@@ -66,10 +66,10 @@ Script build 2 image local, chạy `docker-compose.yml` trong thư mục tạm c
 5. Viết báo cáo vào `plans/reports/`.
 
 ## Success Criteria
-- [ ] `infra/selfhost-smoke.sh` in "SMOKE OK" từ `./data` trống, gồm đủ: mở `/` không đăng nhập; upload chương; `page.prepare` xong không tốn token; export tải được zip;
+- [x] `infra/selfhost-smoke.sh` in "SMOKE OK" từ `./data` trống, gồm đủ: mở `/` không đăng nhập; upload chương; `page.prepare` xong không tốn token; export tải được zip;
       `down && up` còn dữ liệu; khởi động lại tạo backup DB.
-- [ ] Postgres không lộ cổng; app chỉ bind `127.0.0.1`; secret/token quyền 600.
-- [ ] Báo cáo smoke có trong `plans/reports/`.
+- [x] Postgres không lộ cổng; app chỉ bind `127.0.0.1`; secret/token quyền 600.
+- [x] Báo cáo smoke có trong `plans/reports/`.
 
 ## Risk Assessment
 - **Lần đầu tải model lâu/hỏng mạng** → timeout cấu hình được (`--wait-timeout`, `SMOKE_PREPARE_TIMEOUT_S`). Mỗi lần smoke là thư mục mới nên luôn tải lại model — chấp nhận để kiểm đúng đường "lần đầu".
@@ -77,3 +77,20 @@ Script build 2 image local, chạy `docker-compose.yml` trong thư mục tạm c
 - **Prepare chậm trên CPU** → 1 trang nhỏ 800×1200.
 - **Trang trắng không có chữ làm pipeline nhánh khác** → vẫn phải `succeeded`; nếu fail vì "không có vùng chữ" thì đó là bug cần sửa (người dùng thật có trang không thoại).
 - **Docker cũ không hỗ trợ `--wait`** → yêu cầu compose v2.17+; ghi trong `docs/self-host.md`.
+
+## Quyết định khi implement (tự chốt)
+- **Cổng smoke 18081** (`SMOKE_PORT=18081`): 18080 trên máy dev đang bị tiến trình khác của user chiếm (`steam-access-fix.py serve`) — không đụng; mặc định script vẫn 18080.
+- **Series `source_lang: "ja"` + commit `target: "prepared"`**: OCR mặc định `manga_ocr` local, dừng sau Bước 1 (chưa có provider → không nối bước dịch). `ko` = strip dừng chờ duyệt cắt trang → không kiểm được prepare.
+- **Export `png_zip` + `layout: "pages"`**: spec ghi `"zip"` nhưng enum thật `png_zip|cbz`; `layout` bắt buộc (schema không có mặc định).
+- **Poll `GET /api/chapters/:id/progress`** (trạng thái trang + job + lỗi trong 1 lần gọi). Xong = mọi trang `prepared` + `ocr_ready`, job `succeeded`; job `failed|cancelled` → thoát ngay.
+- **"Không tốn token"** = `GET /api/admin/providers` rỗng + `quota.spent_usd === 0`.
+- **Kiểm cổng postgres bằng cột Ports của `compose ps`** (có `->` = publish): `compose port` in `invalid IP:0` (exit 0) khi không publish → lần chạy đầu báo lỗi giả. App: mọi binding phải đúng `127.0.0.1:<port>->8080/tcp`.
+- **Kiểm file `/data` qua `compose exec -T app`** (root trong container): host Linux uid ≠ 1000 / rootless không đọc được `data/secrets` (700).
+- **Trang thử có chữ thật** (bổ sung sau smoke đầu): 2 bóng thoại trắng viền đen, chữ Nhật dọc, vẽ bằng Pillow trong image worker. Image không có font CJK → tải Noto Sans JP Bold (OFL, tag `Sans2.004`, sha256 ghim); `SMOKE_FONT` thay font, `SMOKE_PAGE` thay cả trang (khi đó chỉ kiểm ≥ 1 khối có chữ).
+- **Kiểm OCR qua `psql`** (`pages.ocr_result`): API chưa trả OCR trước khi dịch; không thêm endpoint (ngoài phạm vi). Assert ≥ 1 khối có text; trang tự vẽ: ≥ 50% ký tự đã vẽ đọc ra. Ảnh xoá chữ kiểm qua `images.clean` của `GET /chapters/:id/pages` (tồn tại, khác ảnh gốc).
+- **Cách ly môi trường**: `unset COMPOSE_FILE COMPOSE_PROJECT_NAME COMPOSE_PROFILES MTL_SKIP_BOOT_BACKUP MTL_ALLOWED_HOSTS`, luôn `-p mtl-smoke -f $work/docker-compose.yml`; còn stack `mtl-smoke` cũ → dừng, không chiếm.
+
+## Kết quả (07/11/2026)
+- SMOKE OK từ `./data` trống (model 1,2 GB tải thật), 117s trên arm64/OrbStack: đủ 6 mục + cổng/quyền. Báo cáo: `plans/reports/smoke-261107-2112-selfhost-local-mode-report.md`.
+- Bổ sung OCR thật (21:45): SMOKE OK 118s — manga_ocr đọc `こんにちは元気ですか` (conf 1) + `ありがとうまたね` (0.9993), khớp 18/18 ký tự; ảnh xoá chữ sạch (đã xem), viền bóng còn. `SMOKE_PAGE` (đường dẫn tương đối) OK.
+- Code phase 1–3: không có bug → không sửa. Chỉ sửa 2 script phase 4 (lỗi kiểm cổng + 1 major/8 minor theo review 8/10 `plans/reports/from-code-reviewer-to-controller-261107-2115-selfhost-smoke-scripts-review-report.md`). `pnpm lint` xanh.
