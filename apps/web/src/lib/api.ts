@@ -1,4 +1,5 @@
 import { QUOTA_EXCEEDED } from "@mtl/shared";
+import { useQuery } from "@tanstack/react-query";
 import { createAuthClient } from "better-auth/react";
 
 export const authClient = createAuthClient({ basePath: "/api/auth" });
@@ -77,6 +78,24 @@ export async function api<T>(path: string, init: Omit<RequestInit, "body"> & { b
   }
   return data as T;
 }
+
+/** `GET /api/config` (public): chế độ chạy của server. `local_mode` = self-host 1 người dùng, không đăng nhập. */
+export type AppConfig = { local_mode: boolean };
+
+export const fetchAppConfig = () => api<AppConfig>("/api/config");
+
+/** Không đổi trong suốt vòng đời server → cache vô hạn (đổi chế độ = restart server = tải lại trang). */
+export const appConfigQuery = {
+  queryKey: ["app-config"],
+  queryFn: fetchAppConfig,
+  staleTime: Number.POSITIVE_INFINITY,
+  gcTime: Number.POSITIVE_INFINITY,
+} as const;
+
+export const useAppConfig = () => useQuery(appConfigQuery);
+
+/** Đang ở chế độ local? Chưa tải xong / lỗi → false (hành vi bản nhiều người dùng). */
+export const useLocalMode = (): boolean => useAppConfig().data?.local_mode === true;
 
 /** Hạn mức chi phí hôm nay (`limit_usd` null = không giới hạn). */
 export type Quota = { spent_usd: number; limit_usd: number | null; resets_at: string };

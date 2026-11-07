@@ -4,12 +4,14 @@
  * qua dispatcher (tính tiền GPU, phiên dispatch).
  */
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
-import { workerTokens } from "@mtl/db";
+import { type DbLike, workerTokens } from "@mtl/db";
 import { JOB_TYPES } from "@mtl/shared";
 import { eq, sql } from "drizzle-orm";
 import { db } from "../db.ts";
 
 const PREFIX = "mtlw_";
+/** Token dài hơn → từ chối không tra DB. */
+export const MAX_WORKER_TOKEN_LEN = 128;
 
 export type WorkerIdentity = {
   tokenId: string;
@@ -17,6 +19,8 @@ export type WorkerIdentity = {
   /** Rỗng = không giới hạn thêm (vẫn phải là tập con JobType). */
   capabilities: string[];
 };
+
+export const looksLikeWorkerToken = (t: string): boolean => t.startsWith(PREFIX) && t.length <= MAX_WORKER_TOKEN_LEN;
 
 export function generateWorkerToken(): string {
   return PREFIX + randomBytes(32).toString("base64url");
@@ -28,7 +32,7 @@ export function hashWorkerToken(token: string): string {
 
 /** Tra token theo hash rồi so constant-time; token thu hồi/không có → null. Cập nhật last_seen_at tối đa 1 lần/phút. */
 export async function authenticateWorker(token: string): Promise<WorkerIdentity | null> {
-  if (!token.startsWith(PREFIX) || token.length > 128) return null;
+  if (!looksLikeWorkerToken(token)) return null;
   const hash = hashWorkerToken(token);
   const [row] = await db.select().from(workerTokens).where(eq(workerTokens.tokenHash, hash)).limit(1);
   if (!row || row.revokedAt) return null;
@@ -39,16 +43,13 @@ export async function authenticateWorker(token: string): Promise<WorkerIdentity 
   return { tokenId: row.id, kind: row.kind, capabilities: row.capabilities };
 }
 
-/** Tạo token mới → trả token gốc (chỉ hiện một lần). */
-export async function createWorkerToken(opts: {
-  name: string;
-  kind: "mac" | "modal";
-  capabilities?: string[];
-}): Promise<{ id: string; token: string }> {
+export type WorkerTokenOpts = { name: string; kind: "mac" | "modal"; capabilities?: string[] };
+
+/** Lưu hash của `token` (đã sinh sẵn) → id. Dùng chung cho token mới và token local đọc lại từ file. */
+export async function registerWorkerToken(token: string, opts: WorkerTokenOpts, conn: DbLike = db): Promise<string> {
   const bad = (opts.capabilities ?? []).filter((c) => !(JOB_TYPES as readonly string[]).includes(c));
   if (bad.length) throw new Error(`capability không hợp lệ: ${bad.join(", ")}`);
-  const token = generateWorkerToken();
-  const [row] = await db
+  const [row] = await conn
     .insert(workerTokens)
     .values({
       name: opts.name,
@@ -58,7 +59,13 @@ export async function createWorkerToken(opts: {
     })
     .returning({ id: workerTokens.id });
   if (!row) throw new Error("insert worker token failed");
-  return { id: row.id, token };
+  return row.id;
+}
+
+/** Tạo token mới → trả token gốc (chỉ hiện một lần). */
+export async function createWorkerToken(opts: WorkerTokenOpts): Promise<{ id: string; token: string }> {
+  const token = generateWorkerToken();
+  return { id: await registerWorkerToken(token, opts), token };
 }
 
 export async function revokeWorkerToken(id: string): Promise<boolean> {

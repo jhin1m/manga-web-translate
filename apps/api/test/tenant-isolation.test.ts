@@ -270,6 +270,9 @@ const RESOURCE_CASES: Record<string, (b: Seed) => Record<string, string>> = {
   "DELETE /api/series/:seriesId": (b) => ({ seriesId: spareSeriesOf[b.userId] ?? "" }),
 };
 
+/** Route public có chủ đích dưới /api (không đọc/ghi dữ liệu người dùng) — kiểm riêng ở ca dưới. */
+const PUBLIC_ROUTES = new Set(["GET /api/config"]);
+
 /** Mọi (method, path) người dùng dưới /api — lấy từ router thật, không liệt kê tay. */
 const userRoutes = () => {
   const seen = new Set<string>();
@@ -278,6 +281,7 @@ const userRoutes = () => {
     if (r.path.startsWith("/api/auth/") || r.path.startsWith("/api/dev/")) continue;
     // Route admin xuyên người dùng có chủ đích (cài đặt hệ thống) — kiểm ở admin-access.test.ts.
     if (r.path.startsWith("/api/admin/")) continue;
+    if (PUBLIC_ROUTES.has(`${r.method} ${r.path}`)) continue;
     seen.add(`${r.method} ${r.path}`);
   }
   return [...seen].sort();
@@ -288,6 +292,12 @@ function fill(path: string, params: Record<string, string>) {
 }
 
 describe("tenant isolation", () => {
+  it("public routes stay public and carry no user data", async () => {
+    const res = await call("/api/config");
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ local_mode: false });
+  });
+
   it("discovers user routes (incl. /api/me)", () => {
     const routes = userRoutes();
     expect(routes).toEqual(expect.arrayContaining(["GET /api/me"]));

@@ -7,7 +7,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link, Outlet } from "@tanstack/react-router";
 import { createContext, type ReactNode, useContext, useEffect, useRef } from "react";
 import { ShellActivity } from "../features/chapter/activity-drawer.tsx";
-import { api, authClient, errorMessage, type Me, usd } from "../lib/api.ts";
+import { api, authClient, errorMessage, type Me, usd, useLocalMode } from "../lib/api.ts";
 import { markDevSignedOut } from "../lib/dev-login.ts";
 import "./app-shell.css";
 
@@ -70,6 +70,7 @@ const initials = (name: string) =>
 
 function AccountMenu() {
   const me = useMe();
+  const local = useLocalMode();
   const ref = useRef<HTMLDetailsElement>(null);
 
   // Bấm ra ngoài → đóng menu.
@@ -98,9 +99,12 @@ function AccountMenu() {
             Hạn mức AI hôm nay: {usd(me.quota.spent_usd)} / {usd(me.quota.limit_usd)}
           </span>
         )}
-        <button type="button" onClick={() => void signOut()}>
-          Đăng xuất
-        </button>
+        {/* Chế độ local không có tài khoản → không có đăng xuất. */}
+        {!local && (
+          <button type="button" onClick={() => void signOut()}>
+            Đăng xuất
+          </button>
+        )}
       </div>
     </details>
   );

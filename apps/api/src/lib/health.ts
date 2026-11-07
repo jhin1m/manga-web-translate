@@ -1,5 +1,5 @@
 /**
- * Trạng thái cho `/healthz`: DB, storage (bucket S3 hoặc thư mục disk driver), runner (`mtl-jobs` ghi runtime_flags.runner_heartbeat mỗi 30s).
+ * Trạng thái cho `/healthz` (và `/readyz` = phần không gồm runner): DB, storage (bucket S3 hoặc thư mục disk driver), runner (`mtl-jobs` ghi runtime_flags.runner_heartbeat mỗi 30s).
  * `oldest_queued_age_s` để infra/alert.sh cảnh báo hàng đợi cũ > 15' (không ảnh hưởng ok/fail); job của tài khoản bị khoá không tính (không ai claim, sẽ chờ mãi).
  */
 import { runtimeFlags } from "@mtl/db";
@@ -31,8 +31,16 @@ async function check<T>(fn: () => Promise<T>): Promise<T | null> {
   }
 }
 
-export async function checkHealth(): Promise<Health> {
+export type Ready = { ok: boolean; db: boolean; storage: boolean };
+
+/** DB + storage, KHÔNG xét runner — healthcheck của app (compose chờ app ready rồi mới chạy `jobs` = runner). */
+export async function checkReady(): Promise<Ready> {
   const [dbOk, storage] = await Promise.all([check(() => db.execute(sql`select 1`)), bucketReachable()]);
+  return { ok: !!dbOk && storage, db: !!dbOk, storage };
+}
+
+export async function checkHealth(): Promise<Health> {
+  const { db: dbOk, storage } = await checkReady();
   let runner = false;
   let age: number | null = null;
   let signup: Health["signup"] = null;
@@ -44,6 +52,6 @@ export async function checkHealth(): Promise<Health> {
     const open = await check(() => isSignupOpen(db));
     signup = open === null ? null : open ? "open" : "closed";
   }
-  const ok = !!dbOk && storage && runner;
-  return { ok, db: !!dbOk, storage, runner, oldest_queued_age_s: age === null ? null : Math.round(age), signup };
+  const ok = dbOk && storage && runner;
+  return { ok, db: dbOk, storage, runner, oldest_queued_age_s: age === null ? null : Math.round(age), signup };
 }

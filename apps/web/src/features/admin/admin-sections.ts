@@ -8,20 +8,35 @@ export const ADMIN_SECTIONS = [
   { id: "fonts", label: "Font hệ thống", group: "Hệ thống" },
 ] as const;
 
-export type AdminSection = (typeof ADMIN_SECTIONS)[number]["id"];
+export type AdminSectionDef = (typeof ADMIN_SECTIONS)[number];
+export type AdminSection = AdminSectionDef["id"];
 
-const isSection = (v: unknown): v is AdminSection => ADMIN_SECTIONS.some((s) => s.id === v);
+/** Mục chỉ có nghĩa khi nhiều người dùng (đăng ký, hạn mức, quản lý tài khoản) — ẩn ở chế độ local. */
+const MULTI_USER_SECTIONS: readonly AdminSection[] = ["limits", "users"];
 
-/** Giá trị lạ / thiếu → mục đầu tiên. */
-export const parseSection = (v: unknown): AdminSection => (isSection(v) ? v : (ADMIN_SECTIONS[0]?.id ?? "pipeline"));
+/** Danh sách mục hiển thị theo chế độ chạy. */
+export const visibleSections = (localMode: boolean): readonly AdminSectionDef[] =>
+  localMode ? ADMIN_SECTIONS.filter((s) => !MULTI_USER_SECTIONS.includes(s.id)) : ADMIN_SECTIONS;
+
+const isSection = (v: unknown, sections: readonly AdminSectionDef[]): v is AdminSection =>
+  sections.some((s) => s.id === v);
+
+/** Giá trị lạ / thiếu / không có trong `sections` → mục đầu tiên. */
+export const parseSection = (v: unknown, sections: readonly AdminSectionDef[] = ADMIN_SECTIONS): AdminSection =>
+  isSection(v, sections) ? v : (sections[0]?.id ?? "pipeline");
 
 /** Chỉ giữ giá trị hợp lệ (cho `validateSearch`: URL gọn khi dùng mục mặc định). */
-export const validSection = (v: unknown): AdminSection | undefined => (isSection(v) ? v : undefined);
+export const validSection = (
+  v: unknown,
+  sections: readonly AdminSectionDef[] = ADMIN_SECTIONS,
+): AdminSection | undefined => (isSection(v, sections) ? v : undefined);
 
 /** Mục gom theo nhóm, giữ thứ tự khai báo; nhóm không có mục thì không xuất hiện. */
-export function groupedSections(): { group: string; sections: (typeof ADMIN_SECTIONS)[number][] }[] {
-  const out: { group: string; sections: (typeof ADMIN_SECTIONS)[number][] }[] = [];
-  for (const s of ADMIN_SECTIONS) {
+export function groupedSections(
+  sections: readonly AdminSectionDef[] = ADMIN_SECTIONS,
+): { group: string; sections: AdminSectionDef[] }[] {
+  const out: { group: string; sections: AdminSectionDef[] }[] = [];
+  for (const s of sections) {
     const g = out.find((x) => x.group === s.group);
     if (g) g.sections.push(s);
     else out.push({ group: s.group, sections: [s] });

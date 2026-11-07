@@ -1,7 +1,7 @@
 ---
 phase: 2
 title: "Runtime chế độ local (auth, secret, token worker, backup+migrate, export cleanup, web)"
-status: pending
+status: completed
 priority: P1
 effort: "1.5d"
 dependencies: [1]
@@ -97,10 +97,10 @@ browser ─► / (SPA từ SPA_DIR) ─► /api/config {local_mode:true} ─► 
 9. Kiểm tay nhanh (không Docker): `MTL_LOCAL_MODE=1 MTL_DATA_DIR=$(mktemp -d) DATABASE_URL=<dev db> SPA_DIR=apps/web/dist pnpm --filter @mtl/api start` sau `pnpm --filter @mtl/web build` → mở http://localhost:8080 (đặt `API_PORT=8080`) thấy app không đăng nhập; `ls $MTL_DATA_DIR/{secrets,worker,backups}`.
 
 ## Success Criteria
-- [ ] `pnpm --filter @mtl/api test:unit` xanh không cần Docker.
-- [ ] `pnpm test`, `pnpm typecheck`, `pnpm lint` xanh (gồm `local-mode.test.ts` và toàn bộ test cũ với local tắt).
-- [ ] Kiểm tay bước 9: không màn đăng nhập, không nút Đăng xuất, Cài đặt không có "Người dùng"/"Hạn mức & đăng ký", `/readyz` 200, `/healthz` 503 khi chưa chạy `jobs` rồi 200 khi chạy.
-- [ ] Khởi động lần 2 trên cùng DB tạo thêm 1 file trong `backups/`; lần 1 (DB trống) không tạo.
+- [x] `pnpm --filter @mtl/api test:unit` xanh không cần Docker.
+- [x] `pnpm test`, `pnpm typecheck`, `pnpm lint` xanh (gồm `local-mode.test.ts` và toàn bộ test cũ với local tắt).
+- [x] Kiểm tay bước 9: không màn đăng nhập, không nút Đăng xuất, Cài đặt không có "Người dùng"/"Hạn mức & đăng ký", `/readyz` 200, `/healthz` 503 khi chưa chạy `jobs` rồi 200 khi chạy.
+- [x] Khởi động lần 2 trên cùng DB tạo thêm 1 file trong `backups/`; lần 1 (DB trống) không tạo.
 
 ## Risk Assessment
 - **Lộ API không auth ra mạng** → chỉ bật bằng cờ tường minh; compose bind `127.0.0.1` (phase 3) + cảnh báo README. Không có fallback local ở bản VPS.
@@ -110,3 +110,32 @@ browser ─► / (SPA từ SPA_DIR) ─► /api/config {local_mode:true} ─► 
 - **Hooks React khi rẽ nhánh AuthGate** → tách component `SessionGate` cho nhánh VPS.
 - **Token worker bị revoke trên UI admin** → boot kế tiếp sinh token mới; worker đang chạy nhận 401 — implementer kiểm `worker/mtl_worker/main.py` xử lý 401 (thoát → compose restart). Ghi kết quả vào báo cáo.
 - Rollback: revert phase; cờ tắt mặc định nên VPS không ảnh hưởng.
+
+## Quyết định khi implement (tự chốt)
+- **`STORAGE_DRIVER` + `FILES_DIR` mặc định trong schema env** (transform thuần: local ⇒ `disk`; `FILES_DIR` không đặt = `${MTL_DATA_DIR}/files`, VPS vẫn ra `/data/files`) thay vì gán `process.env` trong `applyLocalEnvDefaults` → test `parseEnv` thuần được. `applyLocalEnvDefaults` chỉ lo secret + `BETTER_AUTH_URL`/`WEB_ORIGIN` + **`API_PORT=8080`** (thêm: khớp URL mặc định; compose phase 3 không phải đặt).
+- **Ép tắt cờ nhiều người dùng trong transform trước superRefine** → các kiểm chéo cũ (SIGNUP cần quota, DISPATCHER cần MODAL_*, DEV_AUTO_LOGIN ở production) không làm hỏng khởi động local khi `.env` cũ còn các biến đó; `console.warn` 1 lần/process liệt kê biến bị bỏ qua.
+- **Secret file: `wx` + đọc lại tối đa 20×50ms nếu file rỗng** (process khác vừa `open` chưa kịp ghi), vẫn rỗng → lỗi rõ ràng. Không dùng `link()` (bind mount Docker Desktop có thể không hỗ trợ hard link).
+- **`registerWorkerToken(token, opts, conn = db)`** nhận DB/transaction; thêm `looksLikeWorkerToken` + `MAX_WORKER_TOKEN_LEN` (dùng chung `authenticateWorker` và đọc file token). File token có sẵn bị `chmod 600` lại khi giữ/khôi phục (worker từ chối quyền rộng).
+- **`ensureLocalUser`: `insert … on conflict (email) do nothing` rồi select** — idempotent, không race.
+- **Phiên local tổng hợp** (`id/token = "local"`, hết hạn 9999) chỉ để thoả kiểu `AuthSession`; không route nào đọc `session`.
+- **SPA ở module riêng `src/lib/spa-static.ts`** (`mountSpa`) — `app.ts` chỉ gọi 1 dòng. `/assets/*` thiếu file → **404** (không trả index.html cho JS/CSS cũ sau khi nâng cấp). Cache header đặt TRƯỚC `serveStatic` (header đặt trong `onFound` không vào Response — đã kiểm bằng test), gỡ trong `onNotFound` → 404 không mang cache 1 năm.
+- **local-guard**: thiếu header `Host` (chỉ xảy ra với `app.request` trong test) → dùng host của URL; `Origin: null`/rác với method ghi → 403. GET/HEAD/OPTIONS không kiểm Origin (cross-origin không đọc được phản hồi; Host đã chặn rebinding).
+- **`GET /api/config` thêm vào ngoại lệ public của `tenant-isolation.test.ts`** (route không chạm dữ liệu người dùng) + ca kiểm nó public và trả `{local_mode:false}` ở bản VPS.
+- **Web**: `appConfigQuery` (TanStack Query, `staleTime/gcTime = ∞`) + `useLocalMode()`; lỗi tải config ⇒ coi như VPS. `loginRoute.beforeLoad` dùng `queryClient.ensureQueryData`. Section admin: `visibleSections(local)`; `parseSection/validSection/groupedSections` nhận danh sách (mặc định đủ) → `validateSearch` giữ nguyên đồng bộ, lọc ở component (`?section=users` ở local rơi về Pipeline).
+- **`apps/web/vite.config.ts` proxy thêm `/files`** (chuyển từ phase 1) — ngoài ranh giới `apps/web/src/**` nhưng là việc phase 1 giao lại.
+- **pg_dump ở máy dev**: máy không có client Postgres → ca backup trong `local-mode.test.ts` `skipIf` không có `pg_dump`; kiểm tay dùng wrapper gọi `pg_dump` trong container `mtl-dev-postgres-1` (scratchpad, không commit) — ca đó pass.
+- **Worker khi token bị thu hồi**: `client.py` 401 → `AuthError` → `main.py` thoát mã 2 → compose restart; nhưng file token chỉ đổi ở lần boot app kế tiếp → worker restart lặp tới khi app restart. Chấp nhận (thu hồi token local là thao tác hiếm); ghi docs phase 3: "thu hồi token local ⇒ `docker compose restart app worker`".
+
+### Sau code review (8/10, không lỗi chặn — `plans/reports/from-code-reviewer-to-controller-261107-2030-selfhost-phase2-review-report.md`)
+- **Backup (bổ sung Decision 10, không đảo)**: vẫn dump MỖI lần boot (giữ tiêu chí "boot 2 thêm 1 file"), nhưng tên `mtl-<UTC>-m<N>.dump` (N = số migration đã áp) và prune giữ 5 bản mới nhất **+ bản mới nhất của mỗi 3 phiên bản schema gần nhất** → restart/crash loop sau nâng cấp không xoá mất bản dump trước nâng cấp.
+- **pg_dump**: `--lock-wait-timeout=60s` + timeout cứng 10' (boot không treo mãi); mật khẩu qua `PGPASSWORD`, URL trong argv không có mật khẩu.
+- **local-guard đặt sau `requestLog` + `secureHeaders`** (request bị chặn vẫn được log, 403 có header bảo mật). `MTL_ALLOWED_HOSTS` chuẩn hoá về `URL.hostname` (bỏ cổng, IPv6 trần → `[…]`), mục hỏng → warn + bỏ.
+- **`ensureLocalUser` luôn gỡ `disabledAt`** (DB nhập từ VPS/SQL tay → tránh 403 + vòng chuyển trang).
+- **Web: `/api/config` lỗi → màn "Không kết nối được máy chủ — Thử lại"** thay vì rơi về màn đăng nhập (ở local là form không dùng được). Áp cả VPS (API chết thì đăng nhập cũng không được).
+- **Giữ `app` trong allowlist cứng** (Decision 19; nếu bỏ thì compose phải luôn đặt `MTL_ALLOWED_HOSTS=app`).
+- **Chuyển phase 3 (docs/compose)**: liệt kê env mới (`MTL_LOCAL_MODE`, `MTL_DATA_DIR`, `MTL_SKIP_BOOT_BACKUP`, `MTL_ALLOWED_HOSTS`, `SPA_DIR`; local mặc định `API_PORT=8080`); worker chạy ngoài compose cần `MTL_ALLOWED_HOSTS` (vd `host.docker.internal`) — 403 bị worker coi là lỗi tạm, lặp im lặng; dev đặt `MTL_LOCAL_MODE=1` phải kèm `MTL_DATA_DIR` (mặc định `/data` không ghi được trên macOS); khi `compose up -d` image mới, cân nhắc dừng `jobs`/`worker` cũ trước khi app mới dump+migrate (lock wait, code cũ trên schema mới); thu hồi token local ⇒ `docker compose restart app worker`.
+
+## Kết quả (07/11/2026)
+- `pnpm --filter @mtl/api test:unit`: 10 file / 62 test xanh (không Docker).
+- `pnpm test`: api 55 file / 513 pass + 1 skip (ca pg_dump `skipIf` không có client; chạy với wrapper pg_dump-qua-container thì pass), web 432, shared 60, db 8. `pnpm typecheck`, `pnpm lint` xanh.
+- Kiểm tay bước 9 (DB trống `mtl_localcheck`, `NODE_ENV=production`, không `GLOBAL_*`, secret để trống): boot 1 không backup, sinh `secrets/{better-auth-secret,secrets-key}` 0600 trong thư mục 0700, `worker/token` 0600; `/api/config` `{local_mode:true}`, `/api/me` admin không cookie, `/api/auth/*` 404, `/readyz` 200, `/healthz` 503 → 200 khi chạy `jobs` (jobs đọc lại cùng secret); SPA `/`, `/settings`, `/s/…` → index.html `no-cache`, `/assets/*` immutable, asset thiếu 404; Host lạ 403, POST Origin lạ 403, POST cùng origin 201. Playwright headless: không màn đăng nhập, menu không có "Đăng xuất", Cài đặt chỉ Pipeline/Nhà cung cấp/Model tác vụ/Font hệ thống, `?section=users` → Pipeline, `/login` → `/`, upload ảnh qua `/files` POST 204 (file + sidecar trên đĩa), không lỗi console. Boot 2: thêm 1 backup, token `kept`; boot 3 (sau sửa review): `mtl-…-m26.dump`.

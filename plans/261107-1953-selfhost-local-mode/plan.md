@@ -24,7 +24,7 @@ Bối cảnh: memory `selfhost-local-mode-direction` (07/11/2026). Docs: `docs/d
 | # | Phase | File | Status | Effort |
 |---|-------|------|--------|--------|
 | 1 | Driver lưu đĩa + route `/files` + test 2 driver | [phase-01-disk-storage-driver.md](phase-01-disk-storage-driver.md) | completed | 1.5d |
-| 2 | Runtime chế độ local (auth, secret, token worker, backup+migrate, export cleanup, web) | [phase-02-local-mode-runtime.md](phase-02-local-mode-runtime.md) | pending | 1.5d |
+| 2 | Runtime chế độ local (auth, secret, token worker, backup+migrate, export cleanup, web) | [phase-02-local-mode-runtime.md](phase-02-local-mode-runtime.md) | completed | 1.5d |
 | 3 | Dockerfile API + worker, compose, release workflow, docs | [phase-03-docker-compose-release.md](phase-03-docker-compose-release.md) | pending | 0.75d |
 | 4 | Smoke end-to-end trên thư mục tạm | [phase-04-e2e-smoke.md](phase-04-e2e-smoke.md) | pending | 0.25d |
 
@@ -48,7 +48,7 @@ Phụ thuộc: 2 ← 1 (driver + `STORAGE_DRIVER`), 3 ← 2 (entrypoint gọi bo
 7. **Local mode không mount `/api/auth/*` và `/api/dev/*`** (404). `requireUser` gắn user local (email `local@localhost`, tạo/lấy lúc boot). `isAdminEmail` trả true khi local mode → user local là admin. Mục Cài đặt "Người dùng" và "Hạn mức & đăng ký" ẩn ở local mode.
 8. **Secret tự sinh đồng bộ trong `env.ts` trước khi parse** (file `0600` ở `/data/secrets/`, mở `wx` → tránh race app/jobs). Token worker sinh sau migrate (cần DB) vào thư mục riêng `/data/worker/token` — worker chỉ mount thư mục này (read-only), không thấy `BETTER_AUTH_SECRET`/`SECRETS_KEY`.
 9. **Migrate chỉ chạy ở `app`** (trước khi listen): backup → migrate → bootstrap user/token. `jobs` và `worker` `depends_on: app: service_healthy`. Healthcheck dùng route mới `GET /readyz` (DB + storage, KHÔNG gồm runner) — dùng `/healthz` sẽ deadlock vì runner = jobs đang chờ app.
-10. **Backup DB mỗi lần app khởi động** khi DB đã có bảng `drizzle.__drizzle_migrations` (DB trống lần đầu thì bỏ qua). `pg_dump -Fc` → `/data/backups/mtl-<UTC>.dump` (ghi tạm rồi rename), giữ 5 bản mới nhất. **pg_dump lỗi → app thoát (fail-closed)**, thoát hiểm bằng `MTL_SKIP_BOOT_BACKUP=1` (ghi trong docs). Lý do: ưu tiên an toàn dữ liệu khi nâng cấp hơn là "luôn chạy".
+10. **Backup DB mỗi lần app khởi động** khi DB đã có bảng `drizzle.__drizzle_migrations` (DB trống lần đầu thì bỏ qua). `pg_dump -Fc` → `/data/backups/mtl-<UTC>.dump` (ghi tạm rồi rename), giữ 5 bản mới nhất (implement: tên `mtl-<UTC>-m<N>.dump`, giữ thêm bản mới nhất của 3 phiên bản schema gần nhất — restart sau nâng cấp không xoá bản trước nâng cấp). **pg_dump lỗi → app thoát (fail-closed)**, thoát hiểm bằng `MTL_SKIP_BOOT_BACKUP=1` (ghi trong docs). Lý do: ưu tiên an toàn dữ liệu khi nâng cấp hơn là "luôn chạy".
 11. **Đường nâng cấp**: `drizzle-orm` migrator chỉ áp migration chưa chạy → DB cũ chạy được sau `compose pull`. Migrate lỗi → container restart lặp, bản backup vừa tạo còn nguyên; docs ghi cách `pg_restore`. Không hỗ trợ hạ cấp.
 12. **Export cleanup**: bước riêng trong `jobs` mỗi 1 giờ, chỉ khi driver = disk; xoá file `u/*/ch/*/export/*` có mtime > `EXPORT_RETENTION_DAYS` (7, `packages/shared/src/job.ts`) và file tạm `.tmp/*` > 24h. S3 vẫn dùng lifecycle MinIO.
 13. **Quyền bind mount**: entrypoint chạy root → `mkdir -p` + `chown 1000:1000` các thư mục `/data/*` của mình → `exec setpriv --reuid=1000 --regid=1000 --init-groups`. Cả app và worker chạy uid 1000 (khớp kiểm `st_uid` trong `worker/mtl_worker/token.py`). Lý do: Docker tạo `./data` thuộc root trên Linux.

@@ -5,6 +5,8 @@ import { secureHeaders } from "hono/secure-headers";
 import { auth } from "./auth.ts";
 import { devAutoLoginEnabled, env } from "./env.ts";
 import { requestLog } from "./lib/request-log.ts";
+import { mountSpa } from "./lib/spa-static.ts";
+import { localGuard } from "./middleware/local-guard.ts";
 import { type AppEnv, requireUser } from "./middleware/user.ts";
 import { adminApi } from "./routes/admin.ts";
 import { chapterRoutes } from "./routes/chapters.ts";
@@ -29,20 +31,33 @@ import { workerRoutes } from "./routes/worker.ts";
 import { diskDriver } from "./storage.ts";
 
 const envDevLogin = (): DevLogin | false =>
-  devAutoLoginEnabled(env)
+  !env.MTL_LOCAL_MODE && devAutoLoginEnabled(env)
     ? { email: env.DEV_AUTO_LOGIN_EMAIL ?? "", password: env.DEV_AUTO_LOGIN_PASSWORD ?? "" }
     : false;
 
 /** `devAutoLogin`: tài khoản cho POST /api/dev/auto-login; false = không mount route (mặc định theo env). */
 export function createApp({ devAutoLogin = envDevLogin() }: { devAutoLogin?: DevLogin | false } = {}) {
   const app = new Hono();
+  const local = env.MTL_LOCAL_MODE;
   if (env.NODE_ENV === "production") app.use("*", requestLog);
   app.use("*", secureHeaders());
+  // Chế độ local không có đăng nhập: chặn Host lạ (DNS rebinding) + request ghi từ site khác (CSRF) trước mọi route
+  // (sau log + secure headers → request bị chặn vẫn được log, 403 vẫn có header bảo mật).
+  if (local) app.use("*", localGuard(env.MTL_ALLOWED_HOSTS));
 
   app.route("/", healthRoutes);
 
-  app.on(["GET", "POST"], "/api/auth/*", (c) => auth.handler(c.req.raw));
-  if (devAutoLogin) app.route("/api", devAuthRoutes(devAutoLogin));
+  // Public (trước userApi): web hỏi chế độ chạy để bỏ màn đăng nhập ở bản local — 1 image cho mọi cấu hình.
+  app.get("/api/config", (c) => {
+    c.header("cache-control", "no-store");
+    return c.json({ local_mode: local });
+  });
+
+  // Chế độ local: không có tài khoản → không mount better-auth / dev login (404).
+  if (!local) {
+    app.on(["GET", "POST"], "/api/auth/*", (c) => auth.handler(c.req.raw));
+    if (devAutoLogin) app.route("/api", devAuthRoutes(devAutoLogin));
+  }
 
   // Route quản trị: đặt trước userApi để `/api/admin/*` đi qua requireAdmin.
   app.route("/api/admin", adminApi());
@@ -57,6 +72,9 @@ export function createApp({ devAutoLogin = envDevLogin() }: { devAutoLogin?: Dev
   // Disk driver (self-host): link file ký HMAC do chính API phục vụ; S3 thì trình duyệt/worker gọi thẳng MinIO.
   const disk = diskDriver();
   if (disk) app.route("/files", createFilesRoutes(disk));
+
+  // SPA đã build (self-host): sau mọi route server, trước notFound.
+  if (env.SPA_DIR) mountSpa(app, env.SPA_DIR);
 
   app.notFound((c) => c.json({ error: "not_found" }, 404));
   app.onError((err, c) => {

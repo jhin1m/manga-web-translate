@@ -9,13 +9,14 @@
  * không có thanh trên của app shell.
  */
 import { QueryClient } from "@tanstack/react-query";
-import { createRootRouteWithContext, createRoute, createRouter, Link, Outlet } from "@tanstack/react-router";
+import { createRootRouteWithContext, createRoute, createRouter, Link, Outlet, redirect } from "@tanstack/react-router";
 import { lazy, Suspense } from "react";
-import { type AdminSection, parseSection, validSection } from "../features/admin/admin-sections.ts";
+import { type AdminSection, parseSection, validSection, visibleSections } from "../features/admin/admin-sections.ts";
 import { GlossaryPage } from "../features/glossary/glossary-editor.tsx";
 import { HomePage } from "../features/home/home-page.tsx";
 import { SOURCE_LANGS, type SourceLang, TARGET_LANGS, type TargetLang } from "../features/series/lang-labels.ts";
 import { SeriesPage } from "../features/series/series-page.tsx";
+import { appConfigQuery, useLocalMode } from "../lib/api.ts";
 import { FontsPage } from "../routes/fonts.tsx";
 import { LoginPage } from "../routes/login.tsx";
 import { SettingsPage } from "../routes/settings.tsx";
@@ -49,6 +50,11 @@ const loginRoute = createRoute({
   // `reason=disabled`: vừa bị đăng xuất vì tài khoản bị khoá (xem `api()`).
   validateSearch: (search: Record<string, unknown>): { reason?: "disabled" } =>
     search.reason === "disabled" ? { reason: "disabled" } : {},
+  // Chế độ local không có tài khoản → /login về trang chủ. Lỗi tải config → vẫn hiện màn đăng nhập.
+  beforeLoad: async ({ context }) => {
+    const config = await context.queryClient.ensureQueryData(appConfigQuery).catch(() => null);
+    if (config?.local_mode) throw redirect({ to: "/" });
+  },
   component: () => <LoginPage reason={loginRoute.useSearch().reason} />,
 });
 
@@ -133,7 +139,8 @@ export const settingsRoute = createRoute({
   },
   component: function SettingsRoute() {
     const { section } = settingsRoute.useSearch();
-    return <SettingsPage section={parseSection(section)} />;
+    // Chế độ local: mục nhiều người dùng bị ẩn → `?section=users` rơi về mục đầu.
+    return <SettingsPage section={parseSection(section, visibleSections(useLocalMode()))} />;
   },
 });
 

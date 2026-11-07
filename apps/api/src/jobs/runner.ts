@@ -4,18 +4,22 @@
  *   người vượt hạn mức ngày → failed (khi chỉ có Modal, job đó không bị claim nên không qua nhánh fail ở claim),
  *   `runtime_flags.runner_heartbeat` cho healthz;
  * - 5s (DISPATCHER_ENABLED): dispatcher Modal.
+ * - 1h (STORAGE_DRIVER=disk): xoá file export quá EXPORT_RETENTION_DAYS + file tạm ghi dở (S3 dùng lifecycle bucket).
  * Chạy: pnpm --filter @mtl/api jobs
  */
 import { type DbLike, runtimeFlags } from "@mtl/db";
+import { EXPORT_RETENTION_DAYS } from "@mtl/shared";
 import { sql } from "drizzle-orm";
 import { budgetStatus, checkBudgetAlerts, resumeBudgetPaused } from "../billing/budget.ts";
 import { closeDb, db } from "../db.ts";
 import { env } from "../env.ts";
 import { DISPATCH_INTERVAL_MS, dispatchTick, reapDispatches } from "./dispatcher.ts";
+import { cleanupExpiredExports } from "./export-cleanup.ts";
 import { failOverQuotaQueued } from "./queue.ts";
 import { reapExpiredLeases } from "./reaper.ts";
 
 export const REAPER_INTERVAL_MS = 30_000;
+export const EXPORT_CLEANUP_INTERVAL_MS = 3_600_000;
 
 async function beat() {
   await db
@@ -84,6 +88,15 @@ async function dispatchLoopTick() {
   }
 }
 
+async function exportCleanupTick() {
+  try {
+    const r = await cleanupExpiredExports({ root: env.FILES_DIR, retentionMs: EXPORT_RETENTION_DAYS * 86_400_000 });
+    if (r.exports || r.tmp) console.info(`[export-cleanup] exports=${r.exports} tmp=${r.tmp}`);
+  } catch (err) {
+    console.error("[export-cleanup] tick failed", err);
+  }
+}
+
 if (import.meta.url === `file://${process.argv[1]}`) {
   let stopping = false;
   const timers = new Map<string, NodeJS.Timeout>();
@@ -106,4 +119,5 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   );
   every("reaper", REAPER_INTERVAL_MS, tick);
   if (env.DISPATCHER_ENABLED) every("dispatcher", DISPATCH_INTERVAL_MS, dispatchLoopTick);
+  if (env.STORAGE_DRIVER === "disk") every("export-cleanup", EXPORT_CLEANUP_INTERVAL_MS, exportCleanupTick);
 }

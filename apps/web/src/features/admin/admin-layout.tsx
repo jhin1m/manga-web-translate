@@ -4,9 +4,9 @@
  */
 import { Link, Navigate } from "@tanstack/react-router";
 import { useMe } from "../../app/app-shell.tsx";
-import { errorMessage } from "../../lib/api.ts";
+import { errorMessage, useLocalMode } from "../../lib/api.ts";
 import { PipelineSettingsForm } from "../pipeline/pipeline-settings.tsx";
-import { type AdminSection, groupedSections } from "./admin-sections.ts";
+import { type AdminSection, groupedSections, visibleSections } from "./admin-sections.ts";
 import { useAdminSettings } from "./api.ts";
 import { LimitsSection } from "./limits-section.tsx";
 import { ProvidersSection } from "./providers-section.tsx";
@@ -34,6 +34,7 @@ const PANELS: Record<AdminSection, () => React.JSX.Element> = {
 
 export function AdminLayout({ section }: { section: AdminSection }) {
   const me = useMe();
+  const groups = groupedSections(visibleSections(useLocalMode()));
   if (!me.is_admin) return <Navigate to="/" replace />;
   const Panel = PANELS[section];
   return (
@@ -43,7 +44,7 @@ export function AdminLayout({ section }: { section: AdminSection }) {
       </div>
       <div className="admin-body">
         <nav className="admin-nav" aria-label="Mục cài đặt">
-          {groupedSections().map((g) => (
+          {groups.map((g) => (
             <div key={g.group} className="admin-nav-group">
               <span className="admin-nav-title">{g.group}</span>
               {g.sections.map((s) => (

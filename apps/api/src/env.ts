@@ -1,5 +1,7 @@
+import { join } from "node:path";
 import { loadRootEnv } from "@mtl/db";
 import { z } from "zod";
+import { applyLocalEnvDefaults, DEFAULT_DATA_DIR, localModeRequested } from "./local/local-secrets.ts";
 
 loadRootEnv();
 
@@ -7,6 +9,8 @@ loadRootEnv();
 const blank = <T extends z.ZodType>(schema: T) => z.preprocess((v) => (v === "" ? undefined : v), schema);
 const optionalUsd = blank(z.coerce.number().nonnegative().optional());
 const flag = blank(z.enum(["true", "false"]).default("false")).transform((v) => v === "true");
+/** Cờ chế độ local: nhận cả `1|0` (compose/docker quen dùng). */
+const flag01 = blank(z.enum(["1", "true", "0", "false"]).default("false")).transform((v) => v === "1" || v === "true");
 
 const Env = z
   .object({
@@ -21,8 +25,27 @@ const Env = z
      * chính API phục vụ — bản self-host). Không đặt = `s3`.
      */
     STORAGE_DRIVER: blank(z.enum(["s3", "disk"]).optional()),
-    /** Thư mục gốc của disk driver. */
-    FILES_DIR: blank(z.string().min(1).default("/data/files")),
+    /** Thư mục gốc của disk driver. Không đặt = `${MTL_DATA_DIR}/files` (mặc định /data/files). */
+    FILES_DIR: blank(z.string().min(1).optional()),
+    /**
+     * Self-host 1 người dùng: không đăng nhập (user local cố định là admin), secret tự sinh ở `${MTL_DATA_DIR}/secrets`,
+     * storage mặc định `disk`, app tự backup + migrate DB lúc khởi động. Tắt đăng ký / dispatcher / ntfy / dev login.
+     * KHÔNG mở ra mạng: mọi request đi qua local-guard (Host + Origin).
+     */
+    MTL_LOCAL_MODE: flag01,
+    /** Thư mục dữ liệu của chế độ local (secrets, files, backups, worker token). */
+    MTL_DATA_DIR: blank(z.string().min(1).default(DEFAULT_DATA_DIR)),
+    /** Thoát hiểm: bỏ bước pg_dump trước migrate lúc khởi động (khi pg_dump hỏng mà vẫn cần chạy app). */
+    MTL_SKIP_BOOT_BACKUP: flag01,
+    /** Hostname thêm (csv, không cổng) được phép gọi API ở chế độ local — ngoài localhost/127.0.0.1/[::1]/app. */
+    MTL_ALLOWED_HOSTS: blank(z.string().optional()).transform((v) =>
+      (v ?? "")
+        .split(",")
+        .map((h) => h.trim().toLowerCase())
+        .filter(Boolean),
+    ),
+    /** Thư mục build SPA (apps/web/dist) — đặt thì API phục vụ luôn web (cùng origin). */
+    SPA_DIR: blank(z.string().min(1).optional()),
     /** `S3_*` + FILES_DOMAIN bắt buộc khi STORAGE_DRIVER=s3 (kiểm ở parseEnv). */
     S3_ENDPOINT: blank(z.string().url().optional()),
     S3_REGION: z.string().default("us-east-1"),
@@ -106,8 +129,50 @@ const Env = z
     DEV_AUTO_LOGIN_EMAIL: blank(z.string().email().optional()),
     DEV_AUTO_LOGIN_PASSWORD: blank(z.string().min(10).optional()),
   })
-  .transform((e) => ({ ...e, STORAGE_DRIVER: e.STORAGE_DRIVER ?? ("s3" as const) }));
+  .transform((e) => {
+    const base = {
+      ...e,
+      STORAGE_DRIVER: e.STORAGE_DRIVER ?? (e.MTL_LOCAL_MODE ? ("disk" as const) : ("s3" as const)),
+      FILES_DIR: e.FILES_DIR ?? join(e.MTL_DATA_DIR, "files"),
+    };
+    return e.MTL_LOCAL_MODE ? forceLocalOff(base) : base;
+  });
 export type Env = z.infer<typeof Env>;
+
+/** Biến bị chế độ local ép tắt — cảnh báo 1 lần/process nếu người dùng có đặt (tránh "đặt mà không ăn"). */
+let warnedLocalOverrides = false;
+
+function forceLocalOff<
+  T extends {
+    SIGNUP_ENABLED: boolean;
+    DISPATCHER_ENABLED: boolean;
+    ALERT_NTFY_URL?: string;
+    ADMIN_EMAILS: string[];
+    DEV_AUTO_LOGIN_EMAIL?: string;
+    DEV_AUTO_LOGIN_PASSWORD?: string;
+  },
+>(e: T): T {
+  const ignored = [
+    e.SIGNUP_ENABLED && "SIGNUP_ENABLED",
+    e.DISPATCHER_ENABLED && "DISPATCHER_ENABLED",
+    e.ALERT_NTFY_URL && "ALERT_NTFY_URL",
+    e.ADMIN_EMAILS.length > 0 && "ADMIN_EMAILS",
+    (e.DEV_AUTO_LOGIN_EMAIL || e.DEV_AUTO_LOGIN_PASSWORD) && "DEV_AUTO_LOGIN_*",
+  ].filter(Boolean);
+  if (ignored.length > 0 && !warnedLocalOverrides) {
+    warnedLocalOverrides = true;
+    console.warn(`[env] MTL_LOCAL_MODE bỏ qua: ${ignored.join(", ")}`);
+  }
+  return {
+    ...e,
+    SIGNUP_ENABLED: false,
+    DISPATCHER_ENABLED: false,
+    ALERT_NTFY_URL: undefined,
+    ADMIN_EMAILS: [],
+    DEV_AUTO_LOGIN_EMAIL: undefined,
+    DEV_AUTO_LOGIN_PASSWORD: undefined,
+  };
+}
 
 const S3_REQUIRED = ["S3_ENDPOINT", "S3_BUCKET", "S3_ACCESS_KEY", "S3_SECRET_KEY", "FILES_DOMAIN"] as const;
 
@@ -118,7 +183,12 @@ export function parseEnv(raw: Record<string, string | undefined>): Env {
     if (missingS3.length > 0) {
       ctx.addIssue({ code: "custom", message: `STORAGE_DRIVER=s3 cần ${missingS3.join(", ")}` });
     }
-    if (e.NODE_ENV === "production" && (e.GLOBAL_DAILY_USD === undefined || e.GLOBAL_MONTHLY_USD === undefined)) {
+    // Local: 1 người dùng tự trả tiền AI bằng key của mình → không bắt kill-switch ngân sách toàn cục.
+    if (
+      e.NODE_ENV === "production" &&
+      !e.MTL_LOCAL_MODE &&
+      (e.GLOBAL_DAILY_USD === undefined || e.GLOBAL_MONTHLY_USD === undefined)
+    ) {
       ctx.addIssue({ code: "custom", message: "production cần GLOBAL_DAILY_USD và GLOBAL_MONTHLY_USD" });
     }
     if (e.DISPATCHER_ENABLED && (!e.MODAL_DRAIN_URL || !e.MODAL_DRAIN_SECRET)) {
@@ -132,6 +202,9 @@ export function parseEnv(raw: Record<string, string | undefined>): Env {
     }
   }).parse(raw);
 }
+
+// Chế độ local: sinh/đọc secret + mặc định URL trước khi parse (biến bắt buộc phải có sẵn lúc parse).
+if (localModeRequested(process.env)) applyLocalEnvDefaults(process.env);
 
 export const env: Env = parseEnv(process.env);
 
