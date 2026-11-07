@@ -27,6 +27,11 @@ def text_regions(regions: list[Region]) -> list[Region]:
     return [r for r in regions if r.kind in ("text_bubble", "text_free")]
 
 
+def in_bubble(r: Region) -> bool:
+    """Vùng chữ nằm trong bóng thoại (detector gắn text_bubble / bóng chứa nó)."""
+    return r.kind == "text_bubble" or r.bubble_id is not None
+
+
 def make_crop(img: np.ndarray, r: Region) -> np.ndarray:
     h, w = img.shape[:2]
     b = r.bbox
@@ -98,7 +103,11 @@ def ocr_page(
         items = [it.model_copy(update={"low_conf": True}) for it in items]
 
     by_region = {r.id: r for r in regions}
-    for it in items:
+    for i, it in enumerate(items):
+        # Chữ trong bóng thoại luôn là thoại: LLM chỉ thấy crop nên hay gắn nhầm SFX cho câu cảm thán / tên riêng
+        # trong bóng, mà SFX thì không xoá chữ cũng không dịch → bóng còn nguyên chữ gốc.
+        if it.is_sfx and in_bubble(by_region[it.id]):
+            it = items[i] = it.model_copy(update={"is_sfx": False})
         by_region[it.id].is_sfx = it.is_sfx
     merged = {it.id: it for it in local_empty + items}
     order = [r.id for r in text_regions(regions)]
