@@ -155,6 +155,9 @@ const BODIES: Record<string, unknown> = {
   "POST /api/chapters/:chapterId/commit": {},
   "PATCH /api/chapters/:chapterId": { number: "99" },
   "POST /api/chapters/:chapterId/translate": {},
+  get "POST /api/chapters/:chapterId/rescan"() {
+    return { page_ids: [pageOf[A.userId]] };
+  },
   "PATCH /api/chapters/:chapterId/source-files/:fileId": { skip: "user" },
   get "PUT /api/chapters/:chapterId/source-files/order"() {
     return { ids: [spareSourceOf[A.userId]] };
@@ -220,6 +223,7 @@ const RESOURCE_CASES: Record<string, (b: Seed) => Record<string, string>> = {
   "POST /api/chapters/:chapterId/retry-failed": (b) => ({ chapterId: b.chapterId }),
   "POST /api/chapters/:chapterId/translate-prepared": (b) => ({ chapterId: b.chapterId }),
   "POST /api/chapters/:chapterId/translate": (b) => ({ chapterId: b.chapterId }),
+  "POST /api/chapters/:chapterId/rescan": (b) => ({ chapterId: b.chapterId }),
   "POST /api/chapters/:chapterId/cancel": (b) => ({ chapterId: b.chapterId }),
   "POST /api/chapters/:chapterId/lock": (b) => ({ chapterId: b.chapterId }),
   "DELETE /api/chapters/:chapterId/lock": (b) => ({ chapterId: b.chapterId }),

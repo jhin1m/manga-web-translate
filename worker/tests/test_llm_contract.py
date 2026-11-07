@@ -283,10 +283,13 @@ def test_ocr_rate_limit_propagates_without_retry():
     assert len(prov.ocr_reqs) == 1
 
 
-def test_ocr_marks_sfx_on_regions():
+def test_ocr_marks_sfx_only_outside_bubbles():
     img, regions = _page()
-    ocr_page(ScriptedProvider(ocr=[lambda r: _echo(r, sfx=True)]), img, regions, 0)
-    assert regions[1].is_sfx
+    img[260:290, 60:200] = 0  # vùng chữ tự do r2 cũng có mực
+    res = ocr_page(ScriptedProvider(ocr=[lambda r: _echo(r, sfx=True)]), img, regions, 0)
+    # LLM gắn SFX cho cả hai: chữ trong bóng vẫn là thoại (xoá + dịch), chữ tự do giữ SFX.
+    assert not regions[1].is_sfx and regions[2].is_sfx
+    assert [(i.id, i.is_sfx) for i in res.items] == [("r1", False), ("r2", True)]
 
 
 # ---------- Dịch giai đoạn 2 ----------

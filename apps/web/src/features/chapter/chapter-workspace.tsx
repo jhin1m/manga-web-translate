@@ -59,6 +59,7 @@ import {
   type ProgressPage,
   REJECT_REASON,
   type Rejected,
+  rescanPages,
   retranslate,
   retryFailed,
   setPageSkip,
@@ -490,9 +491,15 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
         | "commit"
         | "prepare_only"
         | "translate"
-        | { retranslatePage: ProgressPage },
+        | { retranslatePage: ProgressPage }
+        | { rescanPage: ProgressPage },
     ): Promise<Notice | null> => {
       const info = (text: string): Notice => ({ tone: "info", text });
+      if (typeof kind === "object" && "rescanPage" in kind) {
+        const page = kind.rescanPage;
+        await runAi(() => rescanPages(chapterId, [page.id]));
+        return info(`Đã xếp quét lại trang ${page.ord + 1}: xoá chữ + nhận dạng lại rồi dịch.`);
+      }
       if (typeof kind === "object") {
         const page = kind.retranslatePage;
         await runAi(() => retranslate(chapterId, [page.id]));
@@ -539,7 +546,9 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
             ? "Đang có lượt dịch — chờ lượt này xong hoặc huỷ rồi thử lại."
             : e instanceof ApiError && e.body.error === "page_not_prepared"
               ? "Có trang chưa xoá chữ + OCR xong — chạy lại trang lỗi trước rồi dịch."
-              : errorMessage(e),
+              : e instanceof ApiError && e.body.error === "page_has_manual_cleanup"
+                ? 'Trang đã được tẩy / xoá chữ tay trên ảnh — quét lại sẽ làm mất phần đó nên không quét lại được. Dùng công cụ "Quét chữ" (R) khoanh chữ còn sót.'
+                : errorMessage(e),
       }),
     onSettled: data.refresh,
   });
@@ -866,6 +875,7 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
 
   // Menu trang: dịch / dịch lại riêng 1 trang, bỏ chỉnh sửa tay trang đang mở (hoàn tác được bằng toast hoặc Ctrl/Cmd+Z).
   const retranslateOne = useCallback((page: ProgressPage) => runAction({ retranslatePage: page }), [runAction]);
+  const rescanOne = useCallback((page: ProgressPage) => runAction({ rescanPage: page }), [runAction]);
   const canResetEdits = useCallback((page: ProgressPage) => {
     const s = editorStore.getState();
     if (page.id !== s.pageId || !s.doc || !s.ai.state || s.readOnly) return false;
@@ -1442,6 +1452,7 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
           onTranslateSelected={translateSelected}
           onClearSelection={clearSelection}
           onRetranslate={retranslateOne}
+          onRescan={rescanOne}
           retranslateOff={retranslateOff}
           canResetEdits={canResetEdits}
           onResetEdits={resetEdits}

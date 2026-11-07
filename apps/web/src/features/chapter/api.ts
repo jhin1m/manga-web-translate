@@ -161,6 +161,12 @@ export const retranslate = (ch: string, pageIds?: string[]) =>
     method: "POST",
     body: pageIds ? { page_ids: pageIds } : {},
   });
+/**
+ * Quét lại trang: xoá chữ + OCR lại từ ảnh gốc rồi dịch tiếp (dịch lại chỉ dịch trên OCR cũ). 409
+ * `page_has_manual_cleanup` khi trang đã tẩy chữ tay trên ảnh.
+ */
+export const rescanPages = (ch: string, pageIds: string[]) =>
+  api<{ jobs: JobView[] }>(base(ch, "/rescan"), { method: "POST", body: { page_ids: pageIds } });
 export type ProofreadView = { job: JobView | null; suggestions: Suggestion[] };
 export const proofreadKey = (ch: string) => ["chapter", ch, "proofread"] as const;
 export const fetchProofread = (ch: string) => api<ProofreadView>(base(ch, "/proofread"));

@@ -80,7 +80,9 @@ lệch bbox mực từng dòng ≤ 1px — xem `benchmarks/phase-01-results.md`)
   không dùng được: editor (`isKnown` sai, vd font tuỳ chỉnh chưa nạp) rơi về font theo kind; worker vẫn ghi id slot vào
   `font_family` và vẽ bằng font dự phòng.
 - **SFX**: không dịch, không đặt chữ (giữ nguyên chữ gốc), nên form series không có ô font SFX; khoá `sfx` cũ trong
-  `default_fonts` được giữ nguyên nhưng không dùng.
+  `default_fonts` được giữ nguyên nhưng không dùng. Chữ trong bóng thoại (`text_bubble` / có `bubble_id`) không bao giờ
+  là SFX: OCR LLM gắn `is_sfx` cho vùng trong bóng bị worker gỡ (`ocr.py` `in_bubble`) — LLM chỉ thấy crop nên hay gắn
+  nhầm câu cảm thán / tên riêng, làm bóng còn nguyên chữ gốc. Trang đã OCR trước đó: "Quét lại trang".
 - **Đích không phải tiếng Việt** (`en | id | es | pt | fr`): cùng bộ font — mọi font trong `manifest.json` phải đủ glyph
   cho các đích này (`worker/tests/test_font_coverage.py`). Đích CJK/Thái chưa hỗ trợ (cần font + ngắt dòng không dấu cách).
 - **Vùng đặt chữ** (`available_rect` ở `typeset.py`, chỉ server tính; editor nhận sẵn `x, y, w, h`): chữ trong bóng

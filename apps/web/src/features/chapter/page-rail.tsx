@@ -4,7 +4,7 @@
  * thanh % trên thumbnail khi AI đang chạy; trang ẩn mờ + viền đứt, nằm đúng vị trí theo số trang. Bấm = kích hoạt
  * page và cuộn canvas tới (bỏ chọn); ⌘-click (macOS) / Ctrl-click / Shift-click = chọn trang để dịch riêng
  * (page-selection.ts), có chọn → thanh "Dịch N trang · Bỏ chọn" ở đầu cột. Thao tác trang là một menu: nút ⋯ luôn hiện
- * trên trang đang mở, chuột phải (Shift+F10 / phím Menu) mở cùng menu — Dịch / Dịch lại trang, Bỏ chỉnh sửa tay (khi khác
+ * trên trang đang mở, chuột phải (Shift+F10 / phím Menu) mở cùng menu — Dịch / Dịch lại trang, Quét lại trang, Bỏ chỉnh sửa tay (khi khác
  * bản AI), Ẩn trang. Trang khác chỉ có Ẩn trang; bấm trang ẩn mở menu Khôi phục. Số trang giữ số gốc (ord + 1) — trang
  * ẩn để lại lỗ số, khớp bảng văn bản và Tìm/Thay.
  */
@@ -41,6 +41,8 @@ export const PageRail = memo(function PageRail(props: {
   /** Dịch (trang chờ dịch) / dịch lại riêng 1 trang; `retranslateOff` = lý do đang tắt. */
   onRetranslate(page: ProgressPage): void;
   retranslateOff?: string;
+  /** Quét lại trang (xoá chữ + OCR lại rồi dịch) — tắt cùng lý do với dịch lại. */
+  onRescan(page: ProgressPage): void;
   /** Trang này có chỉnh sửa tay để bỏ không (chỉ trang đang mở). Gọi lúc mở menu nên đọc state mới nhất. */
   canResetEdits(page: ProgressPage): boolean;
   onResetEdits(page: ProgressPage): void;
@@ -85,6 +87,14 @@ export const PageRail = memo(function PageRail(props: {
             ? "Dịch + chèn chữ riêng trang này bằng AI"
             : "Dịch lại riêng trang này bằng AI (chỉnh sửa tay được giữ, bản AI mới hiện để chọn áp)"),
         run: () => props.onRetranslate(p),
+      });
+      items.push({
+        label: `Quét lại trang ${n}`,
+        disabled: !!props.retranslateOff,
+        title:
+          props.retranslateOff ??
+          "Sót chữ hoặc chữ chưa dịch: xoá chữ + nhận dạng lại từ ảnh gốc rồi dịch (chỉnh sửa chữ tay được giữ, bản AI mới hiện để chọn áp)",
+        run: () => props.onRescan(p),
       });
     }
     if (props.canResetEdits(p)) {
