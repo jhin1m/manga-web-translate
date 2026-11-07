@@ -8,6 +8,7 @@
     "auth:generate": "auth generate --config src/auth.ts --output ../../packages/db/src/schema/auth.ts --yes",
     "typecheck": "tsc -p tsconfig.json",
     "test": "vitest run",
+    "test:unit": "vitest run -c vitest.unit.config.ts",
     "jobs": "tsx src/jobs/runner.ts"
   },
   "dependencies": {

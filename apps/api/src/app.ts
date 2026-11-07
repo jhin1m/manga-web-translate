@@ -10,6 +10,7 @@ import { adminApi } from "./routes/admin.ts";
 import { chapterRoutes } from "./routes/chapters.ts";
 import { type DevLogin, devAuthRoutes } from "./routes/dev-auth.ts";
 import { exportRoutes } from "./routes/export.ts";
+import { createFilesRoutes } from "./routes/files.ts";
 import { findReplaceRoutes } from "./routes/find-replace.ts";
 import { fontRoutes } from "./routes/fonts.ts";
 import { glossaryRoutes } from "./routes/glossary.ts";
@@ -25,6 +26,7 @@ import { seriesIgnoreApplyRoutes } from "./routes/series-ignore-apply.ts";
 import { seriesSkipImageRoutes } from "./routes/series-skip-images.ts";
 import { uploadRoutes } from "./routes/uploads.ts";
 import { workerRoutes } from "./routes/worker.ts";
+import { diskDriver } from "./storage.ts";
 
 const envDevLogin = (): DevLogin | false =>
   devAutoLoginEnabled(env)
@@ -51,6 +53,10 @@ export function createApp({ devAutoLogin = envDevLogin() }: { devAutoLogin?: Dev
 
   // Worker (Bearer token worker, không cookie) — giao thức có fencing, xem jobs/queue.ts.
   app.route("/worker/v1", workerRoutes);
+
+  // Disk driver (self-host): link file ký HMAC do chính API phục vụ; S3 thì trình duyệt/worker gọi thẳng MinIO.
+  const disk = diskDriver();
+  if (disk) app.route("/files", createFilesRoutes(disk));
 
   app.notFound((c) => c.json({ error: "not_found" }, 404));
   app.onError((err, c) => {

@@ -89,8 +89,13 @@ class WorkerClient:
             headers={"authorization": f"Bearer {token}"},
             timeout=timeout,
         )
-        # Tải/đẩy file qua presigned URL: không gửi Bearer token sang domain file.
-        self.files = httpx.Client(timeout=httpx.Timeout(300.0, connect=30.0), follow_redirects=False)
+        # Tải/đẩy file qua presigned URL: không gửi Bearer token sang domain file. base_url = API để resolve link
+        # tương đối `/files/…` của disk driver (self-host); URL tuyệt đối (S3/MinIO) httpx giữ nguyên.
+        self.files = httpx.Client(
+            base_url=api.rstrip("/"),
+            timeout=httpx.Timeout(300.0, connect=30.0),
+            follow_redirects=False,
+        )
 
     def close(self) -> None:
         self.http.close()

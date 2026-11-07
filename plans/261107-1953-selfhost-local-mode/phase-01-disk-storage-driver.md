@@ -1,7 +1,7 @@
 ---
 phase: 1
 title: "Driver lưu đĩa + route /files + test 2 driver"
-status: pending
+status: completed
 priority: P1
 effort: "1.5d"
 dependencies: []
@@ -98,11 +98,11 @@ các export cũ = `driver.xxx`. Export thêm `diskDriver(): DiskDriver | null` c
 14. Worker: sửa `client.py` như Requirements; test `worker/tests/` dùng `httpx.MockTransport` xác nhận `download("/files/a?x")` gọi `http://api.test/files/a?x` và URL tuyệt đối giữ nguyên. Chạy `cd worker && uv run pytest -q tests/<file>` + `uv run ruff check`.
 
 ## Success Criteria
-- [ ] `pnpm --filter @mtl/api test:unit` xanh khi KHÔNG có Postgres/MinIO (kiểm bằng `docker ps` trống).
-- [ ] `pnpm infra:up && pnpm --filter @mtl/api test` xanh (S3 contract + toàn bộ test cũ).
-- [ ] `pnpm typecheck && pnpm lint` xanh.
-- [ ] Không caller nào của `storage.ts` phải sửa (`git diff --stat` chỉ gồm file trong danh sách trên).
-- [ ] Worker pytest + ruff xanh.
+- [x] `pnpm --filter @mtl/api test:unit` xanh khi KHÔNG có Postgres/MinIO (kiểm bằng `docker ps` trống).
+- [x] `pnpm infra:up && pnpm --filter @mtl/api test` xanh (S3 contract + toàn bộ test cũ).
+- [x] `pnpm typecheck && pnpm lint` xanh.
+- [x] Không caller nào của `storage.ts` phải sửa (`git diff --stat` chỉ gồm file trong danh sách trên).
+- [x] Worker pytest + ruff xanh.
 
 ## Risk Assessment
 - **Đổi env S3 thành optional làm VPS khởi động thiếu biến mà không báo** → superRefine bắt buộc khi driver s3; test env-storage phủ.
@@ -111,3 +111,25 @@ các export cũ = `driver.xxx`. Export thêm `diskDriver(): DiskDriver | null` c
 - **Rename khác filesystem** → `.tmp` nằm trong `root` (cùng mount).
 - **Hono `app.request` với URL tương đối** trong test: dùng `http://local` + path.
 - Rollback: driver mặc định s3 → revert phase không ảnh hưởng VPS.
+
+## Quyết định khi implement (tự chốt)
+- **`STORAGE_DRIVER` optional + `.transform` mặc định `"s3"`** trên schema env (không `.default`) → phase 2 chỉ đổi `?? "s3"` thành theo `MTL_LOCAL_MODE`. `Env` type giữ `"s3" | "disk"` (không undefined).
+- **Facade kiểm lại biến S3** (`required()` trong `storage.ts`) dù superRefine đã bắt buộc — để TS có `string`, s3-driver nhận cfg thuần (không import env).
+- **Hằng TTL + `checkTtl` ở `storage-drivers/types.ts`**, `storage.ts` re-export → cả 2 driver dùng chung, caller không đổi import.
+- **Route lấy key bằng param `/:key{.+}`** (Hono decode 1 lần) thay vì cắt prefix pathname → route không phụ thuộc chỗ mount. Query đọc bằng `URLSearchParams` (khớp cách driver dựng URL, `+`/`%2F` nhất quán).
+- **Tham số `m=PUT|POST` trên URL chỉ để đọc log**; route ký/kiểm theo method HTTP thật → link GET không dùng để PUT/POST được.
+- **Range**: chỉ 1 khoảng (`a-b`, `a-`, `-n`); nhiều khoảng/sai cú pháp → bỏ qua, trả 200 cả file; ngoài kích thước → 416 + `Content-Range: bytes */size`.
+- **PUT không giới hạn dung lượng** (như S3 presigned PUT; link do server ký cho key cố định, TTL ≤ 120s).
+- **`copyObject` khi nguồn không có sidecar** → xoá sidecar cũ của đích (không để Content-Type cũ lệch).
+- **Test route tách `files-route.test.ts`**, harness chung `test/unit/disk-test-harness.ts` (Hono `app.request`, fetcher tự đặt Content-Length như client thật vì `Request` + FormData không tự đặt).
+- **`vitest.unit.config.ts` cấp env giả hợp lệ** (DATABASE_URL cổng 1, `STORAGE_DRIVER=disk`): `env-storage.test` import `src/env.ts` (parse lúc import) — không gì mở kết nối DB. `vitest.config.ts` (integration) cũng chạy `test/unit/**` (vô hại, CI phủ luôn) — không sửa config integration.
+- **Key test chung đổi `ws/test/…` → `u/test/…`** (đúng format `storage-keys.ts`).
+- **Worker test** thay `files._transport` bằng `httpx.MockTransport` để giữ nguyên `base_url`/headers của client thật.
+
+## Kết quả (07/11/2026)
+- `pnpm --filter @mtl/api test:unit`: 4 file / 31 test xanh (DATABASE_URL giả cổng 1, không kết nối DB/MinIO). Máy dev có container của project khác nên không kiểm được "docker ps trống" theo nghĩa đen.
+- `pnpm --filter @mtl/api test`: 48 file / 472 test xanh (gồm contract S3 với MinIO, PUT qua proxy file).
+- `pnpm typecheck`, `pnpm lint` xanh. Worker: `pytest tests/test_client_file_urls.py test_worker_runner.py test_worker_drain.py` 45 pass, ruff check/format xanh.
+- Smoke server Node thật (`createApp` + `STORAGE_DRIVER=disk`): POST 204, GET 200 đủ header, Range 206, PUT 200, unsigned 403.
+- Code review: không lỗi chặn; đã sửa: `head` trả null với key sai (tránh 500 ở `page-state` khi `user_mask_key` lạ), cấm `\n` trong trường ký (sign ném, verify trả false), dọn file tạm khi ghi sidecar lỗi, POST ghi bằng `file.stream()` (bớt 1 bản copy RAM).
+- **Chuyển cho phase 2**: `apps/web/vite.config.ts` chỉ proxy `/api` → dev với `STORAGE_DRIVER=disk` cần proxy thêm `/files`. Header `Cross-Origin-Resource-Policy: same-origin` (secureHeaders toàn cục) chặn `<img>` khác origin — local mode cùng origin nên OK, dev disk phải đi qua proxy Vite.

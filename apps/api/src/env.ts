@@ -8,100 +8,116 @@ const blank = <T extends z.ZodType>(schema: T) => z.preprocess((v) => (v === "" 
 const optionalUsd = blank(z.coerce.number().nonnegative().optional());
 const flag = blank(z.enum(["true", "false"]).default("false")).transform((v) => v === "true");
 
-const Env = z.object({
-  NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
-  DATABASE_URL: z.string().url(),
-  BETTER_AUTH_SECRET: z.string().min(32),
-  BETTER_AUTH_URL: z.string().url(),
-  WEB_ORIGIN: z.string().url(),
-  API_PORT: z.coerce.number().int().default(8787),
-  S3_ENDPOINT: z.string().url(),
-  S3_REGION: z.string().default("us-east-1"),
-  S3_BUCKET: z.string().min(1),
-  S3_ACCESS_KEY: z.string().min(1),
-  S3_SECRET_KEY: z.string().min(1),
-  /** Domain file riêng trình duyệt thấy (dev: localhost:9100, prod: files.<domain>). */
-  FILES_DOMAIN: z.string().min(1),
-  FILES_SCHEME: z.enum(["http", "https"]).default("https"),
-  /**
-   * Muối input_rev lúc enqueue: chỉ tăng khi cùng input mà worker cho kết quả khác (tăng = chạy lại mọi job, tốn AI).
-   * Có thể thấp hơn worker PIPELINE_VERSION khi worker chỉ tăng để chặn bản cũ qua MIN_PIPELINE_VERSION.
-   */
-  PIPELINE_VERSION: z
-    .string()
-    .regex(/^\d+\.\d+\.\d+$/)
-    .default("0.4.0"),
-  /**
-   * Worker có pipeline_version thấp hơn → claim trả 426. 0.4.1: worker hiểu settings.narration_font.
-   * 0.4.2: export pages[].skipped. 0.5.1: translate/export inputs.fonts (font tuỳ chỉnh của người dùng).
-   * 0.6.0: payload có cài đặt pipeline (page.prepare.pipeline, page.reinpaint.inpaint, page.ocr_region.ocr_engine).
-   * 0.7.0: chapter.translate theo lô — payload/result `carry` (ngữ cảnh chuyền giữa các job lô).
-   * 0.7.1: TextBox.valign — schema input export của worker cũ (additionalProperties: false) từ chối state có valign → job export fail.
-   * 0.8.0: Region.style + settings.thought_font/note_font — schema input/output của worker cũ (additionalProperties: false) từ chối.
-   * 0.9.0: page.reinpaint.auto_text_bbox (OCR vùng tự xoá chữ gốc) — worker cũ đòi user_mask_key/user_mask → fail.
-   * 0.10.0: payload `llm` + claim `llm` (key AI theo job), `model_tier` optional — schema worker cũ từ chối cả hai.
-   */
-  MIN_PIPELINE_VERSION: z
-    .string()
-    .regex(/^\d+\.\d+\.\d+$/)
-    .default("0.10.0"),
-  /**
-   * Kill-switch ngân sách toàn cục (USD, cộng usage_ledger.cost_usd mọi người dùng + chi phí nền tảng, ngày/tháng
-   * theo UTC). Bắt buộc ở production; 0 = chặn mọi job tốn tiền. Không đặt (dev/test) = không giới hạn.
-   */
-  GLOBAL_DAILY_USD: optionalUsd,
-  GLOBAL_MONTHLY_USD: optionalUsd,
-  /** Dispatcher Modal trong `mtl-jobs`; false → chỉ worker Mac (rollback). */
-  DISPATCHER_ENABLED: flag,
-  /** Web endpoint `drain` của worker/modal_app.py; body ký HMAC-SHA256 bằng MODAL_DRAIN_SECRET. */
-  MODAL_DRAIN_URL: blank(z.string().url().optional()),
-  MODAL_DRAIN_SECRET: blank(z.string().min(32).optional()),
-  /** Khớp `max_containers` / `scaledown_window` / `timeout` của function Modal (ước lượng GPU rỗi khi bị kill). */
-  MODAL_MAX_CONTAINERS: blank(z.coerce.number().int().positive().default(2)),
-  MODAL_SCALEDOWN_S: blank(z.coerce.number().int().positive().default(60)),
-  MODAL_MAX_LIFETIME_S: blank(z.coerce.number().int().positive().default(3600)),
-  /** Kênh cảnh báo duy nhất: topic ntfy (VD https://ntfy.sh/<topic-bí-mật>). Không đặt → chỉ log. */
-  ALERT_NTFY_URL: blank(z.string().url().optional()),
-  /**
-   * Mở đăng ký email/mật khẩu (POST /api/auth/sign-up/email). Mặc định tắt mọi môi trường; bật thì bắt buộc
-   * GLOBAL_DAILY_USD + USER_DAILY_USD (bất kể NODE_ENV). Tắt → chỉ `pnpm create-user` tạo được tài khoản.
-   */
-  SIGNUP_ENABLED: flag,
-  /**
-   * Hạn mức chi phí mỗi người dùng mỗi ngày UTC (USD, mọi chi phí của user: LLM + GPU). Vượt → endpoint LLM 402,
-   * job LLM fail `quota_exceeded`. 0 = chặn mọi job LLM; không đặt = không giới hạn.
-   */
-  USER_DAILY_USD: optionalUsd,
-  /**
-   * Email quản trị (phân tách bằng dấu phẩy, không phân biệt hoa thường). Chỉ những tài khoản này vào được
-   * /api/admin/*; đăng ký qua web bằng các email này luôn bị từ chối — admin chỉ tạo bằng `pnpm create-user`.
-   */
-  ADMIN_EMAILS: blank(z.string().optional()).transform((v) =>
-    (v ?? "")
-      .split(",")
-      .map((e) => e.trim().toLowerCase())
-      .filter(Boolean),
-  ),
-  /**
-   * Khoá chính (32 byte base64, `openssl rand -base64 32`) mã hoá key provider AI trong DB (AES-256-GCM). Không đặt =
-   * không lưu / đổi được key provider. Mất hoặc đổi khoá = nhập lại key từng provider trên UI.
-   */
-  SECRETS_KEY: blank(
-    z
+const Env = z
+  .object({
+    NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
+    DATABASE_URL: z.string().url(),
+    BETTER_AUTH_SECRET: z.string().min(32),
+    BETTER_AUTH_URL: z.string().url(),
+    WEB_ORIGIN: z.string().url(),
+    API_PORT: z.coerce.number().int().default(8787),
+    /**
+     * Nơi lưu file: `s3` (MinIO/S3, mặc định — bản VPS) hoặc `disk` (thư mục FILES_DIR, link `/files/…` ký HMAC do
+     * chính API phục vụ — bản self-host). Không đặt = `s3`.
+     */
+    STORAGE_DRIVER: blank(z.enum(["s3", "disk"]).optional()),
+    /** Thư mục gốc của disk driver. */
+    FILES_DIR: blank(z.string().min(1).default("/data/files")),
+    /** `S3_*` + FILES_DOMAIN bắt buộc khi STORAGE_DRIVER=s3 (kiểm ở parseEnv). */
+    S3_ENDPOINT: blank(z.string().url().optional()),
+    S3_REGION: z.string().default("us-east-1"),
+    S3_BUCKET: blank(z.string().min(1).optional()),
+    S3_ACCESS_KEY: blank(z.string().min(1).optional()),
+    S3_SECRET_KEY: blank(z.string().min(1).optional()),
+    /** Domain file riêng trình duyệt thấy (dev: localhost:9100, prod: files.<domain>). */
+    FILES_DOMAIN: blank(z.string().min(1).optional()),
+    FILES_SCHEME: z.enum(["http", "https"]).default("https"),
+    /**
+     * Muối input_rev lúc enqueue: chỉ tăng khi cùng input mà worker cho kết quả khác (tăng = chạy lại mọi job, tốn AI).
+     * Có thể thấp hơn worker PIPELINE_VERSION khi worker chỉ tăng để chặn bản cũ qua MIN_PIPELINE_VERSION.
+     */
+    PIPELINE_VERSION: z
       .string()
-      .regex(/^[A-Za-z0-9+/]{43}=$/)
-      .refine((v) => Buffer.from(v, "base64").length === 32, "SECRETS_KEY phải giải mã ra đúng 32 byte")
-      .optional(),
-  ),
-  /** Chỉ dev: tài khoản SPA tự đăng nhập (POST /api/dev/auto-login). Đặt ở production → API không khởi động. */
-  DEV_AUTO_LOGIN_EMAIL: blank(z.string().email().optional()),
-  DEV_AUTO_LOGIN_PASSWORD: blank(z.string().min(10).optional()),
-});
+      .regex(/^\d+\.\d+\.\d+$/)
+      .default("0.4.0"),
+    /**
+     * Worker có pipeline_version thấp hơn → claim trả 426. 0.4.1: worker hiểu settings.narration_font.
+     * 0.4.2: export pages[].skipped. 0.5.1: translate/export inputs.fonts (font tuỳ chỉnh của người dùng).
+     * 0.6.0: payload có cài đặt pipeline (page.prepare.pipeline, page.reinpaint.inpaint, page.ocr_region.ocr_engine).
+     * 0.7.0: chapter.translate theo lô — payload/result `carry` (ngữ cảnh chuyền giữa các job lô).
+     * 0.7.1: TextBox.valign — schema input export của worker cũ (additionalProperties: false) từ chối state có valign → job export fail.
+     * 0.8.0: Region.style + settings.thought_font/note_font — schema input/output của worker cũ (additionalProperties: false) từ chối.
+     * 0.9.0: page.reinpaint.auto_text_bbox (OCR vùng tự xoá chữ gốc) — worker cũ đòi user_mask_key/user_mask → fail.
+     * 0.10.0: payload `llm` + claim `llm` (key AI theo job), `model_tier` optional — schema worker cũ từ chối cả hai.
+     */
+    MIN_PIPELINE_VERSION: z
+      .string()
+      .regex(/^\d+\.\d+\.\d+$/)
+      .default("0.10.0"),
+    /**
+     * Kill-switch ngân sách toàn cục (USD, cộng usage_ledger.cost_usd mọi người dùng + chi phí nền tảng, ngày/tháng
+     * theo UTC). Bắt buộc ở production; 0 = chặn mọi job tốn tiền. Không đặt (dev/test) = không giới hạn.
+     */
+    GLOBAL_DAILY_USD: optionalUsd,
+    GLOBAL_MONTHLY_USD: optionalUsd,
+    /** Dispatcher Modal trong `mtl-jobs`; false → chỉ worker Mac (rollback). */
+    DISPATCHER_ENABLED: flag,
+    /** Web endpoint `drain` của worker/modal_app.py; body ký HMAC-SHA256 bằng MODAL_DRAIN_SECRET. */
+    MODAL_DRAIN_URL: blank(z.string().url().optional()),
+    MODAL_DRAIN_SECRET: blank(z.string().min(32).optional()),
+    /** Khớp `max_containers` / `scaledown_window` / `timeout` của function Modal (ước lượng GPU rỗi khi bị kill). */
+    MODAL_MAX_CONTAINERS: blank(z.coerce.number().int().positive().default(2)),
+    MODAL_SCALEDOWN_S: blank(z.coerce.number().int().positive().default(60)),
+    MODAL_MAX_LIFETIME_S: blank(z.coerce.number().int().positive().default(3600)),
+    /** Kênh cảnh báo duy nhất: topic ntfy (VD https://ntfy.sh/<topic-bí-mật>). Không đặt → chỉ log. */
+    ALERT_NTFY_URL: blank(z.string().url().optional()),
+    /**
+     * Mở đăng ký email/mật khẩu (POST /api/auth/sign-up/email). Mặc định tắt mọi môi trường; bật thì bắt buộc
+     * GLOBAL_DAILY_USD + USER_DAILY_USD (bất kể NODE_ENV). Tắt → chỉ `pnpm create-user` tạo được tài khoản.
+     */
+    SIGNUP_ENABLED: flag,
+    /**
+     * Hạn mức chi phí mỗi người dùng mỗi ngày UTC (USD, mọi chi phí của user: LLM + GPU). Vượt → endpoint LLM 402,
+     * job LLM fail `quota_exceeded`. 0 = chặn mọi job LLM; không đặt = không giới hạn.
+     */
+    USER_DAILY_USD: optionalUsd,
+    /**
+     * Email quản trị (phân tách bằng dấu phẩy, không phân biệt hoa thường). Chỉ những tài khoản này vào được
+     * /api/admin/*; đăng ký qua web bằng các email này luôn bị từ chối — admin chỉ tạo bằng `pnpm create-user`.
+     */
+    ADMIN_EMAILS: blank(z.string().optional()).transform((v) =>
+      (v ?? "")
+        .split(",")
+        .map((e) => e.trim().toLowerCase())
+        .filter(Boolean),
+    ),
+    /**
+     * Khoá chính (32 byte base64, `openssl rand -base64 32`) mã hoá key provider AI trong DB (AES-256-GCM). Không đặt =
+     * không lưu / đổi được key provider. Mất hoặc đổi khoá = nhập lại key từng provider trên UI.
+     */
+    SECRETS_KEY: blank(
+      z
+        .string()
+        .regex(/^[A-Za-z0-9+/]{43}=$/)
+        .refine((v) => Buffer.from(v, "base64").length === 32, "SECRETS_KEY phải giải mã ra đúng 32 byte")
+        .optional(),
+    ),
+    /** Chỉ dev: tài khoản SPA tự đăng nhập (POST /api/dev/auto-login). Đặt ở production → API không khởi động. */
+    DEV_AUTO_LOGIN_EMAIL: blank(z.string().email().optional()),
+    DEV_AUTO_LOGIN_PASSWORD: blank(z.string().min(10).optional()),
+  })
+  .transform((e) => ({ ...e, STORAGE_DRIVER: e.STORAGE_DRIVER ?? ("s3" as const) }));
 export type Env = z.infer<typeof Env>;
+
+const S3_REQUIRED = ["S3_ENDPOINT", "S3_BUCKET", "S3_ACCESS_KEY", "S3_SECRET_KEY", "FILES_DOMAIN"] as const;
 
 /** Parse + kiểm chéo biến môi trường (thuần, test gọi trực tiếp). */
 export function parseEnv(raw: Record<string, string | undefined>): Env {
   return Env.superRefine((e, ctx) => {
+    const missingS3 = e.STORAGE_DRIVER === "s3" ? S3_REQUIRED.filter((k) => !e[k]) : [];
+    if (missingS3.length > 0) {
+      ctx.addIssue({ code: "custom", message: `STORAGE_DRIVER=s3 cần ${missingS3.join(", ")}` });
+    }
     if (e.NODE_ENV === "production" && (e.GLOBAL_DAILY_USD === undefined || e.GLOBAL_MONTHLY_USD === undefined)) {
       ctx.addIssue({ code: "custom", message: "production cần GLOBAL_DAILY_USD và GLOBAL_MONTHLY_USD" });
     }

@@ -1,5 +1,5 @@
 /**
- * Trạng thái cho `/healthz`: DB, MinIO, runner (`mtl-jobs` ghi runtime_flags.runner_heartbeat mỗi 30s).
+ * Trạng thái cho `/healthz`: DB, storage (bucket S3 hoặc thư mục disk driver), runner (`mtl-jobs` ghi runtime_flags.runner_heartbeat mỗi 30s).
  * `oldest_queued_age_s` để infra/alert.sh cảnh báo hàng đợi cũ > 15' (không ảnh hưởng ok/fail); job của tài khoản bị khoá không tính (không ai claim, sẽ chờ mãi).
  */
 import { runtimeFlags } from "@mtl/db";
