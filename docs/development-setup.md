@@ -75,7 +75,7 @@ E2E web (Playwright, Chromium): `pnpm --filter @mtl/web e2e` — tự reset DB `
   `railButton()`, `pageThumbs()` / `pageThumb(page, n)` (thumbnail theo tên truy cập "Trang n · trạng thái").
 - Spec: `full-flow` (thả strip ở home → dịch → sửa → xuất), `click-budget` (số thao tác từ home tới editor; thả ảnh = 1 thao tác tới khi chương đang dịch), `routes` (cây route một người dùng; path cũ `/w/...` không còn, không redirect), `upload-chapter`, `editor`, `chapter-tools`, `series-manage`, `glossary-language-pair` (glossary chung theo cặp + cảnh báo đổi ngôn ngữ series), `typeset-parity`, `fonts` (font của bạn), `signup` (đăng ký → home rỗng → tạo series; đăng ký lại cùng email không lộ gì), `pipeline-settings` (Cài đặt admin → Pipeline lưu/tải lại/về mặc định), `admin-settings` (admin thấy Cài đặt; user thường không thấy link, `/settings` → `/`), `proofread` (AI hiệu đính: chạy → Nhận → hoàn tác → Bỏ).
 - DB e2e `mtl_test_e2e` **dùng chung mọi checkout** và cổng cố định (5181/8797) → không chạy e2e từ 2 worktree cùng lúc. Gate parity Konva ↔ render.py:
-`pnpm --filter @mtl/web e2e typeset-parity` (CI chạy riêng spec này).
+`pnpm --filter @mtl/web e2e typeset-parity` (CI chạy riêng spec này trên runner macOS — fixture hiệu chỉnh theo Chromium macOS, Chromium Linux vẽ chữ lệch tới ~10px).
 
 ## Web (`apps/web`)
 

@@ -23,10 +23,31 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm lint
       - run: pnpm test
-      - name: Parity Konva ↔ render.py (bbox mực từng dòng ≤ 1px so fixture render.py đã commit)
-        run: |
-          pnpm --filter @mtl/web exec playwright install --with-deps chromium
-          pnpm --filter @mtl/web e2e typeset-parity
       - name: Infra logs on failure
         if: failure()
         run: docker compose -f infra/docker-compose.dev.yml logs --tail 100
+
+  # Gate parity Konva ↔ render.py (bbox mực từng dòng ≤ 1px so fixture render.py đã commit) chạy trên macOS: fixture
+  # hiệu chỉnh theo Chromium macOS; Chromium Linux đo/vẽ chữ khác tới ~10px nên gate 1px không có nghĩa ở đó.
+  # Runner macOS không có Docker → Postgres cài qua Homebrew (chỉ cần DB e2e cho seed + API của Playwright).
+  typeset-parity:
+    runs-on: macos-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: cp .env.example .env
+      - name: Postgres 17 (cổng 5442, user mtl như infra dev)
+        run: |
+          brew install postgresql@17
+          PG="$(brew --prefix postgresql@17)/bin"
+          "$PG/initdb" -D "$RUNNER_TEMP/pg" -U mtl --auth=trust
+          "$PG/pg_ctl" -D "$RUNNER_TEMP/pg" -o "-p 5442" -l "$RUNNER_TEMP/pg.log" -w start
+          "$PG/createdb" -h localhost -p 5442 -U mtl mtl
+      - run: pnpm --filter @mtl/web exec playwright install chromium
+      - run: pnpm --filter @mtl/web e2e typeset-parity
