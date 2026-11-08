@@ -1,7 +1,7 @@
 # Mã và model bên thứ ba (worker)
 
-MVP nội bộ: được dùng lại code/model mở bất kể license (GPL/AGPL…); rà giấy phép trước khi thương mại hoá
-(README → "Rà giấy phép"). Weights không commit — nguồn + revision + sha256 ở [`models.lock.json`](./models.lock.json).
+Được dùng lại code / model mở bất kể license (GPL / AGPL…), bảng dưới chỉ ghi nguồn.
+Weights không commit — nguồn + revision + sha256 ở [`models.lock.json`](./models.lock.json).
 
 ## Code
 

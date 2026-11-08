@@ -70,7 +70,7 @@ Không có plan đang mở nào đụng storage/auth/env/infra (đã quét `plan
 
 ## Còn mở
 
-- **Rà license trước phát hành công khai** (GPL/weights trong image worker — xem `worker/THIRD_PARTY.md`).
+- Không còn. License: user chốt 08/11/2026 không cần rà (GPL / weights trong image worker dùng thoải mái).
 
 ## Acceptance (toàn plan)
 

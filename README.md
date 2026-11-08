@@ -1,202 +1,90 @@
 # Manga Web Translate
 
-Web app dịch manga/manhwa, mỗi người một tài khoản riêng (đăng ký mở được bằng `SIGNUP_ENABLED` hoặc công tắc trong Cài đặt admin — giá trị trên UI thắng env —, mặc định tắt): thả ảnh hoặc ZIP một chương → hệ thống ghép/cắt trang, xoá chữ +
-OCR, dịch theo lô trang (giữ ngữ cảnh giữa các lô) + tự chèn chữ → sửa tay trong editor → xuất ZIP/CBZ.
+Web app dịch manga / manhwa / manhua. Thả ảnh hoặc ZIP một chương → tự cắt trang, xoá chữ + OCR, dịch bằng LLM, tự chèn
+chữ → sửa tay trong editor → xuất ZIP / CBZ.
 
-> Trạng thái: **MVP nội bộ** (Phase 1–7 xong). Production chưa mở đăng ký công khai (`SIGNUP_ENABLED=false`, và admin chưa bật trên UI), chưa đo chất lượng/chi phí trên dữ liệu thật
-> — xem [Việc còn lại](#việc-còn-lại).
+## Chạy trên máy mình (Docker)
 
-## Tính năng hiện có
+```bash
+mkdir mtl && cd mtl
+curl -fsSLO https://raw.githubusercontent.com/jhin1m/manga-web-translate/main/docker-compose.yml
+docker compose up -d
+```
 
-- **Upload**: thả ảnh lẻ / ZIP ở home hoặc màn series → tự đoán series + số chương, upload nền (song song, thử lại, tải
-  tiếp sau khi đóng tab). Cột ảnh gốc hiện ngay khi đang tải; xoá / khôi phục và sắp lại thứ tự ảnh trước khi cắt trang
-  (kéo-thả, menu chuột phải, Alt+↑/↓, có hoàn tác).
-- **Dịch chương một nút** ("Dịch chương"): ghép slice → cắt trang theo detector → xoá chữ (inpaint) + OCR (mặc định
-  local, tuỳ chọn LLM; song song theo trang) → dịch theo chuỗi job lô (≤ 4 trang / 40 khối, tuần tự, ngữ cảnh + tên nhân vật chuyền giữa
-  các lô) + auto-typeset theo hợp đồng layout dùng chung web ↔ server. Lô đầu chạy ngay khi có trang đã OCR nên trang đầu
-  xong và sửa được trong khi các lô sau còn chạy; menu ⋯ "Chỉ xoá chữ + OCR (soát trước)" dừng ở "Chờ dịch". Chọn vài
-  trang (⌘/Ctrl-click, Shift-click) để dịch riêng. Tiến độ từng trang bằng tiếng Việt (bước + số đếm, cập nhật vài giây).
-  Màu chữ / viền lấy theo chữ gốc (đỏ, vàng viền nâu…), không đủ tương phản thì về đen / trắng.
-- **Editor** (react-konva): xem từng trang, sửa box chữ, undo/redo, autosave có version + khôi phục bản nháp, vẽ mask
-  để xoá chữ lại, OCR lại vùng tự vẽ, Xem gốc / Chia đôi, bảng văn bản cả chương, khoá chương theo tab đang sửa; rail
-  công cụ + 1 panel theo công cụ, thanh nổi cạnh khối, cột thumbnail trang.
-- **Bỏ rác**: ẩn trang sau khi cắt trang (không dịch, không xuất, khôi phục được); học ảnh credit theo series ("Luôn bỏ ở
-  series này" → chương sau tự bỏ ảnh giống, dHash); gợi ý "Có thể là credit" theo khổ ảnh; danh sách chữ watermark bỏ
-  qua theo series (không gửi LLM, không chèn chữ; khớp bỏ qua dấu cách, mục `/regex/` chạy RE2 ở API); áp ngược danh
-  sách cho chương đã dịch (xem trước → ẩn box → hoàn tác).
-- **Series**: ngôn ngữ nguồn `ko | ja | zh | en` → đích `vi | en | id | es | pt | fr`, định dạng strip / từng trang,
-  kính ngữ, quy tắc xưng hô, giọng văn, font mặc định theo loại chữ (dropdown xem trước bằng chính font đó). Model AI
-  không chọn theo series — admin gán chung ở Cài đặt → Model tác vụ.
-- **Cài đặt pipeline** (`/settings` → Pipeline chung, chỉ admin; áp cho cả hệ thống; nhãn tiếng Việt + thuật ngữ gốc + tooltip): detector
-  (RT-DETR v2 comic / Comic Text Detector), OCR engine theo ngôn ngữ nguồn (AI LLM / **MangaOCR** cho tiếng Nhật /
-  **PaddleOCR** cho Hàn–Trung–Nhật–Anh, cả hai chạy local bằng ONNX, không tốn token, không tính ngân sách), model xoá
-  chữ (Big LaMa / **LaMa manga**); "Nâng cao": ngưỡng tin cậy, nới mask, cỡ vùng xoá chữ. OCR mặc định chạy local
-  (MangaOCR cho tiếng Nhật, PaddleOCR cho Hàn / Trung / Anh — ảnh không rời worker); admin đổi về AI LLM theo từng ngôn
-  ngữ. Cài đặt được chụp vào job lúc chạy (xoá chữ + OCR, xoá chữ lại, OCR vùng tự vẽ).
-- **AI hiệu đính**: rail công cụ → "Hiệu đính" chạy cho cả chương đã dịch (bản dịch hiện tại + glossary + xưng hô /
-  giọng văn của series + ảnh trang) → gợi ý theo khối (cũ → mới, lý do), Nhận / Bỏ từng cái, "Nhận tất cả" ở trang
-  đang mở. Không tự ghi đè: Nhận = sửa bản dịch thường (hoàn tác, autosave, version); khối đã sửa khác → "Lỗi thời".
-  Trước khi chạy hiện hộp xác nhận: số trang, model, khoảng chi phí USD + thời gian (theo các lượt hiệu đính gần đây
-  của chính người dùng, chưa có thì số sơ bộ) và báo rõ ảnh trang + bản dịch được gửi lên nhà cung cấp AI.
-- **Tài khoản**: một người = một tài khoản, dữ liệu (series, glossary, font, cài đặt) riêng từng người. Đăng ký email /
-  mật khẩu ở `/login` khi đăng ký đang mở (`SIGNUP_ENABLED` hoặc admin bật ở Cài đặt › Hạn mức & đăng ký); tắt thì tạo tài khoản bằng `pnpm create-user`. Hạn mức chi phí AI mỗi
-  người mỗi ngày (`USER_DAILY_USD` là mặc định, admin đổi trên UI; hiện ở menu tài khoản). Font tuỳ chỉnh TTF/OTF của riêng mình upload ở `/fonts` hoặc ngay
-  trong dropdown font mặc định của series (font hệ thống do admin tải lên cho mọi người dùng), dùng trong editor, font mặc định series, auto-typeset và bản xuất.
-- **Admin** (email trong `ADMIN_EMAILS`; người khác vào `/settings` bị đưa về `/`): `/settings` có Pipeline chung, Nhà cung cấp AI
-  (Anthropic / Gemini / OpenAI / OpenAI-compatible, kèm mẫu **DeepSeek** tự điền base URL + gợi ý giá; key mã hoá
-  AES-256-GCM bằng `SECRETS_KEY`), Model tác vụ (gán model cho
-  dịch / OCR / hiệu đính, chụp vào job lúc claim), Hạn mức & đăng ký, Người dùng (khoá / mở tài khoản), Font hệ thống —
-  vận hành xem [deployment-guide.md](./docs/deployment-guide.md), giao thức claim ở [job-queue-worker.md](./docs/job-queue-worker.md).
-- **Glossary**: chung theo cặp ngôn ngữ + riêng series, CSV, áp glossary hàng loạt; tìm & thay có hoàn tác.
-- **Xuất**: drawer một nút "Tải chương" (xong tự tải): ảnh trong .zip để đăng web hoặc .cbz (chất lượng Gốc / Cao / Nhẹ),
-  chia ảnh như lúc tải lên hoặc theo trang đã cắt; cảnh báo trước khi xuất nói rõ hậu quả (trang chưa dịch không có trong
-  file…); sửa / dịch lại / ẩn hay khôi phục trang sau lần xuất cuối → chương hiện "Xuất lại".
-- **Vận hành**: hàng đợi job có fencing, worker Python pull-only (Mac local hoặc Modal GPU), kill-switch ngân sách,
-  backup Postgres + MinIO, `/healthz` — xem [deployment-guide.md](./docs/deployment-guide.md).
+Lần đầu worker tải model AI (~1–2 GB). Mở <http://localhost:8080> → **Cài đặt → Nhà cung cấp** → nhập key AI (mặc định
+Anthropic). Không cần `.env`, không cần tài khoản. Phát hiện chữ, OCR, xoá chữ chạy local trên máy; chỉ bước dịch gọi
+API AI.
+
+Cập nhật: `docker compose pull && docker compose up -d`.
+
+> [!WARNING]
+> **Không có đăng nhập.** Chỉ dùng trên máy mình, đừng mở cổng ra LAN / Internet.
+
+Cần Docker Compose ≥ 2.17, RAM trống ≥ 4 GB, máy amd64 hoặc arm64 (Linux / macOS). Backup, khôi phục, xử lý sự cố:
+[docs/self-host.md](./docs/self-host.md).
+
+## Tính năng
+
+- **Dịch chương một nút**: cắt trang theo detector, xoá chữ (Big LaMa / LaMa manga), OCR local (MangaOCR, PaddleOCR)
+  hoặc LLM, dịch theo lô trang giữ ngữ cảnh + tên nhân vật, tự chèn chữ theo màu gốc. Trang đầu sửa được khi các lô sau
+  còn chạy.
+- **Editor**: sửa box chữ, undo / redo, autosave có version, vẽ mask xoá chữ lại, OCR lại vùng chọn, xem gốc / chia đôi,
+  bảng văn bản cả chương.
+- **AI hiệu đính**: gợi ý sửa theo khối, nhận / bỏ từng cái, báo trước chi phí.
+- **Series**: ngôn ngữ nguồn `ko | ja | zh | en` → đích `vi | en | id | es | pt | fr`, kính ngữ, xưng hô, giọng văn,
+  font mặc định; glossary chung + riêng series (CSV), tìm & thay.
+- **Lọc rác**: ẩn trang, tự bỏ ảnh credit đã học theo series, danh sách chữ watermark bỏ qua.
+- **Font**: upload TTF / OTF riêng, dùng cả trong editor và bản xuất.
+- **Xuất**: ZIP để đăng web hoặc CBZ, 3 mức chất lượng; chương sửa sau lần xuất cuối hiện "Xuất lại".
+
+## Hai cách chạy
+
+| | Tự host (Docker) | Production (VPS) |
+|---|---|---|
+| Người dùng | 1, không đăng nhập | Nhiều tài khoản, admin, hạn mức chi phí |
+| Lưu file | Đĩa (`./data`) | S3 / MinIO, presigned URL |
+| Worker AI | Container CPU | Mac local hoặc Modal GPU |
+| Hướng dẫn | [self-host.md](./docs/self-host.md) | [deployment-guide.md](./docs/deployment-guide.md) |
 
 ## Kiến trúc
 
 | Thư mục | Vai trò |
 |---|---|
-| `apps/api` | Hono (Node 24), better-auth, route người dùng `/api/*` (`requireUser`, dữ liệu lọc theo `user_id`), route admin `/api/admin/*` (`requireAdmin`, `ADMIN_EMAILS`), API worker `/worker/v1/*` |
-| `apps/web` | Vite + React SPA, TanStack Router/Query, zustand, react-konva |
-| `packages/db` | Drizzle schema + migration (có down viết tay), `scoped(db, userId)` cô lập dữ liệu theo người dùng |
-| `packages/shared` | Hợp đồng zod dùng chung (page state, job, giao thức worker) → JSON Schema cho worker |
-| `worker` | Python: `mtl_pipeline` (detect, inpaint, OCR/dịch LLM, typeset, export), `mtl_worker` (claim/heartbeat/complete) |
-| `infra` | docker-compose dev (Postgres 17, MinIO, proxy domain file), production: systemd, Caddy, backup |
+| `apps/api` | Hono (Node 24), better-auth, API người dùng `/api/*`, admin `/api/admin/*`, worker `/worker/v1/*` |
+| `apps/web` | Vite + React SPA, TanStack Router / Query, zustand, react-konva |
+| `packages/db` | Drizzle schema + migration (có down viết tay) |
+| `packages/shared` | Hợp đồng zod dùng chung web ↔ API ↔ worker |
+| `worker` | Python: `mtl_pipeline` (detect, inpaint, OCR, dịch, typeset, export), `mtl_worker` (claim / heartbeat) |
+| `infra` | Docker dev + self-host, systemd, Caddy, backup |
 
-Storage private: trình duyệt chỉ nhận presigned URL TTL ngắn trên domain file riêng; key bất biến theo revision.
+## Phát triển
 
-## Tự host bằng Docker
-
-Bản cá nhân 1 người dùng, không cần `.env`, không tài khoản:
+Cần Node 24, pnpm 12, Docker; worker cần Python + `uv`.
 
 ```bash
-mkdir mtl && cd mtl
-curl -fsSLO https://raw.githubusercontent.com/jhin1m/manga-web-translate/main/docker-compose.yml
-docker compose up -d     # mở http://localhost:8080; cập nhật: docker compose pull && docker compose up -d
+pnpm i && cp .env.example .env
+pnpm dev:all     # infra + migrate + API :8787 + web http://localhost:5180 + jobs + worker
 ```
 
-> **Không có đăng nhập** — chỉ dùng trên máy mình, đừng mở cổng ra LAN/Internet. Chi tiết (backup, khôi phục, sự cố):
-> [docs/self-host.md](./docs/self-host.md).
-
-## Bắt đầu nhanh (phát triển)
-
-Yêu cầu: Node 24, pnpm 12, Docker (Compose v2); worker cần Python + `uv`.
+Kiểm tra trước khi commit:
 
 ```bash
-pnpm i
-cp .env.example .env
-pnpm infra:up && pnpm db:migrate
-OWNER_PASSWORD='...' pnpm create-user --email you@example.com     # hoặc đăng ký ở /login (.env.example bật SIGNUP_ENABLED)
-pnpm dev     # API :8787, web http://localhost:5180
-pnpm jobs    # process nền: reaper, kill-switch ngân sách
-```
-
-Hoặc một lệnh: `pnpm dev:all` (infra + migrate + API/web + jobs + worker; worker đọc `MTL_*` và key LLM từ `.env`).
-Ctrl+C dừng tất cả, Docker vẫn chạy (`pnpm infra:down`).
-
-Worker AI + token worker: [docs/job-queue-worker.md](./docs/job-queue-worker.md). Chi tiết setup, dev auto-login, quy
-ước bắt buộc: [docs/development-setup.md](./docs/development-setup.md).
-
-## Kiểm tra
-
-```bash
-pnpm typecheck && pnpm lint && pnpm test           # cần pnpm infra:up
-pnpm --filter @mtl/web e2e                         # Playwright + worker giả lập (lần đầu: playwright install chromium)
+pnpm typecheck && pnpm lint && pnpm test     # cần pnpm infra:up
 cd worker && uv run pytest
 ```
 
-Đổi schema zod → `pnpm schema:emit`; đổi schema DB → `pnpm db:generate` + viết file down ở
-`packages/db/migrations-down/` (migration không đảo được thì file down `RAISE EXCEPTION` báo reset DB + checkout bản cũ).
-Route mới có id tài nguyên phải có case trong `apps/api/test/tenant-isolation.test.ts` (test tự quét router thật, thiếu case
-user khác → fail). Dev đang có DB cũ (còn workspace): reset DB trước khi migrate — xem
-[development-setup.md](./docs/development-setup.md#reset-db-dev).
+Quy ước (schema, migration down, test cô lập dữ liệu theo user): [development-setup.md](./docs/development-setup.md).
 
 ## Tài liệu
 
 | Tài liệu | Nội dung |
 |---|---|
-| [development-setup.md](./docs/development-setup.md) | Cài đặt, monorepo, quy ước, test, web |
-| [job-queue-worker.md](./docs/job-queue-worker.md) | Hàng đợi, giao thức worker, chuỗi lô dịch, lỗi, ingest, ngôn ngữ, ảnh/trang/chữ bỏ qua |
-| [editor.md](./docs/editor.md) | Màn chương + editor, khoá, lưu, rail ảnh gốc, xoá/ẩn, ảnh tự bỏ |
+| [self-host.md](./docs/self-host.md) | Tự host bằng Docker |
+| [deployment-guide.md](./docs/deployment-guide.md) | Production: VPS, Modal, backup, kill-switch |
+| [development-setup.md](./docs/development-setup.md) | Cài đặt dev, monorepo, quy ước, test |
+| [job-queue-worker.md](./docs/job-queue-worker.md) | Hàng đợi job, giao thức worker, chuỗi lô dịch |
+| [editor.md](./docs/editor.md) | Màn chương + editor |
 | [export-and-batch-edit.md](./docs/export-and-batch-edit.md) | Xuất, tìm & thay, glossary |
 | [typeset-layout-contract.md](./docs/typeset-layout-contract.md) | Hợp đồng layout chữ Konva ↔ render.py |
-| [design-guidelines.md](./docs/design-guidelines.md) | Bố cục, nguyên tắc UI |
-| [deployment-guide.md](./docs/deployment-guide.md) | Production: VPS, Modal, backup, kill-switch |
-| [self-host.md](./docs/self-host.md) | Tự host bản cá nhân bằng Docker (1 lệnh, không đăng nhập) |
-| [benchmarks/](./docs/benchmarks/) | Gate chất lượng / chi phí (chưa có số đo thật) |
-
-## Việc còn lại
-
-### Cần đo / kiểm thử với dữ liệu thật
-
-Mọi test tự động hiện dùng worker giả lập; chưa có số đo với LLM và GPU thật.
-
-- [ ] **Gate chất lượng pipeline (Phase 1)** trên golden set KO: recall bóng thoại ≥ 90%, `text_free` ≥ 75%, OCR CER
-      ≤ 6%, chấm mù bản dịch ≥ 3.5/5, bịa trên crop rỗng ≤ 2%, inpaint không cần sửa ≥ 80%, giai đoạn 1 p50 ≤ 30s/trang,
-      chi phí LLM ≤ $0.005/trang. Đang là "GO tạm" — cần API key + gán nhãn golden set, chạy `mtl bench`
-      ([phase-01-results.md](./docs/benchmarks/phase-01-results.md)).
-- [ ] **Production (Phase 7)**: cold start Modal ≤ 40s, giai đoạn 1 ấm p50 ≤ 10s/trang, chi phí GPU ≤ $1/1000 trang,
-      golden set qua Modal không kém local, chạy thử chương KO thứ 2 ([phase-07-prod.md](./docs/benchmarks/phase-07-prod.md)).
-- [ ] **Editor**: page 800×12.000 / 20.000px mở < 2s, cuộn ≥ 50fps (M1); Safari 18; reinpaint ≤ 15s với worker Mac thật;
-      soi mắt parity chữ Konva ↔ render.py trên 5 trang.
-- [ ] **Dịch theo lô với key LLM thật**: chương ≥ 9 trang — trang đầu "Xong" và sửa được khi lô sau còn chạy; token / chương
-      so với dịch cả chương không tăng quá ~10% (`usage_ledger`); tên nhân vật nhất quán giữa các lô (`carry`).
-- [ ] **Luồng dịch với worker LLM thật**: watermark trong danh sách bỏ qua không vào prompt và không có box; trang ẩn
-      không bị dịch; xuất `original_slices` khi có trang ẩn (mở zip kiểm số file / thứ tự).
-- [ ] **OCR local (giờ là mặc định) + LaMa manga + AI hiệu đính** (đã đo smoke trên 2 trang manga mẫu, xem
-      `plans/reports/overnight-261024-0028-local-ocr-manga-lama-proofread-report.md`): CER MangaOCR / PaddleOCR trên
-      golden set thật (KO strip cho PaddleOCR tiếng Hàn, JA trang cho MangaOCR) — chất lượng thấp thì đổi ngôn ngữ đó về
-      AI LLM; AI hiệu đính với LLM thật (chất lượng gợi ý, chi phí/chương so với khoảng ước tính ở hộp xác nhận); LaMa
-      manga vs Big LaMa trên nền screentone thật; model OCR local đã nạp sẵn trong volume Modal (không tải giữa job).
-- [ ] **DeepSeek với key thật**: `json_object` + ảnh (OCR / hiệu đính bằng `deepseek-flash`), worker tắt chế độ suy
-      luận (`thinking: disabled`) đúng như docs DeepSeek; `deepseek-v4-pro` (không vision) chỉ gán slot Dịch.
-- [ ] **Đợt tính năng nhỏ (kiểm tay)**: soi ≥ 3 trang thật có chữ màu (màu chữ dịch khớp tông gốc, đọc rõ); parity
-      chữ Konva ↔ render.py với font tuỳ chỉnh; đăng ký / đăng nhập thật qua `/login` với `SIGNUP_ENABLED=true` trên môi trường thử; kéo-thả sắp ảnh trên Safari; màn series hiện "Xuất lại" sau khi ẩn trang ở chương đã xuất.
-
-### Phải làm
-
-- [ ] **Deploy**: chạy migration mới (`0009_series_skip_images`, `0010_series_ignore_text`,
-      `0011_pages_skip_changed_at`, `0012_workspace_fonts`, `0013_workspace_pipeline_settings`,
-      `0014_proofread_suggestions`, `0015_single_user_guard_worker_kind`, `0016_drop_workspaces`,
-      `0017_user_ownership`, `0018_auth_error_class`, `0019_jobs_progress_counts`, `0020_translate_chain`, `0021_system_settings`, `0022_ai_providers`, `0023_drop_series_llm_tier`, `0024_user_disabled_at`, `0025_system_fonts`) — 0015 từ chối chạy nếu còn dữ liệu workspace nên **bắt buộc reset DB + MinIO và tạo lại
-      token worker** theo "Checklist release single-user-accounts" ở `docs/deployment-guide.md`; worker Mac/Modal phải lên pipeline **0.10.0** (key AI theo job qua claim, provider OpenAI / OpenAI-compatible; gồm mọi bản 0.6–0.9) **trước** khi deploy API (`MIN_PIPELINE_VERSION` 0.10.0, worker cũ nhận 426); `.env` API cần `SECRETS_KEY` + `ADMIN_EMAILS` — xem "Checklist nâng cấp lên pipeline 0.10.0" ở `docs/deployment-guide.md`, không thì
-      hàng đợi dừng; chương manga đang cắt trang / xoá chữ lúc
-      deploy sẽ dừng ở "Chờ dịch" (bấm "Dịch chương" để tiếp) — xem "Checklist nâng cấp lên pipeline 0.7.0" ở `docs/deployment-guide.md` (API deploy trước hoặc cùng web: web mới cần `ocr_ready` trong `/progress`); nạp model
-      OCR local + LaMa manga (`fetch_models.py`) vào volume Modal **trước** khi deploy — OCR local giờ là mặc định, xem
-      "Checklist OCR local mặc định"; production từng bấm Lưu ở Pipeline chung thì cài đặt đã lưu (OCR = LLM) thắng mặc
-      định mới → đổi tay trên UI; VPS cần dựng được addon `re2` — xem checklist ở
-      `docs/deployment-guide.md` mục 4.
-- [ ] **Rà giấy phép** trước khi thương mại hoá / công khai rộng: MVP được dùng code + model + font mở bất kể license
-      (GPL/AGPL…); repo chưa có file `LICENSE`.
-- [ ] **Phase 8 — trước khi mở đăng ký công khai ở production** (`SIGNUP_ENABLED` giữ `false` và admin không bật trên UI tới lúc này): xác thực
-      email, hạn mức dung lượng lưu trữ mỗi người, BYOK, takedown, ToS. (Hạn mức chi phí AI mỗi người
-      `USER_DAILY_USD` → 402 và admin nền tảng một phần — Cài đặt, danh sách người dùng, khoá / mở tài khoản — đã có.)
-- [ ] **Phase 9 — Chrome extension** (phác thảo, sau MVP).
-
-### Chức năng còn thiếu
-
-- [ ] Đích CJK / Thái, chữ dọc khi typeset; dịch SFX + font SFX; phân loại thoại theo nghĩa (suy nghĩ, hét, khung dẫn).
-- [ ] OCR local chưa nhận SFX (mọi vùng coi là chữ thường → bị xoá + dịch). OCR local giờ là mặc định nên SFX bị xoá
-      + dịch theo mặc định; cần giữ SFX thì đổi ngôn ngữ đó về AI LLM.
-- [ ] Thumbnail do server sinh (thứ tự ảnh trước khi cắt trang đã sắp tay được: kéo-thả / menu / Alt+↑↓).
-- [ ] Glossary: chuyển / sao chép entry giữa các cặp ngôn ngữ, cột cặp ngôn ngữ trong CSV.
-- [ ] Chống phát lại dispatch Modal triệt để (lưu `dispatch_id` đã nhận).
-- [ ] _(Ưu tiên sau cùng)_ AI phân loại ảnh credit / quảng cáo (hiện chỉ học theo dHash + gợi ý theo khổ ảnh); credit
-      cùng khổ đã bị ghép vào trang lớn lúc cắt trang chỉ ẩn được cả trang; logo watermark dạng hình.
-
-### Giới hạn đã biết
-
-- Watermark: watermark detector không bắt thì còn trên ảnh.
-- Credit cùng mẫu nhưng đổi chữ (đổi tên người dịch) có thể không khớp ảnh đã học.
-- Ảnh rất cao (> 16k px) có thể không tính được dấu nhận dạng trên Safari → ảnh đó không tự bỏ (upload vẫn chạy).
-- Xem trước font trong danh sách thả xuống cần Chrome/Edge 135+ (`appearance: base-select`); Safari / Firefox chỉ hiện
-  font ở ô đang chọn.
-- PaddleOCR với chữ dọc (ja/zh) tách cột theo hình chiếu mực — cột sát nhau / chữ nhỏ trên nền art có thể đọc sai
-  hoặc rỗng (→ "Cần soát"); manga tiếng Nhật nên dùng MangaOCR.
-- Bóng thoại bán trong suốt / chữ có viền trắng dày: nới mask mặc định (2–6px) còn để vệt viền — tăng "Nới mask" ở
-  Cài đặt → Pipeline chung → Nâng cao (VD 10–12px).
-- Free-tier Gemini hết hạn mức → job tự thử lại tới ~4 giờ trước khi báo lỗi.
-- Giá DeepSeek nhập theo giờ cao điểm (thấp điểm rẻ ½) → chi phí hệ thống ghi nhận ≥ thực tế. Ước tính hiệu đính lấy
-  trung bình 20 lượt gần nhất, không tách theo model — vừa đổi model thì khoảng ước tính lệch tới khi có lượt mới.
+| [design-guidelines.md](./docs/design-guidelines.md) | Nguyên tắc UI |
+| [project-roadmap.md](./docs/project-roadmap.md) | Việc còn lại, giới hạn đã biết |
