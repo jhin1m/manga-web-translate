@@ -19,7 +19,7 @@ FONTS_DIR = Path(__file__).resolve().parent.parent / "fonts"
 MANIFEST = FONTS_DIR / "manifest.json"
 USE_TYPO_METRICS = 1 << 7
 # Font thoại mặc định khi series chưa chọn (khớp manifest.defaults[0] và DEFAULT_DIALOGUE_FONT bên API).
-DEFAULT_FONT = "Bangers-Regular"
+DEFAULT_FONT = "KomikaText-Regular"
 
 
 @dataclass(frozen=True)

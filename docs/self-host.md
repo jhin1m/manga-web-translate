@@ -29,8 +29,25 @@ docker compose up -d
 Lần đầu worker tải model (~1–2 GB, kiểm sha256): theo dõi bằng `docker compose logs -f worker` tới khi thấy dòng
 `mtl-worker … mode=loop`. Trong lúc đó web vẫn mở được, job chỉ chạy khi worker sẵn sàng.
 
-Mở <http://localhost:8080> → **Cài đặt → Nhà cung cấp**: nhập key AI (Anthropic là mặc định của worker). Phát hiện
-chữ, OCR, xoá chữ chạy local trên máy — không cần key, không tốn token; key chỉ dùng cho bước dịch.
+## Thêm nhà cung cấp AI (bắt buộc để dịch)
+
+Mở <http://localhost:8080> → **Cài đặt → Nhà cung cấp** → thêm nhà cung cấp:
+
+1. Loại **Anthropic**, nhập tên và API key.
+2. Bấm gợi ý **+ claude-haiku-5-5** (điền sẵn giá, đã tick Vision).
+3. Lưu. Nhà cung cấp **đầu tiên** tự được gán vào các tác vụ còn trống: Dịch dùng model đầu tiên trong danh sách; OCR
+   và Hiệu đính dùng model đầu tiên có Vision (không có thì để trống). Không cần mở **Model tác vụ**.
+
+Muốn đổi model sau đó: **Cài đặt → Model tác vụ**. Nhà cung cấp thêm sau không tự đổi gán.
+
+Với Anthropic, worker chưa chạy được Sonnet 5.5, Opus 5.5, Fable, Mythos nên form và API từ chối các model này.
+
+Phát hiện chữ, xoá chữ và OCR mặc định chạy local trên máy: không tốn token, key chỉ dùng cho bước dịch. Nếu chọn OCR
+bằng AI ở cài đặt pipeline thì tác vụ **OCR** phải có model Vision.
+
+**Series mới mặc định nguồn tiếng Anh**, loại truyện chỉ quyết định định dạng trang. Dịch raw Hàn / Nhật / Trung thì đổi
+ngôn ngữ nguồn ở Cài đặt series. Nguồn Nhật hoặc Anh dạng từng trang đọc phải sang trái; comic phương Tây dạng trang nên
+đổi sang định dạng Cuộn dọc nếu thứ tự bị đảo.
 
 `docker pull` báo `denied`/`unauthorized` → image GHCR chưa được đặt public (việc của người phát hành).
 

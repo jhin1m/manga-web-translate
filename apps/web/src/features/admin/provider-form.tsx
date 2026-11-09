@@ -4,7 +4,7 @@ import { useId, useState } from "react";
 import { api } from "../../lib/api.ts";
 import { TrashIcon } from "../home/row-icons.tsx";
 import { adminSettingsKey, type ProvidersResponse, providerError, providersKey } from "./api.ts";
-import { REASONING_WARNING, suggestionsFor, UNSUPPORTED_MODELS_NOTE } from "./price-suggestions.ts";
+import { REASONING_WARNING, suggestionsFor, unsupportedModelsNote } from "./price-suggestions.ts";
 import {
   applyChoice,
   applySuggestion,
@@ -155,7 +155,7 @@ export function ProviderForm(props: { saved?: SavedProvider; secretsConfigured: 
 
         <fieldset className="prov-models">
           <legend>Model và giá</legend>
-          <span className="hint small">Giá tính theo USD / 1 triệu token. {UNSUPPORTED_MODELS_NOTE}</span>
+          <span className="hint small">Giá tính theo USD / 1 triệu token. {unsupportedModelsNote(d.type)}</span>
           {d.models.map((m, i) => (
             <div key={m.id ?? i} className="prov-model">
               <div className="prov-model-row">
@@ -228,7 +228,7 @@ export function ProviderForm(props: { saved?: SavedProvider; secretsConfigured: 
                   key={s.model_id}
                   type="button"
                   className="btn-ghost"
-                  title={`Gợi ý giá ${s.price_in} / ${s.price_out} USD mỗi 1M token (xác nhận lại với trang giá của ${deepseek ? "DeepSeek" : "OpenAI"})`}
+                  title={`Gợi ý giá ${s.price_in} / ${s.price_out} USD mỗi 1M token (xác nhận lại với trang giá của ${CHOICE_LABEL[choiceOf(d)]})`}
                   onClick={() => set("models", [...d.models, modelFromSuggestion(s)])}
                 >
                   + {s.model_id}

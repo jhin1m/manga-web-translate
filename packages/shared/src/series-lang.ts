@@ -34,19 +34,19 @@ export const HONORIFIC_EXAMPLES: Record<SourceLang, string> = {
 export const defaultPageFormat = (src: SourceLang): PageFormat => (src === "ja" ? "pages" : "strip");
 
 /**
- * Loại truyện chọn khi tạo series → ngôn ngữ gốc + định dạng. Manga = từng trang: 1 ảnh = 1 trang, không cắt strip,
- * xong bước 1 tự dịch luôn (không dừng chờ duyệt cắt trang).
+ * Loại truyện chọn khi tạo series → định dạng trang; nguồn luôn tiếng Anh (đổi ở Cài đặt series nếu là raw). Manga =
+ * từng trang: 1 ảnh = 1 trang, không cắt strip, xong bước 1 tự dịch luôn (không dừng chờ duyệt cắt trang).
  */
 export const COMIC_KINDS = ["manga", "manhwa", "manhua"] as const;
 export type ComicKind = (typeof COMIC_KINDS)[number];
 export const COMIC_KIND_SETTINGS: Record<ComicKind, { source_lang: SourceLang; page_format: PageFormat }> = {
-  manga: { source_lang: "ja", page_format: "pages" },
-  manhwa: { source_lang: "ko", page_format: "strip" },
-  manhua: { source_lang: "zh", page_format: "strip" },
+  manga: { source_lang: "en", page_format: "pages" },
+  manhwa: { source_lang: "en", page_format: "strip" },
+  manhua: { source_lang: "en", page_format: "strip" },
 };
 
 export type ReadingOrder = "ltr" | "rtl";
 
-/** Manga Nhật dạng trang: hàng trên→dưới, trong hàng phải→trái. Còn lại giữ trên→dưới, trái→phải. */
+/** Manga dạng trang (raw Nhật hoặc bản tiếng Anh giữ khung gốc): hàng trên→dưới, trong hàng phải→trái. Còn lại trái→phải. */
 export const readingOrder = (src: string, fmt: string): ReadingOrder =>
-  src === "ja" && fmt === "pages" ? "rtl" : "ltr";
+  (src === "ja" || src === "en") && fmt === "pages" ? "rtl" : "ltr";

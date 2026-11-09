@@ -1,6 +1,6 @@
 /**
- * Chọn loại truyện khi tạo series (thay cho chọn ngôn ngữ gốc): Manga / Manhwa / Manhua → server nhận ngôn ngữ gốc
- * + định dạng tương ứng (COMIC_KIND_SETTINGS). Ngôn ngữ khác (VD tiếng Anh) đổi sau ở Cài đặt series.
+ * Chọn loại truyện khi tạo series: Manga / Manhwa / Manhua chỉ quyết định định dạng trang (COMIC_KIND_SETTINGS), nguồn
+ * mặc định tiếng Anh. Raw Hàn / Nhật / Trung đổi ngôn ngữ ở Cài đặt series.
  */
 import { COMIC_KIND_LABELS, COMIC_KINDS, type ComicKind } from "./lang-labels.ts";
 

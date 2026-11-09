@@ -1,6 +1,7 @@
 {
   "version": 1,
   "defaults": [
+    "KomikaText-Regular",
     "Bangers-Regular",
     "BeVietnamPro-Regular",
     "Anton-Regular"

@@ -964,7 +964,7 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
   const activeMeta = pages[idx];
   const defaultFont = kit
     ? dialogueFont(kit.manifest, series.data?.default_fonts.dialogue, kit.knows)
-    : "Bangers-Regular";
+    : "KomikaText-Regular";
   const [autoErase, setAutoErase] = useState(readAutoErase);
   const toggleAutoErase = (on: boolean) => {
     setAutoErase(on);

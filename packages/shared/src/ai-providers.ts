@@ -16,6 +16,17 @@ export type AiTaskSlot = (typeof AI_TASK_SLOTS)[number];
 /** Slot nhận ảnh → model phải có cờ vision. */
 export const VISION_SLOTS: readonly AiTaskSlot[] = ["ocr", "proofread"];
 
+/**
+ * Model Anthropic worker chưa chạy được: worker luôn gửi `thinking: {type: "disabled"}`, các model này trả 400.
+ * Nguồn duy nhất của danh sách chặn (form và API). Provider đã lưu trước đó không bị xoá.
+ */
+const ANTHROPIC_UNSUPPORTED_PREFIXES = ["claude-sonnet-5-5", "claude-opus-5-5", "claude-fable-", "claude-mythos-"];
+export const RECOMMENDED_ANTHROPIC_MODEL = "claude-haiku-5-5";
+export const MODEL_UNSUPPORTED_MESSAGE = `Worker chưa chạy được model này của Anthropic. Dùng ${RECOMMENDED_ANTHROPIC_MODEL}.`;
+
+export const isModelUnsupported = (type: string, modelId: string): boolean =>
+  type === "anthropic" && ANTHROPIC_UNSUPPORTED_PREFIXES.some((p) => modelId.trim().startsWith(p));
+
 /** Ký tự in được ASCII, không khoảng trắng / zero-width / xuống dòng giữa key. */
 export const ApiKey = z
   .string()
@@ -86,6 +97,8 @@ export const AiProviderInput = z
       if (seen.has(m.model_id))
         ctx.addIssue({ code: "custom", path: ["models", i, "model_id"], message: "trùng model" });
       seen.add(m.model_id);
+      if (isModelUnsupported(v.type, m.model_id))
+        ctx.addIssue({ code: "custom", path: ["models", i, "model_id"], message: MODEL_UNSUPPORTED_MESSAGE });
     });
   });
 export type AiProviderInput = z.infer<typeof AiProviderInput>;

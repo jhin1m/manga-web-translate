@@ -50,7 +50,7 @@ type Page = typeof pages.$inferSelect;
 type Chapter = typeof chapters.$inferSelect;
 type Series = typeof series.$inferSelect;
 
-export const DEFAULT_DIALOGUE_FONT = "Bangers-Regular";
+export const DEFAULT_DIALOGUE_FONT = "KomikaText-Regular";
 /** Câu chỉ dẫn kính ngữ theo cặp nguồn → đích (policy lạ → gửi nguyên văn). */
 export function honorificText(policy: string, src: string, tgt: string): string {
   const ex = HONORIFIC_EXAMPLES[src as SourceLang] ?? HONORIFIC_EXAMPLES.ko;

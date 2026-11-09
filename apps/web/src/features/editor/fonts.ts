@@ -68,7 +68,7 @@ export function dialogueFont(
   isKnown: (id: string) => boolean = (id) => id in manifest.fonts,
 ): string {
   if (seriesFont && isKnown(seriesFont)) return seriesFont;
-  return manifest.defaults[0] ?? Object.keys(manifest.fonts)[0] ?? "Bangers-Regular";
+  return manifest.defaults[0] ?? Object.keys(manifest.fonts)[0] ?? "KomikaText-Regular";
 }
 
 /**
@@ -90,7 +90,7 @@ export function fontForStyle(
 }
 
 /** Font mặc định khi `fontId` không có trong trình duyệt (trình duyệt tự dùng family thứ hai). */
-let fallbackFamily = "Bangers-Regular";
+let fallbackFamily = "KomikaText-Regular";
 
 export const canvasFont = (fontId: string, size: number) => `${size}px "${fontId}", "${fallbackFamily}"`;
 

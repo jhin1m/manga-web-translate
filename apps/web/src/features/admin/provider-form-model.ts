@@ -8,7 +8,9 @@ import {
   type AiProviderInput,
   type AiProviderType,
   ApiKey,
+  isModelUnsupported,
   MAX_PRICE_PER_MTOK,
+  MODEL_UNSUPPORTED_MESSAGE,
   normalizeBaseUrl,
   type StructuredOutput,
 } from "@mtl/shared";
@@ -189,6 +191,7 @@ export function validateDraft(d: ProviderDraft, saved?: SavedProvider): DraftErr
     const id = m.model_id.trim();
     if (!id) e.models[i] = "Nhập model id.";
     else if (seen.has(id)) e.models[i] = "Trùng model id.";
+    else if (!m.id && isModelUnsupported(d.type, id)) e.models[i] = MODEL_UNSUPPORTED_MESSAGE;
     else if (tooBig(m.price_in) || tooBig(m.price_out)) {
       e.models[i] = `Giá tối đa ${MAX_PRICE_PER_MTOK.toLocaleString("en-US")} USD / 1M token (kiểm tra lại số vừa gõ).`;
     } else if (parsePrice(m.price_in) === null || parsePrice(m.price_out) === null) {

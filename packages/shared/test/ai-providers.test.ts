@@ -6,7 +6,9 @@ import {
   AiProviderPatch,
   AiSlots,
   ApiKey,
+  isModelUnsupported,
   normalizeBaseUrl,
+  RECOMMENDED_ANTHROPIC_MODEL,
 } from "../src/ai-providers.ts";
 
 const KEY = "sk-test-abcdefgh1234";
@@ -71,5 +73,35 @@ describe("patches and slots", () => {
     expect(AiSlots.safeParse({ ocr: id, translate: null, proofread: null }).success).toBe(true);
     expect(AiSlots.safeParse({ ocr: id, translate: null }).success).toBe(false);
     expect(AiSlots.safeParse({ ocr: "x", translate: null, proofread: null }).success).toBe(false);
+  });
+});
+
+describe("models the worker cannot run", () => {
+  const body = (type: string, model_id: string) => ({
+    type,
+    name: "x",
+    api_key: KEY,
+    ...(type === "openai_compatible" ? { base_url: "https://llm.example.com/v1" } : {}),
+    models: [{ model_id, price_in: 1, price_out: 1 }],
+  });
+
+  it.each(["claude-sonnet-5-5", "claude-opus-5-5", "claude-fable-5-1", "claude-mythos-5-1"])(
+    "rejects %s for Anthropic, with a hint at the supported model",
+    (id) => {
+      expect(isModelUnsupported("anthropic", id)).toBe(true);
+      const r = AiProviderInput.safeParse(body("anthropic", id));
+      expect(r.success).toBe(false);
+      expect(r.error?.issues[0]?.message).toContain(RECOMMENDED_ANTHROPIC_MODEL);
+    },
+  );
+
+  it.each([
+    ["anthropic", "claude-haiku-5-5"],
+    ["anthropic", "claude-sonnet-5"],
+    ["anthropic", "claude-opus-5"],
+    ["openai_compatible", "claude-sonnet-5-5"],
+  ])("accepts %s %s", (type, id) => {
+    expect(isModelUnsupported(type, id)).toBe(false);
+    expect(AiProviderInput.safeParse(body(type, id)).success).toBe(true);
   });
 });

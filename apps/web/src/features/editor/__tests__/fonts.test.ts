@@ -45,7 +45,7 @@ describe("custom fonts", () => {
   });
 
   it("canvas font string lists the default family second so unknown ids still draw in it", () => {
-    expect(canvasFont("custom-ffffffff", 24)).toBe('24px "custom-ffffffff", "Bangers-Regular"');
+    expect(canvasFont("custom-ffffffff", 24)).toBe('24px "custom-ffffffff", "KomikaText-Regular"');
   });
 
   it("fontLabel shows the file's name for custom fonts and a short name for bundled ones", () => {
