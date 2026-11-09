@@ -52,9 +52,8 @@ lệch bbox mực từng dòng ≤ 1px — xem `benchmarks/phase-01-results.md`)
 
 ## Mặc định auto-typeset
 
-- **Font thoại** (series chưa chọn): `Bangers-Regular` — font comic OFL lấy từ `github.com/google/fonts`
-  (`ofl/bangers`), đủ 146 chữ cái tiếng Việt (`viComplete`). Chọn vì nét đậm in hoa giống lettering manga/comic;
-  Comic Neue Bold thiếu ~100 chữ có dấu (Ơ, Ư, ạ…ỹ) nên loại; Itim/Mali/Baloo 2 đủ dấu nhưng trông như chữ gõ.
+- **Font thoại** (series chưa chọn): `KomikaText-Regular` — đủ chữ của cả 6 ngôn ngữ đích (`langs`) và dễ đọc hơn font
+  in hoa ở câu thoại dài. `Bangers-Regular` đứng sau trong danh sách dự phòng.
   Một nguồn mỗi phía, khớp nhau: `manifest.defaults[0]` (`PREFERRED_DEFAULTS` trong `scripts/font_glyph_check.py`),
   `DEFAULT_FONT` (`worker/mtl_pipeline/fonts.py`), `DEFAULT_DIALOGUE_FONT` (`apps/api/src/jobs/enqueue.ts`; test
   `apps/api/test/fonts.test.ts` + `worker/tests/test_typeset_fit.py` giữ khớp). Series đã chọn font riêng giữ nguyên.

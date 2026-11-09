@@ -229,6 +229,13 @@ describe("DeepSeek preset", () => {
   });
 });
 
+describe("creating a provider without models", () => {
+  it("is rejected on create and allowed when editing a saved provider", () => {
+    expect(validateDraft(draft({ models: [] }))?.no_models).toBeTruthy();
+    expect(validateDraft(draft({ models: [], api_key: "" }), saved)?.no_models).toBeUndefined();
+  });
+});
+
 describe("Anthropic models", () => {
   const anthropic = (models: ProviderDraft["models"]) => draft({ type: "anthropic", models });
   const row = (model_id: string, id?: string) => ({ ...emptyModel(), id, model_id, price_in: "1", price_out: "1" });

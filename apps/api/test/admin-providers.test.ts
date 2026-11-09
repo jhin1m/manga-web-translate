@@ -84,7 +84,7 @@ describe("models the worker cannot run", () => {
     const bad = await api(`/providers/${p.id}/models`, "POST", SONNET);
     expect(bad.status).toBe(400);
     expect(await bad.json()).toEqual({ error: "model_unsupported" });
-    const ok = await api(`/providers/${p.id}/models`, "POST", { ...HAIKU, model_id: "claude-haiku-4-5" });
+    const ok = await api(`/providers/${p.id}/models`, "POST", { ...HAIKU, model_id: "claude-opus-5" });
     expect(ok.status).toBe(201);
   });
 

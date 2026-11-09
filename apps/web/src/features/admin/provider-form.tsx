@@ -217,6 +217,7 @@ export function ProviderForm(props: { saved?: SavedProvider; secretsConfigured: 
               {errors?.models[i] && <span className="error small">{errors.models[i]}</span>}
             </div>
           ))}
+          {errors?.no_models && <span className="error small">{errors.no_models}</span>}
           <div className="row">
             <button type="button" onClick={() => set("models", [...d.models, emptyModel()])}>
               + Thêm model

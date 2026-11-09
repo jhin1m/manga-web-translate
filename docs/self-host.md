@@ -29,6 +29,8 @@ docker compose up -d
 Lần đầu worker tải model (~1–2 GB, kiểm sha256): theo dõi bằng `docker compose logs -f worker` tới khi thấy dòng
 `mtl-worker … mode=loop`. Trong lúc đó web vẫn mở được, job chỉ chạy khi worker sẵn sàng.
 
+`docker pull` báo `denied`/`unauthorized` → image GHCR chưa được đặt public (việc của người phát hành).
+
 ## Thêm nhà cung cấp AI (bắt buộc để dịch)
 
 Mở <http://localhost:8080> → **Cài đặt → Nhà cung cấp** → thêm nhà cung cấp:
@@ -42,14 +44,13 @@ Muốn đổi model sau đó: **Cài đặt → Model tác vụ**. Nhà cung c�
 
 Với Anthropic, worker chưa chạy được Sonnet 5.5, Opus 5.5, Fable, Mythos nên form và API từ chối các model này.
 
-Phát hiện chữ, xoá chữ và OCR mặc định chạy local trên máy: không tốn token, key chỉ dùng cho bước dịch. Nếu chọn OCR
-bằng AI ở cài đặt pipeline thì tác vụ **OCR** phải có model Vision.
+Phát hiện chữ, xoá chữ và OCR mặc định chạy local trên máy: không tốn token, key chỉ dùng cho dịch và hiệu đính. Nếu
+chọn OCR bằng AI ở cài đặt pipeline thì tác vụ **OCR** phải có model Vision.
 
 **Series mới mặc định nguồn tiếng Anh**, loại truyện chỉ quyết định định dạng trang. Dịch raw Hàn / Nhật / Trung thì đổi
-ngôn ngữ nguồn ở Cài đặt series. Nguồn Nhật hoặc Anh dạng từng trang đọc phải sang trái; comic phương Tây dạng trang nên
-đổi sang định dạng Cuộn dọc nếu thứ tự bị đảo.
-
-`docker pull` báo `denied`/`unauthorized` → image GHCR chưa được đặt public (việc của người phát hành).
+ngôn ngữ nguồn ở Cài đặt series. Nguồn Nhật hoặc Anh dạng từng trang đọc phải sang trái. Comic phương Tây dạng trang bị
+đảo thứ tự: đổi định dạng sang Cuộn dọc chỉ áp dụng cho chương tải lên sau đó, và cuộn dọc sẽ ghép rồi cắt lại trang
+theo vùng chữ.
 
 ## Cập nhật
 
