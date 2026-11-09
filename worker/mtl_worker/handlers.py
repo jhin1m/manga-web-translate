@@ -10,7 +10,7 @@ import numpy as np
 
 from mtl_pipeline.images import open_rgb
 from mtl_pipeline.local_ocr import ocr_page_local
-from mtl_pipeline.ocr import ocr_page
+from mtl_pipeline.ocr import keep_regions_without_text, ocr_page
 from mtl_pipeline.options import LOCAL_OCR_ENGINES, InpaintOptions, PrepareOptions
 from mtl_pipeline.pipeline import restore_sfx
 from mtl_pipeline.proofread import page_images, proofread_page
@@ -132,6 +132,7 @@ def handle_prepare(ctx: JobContext, deps: Deps) -> dict[str, Any]:
         }
         raise failure from e
     ctx.add_usage(ocr.usage)
+    ocr = keep_regions_without_text(regions, ocr)
     if any(r.is_sfx for r in regions):
         clean, mask = restore_sfx(img, clean, mask, regions)
     ctx.report("upload", PREPARE_PROGRESS["upload"])
@@ -169,7 +170,8 @@ def _flags(item: OcrItem | None, low_conf: bool) -> list[str]:
     flags: list[str] = []
     if item and item.is_sfx:
         flags.append("sfx")
-    if item and item.empty:
+    # Vùng đã giữ ảnh gốc (is_sfx) không còn là khối trống cần người xem.
+    if item and item.empty and not item.is_sfx:
         flags.append("empty")
     if low_conf or (item and item.low_conf):
         flags.append("low_conf")

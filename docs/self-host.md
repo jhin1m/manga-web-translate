@@ -165,6 +165,8 @@ sudo rm -rf data               # xoá hẳn dữ liệu (không lấy lại đư
 - **Worker restart lặp**: `docker compose logs worker` — tải model lỗi (mạng) sẽ tự thử lại; `401` = token bị thu hồi
   (xem mục Worker).
 - **Mở web báo "Không kết nối được máy chủ"**: `app` chưa chạy xong (lần đầu/sau cập nhật đang migrate) — đợi rồi bấm Thử lại.
+- **Bóng chỉ có dấu câu (`...!`) bị xoá trắng trên trang đã xử lý trước đây**: bản mới giữ nguyên hình gốc cho vùng không
+  có chữ/số, nhưng trang cũ phải **Quét lại trang** mới áp dụng.
 - **`403` khi mở bằng IP/tên máy**: chỉ `localhost`/`127.0.0.1` được phép (chống DNS rebinding) — mở đúng
   <http://localhost:8080>.
 

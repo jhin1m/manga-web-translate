@@ -23,7 +23,7 @@ from .images import open_rgb, save_png
 from .inpaint import CompositeInpainter, FloodFillInpainter, Inpainter, LamaInpainter
 from .local_ocr import LocalOcrEngine
 from .models import ensure_model, verify_all
-from .ocr import ocr_page
+from .ocr import keep_regions_without_text, ocr_page
 from .options import PrepareOptions
 from .providers.base import LLMProvider
 from .render import render_page, require_raqm
@@ -163,7 +163,7 @@ class Pipeline:
         if provider is not None:
             t = time.perf_counter()
             # OCR đọc ảnh GỐC (chữ đã bị xoá trên clean).
-            res = ocr_page(provider, img, regions, page_ord)
+            res = keep_regions_without_text(regions, ocr_page(provider, img, regions, page_ord))
             timing.ocr = time.perf_counter() - t
             (out_dir / "ocr.json").write_text(res.model_dump_json(indent=2))
             # is_sfx do OCR gắn → trả SFX về nguyên trạng (không xoá/dịch SFX), ghi lại artifact.
