@@ -2,6 +2,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../../lib/api.ts";
 import { bundledFontIds, type FontManifest } from "../editor/fonts.ts";
+import { fontDisplayName } from "./font-names.ts";
 
 export const MAX_FONT_BYTES = 10 * 1024 * 1024;
 export const MAX_USER_FONTS = 20;
@@ -84,15 +85,19 @@ export function useBundledFonts() {
     queryFn: async () => {
       const res = await fetch("/fonts/manifest.json");
       if (!res.ok) throw new Error(`không tải được manifest font (${res.status})`);
-      return ((await res.json()) as FontManifest).fonts;
+      return (await res.json()) as FontManifest;
     },
-    select: (fonts) => ({ has: (id: string) => id in fonts, ids: (lang?: string) => bundledFontIds(fonts, lang) }),
+    select: ({ fonts, defaults }) => ({
+      has: (id: string) => id in fonts,
+      ids: (lang?: string) => bundledFontIds(fonts, lang),
+      defaultId: defaults[0],
+    }),
     staleTime: Number.POSITIVE_INFINITY,
   });
 }
 
-/** Tên hiển thị gọn: "PatrickHand-Regular" → "PatrickHand"; font riêng → tên trong file; chưa chọn → mặc định. */
+/** Tên hiển thị gọn: "PatrickHand-Regular" → "Patrick Hand"; font riêng → tên trong file; chưa chọn → mặc định. */
 export function fontLabel(id: string | undefined, custom: readonly UserFont[] = []): string {
   if (!id) return "Mặc định";
-  return custom.find((f) => f.id === id)?.name ?? id.replace(/-(Regular|Variable|Bold)$/, "");
+  return custom.find((f) => f.id === id)?.name ?? fontDisplayName(id);
 }

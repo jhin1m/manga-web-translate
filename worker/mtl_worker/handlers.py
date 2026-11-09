@@ -32,7 +32,7 @@ from mtl_pipeline.textmask import bbox_text_mask, estimate_polarity
 from mtl_pipeline.translate import SeriesSettings, qualified_id, translate_chapter
 from mtl_pipeline.typeset import bubble_siblings, font_for, typeset_region
 
-from . import PIPELINE_VERSION
+from . import LLM_NOT_CONFIGURED, PIPELINE_VERSION
 from .export import handle_export
 from .ingest import handle_ingest
 from .llm_cache import provider_for_config
@@ -82,7 +82,9 @@ def llm_provider(ctx: JobContext, deps: Deps, slot: str) -> Any:
         return provider_for_config(cfg)
     if slot in (ctx.payload.get("llm") or {}):
         # Payload nói job dùng slot DB nhưng claim không kèm cấu hình: không âm thầm chạy bằng key env.
-        raise JobFailure("auth", "thiếu cấu hình AI của job — admin kiểm tra Cài đặt › AI")
+        raise JobFailure(
+            "auth", f"{LLM_NOT_CONFIGURED}: thiếu cấu hình AI của job — admin kiểm tra Cài đặt › AI"
+        )
     if slot == "proofread":
         return deps.provider_for(ctx.payload.get("model_tier", "standard"))
     return deps.provider

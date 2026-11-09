@@ -51,7 +51,7 @@ describe("custom fonts", () => {
   it("fontLabel shows the file's name for custom fonts and a short name for bundled ones", () => {
     const custom = [{ id: "custom-0a1b2c3d", name: "Anime Ace" }] as UserFont[];
     expect(fontLabel("custom-0a1b2c3d", custom)).toBe("Anime Ace");
-    expect(fontLabel("PatrickHand-Regular", custom)).toBe("PatrickHand");
+    expect(fontLabel("PatrickHand-Regular", custom)).toBe("Patrick Hand");
     expect(fontLabel(undefined, custom)).toBe("Mặc định");
   });
 });

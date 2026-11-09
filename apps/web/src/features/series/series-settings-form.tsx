@@ -22,6 +22,7 @@ import {
   useBundledFonts,
   useUserFonts,
 } from "../fonts/api.ts";
+import { fontDisplayName, recommendedFirst } from "../fonts/font-names.ts";
 import { fetchGlossary, glossaryKey } from "../glossary/api.ts";
 import {
   deleteSeries,
@@ -145,7 +146,6 @@ export function SeriesSettingsDialog({
   useEffect(() => {
     loadFonts(customFonts && (() => Promise.resolve(customFonts))).catch(() => {});
   }, [customFonts]);
-  const [saved, setSaved] = useState<string | null>(null);
   const [ignoreRaw, setIgnoreRaw] = useState(() => series.ignore_text.join("\n"));
   const ignore = parseIgnoreText(ignoreRaw);
   const glossaryScope = { seriesId: series.id };
@@ -178,25 +178,15 @@ export function SeriesSettingsDialog({
   const save = useMutation({
     mutationFn: () => patchSeries(series.id, { ...f, ignore_text: ignore.list }),
     onSuccess: (s) => {
-      setSaved(
-        s.settings_rev !== series.settings_rev || s.glossary_rev !== series.glossary_rev
-          ? "Đã lưu. Lần dịch sau dùng cài đặt mới (chương đã dịch không tự chạy lại)."
-          : "Đã lưu.",
-      );
-      // Giá trị server đã chuẩn hoá (trim, gộp mục trùng) → đưa lại vào form; các nhóm đang mở giữ nguyên.
-      setF(toForm(s));
-      setIgnoreRaw(s.ignore_text.join("\n"));
       void qc.invalidateQueries({ queryKey: ["series"] });
       // Key glossary series không chứa cặp → làm mới để mục kế thừa / Áp glossary theo cặp mới.
       if (s.source_lang !== series.source_lang || s.target_lang !== series.target_lang) {
         void qc.invalidateQueries({ queryKey: ["glossary"] });
       }
+      onClose();
     },
   });
-  const set = <K extends keyof Form>(k: K, v: Form[K]) => {
-    setSaved(null);
-    setF((cur) => ({ ...cur, [k]: v }));
-  };
+  const set = <K extends keyof Form>(k: K, v: Form[K]) => setF((cur) => ({ ...cur, [k]: v }));
   const setFont = (slot: FontSlot, id: string) => {
     const next = { ...f.default_fonts };
     if (id) next[slot] = id;
@@ -251,12 +241,12 @@ export function SeriesSettingsDialog({
       {bundled.data?.has(f.default_fonts[slot] ?? "") &&
         !bundled.data.ids(f.target_lang).includes(f.default_fonts[slot] ?? "") && (
           <option value={f.default_fonts[slot]}>
-            {f.default_fonts[slot]} (thiếu chữ tiếng {langShort(f.target_lang)})
+            {fontDisplayName(f.default_fonts[slot] ?? "")} (thiếu chữ tiếng {langShort(f.target_lang)})
           </option>
         )}
-      {(bundled.data?.ids(f.target_lang) ?? []).map((fid) => (
+      {recommendedFirst(bundled.data?.ids(f.target_lang) ?? []).map((fid) => (
         <option key={fid} value={fid} style={fontPreview(fid)}>
-          {fid}
+          {fontDisplayName(fid)}
         </option>
       ))}
       {[
@@ -302,11 +292,6 @@ export function SeriesSettingsDialog({
               Xoá series
             </button>
             <span className="spacer" />
-            {saved && (
-              <span className="small muted" role="status">
-                {saved}
-              </span>
-            )}
             {save.error && <span className="small error">{errorMessage(save.error)}</span>}
             {ignore.error && <span className="small error">Sửa lỗi ở “Chữ bỏ qua” trước khi lưu.</span>}
             {rulesInvalid && <span className="small error">Điền đủ người nói, người nghe, xưng/gọi.</span>}
@@ -380,7 +365,11 @@ export function SeriesSettingsDialog({
             </div>
             <div>
               <label htmlFor="s-font-dialogue">Font thoại</label>
-              {fontSelect("dialogue", "s-font-dialogue", "Mặc định hệ thống")}
+              {fontSelect(
+                "dialogue",
+                "s-font-dialogue",
+                bundled.data?.defaultId ? `Mặc định (${fontDisplayName(bundled.data.defaultId)})` : "Mặc định",
+              )}
             </div>
           </div>
           <input
@@ -582,10 +571,7 @@ export function SeriesSettingsDialog({
                 placeholder={"VD:\ndiscord.gg/nhomdich\nTên nhóm dịch"}
                 value={ignoreRaw}
                 aria-invalid={ignore.error ? true : undefined}
-                onChange={(e) => {
-                  setSaved(null);
-                  setIgnoreRaw(e.target.value);
-                }}
+                onChange={(e) => setIgnoreRaw(e.target.value)}
               />
               {ignore.error && <span className="small error">{ignore.error}</span>}
               {series.ignore_text.length > 0 && (

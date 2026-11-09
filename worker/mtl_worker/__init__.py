@@ -19,3 +19,7 @@
 # 0.10.0: claim `llm` (cấu hình provider + key theo slot ocr/translate/proofread) + payload `llm`; proofread
 #        `model_tier` optional. Worker < 0.10.0 fail schema claim-response/job-payload (strict).
 PIPELINE_VERSION = "0.10.0"
+
+# Tiền tố lỗi job khi tác vụ chưa có model AI: web nhận diện để báo đúng nguyên nhân (không phải key sai).
+# Phải trùng LLM_NOT_CONFIGURED ở packages/shared/src/job.ts (test_provider_config khoá điều này).
+LLM_NOT_CONFIGURED = "llm_not_configured"

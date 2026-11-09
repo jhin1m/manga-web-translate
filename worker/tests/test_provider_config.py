@@ -4,6 +4,7 @@ key không lọt vào log / fail.message, thiếu cấu hình → auth."""
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -13,7 +14,7 @@ from mtl_pipeline.providers.anthropic import AnthropicProvider
 from mtl_pipeline.providers.gemini import GeminiProvider
 from mtl_pipeline.providers.openai import OpenAIProvider
 from mtl_pipeline.schema import ProofreadItem, ProofreadResult, validate_contract
-from mtl_worker import llm_cache, log_redact
+from mtl_worker import LLM_NOT_CONFIGURED, llm_cache, log_redact
 from mtl_worker.handlers import HANDLERS
 from mtl_worker.main import RuntimeDeps
 from mtl_worker.runner import run_job
@@ -215,6 +216,7 @@ def test_no_env_key_and_no_cfg_fails_auth(monkeypatch):
     assert run_job(c, job, HANDLERS, deps) == "failed"
     f = c.calls[-1][1]
     assert f["error_class"] == "auth" and "chưa cấu hình provider AI" in f["message"]
+    assert f["message"].startswith(LLM_NOT_CONFIGURED)
 
 
 # ---------- key không lộ ----------
@@ -287,3 +289,9 @@ def test_per_job_clients_ignore_sdk_base_url_env(monkeypatch):
     assert "generativelanguage.googleapis.com" in g.client._api_client._http_options.base_url
     o = provider_from_config(cfg("openai"))
     assert str(o.client.base_url).startswith("https://api.openai.com/v1")
+
+
+def test_not_configured_prefix_matches_the_shared_contract():
+    """Web nhận diện lỗi thiếu model theo tiền tố này; đổi một phía phải đổi cả phía kia."""
+    job_ts = Path(__file__).parents[2] / "packages/shared/src/job.ts"
+    assert f'LLM_NOT_CONFIGURED = "{LLM_NOT_CONFIGURED}"' in job_ts.read_text()

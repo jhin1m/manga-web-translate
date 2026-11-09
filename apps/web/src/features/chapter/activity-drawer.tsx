@@ -1,7 +1,7 @@
 /**
- * Drawer "Hoạt động": việc đang chạy/xong/lỗi gom 1 chỗ. Upload (mọi chương của tab, từ upload-manager) luôn có;
- * ở màn chương thêm job của chương đang mở (`progress.jobs` + số trang đang chạy/lỗi theo `error_class`, nút "Chạy
- * lại trang lỗi") và lượt xuất gần đây (tải lại, huỷ). Ở màn chương mở từ chip trạng thái hoặc menu ⋯ (kèm số việc đang chạy).
+ * Drawer "Hoạt động": việc đang chạy/xong/lỗi gom 1 chỗ, mục trống được ẩn. Upload (mọi chương của tab, từ
+ * upload-manager); ở màn chương thêm tóm tắt trang + nguyên nhân lỗi (nút "Chạy lại trang lỗi"), job chương gấp trong
+ * "Chi tiết", và lượt xuất gần đây (tải lại, huỷ). Ở màn chương mở từ chip trạng thái hoặc menu ⋯ (kèm số việc đang chạy).
  */
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
@@ -12,19 +12,19 @@ import { errorMessage } from "../../lib/api.ts";
 import { type ChapterUpload, uploadManager, useUploads } from "../upload/upload-manager.ts";
 import { cancelJob, chapterKeys, fetchChapter, type JobView, type Progress } from "./api.ts";
 import { ExportRow, useExports } from "./export-panel.tsx";
-import { ERROR_CLASS, failedPageGroups, providerWait, providerWaitText } from "./job-error.ts";
-import { pageLevel } from "./page-status.ts";
+import { failedPageGroups, jobErrorLabel, providerWait, providerWaitText } from "./job-error.ts";
+import { pageLevel, pageSummary } from "./page-status.ts";
 import { stageLabel } from "./stage-labels.ts";
 import { formatBytes } from "./text-utils.ts";
 
 const JOB_LABEL: Record<string, string> = {
   "chapter.ingest": "Cắt trang",
-  "page.prepare": "Xoá chữ + OCR",
-  "chapter.translate": "Dịch lô trang",
-  "page.reinpaint": "Xoá chữ lại theo mask",
-  "page.ocr_region": "Quét chữ vùng",
+  "page.prepare": "Xoá chữ và đọc chữ",
+  "chapter.translate": "Dịch",
+  "page.reinpaint": "Xoá chữ lại",
+  "page.ocr_region": "Đọc chữ vùng đã chọn",
   "chapter.export": "Xuất",
-  "chapter.proofread": "AI hiệu đính",
+  "chapter.proofread": "Hiệu đính",
 };
 const JOB_STATUS: Record<string, { label: string; tone: string }> = {
   queued: { label: "Đang chờ", tone: "busy" },
@@ -81,7 +81,7 @@ export function ActivityDrawer(props: {
 }) {
   return (
     <Drawer title="Hoạt động" onClose={props.onClose}>
-      <UploadSection />
+      <UploadSection showEmpty={!props.chapter} />
       {props.chapter && <ChapterSection {...props.chapter} />}
       {props.chapter && <ExportSection chapterId={props.chapter.id} />}
     </Drawer>
@@ -105,8 +105,10 @@ export function ShellActivity() {
   );
 }
 
-function UploadSection() {
+/** Ở màn chương mục trống được ẩn; ở app shell đây là mục duy nhất nên vẫn báo trống. */
+function UploadSection({ showEmpty }: { showEmpty: boolean }) {
   const uploads = Object.values(useUploads());
+  if (uploads.length === 0 && !showEmpty) return null;
   return (
     <section className="drawer-section" aria-label="Upload">
       <h3>Upload</h3>
@@ -187,27 +189,24 @@ function ChapterSection(props: {
         {p.pages.length > 0 && (
           <div className="drawer-item">
             <div className="drawer-item-head">
-              <span className="grow">Trang</span>
-              <span className="status" data-tone={failed.length ? "danger" : busy ? "busy" : "ok"}>
-                {failed.length ? "Có lỗi" : busy ? "Đang xử lý" : "Xong"}
-              </span>
+              <span className="grow">{pageSummary(p.pages.length, busy, failed.length)}</span>
               {failed.length > 0 && props.canRetry && (
                 <button type="button" disabled={props.retrying} onClick={props.onRetry}>
                   Chạy lại trang lỗi
                 </button>
               )}
             </div>
-            <span className="small">
-              {p.pages.length} trang: {p.pages.length - busy - failed.length} xong
-              {busy ? ` · ${busy} đang xử lý` : ""}
-              {failed.length ? ` · ${failed.length} lỗi` : ""}
-            </span>
             {groups.map((g) => (
               <div key={g.cls} className="small">
                 <span className="error">
-                  {g.count} trang lỗi · {g.label}: trang {g.pages}
+                  {g.count} trang · {g.label}: trang {g.pages}
                   {g.hint ? `. ${g.hint}` : ""}
                 </span>
+                {g.needsSetup && (
+                  <Link to="/settings" search={{ section: "tasks" }}>
+                    Mở Model tác vụ
+                  </Link>
+                )}
                 {g.details.length > 0 && (
                   <details className="cw-error-raw">
                     <summary>Chi tiết kỹ thuật</summary>
@@ -223,32 +222,37 @@ function ChapterSection(props: {
             {wait && <span className="small warn-text">{providerWaitText(wait)}</span>}
           </div>
         )}
-        {jobs.map((j) => {
-          const st = JOB_STATUS[j.status] ?? { label: j.status, tone: "idle" };
-          // Bước cũ của job đã kết thúc không còn ý nghĩa (server xoá stage khi xong; lỗi giữ bước cuối).
-          const step = ACTIVE.has(j.status) ? stageLabel(j) : null;
-          return (
-            <div key={j.id} className="drawer-item" data-job-type={j.type}>
-              <div className="drawer-item-head">
-                <span className="grow">{JOB_LABEL[j.type] ?? j.type}</span>
-                <span className="status" data-tone={st.tone}>
-                  {st.label}
-                </span>
-              </div>
-              <span className="muted small">
-                {new Date(j.updated_at).toLocaleString("vi-VN")}
-                {step ? ` · ${step}` : ""}
-                {ACTIVE.has(j.status) && j.progress > 0 ? ` · ${Math.round(j.progress * 100)}%` : ""}
-              </span>
-              {j.status === "failed" && (j.error || j.error_class) && (
-                <span className="small error">
-                  {j.error_class ? `${ERROR_CLASS[j.error_class] ?? j.error_class}: ` : ""}
-                  {j.error}
-                </span>
-              )}
-            </div>
-          );
-        })}
+        {jobs.length > 0 && (
+          <details className="drawer-jobs">
+            <summary className="small">Chi tiết</summary>
+            {jobs.map((j) => {
+              const st = JOB_STATUS[j.status] ?? { label: j.status, tone: "idle" };
+              // Bước cũ của job đã kết thúc không còn ý nghĩa (server xoá stage khi xong; lỗi giữ bước cuối).
+              const step = ACTIVE.has(j.status) ? stageLabel(j) : null;
+              return (
+                <div key={j.id} className="drawer-item" data-job-type={j.type}>
+                  <div className="drawer-item-head">
+                    <span className="grow">{JOB_LABEL[j.type] ?? j.type}</span>
+                    <span className="status" data-tone={st.tone}>
+                      {st.label}
+                    </span>
+                  </div>
+                  <span className="muted small">
+                    {new Date(j.updated_at).toLocaleString("vi-VN")}
+                    {step ? ` · ${step}` : ""}
+                    {ACTIVE.has(j.status) && j.progress > 0 ? ` · ${Math.round(j.progress * 100)}%` : ""}
+                  </span>
+                  {j.status === "failed" && (j.error || j.error_class) && (
+                    <span className="small error">
+                      {jobErrorLabel(j)}
+                      {j.error ? `: ${j.error}` : ""}
+                    </span>
+                  )}
+                </div>
+              );
+            })}
+          </details>
+        )}
         {p.pages.length === 0 && jobs.length === 0 && <p className="muted small">Chưa có việc nào của chương.</p>}
       </div>
     </section>
@@ -259,19 +263,16 @@ function ExportSection({ chapterId }: { chapterId: string }) {
   const { q, refresh } = useExports(chapterId);
   const exports = q.data?.exports ?? [];
   const cancel = useMutation({ mutationFn: (id: string) => cancelJob(id), onSettled: refresh });
+  if (exports.length === 0 && !cancel.error) return null;
   return (
     <section className="drawer-section" aria-label="Xuất gần đây">
       <h3>Xuất gần đây</h3>
       {cancel.error && <p className="notice danger">{errorMessage(cancel.error)}</p>}
-      {exports.length === 0 ? (
-        <p className="muted small">{q.isLoading ? "Đang tải…" : "Chưa có lượt xuất nào."}</p>
-      ) : (
-        <div className="drawer-list">
-          {exports.slice(0, 5).map((x) => (
-            <ExportRow key={x.id} x={x} cancelling={cancel.isPending} onCancel={() => cancel.mutate(x.id)} />
-          ))}
-        </div>
-      )}
+      <div className="drawer-list">
+        {exports.slice(0, 5).map((x) => (
+          <ExportRow key={x.id} x={x} cancelling={cancel.isPending} onCancel={() => cancel.mutate(x.id)} />
+        ))}
+      </div>
     </section>
   );
 }

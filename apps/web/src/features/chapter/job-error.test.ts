@@ -140,3 +140,41 @@ describe("failed pages summary", () => {
     expect(d?.text).toContain("Khoá API AI sai");
   });
 });
+
+describe("missing task model", () => {
+  const NOT_SET = "llm_not_configured: chưa cấu hình provider AI (slot DB hoặc env worker)";
+  const failed = { ...job(), status: "failed", error_class: "auth", error: NOT_SET };
+
+  it("names the task, points at the task settings and never blames the API key", () => {
+    const text = describeJobError({ ...failed, type: "chapter.translate" })?.text ?? "";
+    expect(text).toContain("Chưa chọn model AI cho tác vụ Dịch");
+    expect(text).toContain("Model tác vụ");
+    expect(text).not.toContain("Khoá API");
+  });
+
+  it("falls back to a generic sentence when the job type is unknown", () => {
+    expect(describeJobError(failed)?.text).toContain("Chưa chọn model AI cho tác vụ.");
+  });
+
+  it("a real key rejection still reports the API key", () => {
+    const text = describeJobError({ ...failed, error: "anthropic 401: invalid x-api-key" })?.text ?? "";
+    expect(text).toContain("Khoá API");
+    expect(text).not.toContain("Chưa chọn model");
+  });
+
+  it("groups pages apart from real key errors and flags the settings link", () => {
+    const groups = failedPageGroups([
+      { ord: 0, job: { error_class: "auth", error: NOT_SET, type: "page.prepare" } },
+      { ord: 1, job: { error_class: "auth", error: NOT_SET, type: "page.prepare" } },
+      { ord: 2, job: { error_class: "auth", error: "anthropic 401" } },
+    ]);
+    expect(groups).toHaveLength(2);
+    expect(groups[0]).toMatchObject({
+      count: 2,
+      label: "Chưa chọn model AI cho tác vụ OCR",
+      hint: null,
+      needsSetup: true,
+    });
+    expect(groups[1]).toMatchObject({ count: 1, label: "AI từ chối khoá API", needsSetup: false });
+  });
+});

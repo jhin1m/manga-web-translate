@@ -2,7 +2,7 @@
  * Lỗi job viết cho người: lỗi thô (VD nguyên JSON 429 của Gemini) chỉ để xem chi tiết. Lỗi provider/rate_limited
  * không làm job hỏng ngay — queue requeue có backoff (apps/api/src/jobs/errors.ts) → trang "đang chờ AI", tự thử lại.
  */
-import { QUOTA_EXCEEDED } from "@mtl/shared";
+import { LLM_NOT_CONFIGURED, QUOTA_EXCEEDED } from "@mtl/shared";
 import type { JobView } from "./api.ts";
 
 export const ERROR_CLASS: Record<string, string> = {
@@ -21,7 +21,29 @@ const AUTH_HINT =
 const PROVIDER_CLASSES = new Set(["provider", "rate_limited"]);
 const WAITING = new Set(["queued", "running"]);
 
-type ErrorJob = Pick<JobView, "status" | "error_class" | "error" | "provider_retries" | "run_after">;
+type ErrorJob = Pick<JobView, "status" | "error_class" | "error" | "provider_retries" | "run_after"> &
+  Partial<Pick<JobView, "type">>;
+
+const SETUP_HINT = 'Chọn model ở Cài đặt › Model tác vụ rồi bấm "Chạy lại trang lỗi".';
+const TASK_OF_JOB: Record<string, string> = {
+  "page.prepare": "OCR",
+  "page.ocr_region": "OCR",
+  "chapter.translate": "Dịch",
+  "chapter.proofread": "Hiệu đính",
+};
+type CauseJob = Pick<JobView, "error_class" | "error"> & Partial<Pick<JobView, "type">>;
+
+const needsTaskSetup = (j: CauseJob | null | undefined) => !!j?.error?.startsWith(LLM_NOT_CONFIGURED);
+
+/** Nguyên nhân lỗi ngắn: thiếu model tách khỏi "AI từ chối khoá API" dù cùng `error_class`. */
+export function jobErrorLabel(j: CauseJob): string {
+  if (needsTaskSetup(j)) {
+    const task = TASK_OF_JOB[j.type ?? ""];
+    return `Chưa chọn model AI cho tác vụ${task ? ` ${task}` : ""}`;
+  }
+  const cls = j.error_class ?? "internal";
+  return ERROR_CLASS[cls] ?? cls;
+}
 
 export const clock = (iso: string) => new Date(iso).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" });
 
@@ -49,6 +71,7 @@ export function describeJobError(j: ErrorJob | null | undefined): { text: string
     return { text: `Đã dùng hết hạn mức AI hôm nay — thử lại sau ${clock(nextQuotaReset())}.`, waiting: false };
   }
   if (j.status !== "failed") return null;
+  if (needsTaskSetup(j)) return { text: `Lỗi: ${jobErrorLabel(j)}. ${SETUP_HINT}`, waiting: false };
   if (cls === "auth") return { text: `Lỗi: ${AUTH_HINT}`, waiting: false };
   const label = PROVIDER_CLASSES.has(cls) ? `${providerText(cls)}, đã thử lại nhiều lần` : (ERROR_CLASS[cls] ?? cls);
   return { text: `Lỗi: ${label}. ${RETRY_HINT}`, waiting: false };
@@ -89,7 +112,7 @@ export function pageRanges(ords: number[]): string {
   return out.join(", ");
 }
 
-type FailedPage = { ord: number; job: Pick<JobView, "error_class" | "error"> | null };
+type FailedPage = { ord: number; job: CauseJob | null };
 
 /** Lỗi thô của các trang trong 1 nhóm, gom theo nội dung: [{ pages: "2–4", error }]. */
 function rawErrors(pages: FailedPage[]) {
@@ -104,12 +127,12 @@ function rawErrors(pages: FailedPage[]) {
 /**
  * Trang lỗi gom theo nguyên nhân (nhiều trang nhất trước) → 1 dòng mỗi nguyên nhân thay vì liệt kê từng trang.
  * `hint` = việc cần làm khi chạy lại thôi chưa đủ; `raw` = lỗi thô đầu tiên; `details` = mọi lỗi thô của nhóm (theo
- * nội dung, kèm số trang) để đọc ở "Chi tiết kỹ thuật".
+ * nội dung, kèm số trang) để đọc ở "Chi tiết kỹ thuật"; `needsSetup` = thiếu model, kèm lối tới Model tác vụ.
  */
 export function failedPageGroups(failed: FailedPage[]) {
   const by = new Map<string, FailedPage[]>();
   for (const f of failed) {
-    const k = f.job?.error_class ?? "internal";
+    const k = needsTaskSetup(f.job) ? LLM_NOT_CONFIGURED : (f.job?.error_class ?? "internal");
     by.set(k, [...(by.get(k) ?? []), f]);
   }
   return [...by]
@@ -117,9 +140,10 @@ export function failedPageGroups(failed: FailedPage[]) {
     .map(([cls, ps]) => ({
       cls,
       count: ps.length,
-      label: ERROR_CLASS[cls] ?? cls,
+      label: ps[0]?.job ? jobErrorLabel(ps[0].job) : (ERROR_CLASS[cls] ?? cls),
       pages: pageRanges(ps.map((p) => p.ord + 1)),
       hint: cls === "auth" ? AUTH_HINT : null,
+      needsSetup: cls === LLM_NOT_CONFIGURED,
       raw: ps.find((p) => p.job?.error)?.job?.error ?? null,
       details: rawErrors(ps),
     }));

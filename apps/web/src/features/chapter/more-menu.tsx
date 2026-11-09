@@ -4,16 +4,21 @@
  */
 import { useRef, useState } from "react";
 import { chapterStore, effectiveMode, useChapterStore } from "../editor/chapter-store.ts";
+import { useEditor } from "../editor/store.ts";
 import { ContextMenu, type MenuAt, type MenuItem } from "./context-menu.tsx";
 import type { ChapterCommand } from "./primary-action.ts";
 import { EyeIcon, MoreIcon } from "./tool-icons.tsx";
 
 /**
  * Sáng khi đang hiện ảnh gốc (kể cả lúc giữ `O`). Bấm: Gốc ↔ Dịch; đang Chia đôi → sang Gốc. Phím `\` cùng tác dụng.
+ * Trang chưa có bản dịch thì Gốc và Dịch như nhau nên không hiện nút, trừ khi đang bật Gốc (vẫn phải có lối tắt ra).
  */
 export function OriginalToggle() {
   const mode = useChapterStore(effectiveMode);
   const on = mode === "original";
+  const translated = useEditor((s) => !!s.doc?.regions.some((r) => r.translation.trim()));
+  const stuck = useChapterStore((s) => s.viewMode === "original");
+  if (!translated && !stuck) return null;
   return (
     <button
       type="button"
