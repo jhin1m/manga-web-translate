@@ -178,12 +178,13 @@ export function SeriesSettingsDialog({
   const save = useMutation({
     mutationFn: () => patchSeries(series.id, { ...f, ignore_text: ignore.list }),
     onSuccess: (s) => {
+      // Ghi ngay bản server trả về: mở lại modal trước khi refetch xong vẫn thấy giá trị mới.
+      qc.setQueryData<Series>(seriesKeys.detail(series.id), (cur) => (cur ? { ...cur, ...s } : cur));
       void qc.invalidateQueries({ queryKey: ["series"] });
       // Key glossary series không chứa cặp → làm mới để mục kế thừa / Áp glossary theo cặp mới.
       if (s.source_lang !== series.source_lang || s.target_lang !== series.target_lang) {
         void qc.invalidateQueries({ queryKey: ["glossary"] });
       }
-      onClose();
     },
   });
   const set = <K extends keyof Form>(k: K, v: Form[K]) => setF((cur) => ({ ...cur, [k]: v }));
@@ -218,7 +219,8 @@ export function SeriesSettingsDialog({
       setFocusErr((n) => n + 1);
       return;
     }
-    save.mutate();
+    // Callback ở `mutate` không chạy nếu modal đã đóng: lưu xong không kéo người dùng về lại màn series.
+    save.mutate(undefined, { onSuccess: onClose });
   };
   const invalidRule = (i: number, field: "speaker" | "listener" | "address") =>
     rulesChecked && !f.pronoun_rules[i]?.[field].trim() ? true : undefined;
@@ -578,7 +580,7 @@ export function SeriesSettingsDialog({
                 <IgnoreApplySection
                   seriesId={series.id}
                   disabledReason={
-                    ignoreRaw !== series.ignore_text.join("\n") ? "Bấm Lưu trước để áp danh sách mới." : null
+                    ignoreRaw !== series.ignore_text.join("\n") ? "Lưu rồi mở lại mục này để áp danh sách mới." : null
                   }
                 />
               )}

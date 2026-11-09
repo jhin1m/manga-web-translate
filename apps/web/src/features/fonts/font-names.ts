@@ -17,6 +17,7 @@ const words = (s: string) =>
 
 /** "MTOComic-Regular" → "MTO Comic"; "WildWords-BoldItalic" → "Wild Words Bold Italic". */
 export function fontDisplayName(id: string): string {
+  if (id.startsWith("custom-")) return id; // font riêng có tên thật ở danh sách font; chưa tải xong thì giữ nguyên id
   const [family = id, style] = id.split("-");
   const keepStyle = style && !/^(Regular|Variable|Roman)$/.test(style);
   return keepStyle ? `${words(family)} ${words(style)}` : words(family);

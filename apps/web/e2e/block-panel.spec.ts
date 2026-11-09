@@ -914,7 +914,7 @@ test("the raw technical error of a failed page is readable in Hoạt động", a
   await page.getByRole("button", { name: "Thêm thao tác" }).click();
   await page.getByRole("menuitem", { name: /^Hoạt động/ }).click();
   const drawer = page.getByRole("dialog", { name: "Hoạt động" });
-  await expect(drawer).toContainText("1 trang lỗi");
+  await expect(drawer).toContainText(": trang 1");
   await drawer.getByText("Chi tiết kỹ thuật").click();
   await expect(drawer.getByText(RAW)).toBeVisible();
   await expect(drawer.getByText("Trang 1:")).toBeVisible();

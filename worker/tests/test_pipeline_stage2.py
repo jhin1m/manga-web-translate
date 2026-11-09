@@ -93,3 +93,16 @@ def test_restore_sfx_puts_back_original_pixels_except_other_text():
     assert (c2[20:80, 20:120] == 50).all() and not m2[20:80, 20:120].any()
     assert (c2[200:260, 20:120] == 200).all() and m2[200:260, 20:120].all()
     assert (clean == 200).all()  # không sửa mảng đầu vào
+
+
+def test_restore_sfx_restores_the_whole_box_even_right_next_to_other_text():
+    from mtl_pipeline.pipeline import restore_sfx
+
+    img = np.full((120, 200, 3), 50, np.uint8)
+    clean = np.full((120, 200, 3), 200, np.uint8)
+    mask = np.full((120, 200), 255, np.uint8)
+    talk = Region(id="r0", kind="text_bubble", bbox=BBox(x=20, y=20, w=100, h=40), score=1)
+    kept = Region(id="r1", kind="text_bubble", bbox=BBox(x=20, y=64, w=100, h=12), score=1, is_sfx=True)
+    c2, m2 = restore_sfx(img, clean, mask, [talk, kept])
+    assert (c2[64:76, 20:120] == 50).all() and not m2[64:76, 20:120].any()
+    assert (c2[20:60, 20:120] == 200).all() and m2[20:60, 20:120].all()

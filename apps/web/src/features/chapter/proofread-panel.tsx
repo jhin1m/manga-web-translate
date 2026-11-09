@@ -22,7 +22,7 @@ import {
   proofreadKey,
   runProofread,
 } from "./api.ts";
-import { describeJobError, jobErrorLabel } from "./job-error.ts";
+import { describeJobError, jobErrorLabel, needsTaskSetup } from "./job-error.ts";
 import {
   estimateLines,
   estimateSummary,
@@ -53,6 +53,7 @@ function jobNotice(job: JobView | null): { text: string; tone: "info" | "danger"
     return { text: "Tạm dừng vì vượt ngân sách AI — tự chạy tiếp khi ngân sách mở lại.", tone: "info", raw: null };
   const d = describeJobError(job);
   if (d?.waiting) return { text: d.text, tone: "info", raw: null };
+  if (job.status === "failed" && needsTaskSetup(job) && d) return { text: d.text, tone: "danger", raw: null };
   if (job.status === "failed")
     return {
       text: `Lần hiệu đính gần nhất lỗi: ${jobErrorLabel(job)}. Bấm "Hiệu đính lại cả chương" để chạy lại.`,

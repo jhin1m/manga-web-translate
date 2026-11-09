@@ -10,9 +10,10 @@ import pytest
 from mtl_pipeline.images import open_rgb
 from mtl_pipeline.local_ocr import ocr_page_local
 from mtl_pipeline.ocr import keep_regions_without_text
-from mtl_pipeline.schema import BBox, OcrItem, OcrResult, Region
+from mtl_pipeline.schema import BBox, OcrItem, OcrResult, Region, TranslateItem
+from mtl_pipeline.translate import ChapterTranslation, RollingContext, qualified_id
 from mtl_worker import handlers
-from mtl_worker.runner import open_gray, png_bytes
+from mtl_worker.runner import open_gray, png_bytes, region_to_shared
 
 
 def _region(rid: str, x: int, kind: str = "text_bubble") -> Region:
@@ -136,3 +137,70 @@ def test_prepare_keeps_a_region_with_no_ink_when_no_crop_reaches_the_llm(monkeyp
     assert out["ocr_result"]["items"][0]["is_sfx"]
     assert np.array_equal(kept[20:60, 10:50], img[20:60, 10:50])
     assert (kept_mask[20:60, 10:50] == 0).all()
+
+
+def _translate_boxes(monkeypatch, kept_item: OcrItem) -> tuple[Region, list[dict]]:
+    """Dịch 1 trang có bóng chứa câu thoại (trên) và vùng giữ nguyên hình (dưới) → (bóng, box đặt chữ)."""
+    img = np.full((200, 200, 3), 255, np.uint8)
+    bubble = Region(id="b", kind="bubble", bbox=BBox(x=10, y=10, w=180, h=180), score=0.9)
+    talk = Region(id="talk", kind="text_bubble", bbox=BBox(x=50, y=30, w=100, h=40), score=0.9, bubble_id="b")
+    kept = Region(id="kept", kind="text_bubble", bbox=BBox(x=70, y=140, w=60, h=30), score=0.9, bubble_id="b")
+    regions = [bubble, talk, kept]
+    items = [OcrItem(id="talk", source="Hello"), kept_item]
+    talk_id = qualified_id(0, "talk")
+    tr = ChapterTranslation(
+        items={"0": {talk_id: TranslateItem(id=talk_id, translation="Xin chào các bạn nhé", speaker="?")}},
+        usage=[],
+        context_used="rolling",
+        context=RollingContext(),
+    )
+    monkeypatch.setattr(handlers, "translate_chapter", lambda *a, **k: tr)
+    monkeypatch.setattr(handlers, "llm_provider", lambda *a, **k: SimpleNamespace(model="fake"))
+    seen: dict[str, list[Region]] = {}
+    real = handlers.typeset_region
+
+    def spy(clean, region, bub, text, font, siblings=()):
+        seen[region.id] = list(siblings)
+        return real(clean, region, bub, text, font, siblings)
+
+    monkeypatch.setattr(handlers, "typeset_region", spy)
+    page = {
+        "page_id": "p",
+        "ord": 0,
+        "width": 200,
+        "height": 200,
+        "clean": "c",
+        "ocr_result": {
+            "regions": [region_to_shared(r) for r in regions],
+            "items": [handlers._ocr_item_to_shared(it) for it in items],
+        },
+    }
+    ctx = SimpleNamespace(
+        payload={"settings": _SETTINGS, "context": "rolling", "glossary_rev": 0, "settings_rev": 0},
+        inputs={"pages": [page], "context_lines": []},
+        download=lambda _ref: png_bytes(img)[0],
+        report=lambda *a, **k: None,
+        add_usage=lambda _usage: None,
+    )
+    handlers.handle_translate(ctx, SimpleNamespace())
+    return kept, seen["talk"]
+
+
+_SETTINGS = {
+    "glossary": {},
+    "pronoun_rules": "",
+    "honorific_policy": "",
+    "style_prompt": "",
+    "font": "KomikaText-Regular",
+    "narration_font": "KomikaText-Regular",
+}
+
+
+def test_kept_punctuation_keeps_its_share_of_the_bubble(monkeypatch):
+    kept, siblings = _translate_boxes(monkeypatch, OcrItem(id="kept", source="...!", is_sfx=True))
+    assert [r.id for r in siblings] == [kept.id]
+
+
+def test_a_region_with_no_ink_does_not_take_bubble_space(monkeypatch):
+    _, siblings = _translate_boxes(monkeypatch, OcrItem(id="kept", empty=True, is_sfx=True))
+    assert siblings == []

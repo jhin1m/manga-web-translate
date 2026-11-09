@@ -315,11 +315,12 @@ def handle_translate(ctx: JobContext, deps: Deps) -> dict[str, Any]:
         styles: dict[str, str] = {}
         boxes: list[TextBox] = []
         clean = open_rgb(ctx.download(pg["clean"])) if page_items else None
-        # Vùng chữ được đặt chữ: chỉ chúng chia nhau lòng bóng (vùng OCR rỗng không giữ chỗ).
+        # Vùng được đặt chữ và vùng giữ nguyên hình (`...!`) chia nhau lòng bóng; vùng không có mực không giữ chỗ.
         texted = [
             r
             for r in regions
-            if (t := page_items.get(qualified_id(pg["ord"], r.id))) and t.translation.strip()
+            if ((t := page_items.get(qualified_id(pg["ord"], r.id))) and t.translation.strip())
+            or (r.is_sfx and r.id in items and not items[r.id].empty)
         ]
         for r in regions:
             it = page_items.get(qualified_id(pg["ord"], r.id))

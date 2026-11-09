@@ -24,7 +24,7 @@ const WAITING = new Set(["queued", "running"]);
 type ErrorJob = Pick<JobView, "status" | "error_class" | "error" | "provider_retries" | "run_after"> &
   Partial<Pick<JobView, "type">>;
 
-const SETUP_HINT = 'Chọn model ở Cài đặt › Model tác vụ rồi bấm "Chạy lại trang lỗi".';
+const SETUP_HINT = "Chọn model ở Cài đặt › Model tác vụ rồi chạy lại.";
 const TASK_OF_JOB: Record<string, string> = {
   "page.prepare": "OCR",
   "page.ocr_region": "OCR",
@@ -33,7 +33,7 @@ const TASK_OF_JOB: Record<string, string> = {
 };
 type CauseJob = Pick<JobView, "error_class" | "error"> & Partial<Pick<JobView, "type">>;
 
-const needsTaskSetup = (j: CauseJob | null | undefined) => !!j?.error?.startsWith(LLM_NOT_CONFIGURED);
+export const needsTaskSetup = (j: CauseJob | null | undefined) => !!j?.error?.startsWith(LLM_NOT_CONFIGURED);
 
 /** Nguyên nhân lỗi ngắn: thiếu model tách khỏi "AI từ chối khoá API" dù cùng `error_class`. */
 export function jobErrorLabel(j: CauseJob): string {

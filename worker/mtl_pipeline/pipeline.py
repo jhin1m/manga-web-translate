@@ -201,21 +201,26 @@ class Pipeline:
 def restore_sfx(
     img: np.ndarray, clean: np.ndarray, mask: np.ndarray, regions: list[Region], margin: int = 12
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Trả pixel gốc cho vùng SFX (box + margin phủ phần giãn mask và feather LaMa), trừ phần thuộc vùng chữ khác."""
+    """Trả pixel gốc cho vùng SFX: cả box của nó, trừ phần đè lên box chữ khác; viền margin (phủ phần giãn mask và
+    feather LaMa) thì tránh cả vùng đệm quanh chữ khác."""
     clean, mask = clean.copy(), mask.copy()
     h, w = mask.shape
     keep = np.zeros((h, w), bool)
+    other_text = np.zeros((h, w), bool)
     for r in regions:
         if r.kind != "bubble" and not r.is_sfx:
             b = r.bbox
             keep[max(0, b.y - margin) : b.y2 + margin, max(0, b.x - margin) : b.x2 + margin] = True
+            other_text[b.y : b.y2, b.x : b.x2] = True
     for r in regions:
         if not r.is_sfx:
             continue
         b = r.bbox
         ys = slice(max(0, b.y - margin), min(h, b.y2 + margin))
         xs = slice(max(0, b.x - margin), min(w, b.x2 + margin))
-        sel = ~keep[ys, xs]
+        own_box = np.zeros((ys.stop - ys.start, xs.stop - xs.start), bool)
+        own_box[b.y - ys.start : b.y2 - ys.start, b.x - xs.start : b.x2 - xs.start] = True
+        sel = ~keep[ys, xs] | (own_box & ~other_text[ys, xs])
         clean[ys, xs][sel] = img[ys, xs][sel]
         mask[ys, xs][sel] = 0
     return clean, mask
@@ -291,11 +296,13 @@ def translate_dir(
         clean = open_rgb(d / "clean.png")
         page_items = result.items.get(str(meta["page_ord"]), {})
         translations, boxes = [], []
-        # Vùng chữ được đặt chữ: chỉ chúng chia nhau lòng bóng (vùng OCR rỗng không giữ chỗ).
+        # Vùng được đặt chữ và vùng giữ nguyên hình (`...!`) chia nhau lòng bóng; vùng không có mực không giữ chỗ.
+        empty_ids = {it.id for it in ocr.items if it.empty}
         texted = [
             r
             for r in regions
-            if (t := page_items.get(qualified_id(meta["page_ord"], r.id))) and t.translation.strip()
+            if ((t := page_items.get(qualified_id(meta["page_ord"], r.id))) and t.translation.strip())
+            or (r.is_sfx and r.id not in empty_ids)
         ]
         for r in regions:
             it = page_items.get(qualified_id(meta["page_ord"], r.id))

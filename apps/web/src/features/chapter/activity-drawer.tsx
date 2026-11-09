@@ -7,12 +7,13 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { useStore } from "zustand";
+import { useMe } from "../../app/app-shell.tsx";
 import { Drawer } from "../../app/drawer.tsx";
 import { errorMessage } from "../../lib/api.ts";
 import { type ChapterUpload, uploadManager, useUploads } from "../upload/upload-manager.ts";
 import { cancelJob, chapterKeys, fetchChapter, type JobView, type Progress } from "./api.ts";
 import { ExportRow, useExports } from "./export-panel.tsx";
-import { failedPageGroups, jobErrorLabel, providerWait, providerWaitText } from "./job-error.ts";
+import { failedPageGroups, jobErrorLabel, needsTaskSetup, providerWait, providerWaitText } from "./job-error.ts";
 import { pageLevel, pageSummary } from "./page-status.ts";
 import { stageLabel } from "./stage-labels.ts";
 import { formatBytes } from "./text-utils.ts";
@@ -168,6 +169,19 @@ function UploadItem({ u }: { u: ChapterUpload }) {
   );
 }
 
+/** Lối tới Model tác vụ khi job thiếu model; chỉ admin mở được trang đó. */
+function TaskSetupLink() {
+  const me = useMe();
+  if (!me.is_admin) return null;
+  return (
+    <div>
+      <Link to="/settings" search={{ section: "tasks" }}>
+        Mở Model tác vụ
+      </Link>
+    </div>
+  );
+}
+
 function ChapterSection(props: {
   progress: Progress | undefined;
   canRetry: boolean;
@@ -182,6 +196,10 @@ function ChapterSection(props: {
   const groups = failedPageGroups(failed);
   const jobs = chapterJobs(p.jobs);
   const wait = providerWait(p.pages);
+  // Dịch lại lỗi thì trang vẫn "xong" (giữ bản cũ), nên thiếu model phải báo từ job mới nhất.
+  const newest = jobs[0];
+  const setupJob =
+    newest?.status === "failed" && needsTaskSetup(newest) && !groups.some((g) => g.needsSetup) ? newest : null;
   return (
     <section className="drawer-section" aria-label="Chương đang mở">
       <h3>Chương đang mở</h3>
@@ -202,11 +220,7 @@ function ChapterSection(props: {
                   {g.count} trang · {g.label}: trang {g.pages}
                   {g.hint ? `. ${g.hint}` : ""}
                 </span>
-                {g.needsSetup && (
-                  <Link to="/settings" search={{ section: "tasks" }}>
-                    Mở Model tác vụ
-                  </Link>
-                )}
+                {g.needsSetup && <TaskSetupLink />}
                 {g.details.length > 0 && (
                   <details className="cw-error-raw">
                     <summary>Chi tiết kỹ thuật</summary>
@@ -220,6 +234,12 @@ function ChapterSection(props: {
               </div>
             ))}
             {wait && <span className="small warn-text">{providerWaitText(wait)}</span>}
+          </div>
+        )}
+        {setupJob && (
+          <div className="drawer-item small">
+            <span className="error">{jobErrorLabel(setupJob)}</span>
+            <TaskSetupLink />
           </div>
         )}
         {jobs.length > 0 && (
@@ -245,7 +265,7 @@ function ChapterSection(props: {
                   {j.status === "failed" && (j.error || j.error_class) && (
                     <span className="small error">
                       {jobErrorLabel(j)}
-                      {j.error ? `: ${j.error}` : ""}
+                      {j.error && !needsTaskSetup(j) ? `: ${j.error}` : ""}
                     </span>
                   )}
                 </div>
