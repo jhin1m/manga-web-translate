@@ -3,17 +3,25 @@
  * Xoá / sửa bị chặn khi model còn được gán slot (FK RESTRICT) hoặc job đang hoạt động tham chiếu.
  */
 import { aiModels, aiProviders, type DbLike, isUuid, jobs } from "@mtl/db";
-import { ACTIVE_JOB_STATUSES, AiModelInput, AiModelPatch, AiProviderInput, AiProviderPatch } from "@mtl/shared";
+import {
+  ACTIVE_JOB_STATUSES,
+  AiModelInput,
+  AiModelPatch,
+  AiProviderInput,
+  AiProviderPatch,
+  isModelUnsupported,
+} from "@mtl/shared";
 import { and, asc, count, eq, inArray, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { v7 as uuidv7 } from "uuid";
 import { z } from "zod";
 import { probeProvider } from "../ai/probe.ts";
+import { env } from "../env.ts";
 import { inJobTx } from "../jobs/enqueue.ts";
 import { fail, modelView, pgError, providerView, safeErrorSummary, slotOfConstraint } from "../lib/ai-providers.ts";
 import { decryptSecret, encryptSecret, SecretsError, secretsConfigured } from "../lib/secrets.ts";
-import { lockSystemSettings, readSystemSettings } from "../lib/system-settings.ts";
+import { lockSystemSettings, readSystemSettings, saveSlots, systemSlots } from "../lib/system-settings.ts";
 import { parseJson } from "../lib/validate.ts";
 import type { AppEnv } from "../middleware/user.ts";
 
@@ -86,6 +94,30 @@ async function orInUse<R>(fn: () => Promise<R>): Promise<R> {
   }
 }
 
+/** Local mode, DB chưa có provider: provider sắp tạo tự được gán slot. Khoá settings trước để 2 request không cùng thấy 0. */
+async function isFirstLocalProvider(t: DbLike, modelCount: number): Promise<boolean> {
+  if (!env.MTL_LOCAL_MODE || modelCount === 0) return false;
+  await lockSystemSettings(t);
+  const [r] = await t.select({ n: count() }).from(aiProviders);
+  return r?.n === 0;
+}
+
+/** Điền ô slot trống theo thứ tự admin nhập (`returning` không đảm bảo thứ tự): dịch = model đầu, OCR + hiệu đính = model vision đầu. */
+async function fillEmptySlots(
+  t: DbLike,
+  input: readonly AiModelInput[],
+  rows: readonly { id: string; modelId: string }[],
+) {
+  const idOf = (m: AiModelInput | undefined) => rows.find((r) => r.modelId === m?.model_id)?.id ?? null;
+  const vision = idOf(input.find((m) => m.vision));
+  const slots = await systemSlots(t);
+  await saveSlots(t, {
+    translate: slots.translate ?? idOf(input[0]),
+    ocr: slots.ocr ?? vision,
+    proofread: slots.proofread ?? vision,
+  });
+}
+
 adminProviderRoutes.get("/providers", async (c) => {
   const out = await inJobTx(async (tx) => {
     const providers = await tx.select().from(aiProviders).orderBy(asc(aiProviders.createdAt));
@@ -108,6 +140,7 @@ adminProviderRoutes.post("/providers", async (c) => {
   requireSecretsKey();
   const id = uuidv7(); // làm AAD của key nên sinh trước khi mã hoá
   const view = await inJobTx(async (tx) => {
+    const autoAssign = await isFirstLocalProvider(tx, body.models.length);
     const [p] = await tx
       .insert(aiProviders)
       .values({
@@ -136,6 +169,7 @@ adminProviderRoutes.post("/providers", async (c) => {
           .returning()
       : [];
     if (!p) throw new Error("insert ai_providers returned no row");
+    if (autoAssign) await fillEmptySlots(tx, body.models, models);
     return providerView(p, models);
   });
   return c.json(view, 201);
@@ -188,7 +222,8 @@ adminProviderRoutes.post("/providers/:id/models", async (c) => {
   const id = c.req.param("id");
   try {
     const m = await inJobTx(async (tx) => {
-      await providerById(tx, id);
+      const provider = await providerById(tx, id);
+      if (isModelUnsupported(provider.type, body.model_id)) throw fail(400, "model_unsupported");
       const [row] = await tx
         .insert(aiModels)
         .values({

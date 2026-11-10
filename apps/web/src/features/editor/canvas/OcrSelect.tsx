@@ -12,6 +12,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 import { Group, Layer, Rect } from "react-konva";
 import { errorMessage } from "../../../lib/api.ts";
 import { cancelJob } from "../../chapter/api.ts";
+import { describeJobError, needsTaskSetup } from "../../chapter/job-error.ts";
 import { insertOcrRegion, refreshRegionFromOcr } from "../actions.ts";
 import { type OcrRegionResult, startOcrRegion, startReinpaint, waitJob } from "../api.ts";
 import { createEraseQueue, type EraseQueue } from "../erase-queue.ts";
@@ -117,7 +118,10 @@ export function useOcrRegion(
         const done = await waitJob(job.id, signal, undefined, (j) => {
           if (!signal.aborted) setRetry(ocrRetryNote(j) ?? ocrStallNote(j, Date.now() - sentAt));
         });
-        if (done.status !== "succeeded") throw new Error(done.error ?? "Quét chữ vùng thất bại");
+        if (done.status !== "succeeded")
+          throw new Error(
+            (needsTaskSetup(done) && describeJobError(done)?.text) || done.error || "Quét chữ vùng thất bại",
+          );
         const region = (done.result as OcrRegionResult | null)?.region as Region | undefined;
         if (!region) throw new Error("Quét chữ không trả về vùng");
         const s = editorStore.getState();

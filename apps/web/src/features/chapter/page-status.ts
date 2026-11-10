@@ -160,3 +160,11 @@ export function thumbTitle(p: ThumbPage, overflow: boolean, mac = IS_MAC, active
     : `${active ? "Chuột phải hoặc nút ⋯: thao tác trang" : "Chuột phải: ẩn trang"} · ${selectHint(mac)}`;
   return [step, detail, hint].filter(Boolean).join("\n");
 }
+
+/** Một dòng tóm tắt trang của chương: "35 trang · 30 xong · 5 lỗi"; bỏ số 0. */
+export function pageSummary(total: number, busy: number, failed: number) {
+  const done = total - busy - failed;
+  return [`${total} trang`, done > 0 && `${done} xong`, busy > 0 && `${busy} đang xử lý`, failed > 0 && `${failed} lỗi`]
+    .filter(Boolean)
+    .join(" · ");
+}

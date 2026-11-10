@@ -52,6 +52,19 @@ export function ChapterMetaPopover(props: {
           Ch.{name}
         </button>
       </h1>
+      {props.series && detail && (
+        <button
+          type="button"
+          className="cw-lang-chip"
+          aria-expanded={open}
+          aria-haspopup="dialog"
+          aria-label={`Ngôn ngữ ${pairLabel(props.series)} — đổi ngôn ngữ`}
+          title="Đổi ngôn ngữ của series"
+          onClick={() => setOpen((o) => !o)}
+        >
+          {pairLabel(props.series)}
+        </button>
+      )}
       {open && detail && (
         <MetaForm detail={detail} series={props.series} onClose={() => setOpen(false)} onMoved={props.onMoved} />
       )}

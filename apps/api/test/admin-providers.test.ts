@@ -68,6 +68,38 @@ const insertActiveJob = async (llm: unknown, status: "queued" | "succeeded" = "q
   });
 };
 
+describe("models the worker cannot run", () => {
+  const SONNET = { model_id: "claude-sonnet-5-5", price_in: 2, price_out: 10, vision: true };
+  const HAIKU = { model_id: "claude-haiku-5-5", price_in: 0.1, price_out: 0.5, vision: true };
+
+  it("creating an Anthropic provider with a blocked model → 400 naming the supported model", async () => {
+    loginAdmin();
+    const res = await api("/providers", "POST", { type: "anthropic", name: "A", api_key: KEY, models: [SONNET] });
+    expect(res.status).toBe(400);
+    expect(await res.text()).toContain("claude-haiku-5-5");
+  });
+
+  it("adding a blocked model to an Anthropic provider → 400 model_unsupported; Haiku 5.5 is fine", async () => {
+    const p = await create({ type: "anthropic", models: [HAIKU] });
+    const bad = await api(`/providers/${p.id}/models`, "POST", SONNET);
+    expect(bad.status).toBe(400);
+    expect(await bad.json()).toEqual({ error: "model_unsupported" });
+    const ok = await api(`/providers/${p.id}/models`, "POST", { ...HAIKU, model_id: "claude-opus-5" });
+    expect(ok.status).toBe(201);
+  });
+
+  it("the same model id on an OpenAI-compatible endpoint is not blocked", async () => {
+    const p = await create({
+      type: "openai_compatible",
+      base_url: "https://llm.example.com/v1",
+      models: [SONNET],
+    });
+    expect((await api(`/providers/${p.id}/models`, "POST", { ...SONNET, model_id: "claude-opus-5-5" })).status).toBe(
+      201,
+    );
+  });
+});
+
 describe("create + list", () => {
   it("creates openai + compatible; responses never carry the key or its ciphertext", async () => {
     loginAdmin();

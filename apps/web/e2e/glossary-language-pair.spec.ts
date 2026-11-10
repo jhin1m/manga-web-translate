@@ -65,9 +65,8 @@ test("changing a series language warns about its own glossary and switches the i
   );
   // Cảnh báo không chặn lưu.
   await settings.getByRole("button", { name: "Lưu", exact: true }).click();
-  await expect(page.locator(".series-head").getByText(/Hàn → Anh/)).toBeVisible();
-  await settings.getByRole("button", { name: "Đóng" }).click();
   await expect(settings).toHaveCount(0);
+  await expect(page.locator(".series-head").getByText(/Hàn → Anh/)).toBeVisible();
 
   // Không tải lại trang: glossary series làm mới theo cặp mới.
   await page

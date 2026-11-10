@@ -50,7 +50,7 @@ type Page = typeof pages.$inferSelect;
 type Chapter = typeof chapters.$inferSelect;
 type Series = typeof series.$inferSelect;
 
-export const DEFAULT_DIALOGUE_FONT = "Bangers-Regular";
+export const DEFAULT_DIALOGUE_FONT = "KomikaText-Regular";
 /** Câu chỉ dẫn kính ngữ theo cặp nguồn → đích (policy lạ → gửi nguyên văn). */
 export function honorificText(policy: string, src: string, tgt: string): string {
   const ex = HONORIFIC_EXAMPLES[src as SourceLang] ?? HONORIFIC_EXAMPLES.ko;
@@ -274,7 +274,7 @@ export async function translateSettings(tx: DbLike, s: Series): Promise<Translat
     honorific_policy: honorificText(s.honorificPolicy, s.sourceLang, s.targetLang),
     style_prompt: s.stylePrompt,
     font,
-    // Chưa chọn font dẫn truyện → giống font thoại (series cũ không đổi hành vi).
+    // Chưa chọn font dẫn truyện → giống font thoại.
     narration_font: s.defaultFonts.narration ?? font,
     // Chỉ gửi khi series đã chọn slot; thiếu → worker dùng font theo kind.
     ...(s.defaultFonts.thought ? { thought_font: s.defaultFonts.thought } : {}),

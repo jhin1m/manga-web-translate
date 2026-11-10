@@ -61,6 +61,19 @@ def validate_ids(expected: list[str], items: list[OcrItem]) -> tuple[list[OcrIte
     return out, ok
 
 
+def keep_regions_without_text(regions: list[Region], result: OcrResult) -> OcrResult:
+    """Vùng không có chữ/số (`...!`, `♥`, OCR rỗng) giữ nguyên ảnh gốc: đánh is_sfx để `restore_sfx` trả pixel và
+    bước dịch bỏ qua. Chỉ dùng ở luồng prepare: vùng người dùng tự vẽ (`page.ocr_region`) vẫn được coi là chữ."""
+    by_region = {r.id: r for r in regions}
+    items: list[OcrItem] = []
+    for it in result.items:
+        if not any(ch.isalnum() for ch in it.source):
+            it = it.model_copy(update={"is_sfx": True})
+            by_region[it.id].is_sfx = True
+        items.append(it)
+    return result.model_copy(update={"items": items})
+
+
 def ocr_page(
     provider: LLMProvider, img: np.ndarray, regions: list[Region], page_ord: int, source_lang: str = "ko"
 ) -> OcrResult:

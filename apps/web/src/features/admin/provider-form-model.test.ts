@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { suggestionsFor } from "./price-suggestions.ts";
 import {
   applyChoice,
   applySuggestion,
@@ -225,5 +226,37 @@ describe("DeepSeek preset", () => {
       "OpenAI-compatible",
     );
     expect(providerTypeLabel({ type: "openai", base_url: null })).toBe("OpenAI");
+  });
+});
+
+describe("creating a provider without models", () => {
+  it("is rejected on create and allowed when editing a saved provider", () => {
+    expect(validateDraft(draft({ models: [] }))?.no_models).toBeTruthy();
+    expect(validateDraft(draft({ models: [], api_key: "" }), saved)?.no_models).toBeUndefined();
+  });
+});
+
+describe("Anthropic models", () => {
+  const anthropic = (models: ProviderDraft["models"]) => draft({ type: "anthropic", models });
+  const row = (model_id: string, id?: string) => ({ ...emptyModel(), id, model_id, price_in: "1", price_out: "1" });
+
+  it("rejects a blocked model next to its row and names the supported model", () => {
+    expect(validateDraft(anthropic([row("claude-sonnet-5-5")]))?.models[0]).toContain("claude-haiku-5-5");
+    expect(validateDraft(anthropic([row("claude-fable-5-1")]))?.models[0]).toContain("claude-haiku-5-5");
+  });
+
+  it("does not block a saved row or another provider type", () => {
+    expect(validateDraft(anthropic([row("claude-sonnet-5-5", "saved-id")]))).toBeNull();
+    expect(
+      validateDraft(
+        draft({ type: "openai_compatible", base_url: "https://llm.example.com", models: [row("claude-sonnet-5-5")] }),
+      ),
+    ).toBeNull();
+  });
+
+  it("suggests Haiku 5.5 with price and vision", () => {
+    const filled = applySuggestion("anthropic", { ...emptyModel(), model_id: "claude-haiku-5-5" });
+    expect(filled).toMatchObject({ price_in: "0.1", price_out: "0.5", vision: true, reasoning: false });
+    expect(suggestionsFor("anthropic").map((s) => s.model_id)).toEqual(["claude-haiku-5-5"]);
   });
 });

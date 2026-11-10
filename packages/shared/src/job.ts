@@ -55,6 +55,8 @@ export const ErrorClass = z.enum(ERROR_CLASSES);
  * (error_class `internal`, không tính attempt).
  */
 export const QUOTA_EXCEEDED = "quota_exceeded";
+/** Tiền tố lỗi job khi tác vụ chưa có model AI (error_class `auth`). Worker giữ chuỗi trùng: `mtl_worker.LLM_NOT_CONFIGURED`. */
+export const LLM_NOT_CONFIGURED = "llm_not_configured";
 export type ErrorClass = z.infer<typeof ErrorClass>;
 
 /** `prepared` = xong bước 1 (cắt trang + xoá chữ + OCR), chờ người dùng bấm "Dịch". */

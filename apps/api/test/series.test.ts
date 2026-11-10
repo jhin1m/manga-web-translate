@@ -101,6 +101,7 @@ describe("series languages + page_format", () => {
     expect(await prepareOf("ja", "pages")).toMatchObject({ source_lang: "ja", reading_order: "rtl" });
     expect(await prepareOf("ja", "strip")).toMatchObject({ reading_order: "ltr" });
     expect(await prepareOf("ko", "pages")).toMatchObject({ source_lang: "ko", reading_order: "ltr" });
+    expect(await prepareOf("en", "pages")).toMatchObject({ source_lang: "en", reading_order: "rtl" });
     // Series vừa đổi sang "Từng trang" nhưng chương đã ingest dạng strip → vẫn ltr.
     expect(await prepareOf("ja", "strip", "pages")).toMatchObject({ reading_order: "ltr" });
 

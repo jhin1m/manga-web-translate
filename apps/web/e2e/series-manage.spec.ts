@@ -106,7 +106,7 @@ test("series modals keep the series header behind them and close back to the ser
   await expect(page).toHaveURL(`${WEB_URL}/s/${state.seriesId}`);
 });
 
-test("new series picks the comic kind (source language); settings edit target language, page format and ignored text", async ({
+test("new series defaults to an English source; settings edit target language, page format and ignored text", async ({
   page,
 }) => {
   await login(page);
@@ -118,18 +118,20 @@ test("new series picks the comic kind (source language); settings edit target la
   await page.getByRole("button", { name: "Tạo series" }).click();
   await expect(page.getByRole("heading", { level: 1, name: "Manga Nhật e2e" })).toBeVisible();
   const head = page.locator(".series-head");
-  await expect(head.getByText(/Nhật → Việt/)).toBeVisible();
+  await expect(head.getByText(/Anh → Việt/)).toBeVisible();
 
-  // Cài đặt dịch là modal trên màn series: form nằm trong dialog, save giữ modal mở.
-  await page.getByRole("main").getByRole("link", { name: "Cài đặt dịch" }).click();
+  // Cài đặt dịch là modal trên màn series: lưu thành công thì đóng.
+  const openSettings = () => page.getByRole("main").getByRole("link", { name: "Cài đặt dịch" }).click();
+  await openSettings();
   const settings = page.getByRole("dialog", { name: "Cài đặt dịch" });
-  // ja → server tự chọn "Từng trang".
+  // Loại Manga → "Từng trang".
   await expect(settings.getByLabel("Định dạng", { exact: true })).toHaveValue("pages");
-  await settings.getByLabel("Sang", { exact: true }).selectOption("en");
+  await settings.getByLabel("Sang", { exact: true }).selectOption("id");
   await settings.getByLabel("Định dạng", { exact: true }).selectOption("strip");
   await settings.getByRole("button", { name: "Lưu", exact: true }).click();
-  // Lưu đổi settings_rev → form dựng lại theo giá trị mới từ server.
-  await expect(head.getByText(/Nhật → Anh/)).toBeVisible();
+  await expect(settings).toHaveCount(0);
+  await expect(head.getByText(/Anh → Indonesia/)).toBeVisible();
+  await openSettings();
   await expect(settings.getByLabel("Định dạng", { exact: true })).toHaveValue("strip");
 
   // Chữ bỏ qua (watermark): dòng quá ngắn báo lỗi tại dòng, chặn lưu; sửa xong lưu được, mục trùng gộp lại.
@@ -140,9 +142,6 @@ test("new series picks the comic kind (source language); settings edit target la
   await expect(settings.getByRole("button", { name: "Lưu", exact: true })).toBeDisabled();
   await ignore.fill("discord.gg/nhom\nDISCORD.GG/NHOM\nNhóm Mèo");
   await settings.getByRole("button", { name: "Lưu", exact: true }).click();
-  await expect(settings.getByRole("status").filter({ hasText: "Đã lưu" })).toBeVisible();
-  await expect(ignore).toHaveValue("discord.gg/nhom\nNhóm Mèo");
-  await settings.getByRole("button", { name: "Đóng" }).click();
   await expect(settings).toHaveCount(0);
 
   const url = new URL(page.url());
@@ -153,7 +152,7 @@ test("new series picks the comic kind (source language); settings edit target la
     page_format: string;
     ignore_text: string[];
   };
-  expect([s.source_lang, s.target_lang, s.page_format]).toEqual(["ja", "en", "strip"]);
+  expect([s.source_lang, s.target_lang, s.page_format]).toEqual(["en", "id", "strip"]);
   expect(s.ignore_text).toEqual(["discord.gg/nhom", "Nhóm Mèo"]);
 });
 
@@ -342,9 +341,7 @@ test("settings groups are collapsed with a summary; a missing pronoun field open
     await pronouns.getByLabel("Người nghe").fill("Seoyeon");
     await pronouns.getByLabel("Xưng / gọi").fill("anh/em");
     await settings.getByRole("button", { name: "Lưu", exact: true }).click();
-    await expect(settings.getByRole("status").filter({ hasText: "Đã lưu" })).toBeVisible();
-    // Lưu xong giữ nguyên nhóm đang mở.
-    await expect(pronouns).toHaveAttribute("open", "");
+    await expect(settings).toHaveCount(0);
     const saved = (await (await page.request.get(`/api/series/${id}`)).json()) as {
       pronoun_rules: { speaker: string; listener: string; address: string }[];
     };

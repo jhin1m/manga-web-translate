@@ -311,7 +311,8 @@ test("opening a chapter while it translates holds the lock; the busy page is rea
   await page.getByRole("button", { name: "Thêm thao tác" }).click();
   await page.getByRole("menuitem", { name: /^Hoạt động/ }).click();
   const activity = page.getByRole("dialog", { name: "Hoạt động" });
-  await expect(activity.locator('[data-job-type="chapter.translate"]')).toContainText("Dịch lô trang", {
+  await activity.getByText("Chi tiết", { exact: true }).click();
+  await expect(activity.locator('[data-job-type="chapter.translate"]')).toContainText("Dịch", {
     timeout: 15_000,
   });
   await page.keyboard.press("Escape");
@@ -906,11 +907,11 @@ async function applyStyleFromFirstBlock(page: Page, chapterId: string) {
   await size.press("Enter");
   await expect(size).toHaveValue("18");
   await panel.getByText("Kiểu chữ", { exact: true }).click();
-  await panel.getByRole("button", { name: /^Áp kiểu cho khối/ }).click();
+  await panel.getByRole("button", { name: /^Áp dụng cho mọi khối/ }).click();
   const toast = page.locator(".cw-toasts .notice", { hasText: "Đã áp kiểu cho 2 khối" });
   await expect(toast).toContainText("trên 2 trang");
   // Trang đang mở nạp bản mới nhưng vẫn giữ khối đang chọn (panel Chọn không nhảy về trang).
-  await expect(panel.getByRole("button", { name: /^Áp kiểu cho khối/ })).toBeVisible();
+  await expect(panel.getByRole("button", { name: /^Áp dụng cho mọi khối/ })).toBeVisible();
 
   return { toast, panel };
 }
@@ -968,7 +969,7 @@ test("vertical alignment toggle saves valign and 'Áp kiểu này' copies it to 
   await expect.poll(async () => (await valigns())[0]).toBe("src:middle");
   expect(await valigns()).toEqual(["src:middle", "same-page:-", "src:-"]);
 
-  await panel.getByRole("button", { name: /^Áp kiểu cho khối/ }).click();
+  await panel.getByRole("button", { name: /^Áp dụng cho mọi khối/ }).click();
   await expect(page.locator(".cw-toasts .notice", { hasText: "Đã áp kiểu cho 2 khối" })).toBeVisible();
   expect(await valigns()).toEqual(["src:middle", "same-page:middle", "src:middle"]);
 });

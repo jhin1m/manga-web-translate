@@ -5,6 +5,7 @@ import {
   needsReview,
   pageLevel,
   pageLevelOf,
+  pageSummary,
   selectHint,
   thumbAria,
   thumbFlag,
@@ -12,6 +13,14 @@ import {
   thumbTitle,
 } from "./page-status.ts";
 import type { PageStatus } from "./status.ts";
+
+describe("pageSummary", () => {
+  it("drops zero counts", () => {
+    expect(pageSummary(35, 0, 35)).toBe("35 trang · 35 lỗi");
+    expect(pageSummary(35, 5, 2)).toBe("35 trang · 28 xong · 5 đang xử lý · 2 lỗi");
+    expect(pageSummary(10, 0, 0)).toBe("10 trang · 10 xong");
+  });
+});
 
 describe("page level", () => {
   it("maps the 6 page statuses to 4 levels", () => {

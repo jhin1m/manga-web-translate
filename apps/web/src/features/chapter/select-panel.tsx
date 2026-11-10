@@ -3,7 +3,7 @@
  * - Đầu panel (`BlockActions`, đặt ở đầu ContextPanel): "Khối i/N" + 3 icon Dịch lại khối · Nhân đôi · Xoá.
  * - Có khối (chọn trên canvas hoặc bảng): Gốc (OCR, chỉ đọc), Dịch (cùng nguồn với bảng), cảnh báo ngắn "Tràn 12px"
  *   (hướng dẫn ở tooltip), Font + Cỡ, nhóm "Kiểu chữ" thu gọn: Loại chữ, tự khớp, giãn dòng, lề, căn lề, màu, viền, ẩn khi
- *   xuất, "Áp kiểu" cho khối cùng loại.
+ *   xuất, "Áp dụng cho mọi khối" cùng loại.
  * - Chưa chọn khối: chỉ có nội dung đang chờ (AI có bản mới) hoặc một dòng gợi ý khi mở tay từ rail.
  * AI có bản mới luôn ở đầu thân panel (khi có); xung đột khi lưu nằm trên mọi panel (chapter-workspace.tsx). Thao tác
  * theo trang (dịch lại, ẩn, bỏ chỉnh sửa tay) ở menu chuột phải của cột trang.
@@ -189,7 +189,7 @@ function BlockView(props: SelectPanelProps & { row: Row }) {
                 title={`Áp font, cỡ, căn lề, màu, viền của khối này cho mọi khối ${kind} trong chương (hoàn tác được)`}
                 onClick={() => props.onApplyKind(row)}
               >
-                {props.busy.applyKind ? "Đang áp kiểu…" : `Áp kiểu cho khối ${kind}`}
+                {props.busy.applyKind ? "Đang áp dụng…" : `Áp dụng cho mọi khối ${kind}`}
               </button>
             </AdvancedStyle>
           </details>

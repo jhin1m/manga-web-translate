@@ -3,6 +3,8 @@
  * https://developers.openai.com/api/docs/pricing , đối chiếu 2026-11-04. Chỉ là gợi ý: admin xác nhận giá thật.
  * Mặc định gợi ý model KHÔNG reasoning (chi phí / trần token dự đoán được); model reasoning có cờ + cảnh báo.
  */
+import { RECOMMENDED_ANTHROPIC_MODEL } from "@mtl/shared";
+
 export type PriceSuggestion = {
   model_id: string;
   price_in: number;
@@ -30,6 +32,14 @@ export const DEEPSEEK_SUGGESTIONS: readonly PriceSuggestion[] = [
   { model_id: "deepseek-v4-pro", price_in: 1.32, price_out: 3.96, vision: false, reasoning: false },
 ];
 
+/**
+ * Anthropic: USD / 1M token, prompt ≤ 100K token — https://platform.claude.com/docs/en/about-claude/pricing , đối chiếu
+ * 2026-11-10. Admin xác nhận giá thật.
+ */
+export const ANTHROPIC_SUGGESTIONS: readonly PriceSuggestion[] = [
+  { model_id: RECOMMENDED_ANTHROPIC_MODEL, price_in: 0.1, price_out: 0.5, vision: true, reasoning: false },
+];
+
 /** Endpoint tương thích OpenAI có phải DeepSeek không (theo host base URL). */
 export function isDeepSeek(baseUrl: string | null | undefined): boolean {
   try {
@@ -42,6 +52,7 @@ export function isDeepSeek(baseUrl: string | null | undefined): boolean {
 /** Danh sách gợi ý theo loại provider (+ base URL cho endpoint tương thích). */
 export function suggestionsFor(type: string, baseUrl?: string | null): readonly PriceSuggestion[] {
   if (type === "openai") return OPENAI_SUGGESTIONS;
+  if (type === "anthropic") return ANTHROPIC_SUGGESTIONS;
   if (type === "openai_compatible" && isDeepSeek(baseUrl)) return DEEPSEEK_SUGGESTIONS;
   return [];
 }
@@ -53,5 +64,8 @@ export const suggestionFor = (type: string, modelId: string, baseUrl?: string | 
 export const REASONING_WARNING =
   "Trần token ra (OCR 2048 / Dịch 4096 / Hiệu đính 3072) gồm cả token suy luận — dễ fail do thiếu token, tốn tiền mà không ra kết quả. Nên dùng model không reasoning.";
 
-/** Ghi chú dưới danh sách model. */
-export const UNSUPPORTED_MODELS_NOTE = "Không hỗ trợ model -pro / -codex (chỉ có Responses API).";
+/** Ghi chú dưới danh sách model, theo loại provider. */
+export const unsupportedModelsNote = (type: string): string =>
+  type === "anthropic"
+    ? `Chưa chạy được Sonnet 5.5, Opus 5.5, Fable, Mythos. Nên dùng ${RECOMMENDED_ANTHROPIC_MODEL}.`
+    : "Không hỗ trợ model -pro / -codex (chỉ có Responses API).";

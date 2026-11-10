@@ -1056,14 +1056,21 @@ label.cw-field-head {
   max-height: 12rem;
   overflow: auto;
 }
-.cw-error-raw summary {
+.cw-error-raw summary,
+.drawer-jobs summary {
   cursor: pointer;
+}
+.drawer-jobs summary {
+  color: var(--c-fg-muted);
 }
 
 /* Tên chương bấm được → popover đổi series / số chương. */
 .cw-meta {
   position: relative;
   flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
 }
 .cw-meta-toggle {
   max-width: 220px;
@@ -1077,6 +1084,18 @@ label.cw-field-head {
   padding: 2px var(--sp-1);
 }
 .cw-meta-toggle:hover {
+  border-color: var(--c-line-strong);
+}
+.cw-lang-chip {
+  flex: none;
+  padding: 0 var(--sp-2);
+  font-size: var(--fs-xs);
+  white-space: nowrap;
+  color: var(--c-fg-muted);
+  border-color: transparent;
+  background: transparent;
+}
+.cw-lang-chip:hover {
   border-color: var(--c-line-strong);
 }
 .cw-meta-pop {

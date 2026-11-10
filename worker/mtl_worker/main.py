@@ -23,7 +23,7 @@ from typing import Any
 
 from mtl_pipeline.providers import has_env_key
 
-from . import PIPELINE_VERSION
+from . import LLM_NOT_CONFIGURED, PIPELINE_VERSION
 from .client import AuthError, PipelineTooOld, WorkerClient
 from .handlers import HANDLERS, LLM_TYPES
 from .log_redact import configure_logging
@@ -67,7 +67,9 @@ class RuntimeDeps:
         from mtl_pipeline.providers import has_env_key, make_provider
 
         if not self.provider_name or not has_env_key(self.provider_name):
-            raise JobFailure("auth", "chưa cấu hình provider AI (slot DB hoặc env worker)")
+            raise JobFailure(
+                "auth", f"{LLM_NOT_CONFIGURED}: chưa cấu hình provider AI (slot DB hoặc env worker)"
+            )
         return make_provider(self.provider_name, tier)
 
 

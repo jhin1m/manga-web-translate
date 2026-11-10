@@ -10,7 +10,7 @@ import numpy as np
 
 from mtl_pipeline.images import open_rgb
 from mtl_pipeline.local_ocr import ocr_page_local
-from mtl_pipeline.ocr import ocr_page
+from mtl_pipeline.ocr import keep_regions_without_text, ocr_page
 from mtl_pipeline.options import LOCAL_OCR_ENGINES, InpaintOptions, PrepareOptions
 from mtl_pipeline.pipeline import restore_sfx
 from mtl_pipeline.proofread import page_images, proofread_page
@@ -32,7 +32,7 @@ from mtl_pipeline.textmask import bbox_text_mask, estimate_polarity
 from mtl_pipeline.translate import SeriesSettings, qualified_id, translate_chapter
 from mtl_pipeline.typeset import bubble_siblings, font_for, typeset_region
 
-from . import PIPELINE_VERSION
+from . import LLM_NOT_CONFIGURED, PIPELINE_VERSION
 from .export import handle_export
 from .ingest import handle_ingest
 from .llm_cache import provider_for_config
@@ -82,7 +82,9 @@ def llm_provider(ctx: JobContext, deps: Deps, slot: str) -> Any:
         return provider_for_config(cfg)
     if slot in (ctx.payload.get("llm") or {}):
         # Payload nói job dùng slot DB nhưng claim không kèm cấu hình: không âm thầm chạy bằng key env.
-        raise JobFailure("auth", "thiếu cấu hình AI của job — admin kiểm tra Cài đặt › AI")
+        raise JobFailure(
+            "auth", f"{LLM_NOT_CONFIGURED}: thiếu cấu hình AI của job — admin kiểm tra Cài đặt › AI"
+        )
     if slot == "proofread":
         return deps.provider_for(ctx.payload.get("model_tier", "standard"))
     return deps.provider
@@ -132,6 +134,7 @@ def handle_prepare(ctx: JobContext, deps: Deps) -> dict[str, Any]:
         }
         raise failure from e
     ctx.add_usage(ocr.usage)
+    ocr = keep_regions_without_text(regions, ocr)
     if any(r.is_sfx for r in regions):
         clean, mask = restore_sfx(img, clean, mask, regions)
     ctx.report("upload", PREPARE_PROGRESS["upload"])
@@ -169,7 +172,8 @@ def _flags(item: OcrItem | None, low_conf: bool) -> list[str]:
     flags: list[str] = []
     if item and item.is_sfx:
         flags.append("sfx")
-    if item and item.empty:
+    # Vùng đã giữ ảnh gốc (is_sfx) không còn là khối trống cần người xem.
+    if item and item.empty and not item.is_sfx:
         flags.append("empty")
     if low_conf or (item and item.low_conf):
         flags.append("low_conf")
@@ -311,11 +315,12 @@ def handle_translate(ctx: JobContext, deps: Deps) -> dict[str, Any]:
         styles: dict[str, str] = {}
         boxes: list[TextBox] = []
         clean = open_rgb(ctx.download(pg["clean"])) if page_items else None
-        # Vùng chữ được đặt chữ: chỉ chúng chia nhau lòng bóng (vùng OCR rỗng không giữ chỗ).
+        # Vùng được đặt chữ và vùng giữ nguyên hình (`...!`) chia nhau lòng bóng; vùng không có mực không giữ chỗ.
         texted = [
             r
             for r in regions
-            if (t := page_items.get(qualified_id(pg["ord"], r.id))) and t.translation.strip()
+            if ((t := page_items.get(qualified_id(pg["ord"], r.id))) and t.translation.strip())
+            or (r.is_sfx and r.id in items and not items[r.id].empty)
         ]
         for r in regions:
             it = page_items.get(qualified_id(pg["ord"], r.id))

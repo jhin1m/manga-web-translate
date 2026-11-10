@@ -224,7 +224,7 @@ dòng bảng văn bản đi qua cùng `pick` (chọn khối + `revealRect`); pan
 - **Thân** (`select-panel.tsx`): "AI có bản mới" (khi có) và xung đột khi lưu luôn ở đầu thân (xung đột hiện trên mọi panel);
   có khối — Gốc (OCR), Dịch (`#cw-translation`, cùng nguồn với bảng), cảnh báo ngắn "Tràn 12px" (cách xử lý ở tooltip), Font + Cỡ,
   nhóm "Kiểu chữ" thu gọn: Loại chữ (xem dưới), Tự khớp cỡ chữ vào khung, giãn dòng, lề, căn lề, căn dọc (Trên / Giữa — khối mới mặc
-  định Giữa, khối lưu từ trước giữ Trên; "Áp kiểu" chép cả căn dọc), màu, viền, ẩn khi xuất, "Áp kiểu cho khối <loại>" — mọi trang, kể cả trang
+  định Giữa, khối lưu từ trước giữ Trên; "Áp kiểu" chép cả căn dọc), màu, viền, ẩn khi xuất, "Áp dụng cho mọi khối <loại>" — mọi trang, kể cả trang
   đang mở, ghi trong 1 lượt `PUT /chapters/:id/states` chung `batch_id`; toast "Hoàn tác" khôi phục cả lượt qua
   `find-replace/undo` (`conflicts: "skip"`: trang đã sửa tiếp được giữ và nêu trong toast), lượt là 1 bước trong lịch sử undo của trang đang mở (mốc không có patch): Cmd+Z / nút Hoàn tác ở bước đó gọi đúng hoàn tác của toast, rồi Cmd+Z tiếp lùi các sửa trước lượt; mốc thuộc trang đang mở lúc áp (đổi trang thì Cmd+Z ở trang khác không thấy), không làm lại (redo) được lượt. Cùng cơ chế cho Tìm/Thay và Áp glossary (`apply` trả `versions` = version mới từng page; Cmd+Z hoàn tác với `conflicts: "skip"`, nút Hoàn tác của panel tự tắt; Cmd+Z trong ô nhập vẫn là undo của ô); chương đang xử lý → 409 `chapter_busy`). Chưa chọn khối và không có nội dung: một dòng gợi ý.
   **Loại chữ** (`TextStyleSelect` ở `panels/Properties.tsx`): chỉ hiện khi khối có vùng (`region_id`) **và** series đã chọn ≥ 1 slot
@@ -276,7 +276,7 @@ Canvas hiện **từng trang một** (page active); đổi trang ở cột thumb
 hoặc ←/→/A/D — thumbnail (`aria-current`) và `?page=` luôn theo page active (URL không có `?page=` = trang
 đầu).
 
-Thanh trên màn chương: nút bật/tắt **Gốc** (tên truy cập "Xem gốc"; `aria-pressed` = đang hiện ảnh gốc, kể cả lúc giữ `O`; bấm: Gốc ↔ Dịch,
+Thanh trên màn chương: nút bật/tắt **Gốc** (chỉ hiện khi trang đang mở có bản dịch; phím `O`, `\` và Chia đôi vẫn dùng được; tên truy cập "Xem gốc"; `aria-pressed` = đang hiện ảnh gốc, kể cả lúc giữ `O`; bấm: Gốc ↔ Dịch,
 đang Chia đôi → Gốc) và mục **"Chia đôi gốc / dịch"** trong menu "⋯" (`menuitemcheckbox`; tắt = về Dịch)
 (`chapterStore.viewMode`). Gốc = ảnh gốc, ẩn chữ; Dịch = ảnh sạch + chữ (mặc định); Chia đôi = cột Gốc bên trái cột
 Dịch trên cùng 1 Stage (cuộn/zoom đồng bộ), chỉ cột Dịch nhận thao tác — bấm/kéo ở cột Gốc = kéo canvas. Giữ `O` =

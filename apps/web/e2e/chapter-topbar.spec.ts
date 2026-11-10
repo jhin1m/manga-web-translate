@@ -144,7 +144,7 @@ test("failed pages: primary re-runs N pages, Xuất moves into the menu, no 'Exp
   await expect(chipButton(page)).toContainText("Lỗi 2 trang");
   await expect(top(page).getByRole("button", { name: "Chạy lại 2 trang", exact: true })).toBeVisible();
   await expect(top(page).getByRole("button", { name: "Xuất", exact: true })).toHaveCount(0);
-  expect(await controls(page).count()).toBeLessThanOrEqual(8);
+  expect(await controls(page).count()).toBeLessThanOrEqual(9);
 
   // Trang lỗi: cờ "×" ở góc thumbnail có tên truy cập + tooltip nói rõ lỗi (không chỉ viền đỏ); trang xong không có cờ.
   await expect(pageThumb(page, 2)).toHaveAccessibleName(/^Trang 2 · Lỗi/);
@@ -184,7 +184,7 @@ test("running: a single Huỷ button and a 2px progress bar", async ({ page }) =
   const width = await bar.evaluate((el) => el.getBoundingClientRect().width);
   const total = await top(page).evaluate((el) => el.getBoundingClientRect().width);
   expect(width / total).toBeCloseTo(0.25, 1);
-  expect(await controls(page).count()).toBeLessThanOrEqual(8);
+  expect(await controls(page).count()).toBeLessThanOrEqual(9);
 });
 
 test("done: Xuất is the primary button and the lang pair lives in the chapter popover", async ({ page }) => {
@@ -197,7 +197,7 @@ test("done: Xuất is the primary button and the lang pair lives in the chapter 
   const title = top(page).getByRole("heading").getByRole("button");
   await expect(title).toHaveText(new RegExp(`^Ch\\.${chapterNumber(6)}`));
   await expect(title).toHaveAccessibleName(new RegExp(`^Chương ${chapterNumber(6)}`));
-  expect(await controls(page).count()).toBeLessThanOrEqual(8);
+  expect(await controls(page).count()).toBeLessThanOrEqual(9);
 
   await title.click();
   const dlg = page.getByRole("dialog", { name: /Đổi series/ });

@@ -1,7 +1,7 @@
 /**
- * Thanh trên màn chương (tối đa 8 mục): ‹ series, "Ch.12" (bấm → đổi series / số chương / ngôn ngữ), chip trạng thái
+ * Thanh trên màn chương (tối đa 9 mục): ‹ series, "Ch.12" + cặp ngôn ngữ (bấm → đổi series / số chương / ngôn ngữ), chip trạng thái
  * chương (nút: có trang cần xem → nhảy tới trang đó, không thì mở Hoạt động; chỗ duy nhất nói chương đang ở đâu),
- * chỉ báo sửa/lưu (chỉ hiện khi đang lưu / lỗi / chưa lưu / chỉ xem) · Hoàn tác / Làm lại · Gốc · menu ⋯ (Chia đôi,
+ * chỉ báo sửa/lưu (chỉ hiện khi đang lưu / lỗi / chưa lưu / chỉ xem) · Gốc (trang có bản dịch) · Hoàn tác / Làm lại · menu ⋯ (Chia đôi,
  * Xuất, Dịch lại cả chương, Hoạt động, Phím tắt) · nút chính theo trạng thái (primary-action.ts; đang chạy = Huỷ,
  * "Xuất" mở menu ngay dưới nút). Thanh 2px ở đáy cho tiến độ chương đang chạy.
  * Dưới nó là băng cảnh báo — chỉ hiện khi người dùng phải biết/làm gì (khoá bị giữ/mất/lỗi, khôi phục, lỗi lưu, chờ AI).
@@ -111,8 +111,9 @@ export function ChapterTopbar(props: {
         <EditState {...props.access} />
       </span>
       <span className="spacer" />
-      <UndoRedo onUndo={props.onUndo} onRedo={props.onRedo} />
+      {/* Gốc đứng đầu cụm phải: nút ẩn/hiện theo trang không làm các nút khác nhảy chỗ. */}
       <OriginalToggle />
+      <UndoRedo onUndo={props.onUndo} onRedo={props.onRedo} />
       <MoreMenu
         commands={primary?.menu ?? []}
         pending={props.pending}

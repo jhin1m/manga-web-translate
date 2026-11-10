@@ -8,7 +8,9 @@ import {
   type AiProviderInput,
   type AiProviderType,
   ApiKey,
+  isModelUnsupported,
   MAX_PRICE_PER_MTOK,
+  MODEL_UNSUPPORTED_MESSAGE,
   normalizeBaseUrl,
   type StructuredOutput,
 } from "@mtl/shared";
@@ -163,7 +165,14 @@ const parsePrice = (v: string): number | null => {
 
 const tooBig = (v: string): boolean => Number(v) > MAX_PRICE_PER_MTOK;
 
-export type DraftErrors = { name?: string; base_url?: string; api_key?: string; models: Record<number, string> };
+export type DraftErrors = {
+  name?: string;
+  base_url?: string;
+  api_key?: string;
+  /** Tạo mới mà chưa có model nào: provider không dùng được, và lần tự gán tác vụ đầu tiên sẽ bị bỏ lỡ. */
+  no_models?: string;
+  models: Record<number, string>;
+};
 
 /**
  * `saved` = provider đang sửa (undefined = tạo mới). Đổi base URL khi sửa ⇒ bắt buộc nhập lại key (API cũng chặn).
@@ -184,11 +193,13 @@ export function validateDraft(d: ProviderDraft, saved?: SavedProvider): DraftErr
   else if (saved && !key && normalized && normalized !== saved.base_url) {
     e.api_key = "Đổi base URL phải nhập lại API key (key cũ không được gửi tới host mới).";
   }
+  if (!saved && d.models.length === 0) e.no_models = "Thêm ít nhất một model.";
   const seen = new Set<string>();
   d.models.forEach((m, i) => {
     const id = m.model_id.trim();
     if (!id) e.models[i] = "Nhập model id.";
     else if (seen.has(id)) e.models[i] = "Trùng model id.";
+    else if (!m.id && isModelUnsupported(d.type, id)) e.models[i] = MODEL_UNSUPPORTED_MESSAGE;
     else if (tooBig(m.price_in) || tooBig(m.price_out)) {
       e.models[i] = `Giá tối đa ${MAX_PRICE_PER_MTOK.toLocaleString("en-US")} USD / 1M token (kiểm tra lại số vừa gõ).`;
     } else if (parsePrice(m.price_in) === null || parsePrice(m.price_out) === null) {
@@ -196,7 +207,7 @@ export function validateDraft(d: ProviderDraft, saved?: SavedProvider): DraftErr
     }
     seen.add(id);
   });
-  return e.name || e.base_url || e.api_key || Object.keys(e.models).length ? e : null;
+  return e.name || e.base_url || e.api_key || e.no_models || Object.keys(e.models).length ? e : null;
 }
 
 const modelBody = (m: ModelDraft): AiModelInput => ({

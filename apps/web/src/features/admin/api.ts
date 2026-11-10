@@ -1,4 +1,10 @@
-import type { AiSlots, AiTaskSlot, PipelineSettings, ProbeReason } from "@mtl/shared";
+import {
+  type AiSlots,
+  type AiTaskSlot,
+  MODEL_UNSUPPORTED_MESSAGE,
+  type PipelineSettings,
+  type ProbeReason,
+} from "@mtl/shared";
 import { useQuery } from "@tanstack/react-query";
 import { ApiError, api, errorMessage } from "../../lib/api.ts";
 import type { StoredLimits } from "./limits-model.ts";
@@ -51,6 +57,8 @@ export function providerError(e: unknown): string {
       return `Còn ${String(e.body.jobs ?? "một số")} job đang chạy / chờ dùng nhà cung cấp hoặc model này. Thử lại khi các job xong.`;
     case "duplicate_model":
       return "Model này đã có trong nhà cung cấp.";
+    case "model_unsupported":
+      return MODEL_UNSUPPORTED_MESSAGE;
     case "model_not_vision":
       return `Tác vụ ${slot ?? ""} cần model có vision (đọc được ảnh).`.replace("  ", " ");
     case "model_not_found":
