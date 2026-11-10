@@ -50,6 +50,13 @@ type Page = typeof pages.$inferSelect;
 type Chapter = typeof chapters.$inferSelect;
 type Series = typeof series.$inferSelect;
 
+/**
+ * Job người dùng bấm và đang chờ trên màn hình (xuất file, tẩy lại trang, OCR vùng): chạy ngắn → claim trước lô dịch
+ * (`CHAIN_PRIORITY` 50) và xoá chữ + OCR (100) của chương khác, không xếp sau backlog cả chương. Job đang chạy không bị
+ * ngắt — chạy ngay khi worker rảnh là đủ.
+ */
+export const INTERACTIVE_PRIORITY = 10;
+
 export const DEFAULT_DIALOGUE_FONT = "KomikaText-Regular";
 /** Câu chỉ dẫn kính ngữ theo cặp nguồn → đích (policy lạ → gửi nguyên văn). */
 export function honorificText(policy: string, src: string, tgt: string): string {
@@ -355,6 +362,7 @@ export async function enqueueReinpaint(
     key: pageOpKey(payload),
     chapterId: page.chapterId,
     pageId: page.id,
+    priority: INTERACTIVE_PRIORITY,
   });
 }
 
@@ -390,6 +398,7 @@ export async function enqueueOcrRegion(
     key: pageOpKey(payload),
     chapterId: page.chapterId,
     pageId: page.id,
+    priority: INTERACTIVE_PRIORITY,
   });
 }
 
@@ -425,6 +434,7 @@ export async function enqueueExport(
       rows.map((r) => ({ ...r, version: r.version ?? 0 })),
     ),
     chapterId: ch.id,
+    priority: INTERACTIVE_PRIORITY,
   });
 }
 

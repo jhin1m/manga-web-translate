@@ -3,6 +3,7 @@ import { jobs, pageStateHistory, pageStates, pages, scoped } from "@mtl/db";
 import { emptyPageState, type PageState, pageId, storageKeys } from "@mtl/shared";
 import { eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
+import { INTERACTIVE_PRIORITY } from "../src/jobs/enqueue.ts";
 import { HISTORY_KEEP } from "../src/jobs/page-state-writer.ts";
 import { call, db, seedUser } from "./helpers.ts";
 import { aiState, claimJobs, complete, PNG_1PX, putPng, SHA, workerToken } from "./worker-helpers.ts";
@@ -232,6 +233,8 @@ describe("mask upload → reinpaint", () => {
       // Cài đặt pipeline mặc định của người dùng (snapshot lúc enqueue).
       inpaint: { inpainter: "big_lama", inpaint_size: 512 },
     });
+    // Người dùng đang chờ trong editor → claim trước backlog của chương khác.
+    expect(row?.priority).toBe(INTERACTIVE_PRIORITY);
   });
 
   it("rejects stale clean rev (409), missing/foreign mask (400) and missing lock (423)", async () => {
@@ -333,8 +336,10 @@ describe("POST /pages/:id/ocr-region", () => {
       body: { bbox: [10, 10, 80, 40] },
     });
     expect(res.status).toBe(202);
-    const { job } = (await res.json()) as { job: { type: string; page_id: string } };
+    const { job } = (await res.json()) as { job: { id: string; type: string; page_id: string } };
     expect(job).toMatchObject({ type: "page.ocr_region", page_id: id });
+    const [row] = await db.select().from(jobs).where(eq(jobs.id, job.id));
+    expect(row?.priority).toBe(INTERACTIVE_PRIORITY);
   });
 });
 

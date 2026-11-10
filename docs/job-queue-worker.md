@@ -67,8 +67,17 @@ dịch active → không làm gì; gọi lặp / đồng thời vẫn ra đúng 
 - **Lô đầu** chạy ngay khi có ≥ 1 trang liên tiếp đã prepared. **Lô sau** chưa đầy mà còn trang phía sau đang xoá chữ +
   OCR → chờ cho đủ lô (tránh vụn lô, giữ token ≈ dịch cả chương); hết trang chờ thì chạy lô thiếu. Nhờ vậy trang lô 1 `ready`
   (sửa được) khi lô sau còn chờ/chạy.
-- Job dịch có `priority = 50` (claim xếp `priority, created_at`; `page.prepare` là 100) — trang đã prepare được dịch
-  ngay, không chờ cả chương xoá chữ + OCR xong.
+- Claim xếp `priority, created_at` (số nhỏ chạy trước; job đang chạy không bị ngắt):
+
+  | priority | Job | Lý do |
+  |---|---|---|
+  | 10 (`INTERACTIVE_PRIORITY`) | `chapter.export`, `page.reinpaint`, `page.ocr_region` | Người dùng bấm và đang chờ trên màn hình, job ngắn → không xếp sau backlog cả chương của bộ khác (xuất ZIP bộ đã xong khi bộ khác đang chạy). |
+  | 50 (`CHAIN_PRIORITY`) | `chapter.translate` (lô dịch) | Trang đã prepare được dịch ngay, không chờ cả chương xoá chữ + OCR xong. |
+  | 100 (mặc định) | `page.prepare`, `chapter.ingest`, `chapter.proofread` | Backlog cả chương. Hiệu đính gọi LLM cả chương, chạy lâu → không ưu tiên kẻo chặn lô dịch. |
+
+  Bấm xuất liên tục không làm đói lô dịch: idempotency key của export chặn job trùng khi nội dung không đổi.
+  Bản nhiều người dùng chưa chia lượt theo người: ai tạo hàng loạt export khác tuỳ chọn thì chen trước job của người
+  khác (trước đây hàng loạt job 100 cũng chặn job tạo sau). Chấp nhận ở bản hiện tại, self-host chỉ 1 người dùng.
 - `payload.context`: `rolling` khi lô mở đầu chương và mọi trang hiện xen giữa/ngay sau lô còn trong lượt; còn lại
   `neighbors` (lúc claim dựng nguồn + bản dịch trang ngay trước, nguồn trang ngay sau — dịch lại trang lẻ vẫn lấy trang
   trước + sau). `payload.carry` = `result.carry` của lô thành công gần nhất trong lượt (xem dưới).

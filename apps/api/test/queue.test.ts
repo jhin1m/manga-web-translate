@@ -1,12 +1,13 @@
 /** Hàng đợi: idempotency, claim song song không trùng, worker chung mọi người dùng, lọc capability / pipeline_version. */
-import { jobs, pages, scoped } from "@mtl/db";
+import { chapters, jobs, pages, scoped, series } from "@mtl/db";
 import { type JobPayload, pageId } from "@mtl/shared";
 import { and, eq } from "drizzle-orm";
 import { v7 as uuidv7 } from "uuid";
 import { beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { inJobTx, insertJob } from "../src/jobs/enqueue.ts";
+import { enqueueExport, INTERACTIVE_PRIORITY, inJobTx, insertJob } from "../src/jobs/enqueue.ts";
 import { compareVersion } from "../src/jobs/queue.ts";
 import { reapExpiredLeases } from "../src/jobs/reaper.ts";
+import { CHAIN_PRIORITY } from "../src/jobs/translate-chain.ts";
 import { db, seedUser } from "./helpers.ts";
 import { cancelActiveJobs } from "./isolate-queue.ts";
 import { claimJobs, expireLease, jobRow, SHA, VERSION, wcall, workerToken } from "./worker-helpers.ts";
@@ -15,7 +16,7 @@ type Seed = Awaited<ReturnType<typeof seedUser>>;
 let A: Seed;
 let B: Seed;
 
-const exportPayload = (chapterId: string): JobPayload => ({
+const exportPayload = (chapterId: string): Extract<JobPayload, { type: "chapter.export" }> => ({
   type: "chapter.export",
   chapter_id: chapterId,
   format: "cbz",
@@ -128,6 +129,59 @@ describe("claim", () => {
     const mac = (await workerToken("mac", "w-ord")).token;
     const got = await claimJobs(mac, { caps: ["page.prepare"], max: N });
     expect(got.map((j) => String(j.payload.page_id))).toEqual(ids);
+  });
+
+  it("claims a finished chapter's export before another chapter's prepare and translate backlog", async () => {
+    // Bộ 1 đã xong, bấm xuất trong lúc bộ 2 còn 5 trang chờ xoá chữ (tạo trước) và 1 lô dịch (tạo sau export).
+    const P = await seedUser("qprio");
+    await seedPage(P);
+    const sdb = scoped(db, P.userId);
+    const s2 = await sdb.insert(series, { title: "Series qprio 2" });
+    const ch2 = await sdb.insert(chapters, { seriesId: s2.id, number: "1" });
+    const at = new Date(Date.now() - 60_000);
+    const s2Job = async (ord: number, priority: number, createdAt?: Date) => {
+      const id = pageId(ch2.id, 1, ord);
+      await sdb.insert(pages, {
+        id,
+        chapterId: ch2.id,
+        ord,
+        width: 100,
+        height: 100,
+        originalKey: `u/${P.userId}/ch/${ch2.id}/ingest/1/${ord}.png`,
+        originalSha256: SHA,
+      });
+      // Thứ tự claim chỉ xét priority + created_at → lô dịch mang priority thật nhưng chạy dưới dạng page.prepare
+      // (claim chapter.translate cần trang đã prepare, ngoài phạm vi ca này).
+      const [row] = await db
+        .insert(jobs)
+        .values({
+          userId: P.userId,
+          type: "page.prepare",
+          payload: { type: "page.prepare", page_id: id } as unknown as JobPayload,
+          inputRev: "r",
+          idempotencyKey: uuidv7(),
+          chapterId: ch2.id,
+          pageId: id,
+          priority,
+          ...(createdAt ? { createdAt } : {}),
+        })
+        .returning({ id: jobs.id });
+      return row?.id as string;
+    };
+    const backlog: string[] = [];
+    for (let ord = 0; ord < 5; ord++) backlog.push(await s2Job(ord, 100, at));
+    // Qua enqueueExport thật: bỏ priority ở đó thì ca này đỏ.
+    const { job: ex } = await inJobTx((tx) => enqueueExport(tx, P.userId, exportPayload(P.chapterId)));
+    expect(ex.priority).toBe(INTERACTIVE_PRIORITY);
+    const batch = await s2Job(5, CHAIN_PRIORITY);
+
+    const mac = (await workerToken("mac", "w-prio")).token;
+    const order: string[] = [];
+    for (let i = 0; i < 7; i++) {
+      const got = await claimJobs(mac, { caps: ["page.prepare", "chapter.export"], max: 1 });
+      order.push(...got.map((j) => j.id));
+    }
+    expect(order).toEqual([ex.id, batch, ...backlog]);
   });
 
   it("mac and modal tokens both claim jobs of every user (shared workers)", async () => {
