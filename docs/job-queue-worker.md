@@ -35,6 +35,11 @@ MTL_TOKEN_FILE=~/.config/mtl/worker.token uv run mtl-worker --api http://localho
   URL ảnh presigned — của **mọi** người dùng, nên token Mac là credential toàn nền tảng: chỉ cấp cho người vận hành,
   không đưa cho người dùng thường. Cờ cũ `--workspace` / `--platform` và setting `worker_mode` đã bỏ.
 - Worker chỉ gọi ra ngoài (API + domain file `FILES_DOMAIN`) → chạy sau NAT được.
+- **Nhiều worker cùng lúc**: mỗi worker chạy 1 job một lúc, N worker (dùng chung token được) chạy N job song song —
+  claim `SKIP LOCKED`, fencing theo `lease_token` từng job, model tải về ghi file tạm rồi đổi tên. `--threads` (luồng
+  onnxruntime) mặc định lấy `MTL_THREADS`; không đặt mà `MTL_WORKERS ≥ 2` thì `số nhân / MTL_WORKERS` (tối thiểu 1) để
+  các worker cùng máy không giành hết nhân của nhau; còn lại 0 = onnxruntime tự chọn. Dòng log khởi động in `threads=`.
+  Self-host chạy mặc định 2 worker ([self-host.md](./self-host.md#worker)).
 
 ## Luồng dịch chương: xoá chữ + OCR rồi chuỗi lô dịch
 

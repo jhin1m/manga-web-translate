@@ -1,14 +1,18 @@
 # MTL self-host (1 người dùng, chạy trên máy cá nhân). Hướng dẫn đầy đủ: docs/self-host.md
 #
 #   Cài:        docker compose up -d            → mở http://localhost:8080 (lần đầu worker tải model ~1–2 GB)
-#   Cập nhật:   docker compose pull && docker compose up -d
+#   Cập nhật:   tải lại file này (curl như lúc cài), rồi docker compose pull && docker compose up -d
 #   Ghim bản:   MTL_TAG=1.2.3 docker compose up -d        Đổi cổng: MTL_PORT=9090 docker compose up -d
 #   Dữ liệu:    ./data (postgres, files, secrets, backups, worker, models) — sao lưu cả thư mục này.
 #
 # CẢNH BÁO: chế độ local KHÔNG có đăng nhập — ai gọi được cổng là toàn quyền. Giữ nguyên bind 127.0.0.1,
 # không mở ra LAN/Internet, không đặt sau reverse proxy công khai.
 #
-# Không cần .env: mọi biến đều có mặc định. Biến tuỳ chọn: MTL_TAG, MTL_PORT, MTL_ALLOWED_HOSTS, MTL_SKIP_BOOT_BACKUP.
+# Không cần .env: mọi biến đều có mặc định. Biến tuỳ chọn: MTL_TAG, MTL_PORT, MTL_ALLOWED_HOSTS, MTL_SKIP_BOOT_BACKUP,
+# MTL_WORKERS, MTL_THREADS.
+#
+# RAM: mặc định 2 worker cần ≥ 10 GB RAM cho Docker (nên 12 GB). Máy ít RAM hơn:
+#   MTL_WORKERS=1 docker compose up -d        (cần ≥ 6 GB)
 name: mtl-local
 
 x-logging: &logging
@@ -94,7 +98,13 @@ services:
       MTL_API_URL: http://app:8080
       MTL_TOKEN_FILE: /data/worker/token
       MTL_PROVIDER: anthropic
-      MTL_WORKER_ID: local
+      # Worker chia đều nhân CPU theo số worker (2 worker cùng xoá chữ không giành hết nhân của nhau). MTL_THREADS đặt
+      # số luồng cố định cho mỗi worker. worker_id = hostname, mỗi bản sao một id riêng.
+      MTL_WORKERS: ${MTL_WORKERS:-2}
+      MTL_THREADS: ${MTL_THREADS:-}
+    # Mỗi worker chạy 1 job một lúc → N worker chạy N job song song. Mỗi worker nạp model riêng (tốn RAM).
+    deploy:
+      replicas: ${MTL_WORKERS:-2}
     # Dừng/cập nhật: worker chờ job đang chạy tối đa 90s (MTL_SHUTDOWN_GRACE_S mặc định), quá thì job bị đánh lỗi
     # (fail internal). stop_grace_period lớn hơn 90s để Docker không SIGKILL trước khi worker kịp báo.
     stop_grace_period: 100s

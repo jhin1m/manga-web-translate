@@ -15,12 +15,13 @@ Lần đầu worker tải model AI (~1–2 GB). Mở <http://localhost:8080> →
 Anthropic). Không cần `.env`, không cần tài khoản. Phát hiện chữ, OCR, xoá chữ chạy local trên máy; chỉ bước dịch gọi
 API AI.
 
-Cập nhật: `docker compose pull && docker compose up -d`.
+Cập nhật: tải lại `docker-compose.yml` (lệnh `curl` ở trên) rồi `docker compose pull && docker compose up -d` — xem
+[docs/self-host.md](./docs/self-host.md#cập-nhật).
 
 > [!WARNING]
 > **Không có đăng nhập.** Chỉ dùng trên máy mình, đừng mở cổng ra LAN / Internet.
 
-Cần Docker Compose ≥ 2.17, RAM trống ≥ 4 GB, máy amd64 hoặc arm64 (Linux / macOS). Backup, khôi phục, xử lý sự cố:
+Cần Docker Compose ≥ 2.17, RAM cho Docker ≥ 10 GB, nên 12 GB (2 worker mặc định; `MTL_WORKERS=1` cần ≥ 6 GB), máy amd64 hoặc arm64 (Linux / macOS). Backup, khôi phục, xử lý sự cố:
 [docs/self-host.md](./docs/self-host.md).
 
 ## Tính năng

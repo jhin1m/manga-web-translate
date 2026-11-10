@@ -14,7 +14,9 @@ Bản nhiều người dùng trên VPS (S3/MinIO + đăng nhập) xem [deploymen
   **Linux: Docker Engine ≥ 28.3.3** — bản cũ hơn có thể để máy cùng LAN gọi thẳng vào container dù cổng chỉ bind
   `127.0.0.1` (trước 28.0), hoặc lộ cổng localhost sau khi reload firewalld (CVE-2025-54388, 28.2.0–28.3.2). App
   không có đăng nhập nên lớp bảo vệ duy nhất là cổng chỉ mở cho `127.0.0.1`.
-- RAM ≥ 4 GB trống cho Docker; đĩa ~2 GB cho model AI + chỗ cho ảnh truyện.
+- RAM cho Docker **≥ 10 GB** (nên 12 GB) với mặc định 2 worker, hoặc **≥ 6 GB** nếu đặt `MTL_WORKERS=1` (xem [Worker](#worker)).
+  Docker Desktop giới hạn RAM của VM thấp hơn RAM máy: chỉnh ở Settings → Resources → Memory. Đĩa ~2 GB cho model AI
+  và chỗ cho ảnh truyện.
 - Internet: tải image, tải model lần đầu, gọi API AI khi dịch.
 - Kiến trúc `linux/amd64` hoặc `linux/arm64` (Apple Silicon chạy bản arm64). Chưa hỗ trợ GPU NVIDIA, Windows chưa kiểm.
 
@@ -26,8 +28,9 @@ curl -fsSLO https://raw.githubusercontent.com/jhin1m/manga-web-translate/main/do
 docker compose up -d
 ```
 
-Lần đầu worker tải model (~1–2 GB, kiểm sha256): theo dõi bằng `docker compose logs -f worker` tới khi thấy dòng
-`mtl-worker … mode=loop`. Trong lúc đó web vẫn mở được, job chỉ chạy khi worker sẵn sàng.
+Lần đầu worker tải model (~1–2 GB, kiểm sha256): theo dõi bằng `docker compose logs -f worker` tới khi mỗi worker in
+một dòng `mtl-worker … mode=loop threads=…` (mặc định 2 dòng). Trong lúc đó web vẫn mở được, job chỉ chạy khi worker
+sẵn sàng. Lần đầu cả 2 worker cùng tải model vào `./data/models`: an toàn, chỉ tốn băng thông gấp đôi một lần.
 
 `docker pull` báo `denied`/`unauthorized` → image GHCR chưa được đặt public (việc của người phát hành).
 
@@ -55,8 +58,12 @@ theo vùng chữ.
 ## Cập nhật
 
 ```bash
+curl -fsSLO https://raw.githubusercontent.com/jhin1m/manga-web-translate/main/docker-compose.yml
 docker compose pull && docker compose up -d
 ```
+
+Lệnh `curl` tải lại `docker-compose.yml`, vì bản mới có thể đổi cả file này (vd thêm worker thứ 2). `pull` chỉ tải image
+mới. File cũ bị ghi đè, nên đừng sửa thẳng file: đặt tuỳ chỉnh bằng biến môi trường hoặc file `.env` cạnh nó (xem dưới).
 
 Khi cập nhật, compose tự dừng `jobs` + `worker` **trước** khi tạo lại `app`, chờ `app` mới backup DB + migrate xong
 (healthy) rồi mới chạy lại 2 service đó — code cũ không chạy trên schema mới (`depends_on … restart: true` trong compose).
@@ -74,6 +81,8 @@ Ghim một bản thay vì `latest`: `MTL_TAG=1.2.3 docker compose up -d` (hoặc
 | `MTL_TAG` | `latest` | Phiên bản image |
 | `MTL_ALLOWED_HOSTS` | (trống) | Tên host thêm (csv) được phép gọi API — chỉ cần khi worker chạy ngoài compose (xem dưới) |
 | `MTL_SKIP_BOOT_BACKUP` | (trống) | `1` = bỏ backup DB lúc `app` khởi động — chỉ dùng khi `pg_dump` lỗi chặn app (xem Sự cố) |
+| `MTL_WORKERS` | `2` | Số worker, mỗi worker chạy 1 job một lúc. Mỗi worker cần ~4,6 GB RAM. Máy yếu → `MTL_WORKERS=1 docker compose up -d` (xem [Worker](#worker)) |
+| `MTL_THREADS` | (trống) | Số luồng xoá chữ + OCR của **mỗi** worker. Trống = số nhân CPU chia đều cho `MTL_WORKERS` |
 
 Biến bên trong image (compose/image đã đặt sẵn, chỉ cần biết khi chạy tay hoặc dev):
 
@@ -135,6 +144,18 @@ Postgres được ghim major 17; nâng lên major mới (18…) là thủ tục 
 ## Worker
 
 - Worker trong compose dùng provider `anthropic`; key lấy từ Cài đặt → Nhà cung cấp (lưu mã hoá trong DB).
+- **Mặc định 2 worker**: mỗi worker chạy 1 job một lúc, nên 2 job chạy song song. Job lấy theo thứ tự tạo, nên cả 2
+  worker cùng xoá chữ chương đến trước. Chương sau bắt đầu khi chương trước hết trang chờ xoá chữ, rồi chạy chồng với
+  phần dịch của chương trước. Xuất file, tẩy lại trang, OCR vùng được chạy trước, ngay khi một worker xong job đang chạy.
+  - Xoá chữ + OCR chạy bằng CPU, hai worker chia nhau số nhân (log in `threads=`). Nhanh hơn bao nhiêu thì tuỳ máy.
+    Trên máy đo (arm64, 12 nhân) xoá chữ nhanh hơn ~2 lần so với 1 worker. Máy ít nhân thì tăng ít hơn.
+  - RAM: mỗi worker nạp model riêng, đỉnh ~4,6 GB mỗi worker, cộng tới ~0,7 GB cho app + DB (đo trên arm64, 12 nhân;
+    tổng ~9,8 GB, chưa gồm phần VM Docker tự dùng). Docker có ít hơn ~10 GB → `MTL_WORKERS=1 docker compose up -d`
+    (cần ~6 GB). Ghi `MTL_WORKERS=1` vào `.env` cạnh `docker-compose.yml` để không phải gõ lại.
+  - Đổi số worker bằng `MTL_WORKERS`, đừng dùng `docker compose up --scale worker=N`. `--scale` không đổi cách chia
+    luồng, nên các worker giành nhân của nhau: chỉ chậm hơn, không hỏng.
+  - Hai chương dịch cùng lúc → số request tới API AI tăng gấp đôi, dễ gặp giới hạn tốc độ (429). Server tự tạm dừng
+    provider 2 phút khi lỗi dồn dập rồi chạy tiếp, không cần làm gì.
 - **Thu hồi token worker** trong Cài đặt: token mới chỉ được sinh khi `app` khởi động lại, worker cũ sẽ 401 và restart
   lặp tới lúc đó → chạy `docker compose restart app worker`.
 - **Worker chạy ngoài compose**: API chặn Host lạ. Worker chạy thẳng trên máy gọi `http://localhost:8080` thì không
@@ -165,6 +186,9 @@ sudo rm -rf data               # xoá hẳn dữ liệu (không lấy lại đư
   `docker compose pull && docker compose up -d`), hoặc khôi phục bản dump của bản cũ (mục Backup DB) rồi mới `up -d`.
 - **Worker restart lặp**: `docker compose logs worker` — tải model lỗi (mạng) sẽ tự thử lại; `401` = token bị thu hồi
   (xem mục Worker).
+- **Worker tự khởi động lại giữa chừng** (log in lại dòng `mtl-worker … mode=loop` khi đang chạy job, `docker compose ps`
+  có thể thấy `Restarting (137)`): thường là thiếu RAM, bị OOM kill. Tăng RAM cho Docker hoặc chạy 1 worker:
+  `MTL_WORKERS=1 docker compose up -d`.
 - **Mở web báo "Không kết nối được máy chủ"**: `app` chưa chạy xong (lần đầu/sau cập nhật đang migrate) — đợi rồi bấm Thử lại.
 - **Bóng chỉ có dấu câu (`...!`) bị xoá trắng trên trang đã xử lý trước đây**: bản mới giữ nguyên hình gốc cho vùng không
   có chữ/số, nhưng trang cũ phải **Quét lại trang** mới áp dụng.
@@ -173,7 +197,9 @@ sudo rm -rf data               # xoá hẳn dữ liệu (không lấy lại đư
 
 ## Dành cho người phát hành (maintainer)
 
-1. Merge vào `main` (link cài `docker-compose.yml` trong mục Cài đặt trỏ vào `main`).
+1. Merge vào `main` (link cài và cập nhật `docker-compose.yml` trỏ vào `main`). Người dùng tải file này ngay khi cập
+   nhật, kể cả khi đang ghim `MTL_TAG` cũ → chỉ merge thay đổi compose cùng lúc với tag release có image tương ứng, và
+   giữ compose chạy được với image cũ (biến mới chỉ thêm, không bắt buộc).
 2. Lần đầu: push tag prerelease, VD `git tag v0.1.0-rc.1 && git push origin v0.1.0-rc.1` → `release.yml` chạy test rồi
    build `ghcr.io/jhin1m/mtl:0.1.0-rc.1` và `ghcr.io/jhin1m/mtl-worker:0.1.0-rc.1` (prerelease không gắn `latest`).
 3. Sau lần push đầu, vào GitHub → Packages → `mtl` và `mtl-worker` → Package settings → đổi visibility thành **Public**

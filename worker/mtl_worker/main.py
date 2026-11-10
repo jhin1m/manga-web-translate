@@ -17,7 +17,7 @@ import socket
 import sys
 import threading
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from functools import cached_property
 from typing import Any
 
@@ -73,6 +73,40 @@ class RuntimeDeps:
         return make_provider(self.provider_name, tier)
 
 
+def _env_int(env: Mapping[str, str], name: str, minimum: int) -> int | None:
+    """Số nguyên từ env (rỗng → None); sai → thoát kèm thông báo thay vì traceback lặp lại theo restart của compose."""
+    raw = (env.get(name) or "").strip()
+    if not raw:
+        return None
+    try:
+        value: int | None = int(raw)
+    except ValueError:
+        value = None
+    if value is None or value < minimum:
+        raise SystemExit(f"{name} phải là số nguyên ≥ {minimum}: {raw!r}")
+    return value
+
+
+def _cpu_count() -> int:
+    """Nhân CPU tiến trình được dùng (cpuset của container trên Linux); macOS không có sched_getaffinity."""
+    if hasattr(os, "sched_getaffinity"):
+        return len(os.sched_getaffinity(0))
+    return os.cpu_count() or 1
+
+
+def default_threads(env: Mapping[str, str] = os.environ) -> int:
+    """Số luồng onnxruntime khi không truyền --threads: MTL_THREADS > chia đều nhân CPU cho MTL_WORKERS worker chạy cùng
+    máy (self-host: compose chạy MTL_WORKERS replica, mỗi replica xoá chữ cùng lúc không giành hết nhân của nhau)
+    > 0 = onnxruntime tự chọn (một worker dùng mọi nhân)."""
+    threads = _env_int(env, "MTL_THREADS", 0)
+    if threads is not None:
+        return threads
+    workers = _env_int(env, "MTL_WORKERS", 1) or 1
+    if workers <= 1:
+        return 0
+    return max(1, _cpu_count() // workers)
+
+
 def parse_args(argv: list[str] | None) -> argparse.Namespace:
     ap = argparse.ArgumentParser(prog="mtl-worker")
     ap.add_argument("--api", default=os.environ.get("MTL_API_URL"), help="URL API (hoặc MTL_API_URL)")
@@ -84,7 +118,11 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
     )
     ap.add_argument("--no-llm", action="store_true", help="chỉ nhận job không cần LLM (ingest, reinpaint)")
     ap.add_argument("--capabilities", help="giới hạn loại job, phân tách bằng dấu phẩy")
-    ap.add_argument("--threads", type=int, default=0, help="số luồng onnxruntime (0 = mặc định)")
+    ap.add_argument(
+        "--threads",
+        type=int,
+        help="số luồng onnxruntime (0 = onnxruntime tự chọn; mặc định MTL_THREADS, hoặc số nhân / MTL_WORKERS)",
+    )
     ap.add_argument("--once", action="store_true", help="xử lý tối đa 1 job rồi thoát")
     ap.add_argument(
         "--mode",
@@ -95,7 +133,11 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
     ap.add_argument("--dispatch-id", default=os.environ.get("MTL_DISPATCH_ID"), help="id dispatch (Modal)")
     ap.add_argument("--drain-idle-s", type=float, default=float(os.environ.get("MTL_DRAIN_IDLE_S", "20")))
     ap.add_argument("-v", "--verbose", action="store_true")
-    return ap.parse_args(argv)
+    args = ap.parse_args(argv)
+    # Tính sau khi parse: có --threads thì không đọc MTL_THREADS / MTL_WORKERS (giá trị env sai không chặn cờ tường minh).
+    if args.threads is None:
+        args.threads = default_threads()
+    return args
 
 
 def capabilities(args: argparse.Namespace) -> list[str]:
@@ -158,7 +200,12 @@ def main(argv: list[str] | None = None) -> int:
 
     client = WorkerClient(args.api, token, args.worker_id, dispatch_id=args.dispatch_id)
     log.info(
-        "mtl-worker %s id=%s mode=%s caps=%s", PIPELINE_VERSION, args.worker_id, args.mode, ",".join(caps)
+        "mtl-worker %s id=%s mode=%s threads=%s caps=%s",
+        PIPELINE_VERSION,
+        args.worker_id,
+        args.mode,
+        args.threads or "auto",
+        ",".join(caps),
     )
     busy = [0.0]
     try:

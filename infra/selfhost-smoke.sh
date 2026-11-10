@@ -19,7 +19,7 @@ REPO=$(cd "$(dirname "$0")/.." && pwd)
 PROJECT=mtl-smoke
 export MTL_TAG=smoke MTL_PORT=${SMOKE_PORT:-18080}
 # Biến shell của dev không được lọt vào compose (COMPOSE_FILE ghi đè file trong thư mục tạm; biến MTL_* bị nội suy).
-unset COMPOSE_FILE COMPOSE_PROJECT_NAME COMPOSE_PROFILES MTL_SKIP_BOOT_BACKUP MTL_ALLOWED_HOSTS
+unset COMPOSE_FILE COMPOSE_PROJECT_NAME COMPOSE_PROFILES MTL_SKIP_BOOT_BACKUP MTL_ALLOWED_HOSTS MTL_WORKERS MTL_THREADS
 # Đường dẫn người dùng truyền vào → tuyệt đối trước khi cd sang thư mục tạm.
 for v in SMOKE_PAGE SMOKE_FONT SMOKE_MODELS_CACHE; do
   [ -n "${!v:-}" ] || continue
