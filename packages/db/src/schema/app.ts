@@ -11,6 +11,8 @@ import {
   JOB_TYPES,
   type JobPayload,
   type JobResult,
+  type LearnedPronoun,
+  type LearnedTerm,
   type OcrResult,
   PAGE_FORMATS,
   PAGE_STATUSES,
@@ -20,6 +22,9 @@ import {
   type PreparePartial,
   SOURCE_SKIP_REASONS,
   type SourceSkipReason,
+  SUGGESTION_KINDS,
+  type SuggestionKind,
+  type TranslateMemory,
   USAGE_KINDS,
 } from "@mtl/shared";
 import { sql } from "drizzle-orm";
@@ -114,6 +119,8 @@ export const chapters = pgTable(
     runStartedAt: timestamp("run_started_at", { withTimezone: true }),
     /** Số trang của lượt (để UI hiện "lô x/y", "còn n trang"). */
     runTotal: integer("run_total").notNull().default(0),
+    /** carry cuối lượt dịch cả chương — lô đầu chương khác trong series mở đầu bằng nó (xem lib/series-memory.ts). */
+    translateMemory: jsonb("translate_memory").$type<TranslateMemory>(),
     ...timestamps,
   },
   (t) => [
@@ -444,6 +451,32 @@ export const proofreadSuggestions = pgTable(
     foreignKey({ columns: [t.userId, t.pageId], foreignColumns: [pages.userId, pages.id] }).onDelete("cascade"),
     index("proofread_suggestions_chapter_idx").on(t.chapterId),
     unique("proofread_suggestions_page_region_uq").on(t.pageId, t.regionId),
+  ],
+);
+
+/**
+ * Gợi ý glossary/xưng hô do AI học được khi dịch (result chapter.translate: new_terms, pronoun_pairs). Chưa vào
+ * glossary/pronoun_rules cho tới khi người dùng Nhận. `key` = khoá chuẩn hoá (termKey/pronounKey) để một mục chỉ có
+ * một dòng mỗi series; khi đọc, API ẩn gợi ý đã có trong glossary hoặc quy tắc xưng hô. `dismissed_at` = "Bỏ".
+ * `chapter_id` không có FK: xoá chương chỉ mất nhãn nguồn, gợi ý vẫn giữ.
+ */
+export const seriesSuggestions = pgTable(
+  "series_suggestions",
+  {
+    id: idPk(),
+    userId: userId(),
+    seriesId: uuid("series_id").notNull(),
+    kind: text("kind").$type<SuggestionKind>().notNull(),
+    key: text("key").notNull(),
+    data: jsonb("data").$type<LearnedTerm | LearnedPronoun>().notNull(),
+    chapterId: uuid("chapter_id"),
+    dismissedAt: timestamp("dismissed_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    foreignKey({ columns: [t.userId, t.seriesId], foreignColumns: [series.userId, series.id] }).onDelete("cascade"),
+    unique("series_suggestions_series_kind_key_uq").on(t.seriesId, t.kind, t.key),
+    check("series_suggestions_kind_chk", inList(sql`${t.kind}`, SUGGESTION_KINDS)),
   ],
 );
 

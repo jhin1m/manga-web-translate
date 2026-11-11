@@ -183,6 +183,13 @@
       "when": 1793780673823,
       "tag": "0025_system_fonts",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1794401412292,
+      "tag": "0026_series_memory",
+      "breakpoints": true
     }
   ]
 }
