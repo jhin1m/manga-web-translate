@@ -25,9 +25,8 @@ trong `claim()`, thêm test chia lượt và test song song, đo lại bằng c�
   - Không migration, không đổi `ClaimRequest` / response, không thêm env.
   - Vẫn một câu `SELECT … FOR UPDATE OF jobs SKIP LOCKED`; phần sau câu chọn (khoá chương, cấp rev, fencing, dựng
     input) không đổi.
-  - Ngưỡng (thời gian thật, token mac / modal; đã sửa sau khi đo, xem quyết định 5 trong `plan.md`): 6.000 job queued
-    ≤ 15 ms khi breaker tắt, tới ~20 ms khi breaker bật; ≤ 100 job queued ≤ 1 ms khi không có hạn mức, có hạn mức thì
-    không chậm hơn câu cũ.
+  - Mục tiêu tốc độ (quyết định 5 trong `plan.md`): ở mọi ô của ma trận, câu mới ≤ câu cũ (`ef1e70c`) + 1 ms thời
+    gian thật, và không tăng theo độ dài hàng đợi (đo thêm 20.000 job chờ).
   - `overQuotaSql` giữ nguyên ngữ nghĩa: hạn mức NULL = không giới hạn; ≤ 0 = chặn hết; user chưa có ledger hôm nay
     không bị chặn khi hạn mức > 0.
 
@@ -58,6 +57,9 @@ Viết lại để Postgres băm một lần cho cả câu lệnh:
 - Hàm dùng ở `claimableSql` (claim, dispatcher) và `lockQueuedOverQuotaLlmJobs`. Cả ba cùng nhanh lên, không đổi chữ ký.
 
 ### Câu chọn job
+
+> Phác thảo dưới đây là bản một câu ban đầu, đã thay bằng câu hai nhánh (`pickClaimableSql` trong `queue.ts`) vì bản
+> này xếp cả hàng đợi. Thứ tự claim của hai bản giống nhau.
 
 Sửa đoạn `picked` trong `claim()` (`apps/api/src/jobs/queue.ts:114-132`). Phác thảo:
 
@@ -154,7 +156,7 @@ Lưu ý khi viết:
 - [x] 7 ca test thứ tự mới xanh, cộng 1 ca ledger `user_id` NULL.
 - [x] Test export-trước-backlog và test 1.000 job xanh, không sửa.
 - [x] Cả bộ API xanh; mọi kỳ vọng phải sửa đều có trong report kèm lý do.
-- [x] Mọi ô trong ma trận đo nằm trong ngưỡng đã sửa của quyết định 5.
+- [x] Mọi ô trong ma trận đo đạt mục tiêu của quyết định 5.
 - [x] Smoke (chỉ tính job `attempts = 1`): `claimed_at` đầu tiên của chương ngắn sớm hơn `claimed_at` của trang thứ 3
       từ cuối của chương dài.
 - [x] `git diff --stat` không có file trong `packages/db/migrations/` hay `packages/shared/`.
@@ -165,7 +167,7 @@ Lưu ý khi viết:
 |---|---|
 | Bộ lọc tính theo từng dòng chạy trên cả hàng đợi (hạn mức: 370 ms nếu không sửa) | Viết lại `overQuotaSql` (bước 2). `breakerBlockedSql` (`jsonb_each` từng dòng) có trong ma trận đo. |
 | Viết lại bộ lọc hạn mức làm đổi ai bị chặn | Giữ ba trường hợp biên nêu ở Architecture; test hạn mức sẵn có không sửa kỳ vọng; thêm ca ledger NULL. |
-| Vẫn vượt ngưỡng 15 ms ở một ô nào đó | Đã xảy ra ở ô có hạn mức + breaker bật (14–19 ms): đã dừng, người điều phối chấp nhận và nới ngưỡng ô đó tới ~20 ms. Không thêm index. |
+| Xếp theo khoá không có trong index làm câu chọn job xếp cả hàng đợi | Đã xảy ra ở bản một câu (8–19 ms ở 6.000 job chờ). Sửa bằng câu hai nhánh có LIMIT (`pickClaimableSql`): chương rảnh đi theo index, chương bận là tập nhỏ. Không thêm index. |
 | Hai claim cùng lúc dồn vào một chương | Đã chấp nhận (lệch một job, tự cân). Test song song không assert phân bố. |
 | Test file khác đỏ vì thứ tự giữa các chương đổi | Sửa kỳ vọng có lý do; nếu test đỏ vì lý do khác thì đó là lỗi của thay đổi, phải tìm nguyên nhân. |
 | Postgres kiểm lại dòng sau khi chờ khoá với join bảng dẫn xuất cho kết quả lạ | Test 1.000 job / 4 vòng drain đồng thời là bằng chứng; nếu trùng job hoặc thiếu job thì dừng và báo. |

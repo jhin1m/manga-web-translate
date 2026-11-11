@@ -12,32 +12,32 @@ created: 2026-11-11
 
 ## Cần người dùng duyệt
 
-**Không còn việc chờ duyệt.** Sau khi đo, hai nhóm cấu hình vượt ngưỡng ban đầu của quyết định 5; việc thực thi đã dừng
-và người điều phối đã quyết ngày 2026-11-11 (theo uỷ quyền việc nhỏ): **chấp nhận số đo, giữ nguyên code**. Số đo đầy
-đủ: [reports/measure-claim-order-after-report.md](./reports/measure-claim-order-after-report.md).
+**Không còn việc chờ duyệt.** Diễn biến ngày 2026-11-11:
 
-| Nhóm ô | Ngưỡng ban đầu | Câu mới | Câu cũ | Ghi chú |
-|---|---|---|---|---|
-| 6.000 job chờ, có hạn mức **và** breaker đang bật (mac, modal) | 15 ms | 14–19 ms | 4,3–5,5 ms | Breaker chỉ bật 2 phút mỗi lần provider lỗi liên tục. Nhiễu máy đo ±3 ms. |
-| ≤ 100 job chờ, có hạn mức, 20.000 dòng ledger hôm nay | 1 ms | 2,2–2,6 ms | 4,0–4,3 ms | Câu mới nhanh hơn câu cũ. Ngưỡng 1 ms ở ô này vốn không đạt từ trước. Self-host không đặt hạn mức nên không gặp. |
+1. Bản đầu (commit `38e4f38`) xếp theo "số job đang chạy của chương" trong một câu duy nhất. Đo ra 8–19 ms ở 6.000 job
+   chờ, vượt ngưỡng ở hai nhóm ô; việc thực thi dừng ở đó.
+2. Người điều phối quyết định chấp nhận số đo và nới ngưỡng. **Quyết định này đã bị rút lại** trong cùng ngày: câu
+   chọn job chậm hơn câu cũ 30–50 lần và tăng tuyến tính theo độ dài hàng đợi, tức tiêu chí "câu claim không chậm đi rõ
+   rệt" không đạt. Nới ngưỡng chỉ che việc đó.
+3. Sửa tận gốc (commit `0ba6998`, `8256523`), không migration, không index, không đổi contract: chọn ứng viên theo hai nhánh có
+   LIMIT (chương rảnh đi theo `jobs_claim_idx` và dừng sớm; chương bận là tập nhỏ), rồi xếp và khoá ở tầng ngoài. Thứ
+   tự claim giữ nguyên.
 
-12 ô còn lại đạt, gồm self-host thật (0,21–0,30 ms) và VPS lúc bình thường (Modal, có hạn mức, breaker tắt: ~12 ms).
+Kết quả đo theo mục tiêu mới (quyết định 5): đạt ở cả 24 ô. Số đo:
+[reports/measure-claim-order-after-report.md](./reports/measure-claim-order-after-report.md).
 
-Lý do chấp nhận:
+| Hàng đợi | Không hạn mức: cũ → mới | Có hạn mức: cũ → mới |
+|---|---|---|
+| 78 job chờ | 0,14–0,21 → 0,43–0,62 ms | 4,00–4,27 → 2,35–2,51 ms |
+| 5.998 job chờ | 0,16–0,26 → 0,66–1,04 ms | 4,26–4,81 → 2,85–3,33 ms |
+| 19.998 job chờ | 0,16–0,21 → 0,63–0,83 ms | 4,30–4,35 → 2,72–2,86 ms |
 
-- Ô thứ nhất chỉ xảy ra khi breaker đang bật (trạng thái tạm ~2 phút) và chỉ lố vài ms, trong biên nhiễu ±3 ms.
-- Ô thứ hai câu mới nhanh hơn câu cũ; ngưỡng 1 ms ở ô đó vốn không đạt từ trước.
-- Mỗi job chạy ≥ vài giây nên 10–20 ms cho một lần claim không ảnh hưởng người dùng.
-- Không đổi schema, không đổi contract, đảo ngược được bằng revert.
+Điều cần biết, không cần duyệt: khi đầu hàng là các chương đang bận với backlog lớn (đo: 2 chương × 999 job chờ), câu
+mới mất 2,8–4,2 ms so với 0,9–1,6 ms của câu cũ (không hạn mức). Chi phí theo số job chờ của các chương đang chạy,
+không theo độ dài hàng đợi. Trường hợp này nằm ngoài ma trận mục tiêu.
 
-Phương án không chọn:
-
-- Lấy `pages.ord` bằng subquery thay cho `LEFT JOIN pages`: lợi ích chưa rõ (một ô 12,7 ms, ô kia lẫn trong nhiễu), thêm
-  rủi ro.
-- **Hướng mở:** thêm index hoặc bảng đếm theo chương. Cần migration, nên chỉ làm khi hàng đợi VPS lớn hơn nhiều so với
-  6.000 job chờ; khi đó lập plan riêng.
-
-Ngưỡng sau khi sửa nằm ở quyết định 5.
+Hướng mở nếu sau này cần nhanh hơn nữa ở trường hợp đó: index `(chapter_id, priority, created_at)` cho job chờ hoặc
+bảng đếm theo chương. Cần migration, lập plan riêng.
 
 ## Overview
 
@@ -136,18 +136,12 @@ và lấy dòng kế tiếp, tới khi đủ `LIMIT`. Vì vậy:
    liệu. Khoá toàn cục trên đường claim dùng chung với bản VPS thì rủi ro dồn hàng lớn hơn lợi ích.
 4. **`max > 1` vẫn là một câu lệnh.** Số đếm lấy trước khi claim nên một lượt `max = 8` có thể lấy nhiều trang cùng
    chương. Worker thật luôn gọi `max = 1` (`worker/mtl_worker/main.py:265`), và worker cầm 8 job cũng chạy tuần tự.
-5. **Ngưỡng tốc độ** (thời gian thật `\timing`, đo câu cũ và câu mới liền nhau trong cùng phiên, token `mac` và
-   `modal`), ở 6.000 job queued / 150 chương / 96.000 trang và ở cỡ self-host (≤ 100 job queued):
-   - 6.000 job chờ, breaker tắt: ≤ **15 ms**, có hay không có hạn mức.
-   - 6.000 job chờ, breaker đang bật: chấp nhận tới **~20 ms** (trạng thái tạm ~2 phút).
-   - Hàng đợi nhỏ, không hạn mức: ≤ **1 ms**.
-   - Hàng đợi nhỏ, có hạn mức (≥ 1.000 dòng ledger hôm nay mỗi user): **không chậm hơn câu cũ**. Chi phí ở đây là một
-     lần cộng ledger trong ngày, không theo số job.
-
-   Ngưỡng ban đầu là 15 ms / 1 ms cho mọi cấu hình; đã nới hai ô sau khi đo (xem mục "Cần người dùng duyệt"). Số đo
-   trước khi sửa (mac, không hạn mức): FIFO cũ 0,10 ms theo `EXPLAIN ANALYZE`. Lý do chấp nhận chậm hơn câu cũ nhiều
-   lần về tỉ lệ: mỗi worker claim tối đa một lần cho mỗi job (job ≥ vài giây) hoặc mỗi nhịp backoff, và transaction
-   claim vốn đã chạy 6–10 câu lệnh khác. Vượt ngưỡng thì dừng, không tự thêm index.
+5. **Mục tiêu tốc độ:** ở mọi ô của ma trận (token `mac` / `modal` × có / không hạn mức với ≥ 1.000 dòng ledger hôm
+   nay mỗi user × breaker tắt / bật × ~80 và 6.000 job chờ), thời gian thật trung vị của câu chọn job mới ≤ câu cũ
+   (commit `ef1e70c`) + 1 ms, đo liền nhau trong cùng phiên bằng `\timing`; và không tăng theo độ dài hàng đợi (đo thêm
+   20.000 job chờ). Không đạt thì dừng và báo số đo, không nới ngưỡng, không tự thêm index.
+   Lịch sử: ngưỡng đầu tiên là 15 ms / 1 ms tuyệt đối; từng được nới sau lượt đo 1 rồi bị rút lại (xem mục "Cần người
+   dùng duyệt").
 6. **Chưa chia lượt theo người dùng.** Ngoài phạm vi; docs giữ dòng ghi giới hạn này cho bản nhiều người dùng.
 7. **Viết lại `overQuotaSql` thành subquery không tương quan, làm trong plan này.** Câu claim mới phải xếp toàn bộ
    job chờ, nên bộ lọc hạn mức (cộng `usage_ledger` theo user cho **từng dòng**) chạy 6.000 lần thay vì ~40. Reviewer
@@ -188,19 +182,25 @@ và lấy dòng kế tiếp, tới khi đủ `LIMIT`. Vì vậy:
 - [x] Test "claims a finished chapter's export before…" và test 1.000 job / 2 worker vẫn xanh, không sửa kỳ vọng.
 - [x] Test claim song song trên nhiều chương: không trùng job, không lỗi deadlock, claim hết.
 - [x] Job đang chạy thuộc loại khác (lô dịch) cũng làm chương đó xếp sau; job `chapter_id` NULL xếp như chương rảnh.
-- [x] Số đo sau khi sửa nằm trong ngưỡng của quyết định 5 (bản đã sửa sau khi đo), ghi vào report kèm `EXPLAIN (ANALYZE, BUFFERS)`.
+- [x] Số đo đạt mục tiêu của quyết định 5 ở cả 24 ô (gồm 20.000 job chờ), ghi vào report kèm `EXPLAIN (ANALYZE, BUFFERS)` trước / sau.
 - [x] Bộ lọc hạn mức giữ nguyên ngữ nghĩa: các test hạn mức và dispatcher xanh, không sửa kỳ vọng.
 - [x] Không có file migration mới, `packages/shared/src/worker-protocol.ts` không đổi.
 - [x] Docs + memory đã cập nhật, `status: completed`.
 
 ## Kết quả
 
-- Commit: `perf(api): compute the over-quota user set once per statement`, `feat(api): share claim turns between
-  chapters with queued jobs`, và commit docs.
-- Số đo: [reports/measure-claim-order-after-report.md](./reports/measure-claim-order-after-report.md). 6.000 job chờ:
-  8–14 ms, tới ~19 ms khi có hạn mức + breaker bật; cỡ self-host không hạn mức: 0,2–0,3 ms.
-- Test: 8 ca mới (7 ca thứ tự claim, 1 ca ledger `user_id` NULL). Không phải sửa kỳ vọng của test nào.
-- Smoke 2 worker thật (tiến trình native, chế độ local, không qua image Docker): đạt, chi tiết trong report đo.
+- Commit:
+  - `6c29f78 perf(api): compute the over-quota user set once per statement`
+  - `38e4f38 feat(api): share claim turns between chapters with queued jobs`
+  - `6e34e1c docs(api): state the not-null requirement of the over-quota filter column`
+  - `838c1a2 docs: describe per-chapter claim sharing and its trade-off`
+  - `0ba6998 perf(api): pick claim candidates from the head of the queue instead of sorting it`
+  - `8256523 perf(api): materialize claim candidates so a row recheck does not rerun both branches`
+  - commit docs cuối (cập nhật số đo, plan này).
+- Số đo: [reports/measure-claim-order-after-report.md](./reports/measure-claim-order-after-report.md). Câu chọn job:
+  0,4–1,0 ms không hạn mức, 2,4–3,3 ms có hạn mức, không tăng theo hàng đợi (78 / 6.000 / 20.000 job chờ).
+- Test: 11 ca mới (10 ca thứ tự claim, 1 ca ledger `user_id` NULL). Không phải sửa kỳ vọng của test nào.
+- Smoke: xem report đo (2 worker native ở bản đầu; image Docker ở HEAD).
 
 ## Gate
 

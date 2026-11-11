@@ -96,9 +96,16 @@ dịch active → không làm gì; gọi lặp / đồng thời vẫn ra đúng 
   - Priority 10 cũng chia lượt: tẩy lại trang của chương đang có job chạy có thể xếp sau export của chương khác, lệch
     một job ngắn.
   - Hai worker claim trong cùng vài chục ms có thể vào cùng một chương; lần claim kế tự cân lại.
-  - Tốc độ câu chọn job (thời gian thật, 6.000 job chờ / 96.000 trang): 8–14 ms, tới ~19 ms khi vừa có hạn mức người
-    dùng vừa có breaker đang bật; ở cỡ self-host (dưới 100 job chờ, không hạn mức) 0,2–0,3 ms. Câu này xếp mọi job
-    đang chờ nên thời gian tăng theo độ dài hàng đợi; hàng đợi lớn hơn nhiều thì cần index hoặc bảng đếm theo chương.
+  - Câu chọn job (`pickClaimableSql`) không xếp cả hàng đợi. Khoá "số job đang chạy của chương" không có trong index,
+    nên câu lấy ứng viên theo hai nhánh rồi mới xếp và khoá: job của chương rảnh đi theo `jobs_claim_idx` và dừng sau
+    vài chục dòng; job của chương bận là một tập riêng, đọc qua `jobs_chapter_idx`. Tập user vượt hạn mức được dựng một
+    lần cho cả câu.
+  - Mỗi nhánh đọc trước `max + 32` dòng (`CLAIM_LOOKAHEAD`). Nếu chừng đó dòng đầu của cả hai nhánh đều đang bị
+    transaction khác khoá thì lượt claim trả rỗng dù phía sau còn job, worker nghỉ một nhịp backoff rồi claim lại.
+  - Tốc độ (thời gian thật gồm lập kế hoạch; 78, 6.000 và 20.000 job chờ cho cùng kết quả): 0,4–1,0 ms khi không có
+    hạn mức người dùng, 2,4–3,3 ms khi có (phần lớn là một lần cộng ledger trong ngày). Câu FIFO trước đây: 0,14–0,26 ms
+    và 4,0–4,8 ms. Thời gian không theo độ dài hàng đợi mà theo số job chờ của các chương đang chạy: 2 chương bận, mỗi
+    chương còn ~1.000 trang chờ thì 2,8–4,2 ms.
 - Bản nhiều người dùng chưa chia lượt theo người: ai tạo hàng loạt export khác tuỳ chọn thì chen trước job của người
   khác, và trong cùng một chương job tạo trước vẫn chạy trước. Chấp nhận ở bản hiện tại, self-host chỉ 1 người dùng.
 - `payload.context`: `rolling` khi lô mở đầu chương và mọi trang hiện xen giữa/ngay sau lô còn trong lượt; còn lại
