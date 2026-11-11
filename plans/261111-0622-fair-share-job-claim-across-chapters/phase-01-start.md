@@ -25,8 +25,9 @@ trong `claim()`, thêm test chia lượt và test song song, đo lại bằng c�
   - Không migration, không đổi `ClaimRequest` / response, không thêm env.
   - Vẫn một câu `SELECT … FOR UPDATE OF jobs SKIP LOCKED`; phần sau câu chọn (khoá chương, cấp rev, fencing, dựng
     input) không đổi.
-  - Mục tiêu tốc độ (quyết định 5 trong `plan.md`): ở mọi ô của ma trận, câu mới ≤ câu cũ (`ef1e70c`) + 1 ms thời
-    gian thật, và không tăng theo độ dài hàng đợi (đo thêm 20.000 job chờ).
+  - Mục tiêu tốc độ (quyết định 5 trong `plan.md`): ở mọi ô của ma trận, trên cả dữ liệu 20 user lẫn self-host một
+    user với bảng `user` chưa analyze, với thống kê `jobs` mới lẫn cũ, câu mới ≤ câu cũ (`ef1e70c`) + 1 ms thời gian thật và không tăng theo độ dài
+    hàng đợi (tới 20.000 job chờ).
   - `overQuotaSql` giữ nguyên ngữ nghĩa: hạn mức NULL = không giới hạn; ≤ 0 = chặn hết; user chưa có ledger hôm nay
     không bị chặn khi hạn mức > 0.
 

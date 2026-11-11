@@ -100,12 +100,29 @@ dịch active → không làm gì; gọi lặp / đồng thời vẫn ra đúng 
     nên câu lấy ứng viên theo hai nhánh rồi mới xếp và khoá: job của chương rảnh đi theo `jobs_claim_idx` và dừng sau
     vài chục dòng; job của chương bận là một tập riêng, đọc qua `jobs_chapter_idx`. Tập user vượt hạn mức được dựng một
     lần cho cả câu.
+  - Câu này chỉ nhanh khi Postgres chịu đi theo index rồi dừng, và planner chọn đường đó theo ước lượng của nó. Ba
+    quy tắc giữ cho lựa chọn đó không phụ thuộc thống kê (xem chú thích của `pickClaimableSql` trước khi sửa):
+    - Nhánh chương rảnh cắt hai bước: đi theo đúng hai cột của index `(priority, created_at)` và lấy trọn nhóm hoà cuối
+      (`with ties`), không có bước xếp nào trên bảng `jobs`; rồi mới xếp tập vừa cắt theo trang + id và cắt lại.
+    - Planner chỉ được thấy `status = 'queued'` ở nhánh chương rảnh (để chứng minh điều kiện partial index). Mọi bộ
+      lọc theo dòng khác (giờ chạy, loại job, hạn mức, breaker, tài khoản bị khoá, chương bận), và cả `status` ở nhánh
+      chương bận lẫn tầng khoá, nằm sau một biểu thức `CASE` (`opaque()` trong `queue.ts`). Thêm bộ lọc mới thì đặt vào
+      trong lớp bọc đó.
+    - Bộ lọc tài khoản bị khoá (`notDisabledOwnerSql`) viết bằng `not in (select …)`, không viết `not exists` tương
+      quan.
+    Các bản trước thiếu từng quy tắc này đã quay lại đọc + xếp cả hàng đợi: khi bảng `user` chưa có thống kê (self-host
+    một tài khoản), và khi thống kê bảng `jobs` cũ (analyze lúc hàng đợi trống rồi một lô job mới vào).
   - Mỗi nhánh đọc trước `max + 32` dòng (`CLAIM_LOOKAHEAD`). Nếu chừng đó dòng đầu của cả hai nhánh đều đang bị
     transaction khác khoá thì lượt claim trả rỗng dù phía sau còn job, worker nghỉ một nhịp backoff rồi claim lại.
-  - Tốc độ (thời gian thật gồm lập kế hoạch; 78, 6.000 và 20.000 job chờ cho cùng kết quả): 0,4–1,0 ms khi không có
-    hạn mức người dùng, 2,4–3,3 ms khi có (phần lớn là một lần cộng ledger trong ngày). Câu FIFO trước đây: 0,14–0,26 ms
-    và 4,0–4,8 ms. Thời gian không theo độ dài hàng đợi mà theo số job chờ của các chương đang chạy: 2 chương bận, mỗi
-    chương còn ~1.000 trang chờ thì 2,8–4,2 ms.
+  - Tốc độ (thời gian thật gồm lập kế hoạch; như nhau từ 78 tới 20.000 job chờ, với thống kê `jobs` mới lẫn cũ).
+    Self-host một tài khoản: 0,3–0,6 ms (câu FIFO trước đây 0,12–0,19 ms). Bản 20 tài khoản: 0,3–0,6 ms không hạn mức,
+    2,2–2,5 ms có hạn mức (phần lớn là một lần cộng ledger trong ngày; FIFO 0,13–0,21 ms và 3,9–4,0 ms). Câu đọc khoảng
+    160–270 dòng `jobs` bất kể hàng đợi dài bao nhiêu.
+  - Hai trường hợp câu đọc nhiều hơn thế: bảng `jobs` còn nhỏ (vài nghìn dòng trở xuống) thì planner có thể đọc cả
+    bảng, tốn thêm dưới 0,5 ms; và khi đầu hàng là các chương đang chạy với backlog lớn, thời gian theo số job chờ của
+    chính các chương đó: 2 chương bận, mỗi chương còn ~1.000 trang chờ thì 1,5–3,4 ms (FIFO 0,6–1,5 ms), tức chậm hơn
+    FIFO 1,2–1,9 ms; 8 chương bận × 1.000 trang chờ thì ~8 ms. Bảng `jobs` chưa từng được analyze (phút đầu sau cài mới
+    hoặc restore) thì cả câu này lẫn câu FIFO đều đọc cả hàng đợi.
 - Bản nhiều người dùng chưa chia lượt theo người: ai tạo hàng loạt export khác tuỳ chọn thì chen trước job của người
   khác, và trong cùng một chương job tạo trước vẫn chạy trước. Chấp nhận ở bản hiện tại, self-host chỉ 1 người dùng.
 - `payload.context`: `rolling` khi lô mở đầu chương và mọi trang hiện xen giữa/ngay sau lô còn trong lượt; còn lại
