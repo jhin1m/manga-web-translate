@@ -22,12 +22,17 @@ export const dayStart = sql`date_trunc('day', now() at time zone 'utc') at time 
 export type QuotaStatus = { spent_usd: number; limit_usd: number | null; resets_at: string; exceeded: boolean };
 
 /**
- * SQL "user của cột này đã vượt hạn mức hôm nay" — tính theo từng dòng (user chưa có ledger hôm nay vẫn đúng).
- * Hạn mức hiệu lực = DB ?? env; ngưỡng 0 = chặn hết; không đặt = không giới hạn.
+ * SQL "user của cột này đã vượt hạn mức hôm nay". Hạn mức hiệu lực = DB ?? env; ngưỡng ≤ 0 = chặn hết (kể cả user
+ * chưa có ledger hôm nay); không đặt = không giới hạn.
+ *
+ * Tập user đã vượt là subquery không phụ thuộc dòng ngoài: Postgres cộng ledger hôm nay một lần cho cả câu lệnh rồi
+ * băm, thay vì cộng lại cho từng job (câu chọn job của claim duyệt mọi job đang chờ).
+ * `user_id is not null` là bắt buộc: ledger có dòng chi phí nền tảng không gắn user, và một NULL trong tập làm
+ * `not (x in (...))` thành NULL → không job nào được claim.
  */
 export function overQuotaSql(userIdCol: AnyPgColumn): SQL {
   const limit = userDailyLimitSql();
-  return sql`(${limit} is not null and (${limit} = 0 or coalesce((select sum(${usageLedger.costUsd}) from ${usageLedger} where ${usageLedger.userId} = ${userIdCol} and ${usageLedger.createdAt} >= ${dayStart}), 0) >= ${limit}))`;
+  return sql`(${limit} is not null and (${limit} <= 0 or ${userIdCol} in (select ${usageLedger.userId} from ${usageLedger} where ${usageLedger.userId} is not null and ${usageLedger.createdAt} >= ${dayStart} group by ${usageLedger.userId} having sum(${usageLedger.costUsd}) >= ${limit})))`;
 }
 
 /** Chủ job không bị khoá: job của tài khoản bị khoá nằm yên trong hàng đợi (mở khoá thì chạy tiếp). */

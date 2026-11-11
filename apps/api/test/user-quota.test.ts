@@ -148,6 +148,21 @@ describe("user daily quota — queue", () => {
     expect(pg?.status).toBe("failed");
   });
 
+  it("platform cost rows without a user never block users who are under the quota", async () => {
+    env.USER_DAILY_USD = 1;
+    const { S } = await ingested("quota-platform");
+    // Chi phí nền tảng (GPU rỗi của container) không gắn user, hôm nay đã vượt xa hạn mức một người.
+    await db
+      .insert(usageLedger)
+      .values({ userId: null, kind: "gpu_idle_seconds", quantity: 1, unitCostUsd: 50, costUsd: 50 });
+    await spend(S.userId, 0.5);
+
+    const modal = (await workerToken("modal", "modal-quota-platform")).token;
+    const got = await claimJobs(modal, { caps: ["page.prepare"], max: 8 });
+    expect(got.map((j) => j.id)).toEqual((await prepareJobs(S.chapterId)).map((j) => j.id));
+    expect(await inJobTx((tx) => failOverQuotaQueued(tx))).toBe(0);
+  });
+
   it("non-LLM jobs of an over-quota user run on Mac only (Modal never takes their jobs)", async () => {
     env.USER_DAILY_USD = 1;
     const { S, mac } = await ingested("quota-nonllm");
