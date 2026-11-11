@@ -190,9 +190,36 @@ class TranslateItem(BaseModel):
         return v if v in ("normal", "thought", "note") else "normal"
 
 
+TermKind = Literal["person", "place", "term"]
+
+
+class NewTerm(BaseModel):
+    """Thuật ngữ/tên riêng LLM gợi ý đưa vào glossary của truyện."""
+
+    source: str
+    target: str
+    #: Giá trị lạ/thiếu → term (không bao giờ làm hỏng lô).
+    kind: TermKind = "term"
+
+    @field_validator("kind", mode="before")
+    @classmethod
+    def _known_kind(cls, v: object) -> object:
+        return v if v in ("person", "place", "term") else "term"
+
+
+class PronounPair(BaseModel):
+    """Cặp xưng hô LLM đã dùng trong lô: `speaker` xưng/gọi `listener` bằng `address`."""
+
+    speaker: str
+    listener: str
+    address: str
+
+
 class TranslateResult(BaseModel):
     items: list[TranslateItem]
     context_notes: str = ""
+    new_terms: list[NewTerm] = Field(default_factory=list)
+    pronoun_pairs: list[PronounPair] = Field(default_factory=list)
     usage: list[TokenUsage] = Field(default_factory=list)
 
 

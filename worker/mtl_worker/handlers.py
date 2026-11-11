@@ -29,7 +29,13 @@ from mtl_pipeline.schema import (
     TextBox,
 )
 from mtl_pipeline.textmask import bbox_text_mask, estimate_polarity
-from mtl_pipeline.translate import SeriesSettings, qualified_id, translate_chapter
+from mtl_pipeline.translate import (
+    ChapterTranslation,
+    SeriesSettings,
+    norm_key,
+    qualified_id,
+    translate_chapter,
+)
 from mtl_pipeline.typeset import bubble_siblings, font_for, typeset_region
 
 from . import LLM_NOT_CONFIGURED, PIPELINE_VERSION
@@ -249,6 +255,12 @@ def build_page_state(
 CARRY_NOTES_MAX = 2000
 CARRY_MAX_CHARACTERS = 30
 CARRY_NAME_MAX = 64
+# Trần gợi ý học được (`MAX_LEARNED_*` và độ dài trường trong packages/shared) — vượt thì API từ chối cả result.
+LEARNED_TERMS_MAX = 50
+LEARNED_PRONOUNS_MAX = 30
+TERM_TEXT_MAX = 200
+PERSON_MAX = 80
+ADDRESS_MAX = 120
 
 
 def handle_translate(ctx: JobContext, deps: Deps) -> dict[str, Any]:
@@ -334,7 +346,7 @@ def handle_translate(ctx: JobContext, deps: Deps) -> dict[str, Any]:
                 boxes.append(typeset_region(clean, r, bubble, it.translation, f, bubble_siblings(r, texted)))
         state = build_page_state(pg["width"], pg["height"], regions, items, translations, boxes, meta, styles)
         out.append({"page_id": pg["page_id"], "ai_state": state})
-    return {"type": "chapter.translate", "pages": out, "carry": _carry(tr.context)}
+    return {"type": "chapter.translate", "pages": out, "carry": _carry(tr.context), **_learned(tr)}
 
 
 def _cut_utf16(s: str, n: int) -> str:
@@ -348,6 +360,43 @@ def _carry(c: RollingContext) -> dict[str, Any]:
     names = [_cut_utf16(n.strip(), CARRY_NAME_MAX) for n in c.characters]
     characters = list(dict.fromkeys(n for n in names if n))[-CARRY_MAX_CHARACTERS:]
     return {"notes": _cut_utf16(c.notes, CARRY_NOTES_MAX), "characters": characters}
+
+
+def _clean(s: str, n: int) -> str:
+    """strip → cắt theo UTF-16 → strip lại (cắt có thể để lại khoảng trắng cuối)."""
+    return _cut_utf16(s.strip(), n).strip()
+
+
+# Dấu hỏi (ASCII và full-width) = LLM chưa rõ người nói.
+_UNKNOWN_SPEAKER = frozenset({"?", "？"})
+
+
+def _learned(tr: ChapterTranslation) -> dict[str, Any]:
+    """Gợi ý glossary/xưng hô trong giới hạn hợp đồng. Chỉ thêm key khi có mục, để result không có gợi ý giữ
+    nguyên hình dạng cũ. Mục rác bị lọc ở đây vì result sai hợp đồng làm fail cả lô đã dịch xong."""
+    terms: dict[str, dict[str, str]] = {}
+    for t in tr.new_terms:
+        source, target = _clean(t.source, TERM_TEXT_MAX), _clean(t.target, TERM_TEXT_MAX)
+        if source and target:
+            terms.setdefault(norm_key(source), {"source": source, "target": target, "kind": t.kind})
+    pairs: dict[tuple[str, str], dict[str, str]] = {}
+    for pr in tr.pronoun_pairs:
+        speaker, listener = _clean(pr.speaker, PERSON_MAX), _clean(pr.listener, PERSON_MAX)
+        address = _clean(pr.address, ADDRESS_MAX)
+        if not (speaker and listener and address) or {speaker, listener} & _UNKNOWN_SPEAKER:
+            continue
+        if norm_key(speaker) == norm_key(listener):
+            continue
+        pairs.setdefault(
+            (norm_key(speaker), norm_key(listener)),
+            {"speaker": speaker, "listener": listener, "address": address},
+        )
+    out: dict[str, Any] = {}
+    if terms:
+        out["new_terms"] = list(terms.values())[:LEARNED_TERMS_MAX]
+    if pairs:
+        out["pronoun_pairs"] = list(pairs.values())[:LEARNED_PRONOUNS_MAX]
+    return out
 
 
 # ---- page.reinpaint ----

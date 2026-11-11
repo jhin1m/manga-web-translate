@@ -7,13 +7,15 @@ import os
 from importlib import resources
 from typing import Any, Protocol
 
-from pydantic import ValidationError
+from pydantic import BaseModel, ValidationError
 
 from ..langs import lang_label
 from ..schema import (
     ErrorClass,
+    NewTerm,
     OcrRequest,
     OcrResult,
+    PronounPair,
     ProofreadRequest,
     ProofreadResult,
     TokenUsage,
@@ -84,8 +86,34 @@ TRANSLATE_SCHEMA: dict[str, Any] = {
             },
         },
         "context_notes": {"type": "string"},
+        "new_terms": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "source": {"type": "string"},
+                    "target": {"type": "string"},
+                    "kind": {"type": "string", "enum": ["person", "place", "term"]},
+                },
+                "required": ["source", "target", "kind"],
+                "additionalProperties": False,
+            },
+        },
+        "pronoun_pairs": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "speaker": {"type": "string"},
+                    "listener": {"type": "string"},
+                    "address": {"type": "string"},
+                },
+                "required": ["speaker", "listener", "address"],
+                "additionalProperties": False,
+            },
+        },
     },
-    "required": ["items", "context_notes"],
+    "required": ["items", "context_notes", "new_terms", "pronoun_pairs"],
     "additionalProperties": False,
 }
 
@@ -235,12 +263,31 @@ def parse_ocr(text: str, usage: TokenUsage) -> OcrResult:
         raise ProviderError("schema", f"OCR trả JSON sai hợp đồng: {e}", usage=[usage]) from e
 
 
+def _lenient[M: BaseModel](model: type[M], raw: object) -> list[M]:
+    """Mảng gợi ý (new_terms/pronoun_pairs): không phải list → []; mục hỏng bị bỏ. Không bao giờ raise —
+    gợi ý rác không được làm hỏng lô đã dịch xong."""
+    if not isinstance(raw, list):
+        return []
+    out: list[M] = []
+    for it in raw:
+        if not isinstance(it, dict):
+            continue
+        try:
+            out.append(model.model_validate(it))
+        except ValidationError:
+            continue
+    return out
+
+
 def parse_translate(text: str, usage: TokenUsage) -> TranslateResult:
     try:
         data = json.loads(text)
-        return TranslateResult.model_validate(
+        res = TranslateResult.model_validate(
             {"items": data["items"], "context_notes": data.get("context_notes", ""), "usage": [usage]}
         )
+        res.new_terms = _lenient(NewTerm, data.get("new_terms"))
+        res.pronoun_pairs = _lenient(PronounPair, data.get("pronoun_pairs"))
+        return res
     except (json.JSONDecodeError, KeyError, TypeError, ValidationError) as e:
         raise ProviderError("schema", f"dịch trả JSON sai hợp đồng: {e}", usage=[usage]) from e
 

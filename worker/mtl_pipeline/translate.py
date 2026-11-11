@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import unicodedata
 from dataclasses import dataclass, field
 
 from .providers.base import LLMProvider, ProviderError
@@ -9,7 +10,9 @@ from .schema import (
     DEFAULT_HONORIFIC_POLICY,
     ContextLine,
     ContextMode,
+    NewTerm,
     PageText,
+    PronounPair,
     RollingContext,
     TokenUsage,
     TranslateItem,
@@ -40,6 +43,14 @@ class ChapterTranslation:
     failed: list[int] = field(default_factory=list)
     # Ngữ cảnh sau lô cuối (notes + tên nhân vật) — job dịch lô kế của chương nối tiếp từ đây.
     context: RollingContext = field(default_factory=RollingContext)
+    # Gợi ý glossary / xưng hô gom qua các lô (đã khử trùng, mục đầu thắng); trang hỏng hẳn không đóng góp.
+    new_terms: list[NewTerm] = field(default_factory=list)
+    pronoun_pairs: list[PronounPair] = field(default_factory=list)
+
+
+def norm_key(s: str) -> str:
+    """Khoá khử trùng: bỏ khoảng trắng đầu/cuối, NFC, không phân biệt hoa thường."""
+    return unicodedata.normalize("NFC", s.strip()).casefold()
 
 
 def qualified_id(page_ord: int, region_id: str) -> str:
@@ -84,7 +95,7 @@ def update_context(
 
 def _translate_once(
     provider: LLMProvider, batch: list[PageText], settings: SeriesSettings, ctx: RollingContext | None
-) -> tuple[dict[str, TranslateItem], str, list[TokenUsage]]:
+) -> tuple[dict[str, TranslateItem], str, list[TokenUsage], list[NewTerm], list[PronounPair]]:
     """1 call + retry 1 lần khi lệch id/JSON sai; vẫn lệch → id thiếu thành low_conf."""
     req = TranslateRequest(
         pages=batch,
@@ -100,6 +111,8 @@ def _translate_once(
     got: dict[str, TranslateItem] = {}
     have_result = False
     notes = ""
+    terms: list[NewTerm] = []
+    pairs: list[PronounPair] = []
     for attempt in range(2):
         try:
             res = provider.translate_batch(req)
@@ -118,13 +131,14 @@ def _translate_once(
             if it.id in expected and it.id not in got:
                 got[it.id] = it
         notes = res.context_notes
+        terms, pairs = res.new_terms, res.pronoun_pairs
         if len(got) == len(expected) and len(res.items) == len(expected):
-            return got, notes, usage
+            return got, notes, usage, terms, pairs
     out = {
         i: got[i].model_copy(update={"low_conf": True}) if i in got else TranslateItem(id=i, low_conf=True)
         for i in expected
     }
-    return out, notes, usage
+    return out, notes, usage, terms, pairs
 
 
 def translate_chapter(
@@ -150,10 +164,14 @@ def translate_chapter(
     out: dict[str, dict[str, TranslateItem]] = {}
     usage: list[TokenUsage] = []
     failed: list[int] = []
+    terms: dict[str, NewTerm] = {}
+    pairs: dict[tuple[str, str], PronounPair] = {}
     while batches:
         batch = batches.pop(0)
         try:
-            items, notes, u = _translate_once(provider, batch, settings, ctx if mode == "rolling" else None)
+            items, notes, u, new_terms, new_pairs = _translate_once(
+                provider, batch, settings, ctx if mode == "rolling" else None
+            )
         except ProviderError as e:
             if e.error_class != "schema":
                 e.usage = usage + e.usage  # giữ token của các lô đã xong
@@ -168,9 +186,22 @@ def translate_chapter(
             # nguyên); items rỗng + low_conf để ngữ cảnh cuộn đi tiếp.
             failed.append(batch[0].ord)
             items, notes, u = {r.id: TranslateItem(id=r.id, low_conf=True) for r in batch[0].regions}, "", []
+            new_terms, new_pairs = [], []
         usage.extend(u)
+        for t in new_terms:
+            terms.setdefault(norm_key(t.source), t)
+        for pr in new_pairs:
+            pairs.setdefault((norm_key(pr.speaker), norm_key(pr.listener)), pr)
         for p in batch:
             out[str(p.ord)] = {r.id: items[r.id] for r in p.regions}
         if mode == "rolling":
             ctx = update_context(ctx, batch, items, notes)
-    return ChapterTranslation(items=out, usage=usage, context_used=mode, failed=failed, context=ctx)
+    return ChapterTranslation(
+        items=out,
+        usage=usage,
+        context_used=mode,
+        failed=failed,
+        context=ctx,
+        new_terms=list(terms.values()),
+        pronoun_pairs=list(pairs.values()),
+    )
