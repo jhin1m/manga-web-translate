@@ -3,7 +3,7 @@
 **Date**: 2026-11-11
 **Severity**: Medium (không lỗi dữ liệu; bản đầu làm câu claim chậm 30–50 lần, bắt được trước khi push)
 **Component**: API job queue (`apps/api/src/jobs/queue.ts`), bộ lọc hạn mức và tài khoản bị khoá (`apps/api/src/billing/user-quota.ts`), docs
-**Status**: Đã push lên `main` (`6c29f78` … `93b104a`); chưa tag, image phát hành `v0.1.0-rc.3` vẫn claim theo thứ tự tạo
+**Status**: Đã push lên `main` (`6c29f78` … `880ebd5`), phát hành ở tag `v0.1.0` (image `0.1.0` = `0.1` = `latest`)
 
 ## Mục tiêu
 
@@ -35,7 +35,7 @@ Plan `plans/261111-0622-fair-share-job-claim-across-chapters/`. Người dùng b
 
 ## Việc còn lại
 
-- Tag bản mới để image có thay đổi này. Docs trên `main` đã mô tả hành vi mới trong khi `v0.1.0-rc.3` còn claim theo thứ tự tạo.
-- Smoke Docker (`infra/selfhost-smoke.sh`) đã đạt trên `3734f37` bằng image build local; chưa chạy trên image phát hành.
+- ~~Tag bản mới để image có thay đổi này.~~ Đã phát hành `v0.1.0` ngày 2026-11-11, sau `v0.1.0-rc.4` trên cùng commit `880ebd5`.
+- Smoke Docker (`infra/selfhost-smoke.sh`) đạt trên image phát hành `0.1.0-rc.4` và `latest` (`0.1.0`), kéo từ GHCR không đăng nhập. Chạy trên máy dev với thư mục dữ liệu trống, chưa thử trên máy sạch thật; smoke chỉ có 1 trang nên không kiểm chồng thời gian giữa 2 chương (đã kiểm trên image build local của cùng code).
 - Bảng `jobs` chưa từng analyze (phút đầu sau cài mới hoặc restore): cả câu cũ lẫn câu mới đọc cả hàng đợi (20.000 job chờ: 6,6–8,8 ms so với 14–16 ms).
 - Chưa chia lượt theo người dùng trên bản nhiều tài khoản.

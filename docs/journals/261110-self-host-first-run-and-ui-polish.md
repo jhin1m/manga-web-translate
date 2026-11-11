@@ -3,7 +3,7 @@
 **Date**: 2026-11-10
 **Severity**: High (một lỗi critical bắt được ở review, đã sửa)
 **Component**: worker (OCR/bubble layout), web (provider, chapter/series UI), Playwright e2e
-**Status**: Code xong trên `feat/self-host-first-run-and-ui-polish`; chưa chạy Docker trên máy sạch, chưa tag `v0.1.0`
+**Status**: Code xong trên `feat/self-host-first-run-and-ui-polish`; phát hành trong `v0.1.0` (2026-11-11)
 
 ## Mục tiêu
 
@@ -37,6 +37,6 @@ Lỗi thứ ba, đáng bực nhất: Playwright spec đã cũ vì trước đó 
 
 ## Việc còn lại
 
-- Chạy Docker 1 lệnh trên máy sạch rồi mới tag `v0.1.0` (owner: jhin1m).
+- ~~Chạy Docker 1 lệnh trên máy sạch rồi mới tag `v0.1.0` (owner: jhin1m).~~ Đã tag `v0.1.0` theo quyết định của owner ngày 2026-11-11, sau khi `infra/selfhost-smoke.sh` đạt trên image phát hành (thư mục dữ liệu trống trên máy dev). Chưa thử trên máy sạch thật.
 - Mở: blocklist đã phủ thinking, nhưng `output_config.effort` có thể cũng bị model cũ như `claude-haiku-4-5` từ chối. Chưa kiểm chứng bằng call thật; cần một lần gọi thật trước khi tin.
 - Quyết định về `block-panel.spec.ts:317`: sửa hay đánh dấu skip.
