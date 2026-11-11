@@ -16,6 +16,10 @@ Mọi test tự động hiện dùng worker giả lập; chưa có số đo vớ
       soi mắt parity chữ Konva ↔ render.py trên 5 trang.
 - [ ] **Dịch theo lô với key LLM thật**: chương ≥ 9 trang — trang đầu "Xong" và sửa được khi lô sau còn chạy; token / chương
       so với dịch cả chương không tăng quá ~10% (`usage_ledger`); tên nhân vật nhất quán giữa các lô (`carry`).
+- [ ] **Gợi ý và trí nhớ series**: smoke LLM thật đã chạy (token ra mỗi trang +3,1% sau khi hạ giới hạn xuống 5 thuật
+      ngữ / 3 cặp / ghi chú 300 ký tự), xem [báo cáo smoke](../plans/261111-1925-series-memory-glossary-pronoun-suggestions/reports/smoke-real-llm-series-memory-report.md).
+      Còn đo khi dùng thật: tỉ lệ gợi ý rác; **số gợi ý xưng hô** (lần smoke thứ hai ra 0, lần đầu với giới hạn cao ra 4) —
+      nếu vẫn gần 0 thì cân nhắc nâng lại giới hạn cặp xưng hô; tên nhân vật nhất quán giữa các chương.
 - [ ] **Luồng dịch với worker LLM thật**: watermark trong danh sách bỏ qua không vào prompt và không có box; trang ẩn
       không bị dịch; xuất `original_slices` khi có trang ẩn (mở zip kiểm số file / thứ tự).
 - [ ] **OCR local (giờ là mặc định) + LaMa manga + AI hiệu đính** (đã đo smoke trên 2 trang manga mẫu, xem
@@ -33,8 +37,8 @@ Mọi test tự động hiện dùng worker giả lập; chưa có số đo vớ
 - [ ] **Deploy**: chạy migration mới (`0009_series_skip_images`, `0010_series_ignore_text`,
       `0011_pages_skip_changed_at`, `0012_workspace_fonts`, `0013_workspace_pipeline_settings`,
       `0014_proofread_suggestions`, `0015_single_user_guard_worker_kind`, `0016_drop_workspaces`,
-      `0017_user_ownership`, `0018_auth_error_class`, `0019_jobs_progress_counts`, `0020_translate_chain`, `0021_system_settings`, `0022_ai_providers`, `0023_drop_series_llm_tier`, `0024_user_disabled_at`, `0025_system_fonts`) — 0015 từ chối chạy nếu còn dữ liệu workspace nên **bắt buộc reset DB + MinIO và tạo lại
-      token worker** theo "Checklist release single-user-accounts" ở `docs/deployment-guide.md`; worker Mac/Modal phải lên pipeline **0.10.0** (key AI theo job qua claim, provider OpenAI / OpenAI-compatible; gồm mọi bản 0.6–0.9) **trước** khi deploy API (`MIN_PIPELINE_VERSION` 0.10.0, worker cũ nhận 426); `.env` API cần `SECRETS_KEY` + `ADMIN_EMAILS` — xem "Checklist nâng cấp lên pipeline 0.10.0" ở `docs/deployment-guide.md`, không thì
+      `0017_user_ownership`, `0018_auth_error_class`, `0019_jobs_progress_counts`, `0020_translate_chain`, `0021_system_settings`, `0022_ai_providers`, `0023_drop_series_llm_tier`, `0024_user_disabled_at`, `0025_system_fonts`, `0026_series_memory` — chỉ thêm cột + bảng, deploy API / worker thứ tự nào cũng được) — 0015 từ chối chạy nếu còn dữ liệu workspace nên **bắt buộc reset DB + MinIO và tạo lại
+      token worker** theo "Checklist release single-user-accounts" ở `docs/deployment-guide.md`; worker Mac/Modal phải lên pipeline **0.10.0** (key AI theo job qua claim, provider OpenAI / OpenAI-compatible; gồm mọi bản 0.6–0.9) **trước** khi deploy API (`MIN_PIPELINE_VERSION` 0.10.0, worker cũ nhận 426); `.env` API cần `SECRETS_KEY` + `ADMIN_EMAILS` — worker 0.11.0 (gợi ý từ AI) là tuỳ chọn, 0.10.0 vẫn chạy, chỉ không sinh gợi ý; xem "Checklist nâng cấp lên pipeline 0.10.0" ở `docs/deployment-guide.md`, không thì
       hàng đợi dừng; chương manga đang cắt trang / xoá chữ lúc
       deploy sẽ dừng ở "Chờ dịch" (bấm "Dịch chương" để tiếp) — xem "Checklist nâng cấp lên pipeline 0.7.0" ở `docs/deployment-guide.md` (API deploy trước hoặc cùng web: web mới cần `ocr_ready` trong `/progress`); nạp model
       OCR local + LaMa manga (`fetch_models.py`) vào volume Modal **trước** khi deploy — OCR local giờ là mặc định, xem

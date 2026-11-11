@@ -154,6 +154,22 @@ Thứ tự khoá cố định job → chapter → pages ở mọi nhánh (claim,
 chuyền ngữ cảnh giữa các lô — worker trả `result.carry` (ngữ cảnh sau lô cuối, cắt theo đơn vị UTF-16 như zod), API nhét
 vào `payload.carry` của lô kế, worker nạp vào `RollingContext` đầu job. Thiếu `carry` = ngữ cảnh rỗng như cũ (payload cũ vẫn chạy).
 
+**Trí nhớ series** (pipeline 0.11.0): `carry` còn sống qua lượt và chương nhờ cột `chapters.translate_memory` (carry cuối +
+`source_lang` / `target_lang`).
+- **Ghi** chỉ khi lượt dịch **cả chương** đóng bình thường (hết trang chờ), từ `carry` của lô thành công gần nhất
+  trong lượt: `run_target = translated`, lượt phủ mọi trang không bỏ qua đã qua bước 1 (trang lỗi bước 1 không tính).
+  Dịch lại một phần, hoặc lượt bị huỷ / dừng vì hết hạn mức giữa chừng, không bao giờ ghi đè trí nhớ có sẵn. Giới hạn
+  đã biết: lượt chạy tiếp sau khi dừng vì hạn mức (`translatePrepared` trên các trang còn lại) không ghi trí nhớ.
+- **Đọc**: lô của lượt chưa có carry của lượt thì lấy trí nhớ của chương **khác** cùng series, cùng cặp ngôn ngữ, gần
+  nhất: số chương ≤ hiện tại (gần nhất), không có thì số lớn hơn gần nhất; không bao giờ lấy chính chương đang dịch. Đã
+  có carry của lượt thì dùng carry đó.
+- Hợp đồng payload không đổi (vẫn `payload.carry`), trí nhớ không vào `input_rev` / idempotency.
+
+**Gợi ý từ AI**: `result.new_terms` (≤ 50, `MAX_LEARNED_TERMS`) và `result.pronoun_pairs` (≤ 30, `MAX_LEARNED_PRONOUNS`) đều
+optional, worker cắt theo UTF-16 như `carry`. Mỗi lô prompt xin ≤ 5 thuật ngữ, ≤ 3 cặp xưng hô và `context_notes` cộng
+dồn ≤ 300 ký tự (hạ từ 8/5/500 sau smoke LLM thật: token ra mỗi trang +15,4% → +3,1%). API lọc rồi lưu vào
+`series_suggestions`; xem mục Glossary ở [export-and-batch-edit](./export-and-batch-edit.md).
+
 Lỗi `schema` của lô (JSON sai sau retry, vượt guard token) không fail chương: lô nhiều trang tách dịch lại từng trang;
 1 trang vẫn hỏng → worker bỏ trang khỏi result → server đánh page `failed` (bản AI cũ giữ nguyên), job `succeeded` nhưng
 ghi `error_class=schema` để UI gom đúng nguyên nhân. 429/provider/auth vẫn fail cả job.
@@ -296,6 +312,9 @@ API `PIPELINE_VERSION` (muối input_rev) vẫn 0.4.0. 0.8.0 (`Region.style` ở
 `chapter.translate`) nâng `MIN_PIPELINE_VERSION = 0.8.0` cùng lý do; thứ tự deploy ở `docs/deployment-guide.md`. Heartbeat `done/total` không cần nâng version (API cũ bỏ qua key lạ).
 0.9.0 (`page.reinpaint.auto_text_bbox`, xem mục dưới) nâng `MIN_PIPELINE_VERSION = 0.9.0`: worker cũ đòi `user_mask_key`
 + input `user_mask` nên fail job xoá chữ theo khung. API `PIPELINE_VERSION` (muối input_rev) vẫn 0.4.0.
+0.11.0 (prompt dịch + hai key result optional `new_terms` / `pronoun_pairs`, trí nhớ series) **không** nâng
+`MIN_PIPELINE_VERSION` (giữ 0.10.0): API cũ bỏ qua key lạ, API mới nhận result thiếu key, payload không đổi; worker
+0.10.0 vẫn chạy nhưng không sinh gợi ý. API `PIPELINE_VERSION` vẫn 0.4.0.
 
 ## Xoá chữ lại (`page.reinpaint`, pipeline 0.9.0)
 

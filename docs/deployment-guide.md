@@ -251,6 +251,13 @@ worker; job `auto_text_bbox` còn xếp hàng lúc đó sẽ fail hợp đồng 
    (`pnpm worker-token revoke`) và đổi key ở provider; bật giới hạn chi tiêu phía provider cho mọi key nhập vào.
 7. Sau một phiên bản ổn định: bỏ `model_tier` / `proofread_tier` legacy (cấp hiệu đính cũ chỉ còn dùng khi chưa gán slot Hiệu đính).
 
+### Ghi chú: trí nhớ series và gợi ý từ AI (migration 0026, worker 0.11.0)
+
+`0026_series_memory` chỉ thêm (cột `chapters.translate_memory` nullable, bảng `series_suggestions`), nên deploy API và
+worker theo thứ tự nào cũng được; `MIN_PIPELINE_VERSION` giữ 0.10.0 và `PIPELINE_VERSION` API không đổi (worker 0.10.0
+vẫn chạy, chỉ không sinh gợi ý). Rollback app không cần down DB; gỡ hẳn thì chạy
+`packages/db/migrations-down/0026_series_memory.down.sql` (đúng thứ tự ngược như checklist 0.10.0).
+
 ### Checklist OCR local mặc định (MangaOCR / PaddleOCR)
 
 1. **Model OCR local giờ nằm trên đường mặc định** (`ja` → MangaOCR ~460MB, `ko`/`zh`/`en` → PaddleOCR ~45MB). Trước khi

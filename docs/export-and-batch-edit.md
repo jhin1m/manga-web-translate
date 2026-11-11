@@ -142,6 +142,28 @@ nhất; ưu tiên giữ bản ko→vi). Rollback **chỉ app** về bản trư�
 ép chữ Việt vào bản dịch đích khác) và **nhập CSV "thay toàn bộ" ở glossary chung xoá entry của mọi cặp** — không dùng
 chế độ đó tới khi deploy lại. Tab web mở từ trước deploy gọi route glossary chung không có cặp → 400 tới khi tải lại trang.
 
+### Gợi ý từ AI (bảng `series_suggestions`)
+
+Sau mỗi lô dịch, AI có thể gợi ý thuật ngữ và cặp xưng hô mới (không thêm lượt gọi LLM; xem
+[job-queue-worker](./job-queue-worker.md)). API lọc rồi lưu chờ duyệt:
+
+- Bỏ gợi ý đã có trong glossary hiệu lực của series (kể cả glossary chung đúng cặp), đã có trong `pronoun_rules`, bản
+  dịch trùng nguyên văn từ gốc sau chuẩn hoá, người nói/nghe là `?` / `？` hoặc tự gọi mình.
+- Khoá chống trùng: thuật ngữ theo nguồn đã chuẩn hoá; xưng hô theo cặp có thứ tự người nói → người nghe (không tính
+  cách gọi). Chèn `ON CONFLICT DO NOTHING`. Mỗi series giữ tối đa 200 gợi ý chờ duyệt mỗi loại (`MAX_PENDING_PER_KIND`;
+  chưa Bỏ và chưa được phủ).
+- Web: badge số trên nút Glossary và icon Cài đặt dịch ở màn series; danh sách "Gợi ý từ AI · N" ở đầu modal Glossary
+  series và trong nhóm Xưng hô của Cài đặt dịch. Không có "Nhận tất cả".
+- **Nhận** thuật ngữ = POST glossary của series (`glossary_rev` + 1, `note` rỗng). **Nhận** xưng hô = thêm hàng vào bảng
+  Xưng hô rồi bấm Lưu (`settings_rev` + 1). Không có trạng thái "đã nhận": server ẩn gợi ý đã được phủ, nên xoá entry /
+  quy tắc thì gợi ý hiện lại (bấm Bỏ nếu không muốn). **Bỏ** = không quay lại nữa.
+- Giới hạn đã biết: gợi ý không lưu cặp ngôn ngữ, nên đổi ngôn ngữ đích của series thì gợi ý cũ vẫn hiện (Bỏ chúng).
+
+| API (`/api/…`) | Ghi chú |
+|---|---|
+| `series/:seriesId/suggestions` (GET) | gợi ý chờ duyệt (không gồm đã Bỏ / đã được phủ) |
+| `series-suggestions/:suggestionId` (PATCH `{dismissed}`) | Bỏ / hoàn tác Bỏ một gợi ý |
+
 ## Gate parity Konva ↔ render.py
 
 `apps/web/e2e/typeset-parity.spec.ts` vẽ 10 page_state golden bằng code editor thật (`drawBoxText`) và so bbox mực
