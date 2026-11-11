@@ -3,8 +3,15 @@
 # rồi hạ quyền về uid 1000 (khớp worker — token.py kiểm file token cùng uid) và chạy:
 #   app  → API (backup + migrate + bootstrap local trước khi listen)
 #   jobs → runner nền
+#   updater / update-run → cập nhật trong app; giữ root (Docker socket thuộc root), rẽ nhánh TRƯỚC khối chown vì
+#                          updater mount data/secrets chỉ đọc
 #   khác → chạy lệnh tuỳ ý (vd `sh`)
 set -eu
+
+case "${1:-}" in
+  updater) exec node_modules/.bin/tsx src/updater/server.ts ;;
+  update-run) exec node_modules/.bin/tsx src/updater/runner.ts ;;
+esac
 
 if [ "$(id -u)" = "0" ]; then
   data="${MTL_DATA_DIR:-/data}"

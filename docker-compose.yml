@@ -9,7 +9,11 @@
 # không mở ra LAN/Internet, không đặt sau reverse proxy công khai.
 #
 # Không cần .env: mọi biến đều có mặc định. Biến tuỳ chọn: MTL_TAG, MTL_PORT, MTL_ALLOWED_HOSTS, MTL_SKIP_BOOT_BACKUP,
-# MTL_WORKERS, MTL_THREADS.
+# MTL_WORKERS, MTL_THREADS, MTL_UPDATE_CHECK (0 = không hỏi GitHub có bản mới), MTL_UPDATER, MTL_DOCKER_SOCK.
+#
+# Nút "Cập nhật ngay" trong app do service `updater` đảm nhiệm. CẢNH BÁO: updater giữ Docker socket (ngang quyền root
+# trên máy). Tắt hẳn bằng MTL_UPDATER=0 (không có container, không mount socket); khi đó cập nhật bằng lệnh tay ở trên.
+# Docker rootless: MTL_DOCKER_SOCK=$XDG_RUNTIME_DIR/docker.sock.
 #
 # RAM: mặc định 2 worker cần ≥ 10 GB RAM cho Docker (nên 12 GB). Máy ít RAM hơn:
 #   MTL_WORKERS=1 docker compose up -d        (cần ≥ 6 GB)
@@ -29,6 +33,12 @@ x-app-env: &app-env
   MTL_ALLOWED_HOSTS: ${MTL_ALLOWED_HOSTS:-}
   # Thoát hiểm khi pg_dump lỗi chặn khởi động: MTL_SKIP_BOOT_BACKUP=1 docker compose up -d app
   MTL_SKIP_BOOT_BACKUP: ${MTL_SKIP_BOOT_BACKUP:-}
+  # Bản đang ghim (app ẩn nút Cập nhật khi khác latest), tắt hỏi GitHub, và đích thử bản prerelease (người phát hành).
+  MTL_TAG: ${MTL_TAG:-latest}
+  MTL_UPDATE_CHECK: ${MTL_UPDATE_CHECK:-}
+  MTL_UPDATE_TARGET: ${MTL_UPDATE_TARGET:-}
+  # 0 = updater tắt: app không gọi nó (chỉ nhận 0 hoặc 1, cũng là số replicas của service updater).
+  MTL_UPDATER: ${MTL_UPDATER:-1}
 
 services:
   postgres:
@@ -117,6 +127,25 @@ services:
       app: { condition: service_healthy, restart: true }
     # Cần Internet: tải model lần đầu + gọi API AI.
     networks: [web]
+    logging: *logging
+
+  # Giữ Docker socket. Không publish cổng, chỉ ở mạng internal (app gọi http://updater:8090 bằng token trong
+  # data/secrets/updater-token). Updater chỉ kiểm tra rồi sinh container runner `<project>-update` chạy compose pull/up,
+  # vì `up` tạo lại chính container này. Không ai depends_on service này (replicas 0 khi MTL_UPDATER=0).
+  updater:
+    image: ghcr.io/jhin1m/mtl:${MTL_TAG:-latest}
+    command: updater
+    restart: unless-stopped
+    init: true
+    environment:
+      MTL_DOCKER_SOCK: ${MTL_DOCKER_SOCK:-}
+    volumes:
+      - ${MTL_DOCKER_SOCK:-/var/run/docker.sock}:/var/run/docker.sock
+      # Chỉ cần updater-token. Updater có socket nên đã ngang root, ro không làm tăng quyền.
+      - ./data/secrets:/data/secrets:ro
+    deploy:
+      replicas: ${MTL_UPDATER:-1}
+    networks: [internal]
     logging: *logging
 
 networks:

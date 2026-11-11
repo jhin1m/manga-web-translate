@@ -1,0 +1,237 @@
+{
+  "platform": "windows-wsl2",
+  "note": "HAND-WRITTEN from the research report, not captured: Docker Desktop WSL2 with Mounts Source /run/desktop/mnt/host/c/... and compose labels in client form C:\\Users\\me\\mtl. A real capture must replace this file.",
+  "containers": [
+    {
+      "Id": "13b69d285294ad5722fd5a31a07b1c02d054d0eb2cda22ad731cd4d5ab40db13",
+      "Name": "/mtl-local-worker-1",
+      "Image": "sha256:c5d3b23004731f16043dd63b1efd716dc64b84556b3f1a8f66b8e7bd149f47bc",
+      "Config": {
+        "Hostname": "13b69d285294",
+        "Image": "ghcr.io/jhin1m/mtl-worker:latest",
+        "Env": ["MTL_THREADS=4", "MTL_WORKERS=1", "MTL_MODELS_DIR=/data/models", "MTL_FONT_CACHE_DIR=/tmp/mtl-fonts"],
+        "Labels": {
+          "com.docker.compose.config-hash": "bbdb7818eef049037c84082b5e1d8daab7d172a1b9116022e2f790c7656f8b67",
+          "com.docker.compose.container-number": "1",
+          "com.docker.compose.depends_on": "",
+          "com.docker.compose.image": "sha256:c5d3b23004731f16043dd63b1efd716dc64b84556b3f1a8f66b8e7bd149f47bc",
+          "com.docker.compose.oneoff": "False",
+          "com.docker.compose.project": "mtl-local",
+          "com.docker.compose.project.config_files": "C:\\Users\\me\\mtl\\docker-compose.yml",
+          "com.docker.compose.project.working_dir": "C:\\Users\\me\\mtl",
+          "com.docker.compose.service": "worker",
+          "com.docker.compose.version": "5.1.2"
+        }
+      },
+      "HostConfig": {
+        "PortBindings": {}
+      },
+      "Mounts": [
+        {
+          "Type": "bind",
+          "Source": "/run/desktop/mnt/host/c/Users/me/mtl/data/worker",
+          "Destination": "/data/worker",
+          "RW": false
+        },
+        {
+          "Type": "bind",
+          "Source": "/run/desktop/mnt/host/c/Users/me/mtl/data/models",
+          "Destination": "/data/models",
+          "RW": true
+        }
+      ],
+      "State": {
+        "Status": "running"
+      }
+    },
+    {
+      "Id": "1881700446c383acdfd642d52a8eac817a40913fd939944b939a9b4e1e640e1a",
+      "Name": "/mtl-local-postgres-1",
+      "Image": "sha256:f59abe656b692d901e184be3445e084786602108599d2a51d229c0f5a48c71bf",
+      "Config": {
+        "Hostname": "1881700446c3",
+        "Image": "postgres:17",
+        "Env": [],
+        "Labels": {
+          "com.docker.compose.config-hash": "cfcc56416030521b29d4f493b79068260efeee85594ec9321df942deabcb9086",
+          "com.docker.compose.container-number": "1",
+          "com.docker.compose.depends_on": "",
+          "com.docker.compose.image": "sha256:f59abe656b692d901e184be3445e084786602108599d2a51d229c0f5a48c71bf",
+          "com.docker.compose.oneoff": "False",
+          "com.docker.compose.project": "mtl-local",
+          "com.docker.compose.project.config_files": "C:\\Users\\me\\mtl\\docker-compose.yml",
+          "com.docker.compose.project.working_dir": "C:\\Users\\me\\mtl",
+          "com.docker.compose.service": "postgres",
+          "com.docker.compose.version": "5.1.2"
+        }
+      },
+      "HostConfig": {
+        "PortBindings": {}
+      },
+      "Mounts": [
+        {
+          "Type": "bind",
+          "Source": "/run/desktop/mnt/host/c/Users/me/mtl/data/postgres",
+          "Destination": "/var/lib/postgresql/data",
+          "RW": true
+        }
+      ],
+      "State": {
+        "Status": "running"
+      }
+    },
+    {
+      "Id": "af6bb42078e6ddfcd7e2e775f665b7f7692d207e15a6a23e2f08ebe126bf83ac",
+      "Name": "/mtl-local-jobs-1",
+      "Image": "sha256:a1d1a89d981c03c45c7fa8d90ee9d3afa162ac41047bcdfcc0642ee4bc63a11c",
+      "Config": {
+        "Hostname": "af6bb42078e6",
+        "Image": "ghcr.io/jhin1m/mtl:latest",
+        "Env": ["MTL_LOCAL_MODE=1", "MTL_DATA_DIR=/data"],
+        "Labels": {
+          "com.docker.compose.config-hash": "3e3aa3031238af9201777af1081188e967ae0a156ee3dc1689eefb628664297a",
+          "com.docker.compose.container-number": "1",
+          "com.docker.compose.depends_on": "",
+          "com.docker.compose.image": "sha256:a1d1a89d981c03c45c7fa8d90ee9d3afa162ac41047bcdfcc0642ee4bc63a11c",
+          "com.docker.compose.oneoff": "False",
+          "com.docker.compose.project": "mtl-local",
+          "com.docker.compose.project.config_files": "C:\\Users\\me\\mtl\\docker-compose.yml",
+          "com.docker.compose.project.working_dir": "C:\\Users\\me\\mtl",
+          "com.docker.compose.service": "jobs",
+          "com.docker.compose.version": "5.1.2"
+        }
+      },
+      "HostConfig": {
+        "PortBindings": {}
+      },
+      "Mounts": [
+        {
+          "Type": "bind",
+          "Source": "/run/desktop/mnt/host/c/Users/me/mtl/data/files",
+          "Destination": "/data/files",
+          "RW": true
+        },
+        {
+          "Type": "bind",
+          "Source": "/run/desktop/mnt/host/c/Users/me/mtl/data/secrets",
+          "Destination": "/data/secrets",
+          "RW": true
+        }
+      ],
+      "State": {
+        "Status": "running"
+      }
+    },
+    {
+      "Id": "a30754d1a01b2220cf27ff17e33780066313f214e3dfe339297561ce4925859d",
+      "Name": "/mtl-local-app-1",
+      "Image": "sha256:a1d1a89d981c03c45c7fa8d90ee9d3afa162ac41047bcdfcc0642ee4bc63a11c",
+      "Config": {
+        "Hostname": "a30754d1a01b",
+        "Image": "ghcr.io/jhin1m/mtl:latest",
+        "Env": [
+          "MTL_ALLOWED_HOSTS=host.docker.internal",
+          "MTL_UPDATE_CHECK=",
+          "MTL_UPDATE_TARGET=",
+          "MTL_TAG=latest",
+          "MTL_VERSION=0.2.0",
+          "MTL_LOCAL_MODE=1",
+          "MTL_DATA_DIR=/data"
+        ],
+        "Labels": {
+          "com.docker.compose.config-hash": "7da532f303afbac9c8a9a5b89b7f89dfb05c3e3cc9a1eec4a23823e41bb7dea2",
+          "com.docker.compose.container-number": "1",
+          "com.docker.compose.depends_on": "",
+          "com.docker.compose.image": "sha256:a1d1a89d981c03c45c7fa8d90ee9d3afa162ac41047bcdfcc0642ee4bc63a11c",
+          "com.docker.compose.oneoff": "False",
+          "com.docker.compose.project": "mtl-local",
+          "com.docker.compose.project.config_files": "C:\\Users\\me\\mtl\\docker-compose.yml",
+          "com.docker.compose.project.working_dir": "C:\\Users\\me\\mtl",
+          "com.docker.compose.service": "app",
+          "com.docker.compose.version": "5.1.2"
+        }
+      },
+      "HostConfig": {
+        "PortBindings": {
+          "8080/tcp": [
+            {
+              "HostIp": "127.0.0.1",
+              "HostPort": "9090"
+            }
+          ]
+        }
+      },
+      "Mounts": [
+        {
+          "Type": "bind",
+          "Source": "/run/desktop/mnt/host/c/Users/me/mtl/data/worker",
+          "Destination": "/data/worker",
+          "RW": true
+        },
+        {
+          "Type": "bind",
+          "Source": "/run/desktop/mnt/host/c/Users/me/mtl/data/files",
+          "Destination": "/data/files",
+          "RW": true
+        },
+        {
+          "Type": "bind",
+          "Source": "/run/desktop/mnt/host/c/Users/me/mtl/data/secrets",
+          "Destination": "/data/secrets",
+          "RW": true
+        },
+        {
+          "Type": "bind",
+          "Source": "/run/desktop/mnt/host/c/Users/me/mtl/data/backups",
+          "Destination": "/data/backups",
+          "RW": true
+        }
+      ],
+      "State": {
+        "Status": "running"
+      }
+    },
+    {
+      "Id": "a218c6f0a708b0af8c03fe399417a181b00b2e05888b4f82d95564f9f1aed200",
+      "Name": "/mtl-local-updater-1",
+      "Image": "sha256:a1d1a89d981c03c45c7fa8d90ee9d3afa162ac41047bcdfcc0642ee4bc63a11c",
+      "Config": {
+        "Hostname": "a218c6f0a708",
+        "Image": "ghcr.io/jhin1m/mtl:latest",
+        "Env": ["MTL_DOCKER_SOCK=", "MTL_LOCAL_MODE=1", "MTL_DATA_DIR=/data"],
+        "Labels": {
+          "com.docker.compose.config-hash": "2b695ae6d3956dade70caf748e0c0d13fefa19d5acec58e9dc670eda5a31ab07",
+          "com.docker.compose.container-number": "1",
+          "com.docker.compose.depends_on": "",
+          "com.docker.compose.image": "sha256:a1d1a89d981c03c45c7fa8d90ee9d3afa162ac41047bcdfcc0642ee4bc63a11c",
+          "com.docker.compose.oneoff": "False",
+          "com.docker.compose.project": "mtl-local",
+          "com.docker.compose.project.config_files": "C:\\Users\\me\\mtl\\docker-compose.yml",
+          "com.docker.compose.project.working_dir": "C:\\Users\\me\\mtl",
+          "com.docker.compose.service": "updater",
+          "com.docker.compose.version": "5.1.2"
+        }
+      },
+      "HostConfig": {
+        "PortBindings": {}
+      },
+      "Mounts": [
+        {
+          "Type": "bind",
+          "Source": "/run/desktop/mnt/host/c/Users/me/mtl/data/secrets",
+          "Destination": "/data/secrets",
+          "RW": false
+        },
+        {
+          "Type": "bind",
+          "Source": "/var/run/docker.sock",
+          "Destination": "/var/run/docker.sock",
+          "RW": true
+        }
+      ],
+      "State": {
+        "Status": "running"
+      }
+    }
+  ]
+}
