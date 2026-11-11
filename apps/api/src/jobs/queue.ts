@@ -150,10 +150,12 @@ type PickOptions = {
  *   khi Postgres kiểm lại điều kiện của tầng khoá trên bản mới của dòng. Thiếu thì hai worker nhận cùng một job.
  * - `cand` phải là `materialized`: để Postgres nhúng nó vào tầng ngoài thì mỗi lần kiểm lại một dòng vừa bị transaction
  *   khác sửa, cả hai nhánh chạy lại từ đầu (kết quả vẫn đúng nhưng tốn vài ms mỗi lần hai worker đụng nhau).
- * - Nhánh chương rảnh xếp đúng theo hai cột của `jobs_claim_idx` (priority, created_at) và lấy trọn nhóm hoà cuối
- *   (`with ties`); thứ tự trang và id để tầng ngoài xếp. Nhờ vậy nhánh này không cần bước xếp nào: Postgres chỉ việc
- *   đi theo index rồi dừng. Xếp thêm theo trang ngay trong nhánh thì planner phải chọn giữa xếp tăng dần (dừng sớm) và
- *   xếp toàn bộ (đọc hết hàng đợi), và nó chọn sai khi ước lượng số job chờ quá thấp.
+ * - Nhánh chương rảnh cắt hai bước. Bước trong xếp đúng theo hai cột của `jobs_claim_idx` (priority, created_at) và
+ *   lấy trọn nhóm hoà cuối (`with ties`), nên không cần bước xếp nào: Postgres chỉ việc đi theo index rồi dừng. Bước
+ *   ngoài xếp tập vừa cắt theo trang + id rồi mới lấy `max + CLAIM_LOOKAHEAD` dòng. Gộp làm một bước (xếp theo trang
+ *   ngay trên bảng jobs) thì planner phải chọn giữa xếp tăng dần (dừng sớm) và xếp toàn bộ (đọc hết hàng đợi), và nó
+ *   chọn sai khi ước lượng số job chờ quá thấp. Bỏ bước ngoài thì cả nhóm hoà (một chương tới 1.000 trang cùng
+ *   created_at) bị đẩy lên tầng khoá.
  * - Planner chỉ được thấy `status = 'queued'` ở đúng một chỗ: nhánh chương rảnh, nơi cần chứng minh điều kiện của
  *   partial index. Mọi bộ lọc khác, và cả `status = 'queued'` ở nhánh chương bận lẫn tầng ngoài, đi qua `opaque()`:
  *   - bộ lọc theo dòng để lộ thì ước lượng của nhánh chương rảnh tụt dưới LIMIT khi vài bộ lọc cùng bật (hoặc khi
@@ -206,6 +208,8 @@ export function pickClaimableSql(o: PickOptions): SQL {
           fetch first ${sql.raw(String(take))} rows with ties
         ) head
         left join ${pages} on ${pages.id} = head.page_id
+        order by head.priority, head.created_at, ${pages.ord} asc nulls last, head.id
+        limit ${sql.raw(String(take))}
       )
       union all
       (
