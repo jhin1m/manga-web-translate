@@ -59,6 +59,10 @@ hàng đợi. Số đo: [reports/measure-claim-order-after-report.md](./reports/
 Hướng mở nếu sau này cần nhanh hơn nữa ở trường hợp đó: index `(chapter_id, priority, created_at)` cho job chờ hoặc
 bảng đếm theo chương. Cần migration, lập plan riêng.
 
+**Chủ dự án đã chốt ngày 2026-11-11:** chấp nhận hiện trạng, không migration. Câu chọn job chậm hơn câu FIFO cũ
+0,1–0,3 ms mỗi lần claim ở trường hợp thường gặp và chậm hơn vài ms khi chương đang chạy còn ~1.000 trang chờ; cả hai
+được coi là đạt tiêu chí "không chậm đi rõ rệt". Chỉ mở lại hướng index khi hàng đợi thật có dạng đó.
+
 ## Overview
 
 Hiện `claim()` (`apps/api/src/jobs/queue.ts:130`) xếp `priority, created_at, pages.ord, id`. Hai worker cùng lấy job
