@@ -3,7 +3,7 @@
 **Date**: 2026-11-10
 **Severity**: High (người dùng không tải được ZIP của bộ đã xong; đã sửa)
 **Component**: API job queue (`enqueue.ts`, `queue.ts`), worker (`main.py`), `docker-compose.yml`, docs self-host
-**Status**: Code xong trên `main`, chưa commit; chưa tag release; còn một câu hỏi sản phẩm chưa trả lời
+**Status**: Đã commit trên `main` (`b9062d1`, `ee640ec`), phát hành ở tag `v0.1.0-rc.3`; chia lượt claim theo chương làm plan riêng
 
 ## Mục tiêu
 
