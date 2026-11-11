@@ -11,6 +11,8 @@ const optionalUsd = blank(z.coerce.number().nonnegative().optional());
 const flag = blank(z.enum(["true", "false"]).default("false")).transform((v) => v === "true");
 /** Cờ chế độ local: nhận cả `1|0` (compose/docker quen dùng). */
 const flag01 = blank(z.enum(["1", "true", "0", "false"]).default("false")).transform((v) => v === "1" || v === "true");
+/** Như `flag01` nhưng mặc định bật. */
+const flag01On = blank(z.enum(["1", "true", "0", "false"]).default("true")).transform((v) => v === "1" || v === "true");
 
 const Env = z
   .object({
@@ -44,6 +46,16 @@ const Env = z
         .map((h) => h.trim().toLowerCase())
         .filter(Boolean),
     ),
+    /** Phiên bản app, image đặt sẵn (release). Không phải semver (kể cả "dev") = bản dev: không kiểm bản mới. */
+    MTL_VERSION: blank(z.string().default("dev")),
+    /** Tắt = không bao giờ hỏi GitHub về bản mới (riêng tư mạng). Mặc định bật. */
+    MTL_UPDATE_CHECK: flag01On,
+    /** Chỉ cho người phát hành: thay kết quả GitHub bằng phiên bản này (cho phép đích prerelease). Không phải semver thì bỏ qua. */
+    MTL_UPDATE_TARGET: blank(z.string().optional()),
+    /** Tag image mà compose truyền vào; khác `latest` nghĩa là người dùng đang ghim phiên bản. */
+    MTL_TAG: blank(z.string().optional()),
+    /** `0` = bản cài không có service `updater`: app không gọi nó (mặc định bật, compose truyền xuống). */
+    MTL_UPDATER: flag01On,
     /** Thư mục build SPA (apps/web/dist) — đặt thì API phục vụ luôn web (cùng origin). */
     SPA_DIR: blank(z.string().min(1).optional()),
     /** `S3_*` + FILES_DOMAIN bắt buộc khi STORAGE_DRIVER=s3 (kiểm ở parseEnv). */

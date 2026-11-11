@@ -310,7 +310,7 @@ describe("tenant isolation", () => {
   it("public routes stay public and carry no user data", async () => {
     const res = await call("/api/config");
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ local_mode: false });
+    expect(await res.json()).toEqual({ local_mode: false, version: "dev" });
   });
 
   it("discovers user routes (incl. /api/me)", () => {

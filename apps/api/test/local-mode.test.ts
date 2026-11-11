@@ -39,7 +39,7 @@ describe("local mode HTTP", () => {
     const res = await app.request("/api/config");
     expect(res.status).toBe(200);
     expect(res.headers.get("cache-control")).toBe("no-store");
-    expect(await res.json()).toEqual({ local_mode: true });
+    expect(await res.json()).toEqual({ local_mode: true, version: env.MTL_VERSION });
   });
 
   it("GET /api/me without a cookie → the local user, admin", async () => {

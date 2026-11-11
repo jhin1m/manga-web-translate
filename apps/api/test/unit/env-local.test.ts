@@ -63,4 +63,36 @@ describe("env local mode", () => {
     ).toEqual(["nas.local", "box"]);
     expect(parseEnv({ ...base, MTL_LOCAL_MODE: "1" }).MTL_ALLOWED_HOSTS).toEqual([]);
   });
+
+  it("update variables: version dev, check on by default, optional target and tag", () => {
+    const e = parseEnv({ ...base, MTL_LOCAL_MODE: "1" });
+    expect(e.MTL_VERSION).toBe("dev");
+    expect(e.MTL_UPDATE_CHECK).toBe(true);
+    expect(e.MTL_UPDATE_TARGET).toBeUndefined();
+    expect(e.MTL_TAG).toBeUndefined();
+    expect(
+      parseEnv({ ...base, MTL_LOCAL_MODE: "1", MTL_VERSION: "", MTL_TAG: "", MTL_UPDATE_CHECK: "" }),
+    ).toMatchObject({
+      MTL_VERSION: "dev",
+      MTL_UPDATE_CHECK: true,
+      MTL_TAG: undefined,
+    });
+    expect(parseEnv({ ...base, MTL_LOCAL_MODE: "1", MTL_VERSION: "0.3.0", MTL_TAG: "0.2.0" })).toMatchObject({
+      MTL_VERSION: "0.3.0",
+      MTL_TAG: "0.2.0",
+    });
+    for (const v of ["0", "false"])
+      expect(parseEnv({ ...base, MTL_LOCAL_MODE: "1", MTL_UPDATE_CHECK: v }).MTL_UPDATE_CHECK).toBe(false);
+    for (const v of ["1", "true"])
+      expect(parseEnv({ ...base, MTL_LOCAL_MODE: "1", MTL_UPDATE_CHECK: v }).MTL_UPDATE_CHECK).toBe(true);
+    expect(() => parseEnv({ ...base, MTL_LOCAL_MODE: "1", MTL_UPDATE_CHECK: "yes" })).toThrow();
+  });
+
+  it("MTL_UPDATER is on by default and by blank; 0|false turns it off", () => {
+    expect(parseEnv({ ...base, MTL_LOCAL_MODE: "1" }).MTL_UPDATER).toBe(true);
+    expect(parseEnv({ ...base, MTL_LOCAL_MODE: "1", MTL_UPDATER: "" }).MTL_UPDATER).toBe(true);
+    for (const v of ["0", "false"])
+      expect(parseEnv({ ...base, MTL_LOCAL_MODE: "1", MTL_UPDATER: v }).MTL_UPDATER).toBe(false);
+    expect(() => parseEnv({ ...base, MTL_LOCAL_MODE: "1", MTL_UPDATER: "yes" })).toThrow();
+  });
 });

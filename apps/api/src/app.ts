@@ -51,7 +51,7 @@ export function createApp({ devAutoLogin = envDevLogin() }: { devAutoLogin?: Dev
   // Public (trước userApi): web hỏi chế độ chạy để bỏ màn đăng nhập ở bản local — 1 image cho mọi cấu hình.
   app.get("/api/config", (c) => {
     c.header("cache-control", "no-store");
-    return c.json({ local_mode: local });
+    return c.json({ local_mode: local, version: env.MTL_VERSION });
   });
 
   // Chế độ local: không có tài khoản → không mount better-auth / dev login (404).
