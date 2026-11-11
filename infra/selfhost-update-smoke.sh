@@ -412,7 +412,10 @@ env_of "$new_app" | grep -qx "MTL_UPDATE_TARGET=$TO" || die "app env lost MTL_UP
 log "port 127.0.0.1:$SMOKE_PORT, 1 worker, MTL_THREADS=2 (.env), MTL_UPDATE_TARGET=$TO (shell) kept"
 cmp -s "$work/docker-compose.yml" "$work/ref/compose-to.yml" || die "docker-compose.yml differs from the one at tag v$TO"
 cmp -s "$work/docker-compose.yml.bak" "$work/ref/compose-from.yml" || die "docker-compose.yml.bak differs from the one at tag v$FROM"
-[ "$(file_sha "$work/docker-compose.yml")" != "$sha_before" ] || die "docker-compose.yml was not replaced"
+# Two tags on the same commit ship the same compose file: then only the .bak above proves the write happened.
+if ! cmp -s "$work/ref/compose-from.yml" "$work/ref/compose-to.yml"; then
+  [ "$(file_sha "$work/docker-compose.yml")" != "$sha_before" ] || die "docker-compose.yml was not replaced"
+fi
 [ "$(fstat "$work/docker-compose.yml")" = "$stat_before" ] || die "compose file uid/gid/mode '$(fstat "$work/docker-compose.yml")' != '$stat_before'"
 log "compose == v$TO, .bak == v$FROM, uid/gid/mode kept ($stat_before)"
 req GET /api/admin/update
