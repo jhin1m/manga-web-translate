@@ -7,6 +7,9 @@
 #   image   → build + push MỖI image theo tag bất biến `:<version>` (không đụng tag trôi).
 #   promote → chỉ khi CẢ HAI image xanh: gắn `:<major>.<minor>` (mới nhất dòng đó) + `:latest` (bản ổn định mới nhất)
 #             bằng imagetools; tuần tự giữa các tag.
+# Thêm một pha cuối cho tag chính thức:
+#   github-release → sau promote, tạo GitHub Release (nguồn của `releases/latest` mà app hỏi). Ghi chú lấy từ
+#             docs/releases/vX.Y.Z.md; Latest chỉ khi promote vừa gắn `:latest`. Release đã có thì giữ nguyên.
 # Action ghim theo commit SHA (comment = tag chính thức lúc ghim): tag có thể bị dời, SHA thì không.
 name: release
 
@@ -43,6 +46,14 @@ jobs:
             echo "prerelease=$pre"
           } >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - name: Cảnh báo nếu tag chính thức thiếu ghi chú phát hành
+        env:
+          VERSION: ${{ steps.v.outputs.version }}
+          PRERELEASE: ${{ steps.v.outputs.prerelease }}
+        run: |
+          if [ "$PRERELEASE" = false ] && [ ! -f "docs/releases/v$VERSION.md" ]; then
+            echo "::warning::thiếu docs/releases/v$VERSION.md → GitHub Release sẽ dùng ghi chú tự sinh"
+          fi
       - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
@@ -73,8 +84,10 @@ jobs:
         include:
           - name: mtl
             dockerfile: infra/docker/app.Dockerfile
+            build_args: MTL_VERSION=${{ needs.test.outputs.version }}
           - name: mtl-worker
             dockerfile: infra/docker/worker.Dockerfile
+            build_args: ""
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3.7.0
@@ -95,6 +108,7 @@ jobs:
         with:
           context: .
           file: ${{ matrix.dockerfile }}
+          build-args: ${{ matrix.build_args }}
           platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ steps.meta.outputs.tags }}
@@ -113,6 +127,8 @@ jobs:
       cancel-in-progress: false
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    outputs:
+      latest: ${{ steps.tags.outputs.latest }}
     permissions:
       contents: read
       packages: write
@@ -123,7 +139,8 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Gắn :<major>.<minor> + :latest cho cả hai image
+      - id: tags
+        name: Gắn :<major>.<minor> + :latest cho cả hai image
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ needs.test.outputs.version }}
@@ -144,6 +161,8 @@ jobs:
             echo "::error::không đọc được danh sách tag semver (gh api) → không gắn tag trôi"
             exit 1
           fi
+          # Cho job github-release: Latest khi và chỉ khi :latest được dời tới bản này.
+          if [ "$VERSION" = "$newest" ]; then echo "latest=true" >> "$GITHUB_OUTPUT"; else echo "latest=false" >> "$GITHUB_OUTPUT"; fi
           for name in mtl mtl-worker; do
             img="ghcr.io/$owner/$name"
             tags=()
@@ -155,4 +174,42 @@ jobs:
             echo "::notice::$VERSION không phải bản mới nhất dòng $MINOR ($newest_minor) → giữ nguyên :$MINOR, :latest"
           elif [ "$VERSION" != "$newest" ]; then
             echo "::notice::$VERSION không phải bản ổn định mới nhất ($newest) → giữ nguyên :latest"
+          fi
+
+  github-release:
+    needs: [test, promote]
+    if: needs.test.outputs.prerelease == 'false'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    # Quyền ghi chỉ ở job này (không chạy code của PR: trigger là push tag); toàn workflow vẫn contents: read.
+    permissions:
+      contents: write
+    concurrency:
+      group: release-notes
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - name: Tạo GitHub Release (bỏ qua nếu đã có)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.test.outputs.version }}
+          LATEST: ${{ needs.promote.outputs.latest }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="v$VERSION"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "::notice::Release $tag đã có → giữ nguyên (không ghi đè ghi chú làm tay)"
+            exit 0
+          fi
+          notes="docs/releases/$tag.md"
+          if [ -f "$notes" ]; then
+            first="$(head -n1 "$notes")"
+            case "$first" in
+              "# "*) title="${first#\# }"; tail -n +2 "$notes" > "$RUNNER_TEMP/body.md" ;;
+              *)     title="$tag"; cp "$notes" "$RUNNER_TEMP/body.md" ;;
+            esac
+            gh release create "$tag" --verify-tag --latest="$LATEST" --title "$title" --notes-file "$RUNNER_TEMP/body.md"
+          else
+            gh release create "$tag" --verify-tag --latest="$LATEST" --title "$tag" --generate-notes
           fi

@@ -53,13 +53,22 @@ COPY --from=prod-deps /app /app
 COPY . .
 COPY --from=build /app/apps/web/dist /app/apps/web/dist
 COPY --chmod=755 infra/docker/app-entrypoint.sh /usr/local/bin/app-entrypoint.sh
+# Standalone compose binary for the updater and its detached runner (no full docker CLI: the Engine API is called
+# over the socket). Pinned by index digest (multi-arch) because tags can move. Pinned: docker 29.9.3-cli, which ships
+# Compose v5.7.0. To upgrade: `docker buildx imagetools inspect docker:<ver>-cli`, copy the top-level Digest, and
+# check the plugin path with `docker run --rm --entrypoint sh docker:<ver>-cli -c 'ls /usr/local/libexec/docker/cli-plugins'`.
+COPY --from=docker:29.9.3-cli@sha256:2357639ad1ea7d0194134bf3292622fd4e562483966ed674e5d7c945b5f3b28d /usr/local/libexec/docker/cli-plugins/docker-compose /usr/local/bin/docker-compose
 ENV NODE_ENV=production \
   MTL_LOCAL_MODE=1 \
   API_PORT=8080 \
   MTL_DATA_DIR=/data \
   SPA_DIR=/app/apps/web/dist
 WORKDIR /app/apps/api
-RUN test -x node_modules/.bin/tsx && test -f /app/worker/fonts/manifest.json
+RUN test -x node_modules/.bin/tsx && test -f /app/worker/fonts/manifest.json \
+  && docker-compose version
 EXPOSE 8080
+# Last in the stage so a version bump does not invalidate the layers above. `dev` when built outside a release.
+ARG MTL_VERSION=dev
+ENV MTL_VERSION=$MTL_VERSION
 ENTRYPOINT ["/usr/local/bin/app-entrypoint.sh"]
 CMD ["app"]
