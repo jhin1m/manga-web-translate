@@ -4,11 +4,12 @@
  */
 import { chapters, jobs, pages, scoped, series } from "@mtl/db";
 import { type JobPayload, pageId } from "@mtl/shared";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { v7 as uuidv7 } from "uuid";
 import { beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { env } from "../src/env.ts";
 import { enqueueExport, INTERACTIVE_PRIORITY, inJobTx, insertJob } from "../src/jobs/enqueue.ts";
-import { CLAIM_LOOKAHEAD, compareVersion } from "../src/jobs/queue.ts";
+import { CLAIM_LOOKAHEAD, compareVersion, pickClaimableSql } from "../src/jobs/queue.ts";
 import { reapExpiredLeases } from "../src/jobs/reaper.ts";
 import { CHAIN_PRIORITY } from "../src/jobs/translate-chain.ts";
 import { db, seedUser } from "./helpers.ts";
@@ -465,6 +466,61 @@ describe("claim", () => {
     expect(compareVersion("0.10.0", "0.9.9")).toBe(1);
     expect(compareVersion("0.3.0", "0.3.0")).toBe(0);
     expect(compareVersion("0.2.9", "0.3.0")).toBe(-1);
+  });
+});
+
+describe("job selection plan", () => {
+  type PlanNode = {
+    "Node Type": string;
+    "Index Name"?: string;
+    "Actual Rows"?: number;
+    Plans?: PlanNode[];
+  };
+  const walk = (n: PlanNode): PlanNode[] => [n, ...(n.Plans ?? []).flatMap(walk)];
+
+  it("walks the claim index from the head and stops early, with every row filter switched on", async () => {
+    const U = await seedUser("qplan");
+    const QUEUED = 3000;
+    // Một người, hàng đợi dài như self-host: 75 chương × 40 job, mỗi chương một created_at.
+    await db.execute(sql`
+      with ch as (
+        insert into chapters (id, series_id, number, user_id)
+        select gen_random_uuid(), ${U.seriesId}, 1000 + c, ${U.userId} from generate_series(1, ${QUEUED / 40}) c
+        returning id, number
+      )
+      insert into jobs (id, user_id, type, payload, input_rev, idempotency_key, chapter_id, created_at)
+      select gen_random_uuid(), ${U.userId}, 'chapter.export', ${JSON.stringify(exportPayload(U.chapterId))}::jsonb, 'r',
+             gen_random_uuid()::text, ch.id, now() - interval '1 day' + ch.number * interval '1 second'
+      from ch, generate_series(1, 40)`);
+    await db.execute(sql`analyze jobs`);
+    env.USER_DAILY_USD = 1000;
+    try {
+      // Bật mọi bộ lọc theo dòng (hạn mức, breaker, chặn job LLM): không cái nào được làm planner bỏ đường đi theo index.
+      const query = pickClaimableSql({
+        kind: "modal",
+        caps: ["chapter.export", "page.prepare"],
+        blockLlm: true,
+        paused: ["env", uuidv7()],
+        max: 1,
+      });
+      let nodes: PlanNode[] = [];
+      await db
+        .transaction(async (t) => {
+          const rows = await t.execute<{ "QUERY PLAN": [{ Plan: PlanNode }] }>(
+            sql`explain (analyze, format json) ${query}`,
+          );
+          nodes = walk((rows[0] as { "QUERY PLAN": [{ Plan: PlanNode }] })["QUERY PLAN"][0].Plan);
+          // EXPLAIN ANALYZE chạy thật câu lệnh (khoá 1 dòng) → bỏ transaction.
+          t.rollback();
+        })
+        .catch(() => {});
+      const head = nodes.filter((n) => n["Index Name"] === "jobs_claim_idx");
+      expect(head.map((n) => n["Node Type"])).toEqual(["Index Scan"]);
+      // Dừng sớm: chỉ đọc cỡ số dòng đọc trước, không đọc cả hàng đợi.
+      expect(head[0]?.["Actual Rows"]).toBeLessThan(CLAIM_LOOKAHEAD * 4);
+    } finally {
+      env.USER_DAILY_USD = undefined;
+    }
   });
 });
 

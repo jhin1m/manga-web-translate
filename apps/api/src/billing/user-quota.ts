@@ -44,8 +44,14 @@ export function overQuotaSql(userIdCol: AnyPgColumn, overUsers: SQL = overQuotaU
   return sql`(${limit} is not null and (${limit} <= 0 or ${userIdCol} in (${overUsers})))`;
 }
 
-/** Chủ job không bị khoá: job của tài khoản bị khoá nằm yên trong hàng đợi (mở khoá thì chạy tiếp). */
-export const notDisabledOwnerSql = sql`not exists (select 1 from "user" u where u.id = ${jobs.userId} and u.disabled_at is not null)`;
+/**
+ * Chủ job không bị khoá: job của tài khoản bị khoá nằm yên trong hàng đợi (mở khoá thì chạy tiếp).
+ * Viết thành tập không phụ thuộc dòng ngoài (băm một lần), không viết `not exists` tương quan: với anti-join Postgres
+ * ước lượng số job còn lại theo thống kê bảng `user`, và khi bảng đó chưa được analyze (self-host một tài khoản) ước
+ * lượng tụt về ~0 dòng làm câu chọn job của claim bỏ đường đi theo index. `u.id` là khoá chính và `jobs.user_id` NOT
+ * NULL nên `not in` không dính NULL.
+ */
+export const notDisabledOwnerSql = sql`${jobs.userId} not in (select u.id from "user" u where u.disabled_at is not null)`;
 
 /**
  * Job worker loại `kind` được claim (ngoài trạng thái/loại/breaker): job LLM của người vượt hạn mức không ai nhận;
