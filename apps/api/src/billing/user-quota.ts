@@ -28,7 +28,8 @@ export type QuotaStatus = { spent_usd: number; limit_usd: number | null; resets_
  * Tập user đã vượt là subquery không phụ thuộc dòng ngoài: Postgres cộng ledger hôm nay một lần cho cả câu lệnh rồi
  * băm, thay vì cộng lại cho từng job (câu chọn job của claim duyệt mọi job đang chờ).
  * `user_id is not null` là bắt buộc: ledger có dòng chi phí nền tảng không gắn user, và một NULL trong tập làm
- * `not (x in (...))` thành NULL → không job nào được claim.
+ * `not (x in (...))` thành NULL → token Modal không claim được job nào, token Mac không claim được job LLM nào.
+ * Cùng lý do, `userIdCol` phải là cột NOT NULL (hiện chỉ dùng với `jobs.user_id`).
  */
 export function overQuotaSql(userIdCol: AnyPgColumn): SQL {
   const limit = userDailyLimitSql();
