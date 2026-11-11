@@ -43,12 +43,20 @@ Lưu ý: `git status --short` là nguồn đúng. `app-shell.tsx` chỉ nằm tr
 
 ## Phase 8: bước tiếp theo, theo thứ tự
 
-1. Chờ review cuối; sửa finding nếu có, chạy lại gate phần bị ảnh hưởng.
-2. Commit (conventional, không nhắc AI), chỉ file của plan này. Nên tách: shared/api/web, updater+compose+Dockerfile, CI, docs, plan.
-3. `git push origin main`.
-4. Tag `v0.3.0-rc.1` rồi `v0.3.0-rc.2` (cùng commit, hoặc rc.2 sau khi sửa nếu cần). Kiểm Actions: image có `MTL_VERSION` đúng, `docker-compose version` chạy được, tag rc không tạo Release.
-5. Chờ checks xanh, rồi `FROM=0.3.0-rc.1 TO=0.3.0-rc.2 infra/selfhost-update-smoke.sh` trên macOS. Cần in `UPDATE SMOKE OK`, lưu báo cáo `reports/update-smoke-0.3.0-rc.1-to-0.3.0-rc.2-report.md`.
-6. Test bootstrap thủ công: 0.2.0 → rc (cập nhật tay một lần, vì 0.2.0 không có updater).
+**Đã xong (12/11/2026, 00:50):**
+- Review cuối 9/10, đã sửa các lỗi low.
+- Commit `f1c0e3d..c7501d3` đã push lên main. CI `main` xanh.
+- Tag `v0.3.0-rc.1` và `v0.3.0-rc.2` (cùng commit `c7501d3`). Release workflow xanh. Image có amd64 và arm64, label và
+  `MTL_VERSION` đúng, có `docker-compose` v5.7.0. Không tạo Release cho rc.
+- Smoke `UPDATE SMOKE OK` trên macOS OrbStack, xem `reports/update-smoke-0.3.0-rc.1-to-0.3.0-rc.2-report.md`. Script
+  smoke đã sửa ca hai tag cùng commit.
+
+Các commit sau `c7501d3` chỉ đổi script smoke, docs và plan, không đổi image. Nếu sửa code app/updater thì phải cắt rc mới
+và smoke lại trước khi tag chính thức.
+
+6. Test bootstrap thủ công: 0.2.0 → rc (cập nhật tay một lần, vì 0.2.0 không có updater). Theo lệnh ở `docs/self-host.md`
+   mục Cập nhật, với `MTL_TAG=0.3.0-rc.2` và compose của tag `v0.3.0-rc.2`. Kiểm dữ liệu còn, `updater` running, menu
+   hiện `v0.3.0-rc.2`.
 7. User chạy checklist Windows (phase 8 mục C, D, E1; lệnh PowerShell 5.1, dùng `curl.exe`, mỗi lệnh một dòng). Chờ user báo đạt.
 8. Thay fixture Windows giả bằng `docker inspect` thật (`apps/api/test/unit/fixtures/`), chạy lại unit test discovery; sửa `docs/self-host.md` (dòng 21 và phần Windows) theo đúng phạm vi đã kiểm.
 9. Tag `v0.3.0` đúng commit đã thử. Kiểm đúng 1 Release "Latest", tiêu đề từ `docs/releases/v0.3.0.md`. Chạy lại smoke với đích chính thức nếu có bản kế tiếp.
