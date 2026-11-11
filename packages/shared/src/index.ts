@@ -7,5 +7,6 @@ export * from "./pipeline-settings.ts";
 export * from "./series-lang.ts";
 export * from "./series-suggestions.ts";
 export * from "./storage-keys.ts";
+export * from "./update.ts";
 export * from "./vietnamese-chars.ts";
 export * from "./worker-protocol.ts";

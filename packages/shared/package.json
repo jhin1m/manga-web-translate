@@ -4,7 +4,8 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./series-lang": "./src/series-lang.ts"
+    "./series-lang": "./src/series-lang.ts",
+    "./update": "./src/update.ts"
   },
   "scripts": {
     "emit": "tsx scripts/emit-json-schema.ts",
