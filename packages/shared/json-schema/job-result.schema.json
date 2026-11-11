@@ -647,6 +647,69 @@
             "characters"
           ],
           "additionalProperties": false
+        },
+        "new_terms": {
+          "maxItems": 50,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "source": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              },
+              "target": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "person",
+                  "place",
+                  "term"
+                ]
+              }
+            },
+            "required": [
+              "source",
+              "target",
+              "kind"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "pronoun_pairs": {
+          "maxItems": 30,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "speaker": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 80
+              },
+              "listener": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 80
+              },
+              "address": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 120
+              }
+            },
+            "required": [
+              "speaker",
+              "listener",
+              "address"
+            ],
+            "additionalProperties": false
+          }
         }
       },
       "required": [

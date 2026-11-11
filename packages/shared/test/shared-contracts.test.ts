@@ -8,6 +8,7 @@ import {
   JOB_TYPES,
   JobFonts,
   JobPayload,
+  JobResult,
   keyBelongsToUser,
   LlmConfig,
   PageState,
@@ -244,6 +245,39 @@ describe("JobFonts", () => {
     ]) {
       expect(JobFonts.safeParse([{ id, url, sha256 }]).success, id).toBe(false);
     }
+  });
+});
+
+describe("chapter.translate result: series memory", () => {
+  const base = { type: "chapter.translate", pages: [] };
+  const term = { source: "민준", target: "Min Jun", kind: "person" };
+  const pair = { speaker: "A", listener: "B", address: "anh - em" };
+
+  it("accepts results without the new keys", () => {
+    expect(JobResult.safeParse(base).success).toBe(true);
+  });
+
+  it("accepts valid new_terms and pronoun_pairs", () => {
+    const r = JobResult.safeParse({ ...base, new_terms: [term], pronoun_pairs: [pair] });
+    expect(r.success).toBe(true);
+  });
+
+  it("strips unknown keys", () => {
+    const r = JobResult.parse({ ...base, new_terms: [{ ...term, extra: 1 }], junk: true });
+    expect(r).not.toHaveProperty("junk");
+    expect((r as { new_terms: object[] }).new_terms[0]).not.toHaveProperty("extra");
+  });
+
+  it("rejects bad kind, empty or oversized strings, and too many items", () => {
+    const bad = (extra: object) => JobResult.safeParse({ ...base, ...extra }).success;
+    expect(bad({ new_terms: [{ ...term, kind: "item" }] })).toBe(false);
+    expect(bad({ new_terms: [{ ...term, source: "" }] })).toBe(false);
+    expect(bad({ new_terms: [{ ...term, target: "x".repeat(201) }] })).toBe(false);
+    expect(bad({ new_terms: Array.from({ length: 51 }, () => term) })).toBe(false);
+    expect(bad({ pronoun_pairs: [{ ...pair, speaker: "x".repeat(81) }] })).toBe(false);
+    expect(bad({ pronoun_pairs: [{ ...pair, address: "x".repeat(121) }] })).toBe(false);
+    expect(bad({ pronoun_pairs: [{ ...pair, listener: "" }] })).toBe(false);
+    expect(bad({ pronoun_pairs: Array.from({ length: 31 }, () => pair) })).toBe(false);
   });
 });
 

@@ -136,13 +136,42 @@ export type TranslateSettings = z.infer<typeof TranslateSettings>;
 
 /**
  * Ngữ cảnh dịch chuyền giữa các job lô liên tiếp của một lượt (0.7.0): ghi chú của AI + tên nhân vật gặp gần nhất.
- * Result lô trước → payload lô sau; thiếu = bắt đầu ngữ cảnh rỗng như cũ.
+ * Result lô trước → payload lô sau; lô chưa có carry trong lượt nhận trí nhớ series (API); không có cả hai = ngữ cảnh rỗng như cũ.
  */
 export const TranslateCarry = z.object({
   notes: z.string().max(2000),
   characters: z.array(z.string().min(1).max(64)).max(30),
 });
 export type TranslateCarry = z.infer<typeof TranslateCarry>;
+
+export const TERM_KINDS = ["person", "place", "term"] as const;
+export type TermKind = (typeof TERM_KINDS)[number];
+
+/** Thuật ngữ/tên riêng AI gặp trong lô mà glossary của job chưa có — API lưu thành gợi ý chờ duyệt. */
+export const LearnedTerm = z.object({
+  source: z.string().min(1).max(200),
+  target: z.string().min(1).max(200),
+  kind: z.enum(TERM_KINDS),
+});
+export type LearnedTerm = z.infer<typeof LearnedTerm>;
+
+/** Cặp xưng hô AI đã dùng mà pronoun_rules chưa có (giới hạn khớp PronounRule của series). */
+export const LearnedPronoun = z.object({
+  speaker: z.string().min(1).max(80),
+  listener: z.string().min(1).max(80),
+  address: z.string().min(1).max(120),
+});
+export type LearnedPronoun = z.infer<typeof LearnedPronoun>;
+
+export const MAX_LEARNED_TERMS = 50;
+export const MAX_LEARNED_PRONOUNS = 30;
+
+/** carry cuối lượt dịch cả chương + cặp ngôn ngữ lúc dịch — trí nhớ series (chapters.translate_memory). */
+export const TranslateMemory = TranslateCarry.extend({
+  source_lang: z.string().min(2),
+  target_lang: z.string().min(2),
+});
+export type TranslateMemory = z.infer<typeof TranslateMemory>;
 
 export const JobPayload = z.discriminatedUnion("type", [
   z.object({ type: z.literal("chapter.ingest"), chapter_id: Uuid, ingest_rev: Rev, mode: IngestMode }),
@@ -270,6 +299,8 @@ export const JobResult = z.discriminatedUnion("type", [
     type: z.literal("chapter.translate"),
     pages: z.array(z.object({ page_id: Uuid, ai_state: PageState })),
     carry: TranslateCarry.optional(),
+    new_terms: z.array(LearnedTerm).max(MAX_LEARNED_TERMS).optional(),
+    pronoun_pairs: z.array(LearnedPronoun).max(MAX_LEARNED_PRONOUNS).optional(),
   }),
   z.object({ type: z.literal("page.reinpaint"), clean_rev: Rev }),
   z.object({ type: z.literal("page.ocr_region"), region: Region }),
