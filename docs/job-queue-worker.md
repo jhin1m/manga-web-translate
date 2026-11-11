@@ -39,6 +39,7 @@ MTL_TOKEN_FILE=~/.config/mtl/worker.token uv run mtl-worker --api http://localho
   claim `SKIP LOCKED`, fencing theo `lease_token` từng job, model tải về ghi file tạm rồi đổi tên. `--threads` (luồng
   onnxruntime) mặc định lấy `MTL_THREADS`; không đặt mà `MTL_WORKERS ≥ 2` thì `số nhân / MTL_WORKERS` (tối thiểu 1) để
   các worker cùng máy không giành hết nhân của nhau; còn lại 0 = onnxruntime tự chọn. Dòng log khởi động in `threads=`.
+  Khi nhiều chương cùng chờ, N worker chạy N chương cùng lúc, mỗi chương một worker (xem thứ tự claim bên dưới).
   Self-host chạy mặc định 2 worker ([self-host.md](./self-host.md#worker)).
 
 ## Luồng dịch chương: xoá chữ + OCR rồi chuỗi lô dịch
@@ -72,7 +73,8 @@ dịch active → không làm gì; gọi lặp / đồng thời vẫn ra đúng 
 - **Lô đầu** chạy ngay khi có ≥ 1 trang liên tiếp đã prepared. **Lô sau** chưa đầy mà còn trang phía sau đang xoá chữ +
   OCR → chờ cho đủ lô (tránh vụn lô, giữ token ≈ dịch cả chương); hết trang chờ thì chạy lô thiếu. Nhờ vậy trang lô 1 `ready`
   (sửa được) khi lô sau còn chờ/chạy.
-- Claim xếp `priority, created_at` (số nhỏ chạy trước; job đang chạy không bị ngắt):
+- Claim xếp `priority`, rồi **số job đang chạy của chương**, rồi `created_at`, thứ tự trang (số nhỏ chạy trước; job
+  đang chạy không bị ngắt). Bảng priority:
 
   | priority | Job | Lý do |
   |---|---|---|
@@ -81,8 +83,24 @@ dịch active → không làm gì; gọi lặp / đồng thời vẫn ra đúng 
   | 100 (mặc định) | `page.prepare`, `chapter.ingest`, `chapter.proofread` | Backlog cả chương. Hiệu đính gọi LLM cả chương, chạy lâu → không ưu tiên kẻo chặn lô dịch. |
 
   Bấm xuất liên tục không làm đói lô dịch: idempotency key của export chặn job trùng khi nội dung không đổi.
-  Bản nhiều người dùng chưa chia lượt theo người: ai tạo hàng loạt export khác tuỳ chọn thì chen trước job của người
-  khác (trước đây hàng loạt job 100 cũng chặn job tạo sau). Chấp nhận ở bản hiện tại, self-host chỉ 1 người dùng.
+- **Chia lượt giữa các chương** (`pickClaimable` trong `apps/api/src/jobs/queue.ts`): cùng priority, worker rảnh nhận
+  job của chương đang có ít job chạy nhất; hoà thì chương tạo job trước, rồi trang đầu trước.
+  - Đếm job `running` còn lease của chương, mọi loại và mọi priority (lô dịch, export đang chạy cũng tính). Job đã hết
+    lease không tính.
+  - Số đếm chỉ xếp thứ tự, không chặn: chỉ còn một chương có job chờ thì mọi worker cùng làm chương đó.
+  - Kết quả: N worker → N chương chạy cùng lúc; chương thứ N+1 bắt đầu khi một chương đang chạy hết job chờ. Một
+    worker thì thường vẫn lần lượt từng chương (sau khi worker khởi động lại, job cũ còn lease tới ~150 s nên có thể
+    nhảy sang chương khác).
+  - Cái giá: khi có từ 2 chương chờ, chương tạo trước chỉ còn 1 worker thay vì cả N nên xong chậm hơn khoảng N lần
+    (Modal: theo số container). Tổng thời gian xong hết các chương không đổi.
+  - Priority 10 cũng chia lượt: tẩy lại trang của chương đang có job chạy có thể xếp sau export của chương khác, lệch
+    một job ngắn.
+  - Hai worker claim trong cùng vài chục ms có thể vào cùng một chương; lần claim kế tự cân lại.
+  - Tốc độ câu chọn job (thời gian thật, 6.000 job chờ / 96.000 trang): 8–14 ms, tới ~19 ms khi vừa có hạn mức người
+    dùng vừa có breaker đang bật; ở cỡ self-host (dưới 100 job chờ, không hạn mức) 0,2–0,3 ms. Câu này xếp mọi job
+    đang chờ nên thời gian tăng theo độ dài hàng đợi; hàng đợi lớn hơn nhiều thì cần index hoặc bảng đếm theo chương.
+- Bản nhiều người dùng chưa chia lượt theo người: ai tạo hàng loạt export khác tuỳ chọn thì chen trước job của người
+  khác, và trong cùng một chương job tạo trước vẫn chạy trước. Chấp nhận ở bản hiện tại, self-host chỉ 1 người dùng.
 - `payload.context`: `rolling` khi lô mở đầu chương và mọi trang hiện xen giữa/ngay sau lô còn trong lượt; còn lại
   `neighbors` (lúc claim dựng nguồn + bản dịch trang ngay trước, nguồn trang ngay sau — dịch lại trang lẻ vẫn lấy trang
   trước + sau). `payload.carry` = `result.carry` của lô thành công gần nhất trong lượt (xem dưới).

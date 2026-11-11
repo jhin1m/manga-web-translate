@@ -144,9 +144,12 @@ Postgres được ghim major 17; nâng lên major mới (18…) là thủ tục 
 ## Worker
 
 - Worker trong compose dùng provider `anthropic`; key lấy từ Cài đặt → Nhà cung cấp (lưu mã hoá trong DB).
-- **Mặc định 2 worker**: mỗi worker chạy 1 job một lúc, nên 2 job chạy song song. Job lấy theo thứ tự tạo, nên cả 2
-  worker cùng xoá chữ chương đến trước. Chương sau bắt đầu khi chương trước hết trang chờ xoá chữ, rồi chạy chồng với
-  phần dịch của chương trước. Xuất file, tẩy lại trang, OCR vùng được chạy trước, ngay khi một worker xong job đang chạy.
+- **Mặc định 2 worker**: mỗi worker chạy 1 job một lúc, nên 2 job chạy song song. Khi có nhiều chương cùng chờ,
+  2 worker chạy 2 chương cùng lúc, mỗi chương một worker; chương thứ 3 bắt đầu khi một trong hai chương hết trang chờ.
+  Chỉ một chương chờ thì cả 2 worker cùng làm chương đó. Đổi lại, khi nhiều chương cùng chờ thì chương tải lên trước
+  xong chậm hơn khoảng 2 lần so với lúc được cả 2 worker; tổng thời gian xong hết các chương không đổi. Xuất file, tẩy
+  lại trang, OCR vùng được chạy trước, ngay khi một worker xong job đang chạy.
+  - `MTL_WORKERS=1`: các chương thường chạy lần lượt, chương tải lên trước chạy trước.
   - Xoá chữ + OCR chạy bằng CPU, hai worker chia nhau số nhân (log in `threads=`). Nhanh hơn bao nhiêu thì tuỳ máy.
     Trên máy đo (arm64, 12 nhân) xoá chữ nhanh hơn ~2 lần so với 1 worker. Máy ít nhân thì tăng ít hơn.
   - RAM: mỗi worker nạp model riêng, đỉnh ~4,6 GB mỗi worker, cộng tới ~0,7 GB cho app + DB (đo trên arm64, 12 nhân;

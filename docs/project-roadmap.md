@@ -71,4 +71,4 @@ Mọi test tự động hiện dùng worker giả lập; chưa có số đo vớ
 - Free-tier Gemini hết hạn mức → job tự thử lại tới ~4 giờ trước khi báo lỗi.
 - Giá DeepSeek nhập theo giờ cao điểm (thấp điểm rẻ ½) → chi phí hệ thống ghi nhận ≥ thực tế. Ước tính hiệu đính lấy
   trung bình 20 lượt gần nhất, không tách theo model — vừa đổi model thì khoảng ước tính lệch tới khi có lượt mới.
-- Self-host nhận job theo thứ tự cũ nhất trước: chương kế tiếp chỉ bắt đầu khi chương trước hết job xoá chữ + OCR đang xếp hàng. Xuất file, tẩy lại trang, OCR vùng (priority 10) luôn chạy trước. Chi tiết: [job-queue-worker.md](./job-queue-worker.md).
+- Số chương chạy cùng lúc = số worker (self-host mặc định 2): chương kế tiếp chỉ bắt đầu khi một chương đang chạy hết job đang xếp hàng; 1 worker thì vẫn lần lượt từng chương. Khi nhiều chương cùng chờ, chương tạo trước xong chậm hơn khoảng N lần với N worker. Chưa chia lượt theo người dùng. Xuất file, tẩy lại trang, OCR vùng (priority 10) luôn chạy trước. Chi tiết: [job-queue-worker.md](./job-queue-worker.md).
