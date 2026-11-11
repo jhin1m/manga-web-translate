@@ -3,7 +3,7 @@
 **Date**: 2026-11-11
 **Severity**: Medium (không lỗi dữ liệu người dùng; review bắt được 1 High, 2 Medium, 1 deadlock trước khi commit)
 **Component**: worker (`mtl_pipeline`, `mtl_worker`), API (`lib/series-memory.ts`, `jobs/translate-chain.ts`), web (`features/series`, `features/glossary`), DB (bảng `series_suggestions`, cột `chapters.translate_memory`)
-**Status**: Xong, chưa commit. Gate xanh trừ e2e 100/101 (`block-panel.spec.ts:317`, lỗi có sẵn trên HEAD sạch)
+**Status**: Phát hành trong `v0.2.0` (2026-11-11, commit `508a3b9`). Gate xanh trừ e2e 100/101 (`block-panel.spec.ts:317`, lỗi có sẵn trên HEAD sạch)
 
 ## Đã làm gì
 
@@ -47,7 +47,7 @@ Khác (Medium/Low đã sửa): nút Nhận/Bỏ bấm đôi nhận 409, mất fo
 
 ## Việc còn lại và giới hạn
 
-- **Quyết định cần chủ dự án:** giữ 5/3/300 hay quay về 8/5/500? Cần lần chạy thứ 3 để tách phương sai khỏi hiệu ứng. Docs phải khớp giá trị cuối.
+- Đã chốt 5/3/300 cho `v0.2.0` (smoke lần 1 vượt ngưỡng token). Theo dõi số gợi ý xưng hô khi dùng thật; gần 0 thì nâng lại giới hạn xưng hô.
 - Dữ liệu smoke còn trong DB dev (2 series, 4 chương): xoá tay.
 - Lượt chạy tiếp sau khi dừng vì hạn mức không ghi trí nhớ (giới hạn đã biết).
 - Watermark/tên nhóm scan lọt vào `new_terms`; chỉ bộ lọc bản dịch trùng nguyên văn chặn được. Prompt loại trừ không hiệu quả.
@@ -55,7 +55,7 @@ Khác (Medium/Low đã sửa): nút Nhận/Bỏ bấm đôi nhận 409, mất fo
 - Gợi ý không lưu cặp ngôn ngữ; đổi ngôn ngữ đích thì gợi ý cũ vẫn hiện. Cần quyết định sản phẩm.
 - Mỗi lần OCR vùng bằng LLM trả thêm 2 mảng rồi bỏ: tốn token nhẹ.
 - Sửa hoặc cô lập `block-panel.spec.ts:317` ở một thay đổi riêng, bisect về `7e0ed9e`.
-- Chưa commit; các file chương của plan khác vẫn chưa commit cùng cây.
+- Phát hành: `v0.2.0-rc.1` qua `infra/selfhost-smoke.sh` và thử nâng cấp 0.1.0 → rc (dữ liệu giữ nguyên, backup trước migrate, worker không 426); `v0.2.0` gắn đúng commit đã thử. Chưa thử image amd64 và đường dịch AI trên image (đã smoke LLM thật trên máy dev cùng code).
 
 Status: DONE_WITH_CONCERNS
 Summary: /Users/jhin1m/Desktop/ducanh-project/manga-web-translate/docs/journals/261111-series-memory-suggestions.md
