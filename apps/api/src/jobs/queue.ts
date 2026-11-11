@@ -5,6 +5,8 @@
  *   không ghi gì;
  * - `attempt` trên dây = attempts + provider_retries (thứ tự claim, tăng đơn điệu) → ledger không trùng
  *   (job, attempt) giữa các lần claim kể cả khi lỗi provider hoàn lại lượt attempt.
+ * Thứ tự claim: priority, rồi chương đang có ít job chạy nhất (N worker → N chương cùng lúc), rồi thứ tự tạo và thứ
+ * tự trang — xem `pickClaimable`.
  * Muốn chuyển sang pg-boss: chỉ thay file này, giữ API worker.
  */
 import { randomBytes } from "node:crypto";
@@ -26,7 +28,8 @@ import {
   LLM_JOB_TYPES,
   storageKeys,
 } from "@mtl/shared";
-import { and, asc, eq, gt, inArray, lte, ne, not, sql } from "drizzle-orm";
+import { and, asc, eq, gt, inArray, isNotNull, lte, ne, not, sql } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 import type { z } from "zod";
 import { LlmConfigError, resolveLlmConfigs } from "../ai/llm-config.ts";
 import { budgetStatus, pauseQueuedPaidJobs } from "../billing/budget.ts";
@@ -87,6 +90,63 @@ export type ClaimedJobOut = {
   llm?: LlmConfigs;
 };
 
+/**
+ * Câu chọn job cho một lượt claim (khoá dòng job, bỏ dòng worker khác đang giữ).
+ *
+ * Thứ tự: priority → số job đang chạy của chương → created_at → thứ tự trang → id. Khoá thứ hai chia worker giữa
+ * các chương: worker rảnh nhận job của chương đang có ít job chạy nhất, nên N worker chạy N chương cùng lúc thay vì
+ * dồn hết vào chương tạo trước. Nó chỉ xếp thứ tự, không loại job nào: chương duy nhất còn job chờ vẫn được mọi worker
+ * cùng làm.
+ */
+export function pickClaimable(
+  t: DbLike,
+  o: { kind: WorkerIdentity["kind"]; caps: Job["type"][]; blockLlm: boolean; paused: string[]; max: number },
+) {
+  // Chương đang giữ worker: đếm job `running` còn lease, mọi loại và mọi priority (lô dịch hay export đang chạy cũng
+  // chiếm một worker). Job hết lease (worker chết, reaper chưa quét) không tính, để chương đó không bị xếp sau oan.
+  // GROUP BY phải nằm trong bảng dẫn xuất: Postgres cấm FOR UPDATE ở tầng query có GROUP BY, và `of: jobs` bên dưới
+  // giữ cho khoá chỉ đặt lên dòng job chứ không lên bảng dẫn xuất này.
+  const running = alias(jobs, "running_jobs");
+  const busy = t
+    // Drizzle tham chiếu cột này không kèm tên bảng → tên phải khác mọi cột của `jobs` / `pages`.
+    .select({ chapterId: running.chapterId, n: sql<number>`count(*)::int`.as("busy_n") })
+    .from(running)
+    .where(and(eq(running.status, "running"), gt(running.leaseExpiresAt, sql`now()`), isNotNull(running.chapterId)))
+    .groupBy(running.chapterId)
+    .as("busy");
+  // Worker chung toàn hệ thống: mọi token claim job mọi người dùng. Modal (tốn GPU) không nhận job nào của người
+  // vượt hạn mức — job không-LLM của họ chỉ chạy trên Mac ($0) hoặc chờ sang ngày.
+  return (
+    t
+      .select({ id: jobs.id })
+      .from(jobs)
+      // Job cùng created_at (ingest tạo cả loạt page.prepare trong một transaction) → page đầu chương claim trước.
+      // Job không gắn page: ord NULL, xếp sau trong nhóm hoà.
+      .leftJoin(pages, eq(pages.id, jobs.pageId))
+      // Job không gắn chương không khớp dòng nào → coi như chương không có job chạy.
+      .leftJoin(busy, eq(busy.chapterId, jobs.chapterId))
+      .where(
+        and(
+          eq(jobs.status, "queued"),
+          lte(jobs.runAfter, sql`now()`),
+          inArray(jobs.type, o.caps),
+          o.blockLlm ? not(llmJobSql) : undefined,
+          o.paused.length ? not(breakerBlockedSql(o.paused)) : undefined,
+          claimableSql(o.kind),
+        ),
+      )
+      .orderBy(
+        asc(jobs.priority),
+        sql`coalesce(${busy.n}, 0)`,
+        asc(jobs.createdAt),
+        sql`${pages.ord} asc nulls last`,
+        asc(jobs.id),
+      )
+      .limit(o.max)
+      .for("update", { of: jobs, skipLocked: true })
+  );
+}
+
 export async function claim(w: WorkerIdentity, req: z.infer<typeof ClaimRequest>): Promise<ClaimedJobOut[]> {
   if (compareVersion(req.pipeline_version, env.MIN_PIPELINE_VERSION) < 0) {
     throw new JobHttpError(426, "pipeline_too_old", `pipeline_version < ${env.MIN_PIPELINE_VERSION}`);
@@ -109,27 +169,7 @@ export async function claim(w: WorkerIdentity, req: z.infer<typeof ClaimRequest>
     await failOverQuotaQueued(t);
     // Claim kèm dispatch_id (container Modal) → dispatch active; id lạ / token không phải Modal → bỏ qua.
     const dispatchId = w.kind !== "modal" || !req.dispatch_id ? null : await markDispatchClaimed(t, req.dispatch_id);
-    // Worker chung toàn hệ thống: mọi token claim job mọi người dùng. Modal (tốn GPU) không nhận job nào của người
-    // vượt hạn mức — job không-LLM của họ chỉ chạy trên Mac ($0) hoặc chờ sang ngày.
-    const picked = await t
-      .select({ id: jobs.id })
-      .from(jobs)
-      // Job cùng created_at (ingest tạo cả loạt page.prepare trong một transaction) → page đầu chương claim trước.
-      // Job không gắn page: ord NULL, xếp sau trong nhóm hoà.
-      .leftJoin(pages, eq(pages.id, jobs.pageId))
-      .where(
-        and(
-          eq(jobs.status, "queued"),
-          lte(jobs.runAfter, sql`now()`),
-          inArray(jobs.type, caps),
-          blockLlm ? not(llmJobSql) : undefined,
-          paused.length ? not(breakerBlockedSql(paused)) : undefined,
-          claimableSql(w.kind),
-        ),
-      )
-      .orderBy(asc(jobs.priority), asc(jobs.createdAt), sql`${pages.ord} asc nulls last`, asc(jobs.id))
-      .limit(req.max)
-      .for("update", { of: jobs, skipLocked: true });
+    const picked = await pickClaimable(t, { kind: w.kind, caps, blockLlm, paused, max: req.max });
 
     const out: ClaimedJobOut[] = [];
     for (const { id } of picked) {

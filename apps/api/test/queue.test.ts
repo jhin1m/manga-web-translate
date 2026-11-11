@@ -1,4 +1,7 @@
-/** Hàng đợi: idempotency, claim song song không trùng, worker chung mọi người dùng, lọc capability / pipeline_version. */
+/**
+ * Hàng đợi: idempotency, claim song song không trùng, thứ tự claim (priority, chia lượt giữa các chương, thứ tự trang),
+ * worker chung mọi người dùng, lọc capability / pipeline_version.
+ */
 import { chapters, jobs, pages, scoped, series } from "@mtl/db";
 import { type JobPayload, pageId } from "@mtl/shared";
 import { and, eq } from "drizzle-orm";
@@ -53,6 +56,62 @@ async function seedPage(seed: Seed) {
     originalSha256: SHA,
   });
 }
+
+/** Chương mới của `userId` (bộ riêng) — mỗi ca chia lượt cần nhiều chương của cùng một người. */
+async function newChapter(userId: string, label: string) {
+  const sdb = scoped(db, userId);
+  const s = await sdb.insert(series, { title: `Series ${label}` });
+  return (await sdb.insert(chapters, { seriesId: s.id, number: "1" })).id;
+}
+
+/** Trang `ord` của chương + job page.prepare đang chờ cho trang đó. */
+async function prepareJob(
+  userId: string,
+  chapterId: string,
+  ord: number,
+  opts: { createdAt?: Date; priority?: number } = {},
+) {
+  const id = pageId(chapterId, 1, ord);
+  await scoped(db, userId).insert(pages, {
+    id,
+    chapterId,
+    ord,
+    width: 100,
+    height: 100,
+    originalKey: `u/${userId}/ch/${chapterId}/ingest/1/${ord}.png`,
+    originalSha256: SHA,
+  });
+  const [row] = await db
+    .insert(jobs)
+    .values({
+      userId,
+      type: "page.prepare",
+      // Chỉ page_id được claim đọc; phần còn lại của payload không ảnh hưởng thứ tự.
+      payload: { type: "page.prepare", page_id: id } as unknown as JobPayload,
+      inputRev: "r",
+      idempotencyKey: uuidv7(),
+      chapterId,
+      pageId: id,
+      ...opts,
+    })
+    .returning({ id: jobs.id });
+  return row?.id as string;
+}
+
+/**
+ * Chương có `n` trang, mỗi trang một job page.prepare cùng `createdAt` (như ingest tạo cả loạt trong một transaction).
+ * `createdAt` đặt tường minh: hai chương phải cách nhau rõ ràng, không rơi xuống so `id`.
+ */
+async function chapterWithPrepare(userId: string, label: string, n: number, createdAt: Date) {
+  const chapterId = await newChapter(userId, label);
+  const jobIds: string[] = [];
+  for (let ord = 0; ord < n; ord++) jobIds.push(await prepareJob(userId, chapterId, ord, { createdAt }));
+  return { chapterId, jobIds };
+}
+
+const ago = (s: number) => new Date(Date.now() - s * 1000);
+const finish = (id: string) => db.update(jobs).set({ status: "succeeded" }).where(eq(jobs.id, id));
+const claimOne = async (token: string, caps = ["page.prepare"]) => (await claimJobs(token, { caps, max: 1 }))[0]?.id;
 
 beforeAll(async () => {
   [A, B] = await Promise.all([seedUser("qa"), seedUser("qb")]);
@@ -183,6 +242,137 @@ describe("claim", () => {
     }
     expect(order).toEqual([ex.id, batch, ...backlog]);
   });
+
+  it("shares claims between chapters: the later chapter starts on the second claim, pages stay in order", async () => {
+    const U = await seedUser("qshare");
+    const a = await chapterWithPrepare(U.userId, "share-a", 20, ago(120));
+    const b = await chapterWithPrepare(U.userId, "share-b", 5, ago(60));
+    const mac = (await workerToken("mac", "w-share")).token;
+    // Không job nào kết thúc: mỗi lượt claim làm chương đó "bận" thêm một job.
+    const order: (string | undefined)[] = [];
+    for (let i = 0; i < 25; i++) order.push(await claimOne(mac));
+    const turns = [0, 1, 2, 3, 4].flatMap((i) => [a.jobIds[i], b.jobIds[i]]);
+    expect(order).toEqual([...turns, ...a.jobIds.slice(5)]);
+    expect(await claimOne(mac)).toBeUndefined();
+  });
+
+  it("two workers each stay on their own chapter until the shorter one runs out", async () => {
+    const U = await seedUser("qtwo");
+    const a = await chapterWithPrepare(U.userId, "two-a", 20, ago(120));
+    const b = await chapterWithPrepare(U.userId, "two-b", 5, ago(60));
+    const w1 = (await workerToken("mac", "w-two-1")).token;
+    const w2 = (await workerToken("mac", "w-two-2")).token;
+    const got: Record<string, string[]> = { [w1]: [], [w2]: [] };
+    const holding: Record<string, string | undefined> = {};
+    // Mỗi worker: xong job đang giữ rồi mới claim tiếp, hai worker luân phiên.
+    for (let round = 0; round < 14; round++) {
+      for (const w of [w1, w2]) {
+        if (holding[w]) await finish(holding[w]);
+        holding[w] = await claimOne(w);
+        if (holding[w]) got[w]?.push(holding[w]);
+      }
+    }
+    expect(got[w1]).toHaveLength(13);
+    expect(got[w1]?.every((id) => a.jobIds.includes(id))).toBe(true);
+    expect(got[w2]?.slice(0, 5)).toEqual(b.jobIds);
+    expect(got[w2]?.slice(5).every((id) => a.jobIds.includes(id))).toBe(true);
+    // Cả hai worker gộp lại: đủ 20 trang của chương dài, đúng thứ tự trang.
+    const claimedAt = await db
+      .select({ id: jobs.id })
+      .from(jobs)
+      .where(eq(jobs.chapterId, a.chapterId))
+      .orderBy(jobs.claimedAt);
+    expect(claimedAt.map((r) => r.id)).toEqual(a.jobIds);
+  });
+
+  it("priority still comes first: an urgent job of a busy chapter beats a normal job of an idle one", async () => {
+    const U = await seedUser("qbusyprio");
+    const a = await chapterWithPrepare(U.userId, "prio-a", 1, ago(120));
+    const mac = (await workerToken("mac", "w-busyprio")).token;
+    expect(await claimOne(mac)).toBe(a.jobIds[0]);
+    const idle = await chapterWithPrepare(U.userId, "prio-b", 1, ago(60));
+    const urgent = await prepareJob(U.userId, a.chapterId, 1, { priority: CHAIN_PRIORITY });
+    expect(await claimOne(mac)).toBe(urgent);
+    expect(await claimOne(mac)).toBe(idle.jobIds[0]);
+  });
+
+  it("a running job whose lease expired does not make its chapter wait", async () => {
+    const U = await seedUser("qlease");
+    const a = await chapterWithPrepare(U.userId, "lease-a", 2, ago(120));
+    const b = await chapterWithPrepare(U.userId, "lease-b", 1, ago(60));
+    const mac = (await workerToken("mac", "w-lease")).token;
+    expect(await claimOne(mac)).toBe(a.jobIds[0]);
+    await expireLease(a.jobIds[0] as string);
+    expect(await claimOne(mac)).toBe(a.jobIds[1]);
+    expect(await claimOne(mac)).toBe(b.jobIds[0]);
+  });
+
+  it("a running job of any type and priority counts: a chapter mid-translation waits behind an idle chapter", async () => {
+    const U = await seedUser("qanytype");
+    const a = await chapterWithPrepare(U.userId, "any-a", 1, ago(120));
+    const b = await chapterWithPrepare(U.userId, "any-b", 1, ago(60));
+    const mac = await workerToken("mac", "w-anytype");
+    await db.insert(jobs).values({
+      userId: U.userId,
+      type: "chapter.translate",
+      status: "running",
+      priority: CHAIN_PRIORITY,
+      payload: { type: "chapter.translate", chapter_id: a.chapterId, page_ids: [] } as unknown as JobPayload,
+      inputRev: "r",
+      idempotencyKey: uuidv7(),
+      chapterId: a.chapterId,
+      leaseOwner: mac.id,
+      leaseExpiresAt: new Date(Date.now() + 120_000),
+    });
+    expect(await claimOne(mac.token)).toBe(b.jobIds[0]);
+    expect(await claimOne(mac.token)).toBe(a.jobIds[0]);
+  });
+
+  it("a job without a chapter is ordered like an idle chapter", async () => {
+    const U = await seedUser("qnochapter");
+    const a = await chapterWithPrepare(U.userId, "nochapter-a", 2, ago(120));
+    const mac = (await workerToken("mac", "w-nochapter")).token;
+    expect(await claimOne(mac)).toBe(a.jobIds[0]);
+    // Cột chapter_id để trống (payload vẫn trỏ chương có trang để dựng được input), tạo sau job còn chờ của chương.
+    const [loose] = await db
+      .insert(jobs)
+      .values({
+        userId: U.userId,
+        type: "chapter.export",
+        payload: exportPayload(a.chapterId),
+        inputRev: "r",
+        idempotencyKey: uuidv7(),
+        chapterId: null,
+      })
+      .returning({ id: jobs.id });
+    const caps = ["page.prepare", "chapter.export"];
+    expect(await claimOne(mac, caps)).toBe(loose?.id);
+    expect(await claimOne(mac, caps)).toBe(a.jobIds[1]);
+  });
+
+  it("4 concurrent claimers over 6 chapters get every job exactly once", async () => {
+    const U = await seedUser("qmany");
+    const all: string[] = [];
+    for (let c = 0; c < 6; c++) {
+      all.push(...(await chapterWithPrepare(U.userId, `many-${c}`, 20, ago(600 - c * 60))).jobIds);
+    }
+    const t1 = (await workerToken("mac", "w-many-1")).token;
+    const t2 = (await workerToken("mac", "w-many-2")).token;
+    const seen: string[] = [];
+    // claimJobs ném lỗi khi response khác 200 → một request lỗi (deadlock, 500) làm ca này đỏ.
+    const drain = async (tk: string) => {
+      for (;;) {
+        const id = await claimOne(tk);
+        if (!id) return;
+        seen.push(id);
+      }
+    };
+    // Không kiểm phân bố theo chương: hai claim trùng thời điểm được phép vào cùng một chương.
+    await Promise.all([drain(t1), drain(t2), drain(t1), drain(t2)]);
+    expect(seen).toHaveLength(120);
+    expect(new Set(seen).size).toBe(120);
+    expect([...seen].sort()).toEqual([...all].sort());
+  }, 120_000);
 
   it("mac and modal tokens both claim jobs of every user (shared workers)", async () => {
     const mac = (await workerToken("mac", "mac-any")).token;
