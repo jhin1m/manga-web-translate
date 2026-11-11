@@ -79,6 +79,11 @@ export type FakeWorkerOptions = {
   pagesPerSource?: number;
   /** Loại job nhận (mặc định tất cả) — VD chỉ ingest + prepare để giữ chương ở "processing". */
   capabilities?: string[];
+  /** Thuật ngữ / cặp xưng hô "học được" gắn vào kết quả dịch — chỉ gắn khi truyền, spec khác không đổi. */
+  learned?: {
+    new_terms?: { source: string; target: string; kind: "person" | "place" | "term" }[];
+    pronoun_pairs?: { speaker: string; listener: string; address: string }[];
+  };
 };
 
 const ALL_CAPABILITIES = ["chapter.ingest", "page.prepare", "chapter.translate", "chapter.export"];
@@ -118,6 +123,7 @@ async function handle(token: string, j: Claimed, opts: FakeWorkerOptions) {
     return complete(token, j, {
       type: "chapter.translate",
       pages: pages.map((p) => ({ page_id: p.page_id, ai_state: aiState(p.width, p.height) })),
+      ...(opts.learned ?? {}),
     });
   }
   if (j.type === "chapter.export") {

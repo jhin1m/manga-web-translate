@@ -5,7 +5,11 @@ const oneLine = (s: string) => s.replace(/\s+/g, " ").trim();
 
 export const styleSummary = (prompt: string) => oneLine(prompt) || "Chưa đặt";
 
-export const rulesSummary = (rules: readonly PronounRule[]) => (rules.length ? `${rules.length} quy tắc` : "Chưa có");
+/** `pending` = số gợi ý xưng hô AI chưa nhận / bỏ; 0 thì giữ chuỗi cũ. */
+export const rulesSummary = (rules: readonly PronounRule[], pending = 0) => {
+  const base = rules.length ? `${rules.length} quy tắc` : "Chưa có";
+  return pending > 0 ? `${base} · ${pending} gợi ý` : base;
+};
 
 export const countSummary = (n: number, unit: string) => (n ? `${n} ${unit}` : "Chưa có");
 

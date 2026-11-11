@@ -1,4 +1,5 @@
 /** Kiểu + query của series (khớp apps/api/src/routes/series.ts). */
+import type { TermKind } from "@mtl/shared";
 import type { PageFormat, SourceLang, TargetLang } from "@mtl/shared/series-lang";
 import { api } from "../../lib/api.ts";
 
@@ -67,6 +68,7 @@ export const seriesKeys = {
   detail: (id: string) => ["series", id] as const,
   recent: () => ["series", "recent-chapters"] as const,
   skipImages: (id: string) => ["series", id, "skip-images"] as const,
+  suggestions: (id: string) => ["series", id, "suggestions"] as const,
 };
 
 export const fetchSeriesList = () => api<{ series: SeriesListItem[] }>("/api/series");
@@ -121,6 +123,30 @@ export const applyIgnoreApply = (seriesId: string, versions: Record<string, numb
   api<IgnoreApplied>(ignoreApply(seriesId, "apply"), { method: "POST", body: { versions } });
 export const undoIgnoreApply = (seriesId: string, batchId: string) =>
   api<IgnoreUndone>(ignoreApply(seriesId, "undo"), { method: "POST", body: { batch_id: batchId } });
+
+/** Gợi ý AI học được khi dịch (server đã ẩn mục đã bỏ và mục glossary / quy tắc xưng hô đã có). */
+export type TermSuggestion = {
+  id: string;
+  source: string;
+  target: string;
+  kind: TermKind;
+  chapter_number: string | null;
+  created_at: string;
+};
+export type PronounSuggestion = {
+  id: string;
+  speaker: string;
+  listener: string;
+  address: string;
+  chapter_number: string | null;
+  created_at: string;
+};
+export type SeriesSuggestions = { terms: TermSuggestion[]; pronouns: PronounSuggestion[] };
+
+export const fetchSuggestions = (seriesId: string) => api<SeriesSuggestions>(`/api/series/${seriesId}/suggestions`);
+/** Bỏ (dismissed = true) một gợi ý để không hiện lại; false = khôi phục. */
+export const dismissSuggestion = (id: string, dismissed = true) =>
+  api<{ id: string; dismissed: boolean }>(`/api/series-suggestions/${id}`, { method: "PATCH", body: { dismissed } });
 
 /** Số chương gợi ý cho lần upload tiếp theo: lớn nhất + 1. */
 export function nextChapterNumber(chapters: Pick<ChapterSummary, "number">[]): string {

@@ -24,6 +24,19 @@ describe("firstMissingRuleField", () => {
   });
 });
 
+describe("rulesSummary", () => {
+  it("keeps the old text without pending suggestions", () => {
+    expect(rulesSummary([rule(), rule()])).toBe("2 quy tắc");
+    expect(rulesSummary([])).toBe("Chưa có");
+    expect(rulesSummary([rule()], 0)).toBe("1 quy tắc");
+  });
+
+  it("appends the pending suggestion count", () => {
+    expect(rulesSummary([rule(), rule()], 1)).toBe("2 quy tắc · 1 gợi ý");
+    expect(rulesSummary([], 3)).toBe("Chưa có · 3 gợi ý");
+  });
+});
+
 describe("summaries", () => {
   it("collapses whitespace in the style prompt and falls back when empty", () => {
     expect(styleSummary("  giọng trẻ,\n đời thường ")).toBe("giọng trẻ, đời thường");

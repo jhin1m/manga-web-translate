@@ -35,13 +35,21 @@ export async function translateIfPrepared(page: Page, chapterId: string, status:
   expect(r.status()).toBe(202);
 }
 
-/** Chương 1 ảnh nguồn tạo + upload + bước 1 (commit) qua API rồi chạy worker giả (+ bước 2) tới khi mọi page "ready". */
-export async function apiReadyChapter(page: Page, number: string, opts: FakeWorkerOptions = {}) {
+/**
+ * Chương 1 ảnh nguồn tạo + upload + bước 1 (commit) qua API rồi chạy worker giả (+ bước 2) tới khi mọi page "ready".
+ * Mặc định vào series seed; truyền `seriesId` để tạo trong series riêng của spec.
+ */
+export async function apiReadyChapter(
+  page: Page,
+  number: string,
+  opts: FakeWorkerOptions = {},
+  seriesId: string = state.seriesId,
+) {
   const headers = { origin: WEB_URL };
   const created = await page.request.post(`/api/chapters`, {
     headers,
     data: {
-      series_id: state.seriesId,
+      series_id: seriesId,
       number,
       files: [{ name: "1.png", content_type: "image/png", bytes: PNG_1PX.length }],
     },

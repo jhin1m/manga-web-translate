@@ -28,6 +28,7 @@ import {
   deleteSeries,
   type FontSlot,
   fetchSkipImages,
+  fetchSuggestions,
   type PronounRule,
   patchSeries,
   type Series,
@@ -47,8 +48,10 @@ import {
   SOURCE_LANGS,
   TARGET_LANGS,
 } from "./lang-labels.ts";
+import { PronounSuggestions } from "./pronoun-suggestions.tsx";
 import { countSummary, firstMissingRuleField, rulesSummary, styleSummary } from "./settings-summary.ts";
 import { SkipImagesSection } from "./skip-images-section.tsx";
+import { pendingPronouns, ruleFromSuggestion } from "./suggestions.ts";
 
 // Không có ô SFX: SFX giữ nguyên chữ gốc (không dịch / đặt chữ). Khoá `sfx` đã lưu vẫn được giữ khi lưu form.
 const OTHER_FONT_SLOTS: { slot: FontSlot; label: string; empty: string }[] = [
@@ -158,6 +161,12 @@ export function SeriesSettingsDialog({
     queryFn: () => fetchSkipImages(series.id),
     staleTime: 10 * 60_000,
   });
+  const suggestions = useQuery({
+    queryKey: seriesKeys.suggestions(series.id),
+    queryFn: () => fetchSuggestions(series.id),
+  });
+  // Gợi ý xưng hô chưa có trong bảng đang sửa (kể cả hàng chưa Lưu).
+  const pendingHints = pendingPronouns(suggestions.data?.pronouns ?? [], f.pronoun_rules);
   const langWarning = langChangeWarning(series, f, glossary.data?.entries.length);
 
   // Nhóm nào đang mở; lỗi nhập → mở nhóm chứa lỗi rồi focus đúng trường (effect chạy sau khi <details> đã mở).
@@ -436,7 +445,7 @@ export function SeriesSettingsDialog({
 
             <Fold
               title="Xưng hô"
-              summary={rulesInvalid ? "Thiếu thông tin" : rulesSummary(f.pronoun_rules)}
+              summary={rulesInvalid ? "Thiếu thông tin" : rulesSummary(f.pronoun_rules, pendingHints.length)}
               invalid={rulesInvalid}
               open={open.pronouns}
               onOpen={setGroup("pronouns")}
@@ -523,6 +532,12 @@ export function SeriesSettingsDialog({
                   + Thêm quy tắc
                 </button>
               </div>
+              <PronounSuggestions
+                seriesId={series.id}
+                items={pendingHints}
+                rules={f.pronoun_rules}
+                onAccept={(s) => set("pronoun_rules", [...f.pronoun_rules, ruleFromSuggestion(s)])}
+              />
             </Fold>
 
             <Fold title="Font khác" summary={fontsSummary} open={open.fonts} onOpen={setGroup("fonts")}>

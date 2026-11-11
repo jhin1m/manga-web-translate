@@ -329,6 +329,19 @@ label.file-pick input {
   border: 1px solid var(--c-line-strong);
   color: var(--c-fg);
 }
+/* Badge số gợi ý ở góc trên icon Cài đặt dịch. */
+.series-head .icon-btn {
+  position: relative;
+}
+.series-head .icon-btn .count-badge {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  min-width: 16px;
+  margin: 0;
+  padding: 0 4px;
+  line-height: 16px;
+}
 .series-head > a[aria-label="Về trang chủ"] {
   border-color: transparent;
 }
@@ -459,6 +472,25 @@ label.file-pick input {
 }
 .add-rule {
   margin-top: var(--sp-3);
+}
+/* Gợi ý AI (glossary / xưng hô): tiêu đề nhỏ, bảng sát dưới, chữ phụ mờ. */
+.ai-suggestions {
+  margin: var(--sp-3) 0;
+}
+.ai-suggestions-title {
+  font-weight: 600;
+  color: var(--c-fg);
+}
+.ai-suggestions table.data {
+  margin-top: var(--sp-1);
+}
+/* Từ gốc không bẻ từng âm tiết khi hẹp; các cột còn lại tự xuống dòng. */
+.ai-suggestions td.ai-src {
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
+.ai-suggestions > p {
+  margin: var(--sp-1) 0 0;
 }
 /* 4 ô chọn → 2×2 trên màn rộng, 1 cột trên điện thoại. */
 .grid-pairs {
