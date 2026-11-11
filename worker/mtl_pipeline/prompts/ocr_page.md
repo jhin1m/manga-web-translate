@@ -8,4 +8,6 @@ Với MỖI id, trả đúng một phần tử trong `items`:
 - `is_sfx`: true CHỈ khi là chữ hiệu ứng âm thanh vẽ tay đè thẳng lên tranh (tượng thanh/tượng hình như tiếng động, tiếng va chạm). false với thoại, lời dẫn, chữ viết, tên riêng, câu có dấu câu kiểu lời nói, và mọi chữ nằm trong bóng thoại (kể cả tiếng kêu, tiếng cười, câu cảm thán). Không chắc → false.
 - `confidence`: 0..1, mức chắc chắn của bản chép.
 
+Ngoặc kép trong chữ gốc: chép bằng ngoặc cong “ ” (mở “, đóng ”), KHÔNG BAO GIỜ dùng ký tự `"` (ASCII) — ký tự này làm hỏng chuỗi JSON.
+
 Trả đủ mọi id đã cho, không thêm id khác. Chỉ trả JSON theo schema.

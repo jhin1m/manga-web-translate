@@ -16,4 +16,6 @@ Yêu cầu:
 - Bản dịch ngắn gọn vừa bóng thoại; giữ "…", "!", "?" theo nguồn.
 - `context_notes`: tóm tắt ngắn (≤ 300 ký tự) nhân vật mới, xưng hô đã chốt, điều cần nhớ cho lô sau.
 
+Ngoặc kép trong mọi trường: viết bằng ngoặc cong “ ” (mở “, đóng ”), KHÔNG BAO GIỜ dùng ký tự `"` (ASCII) — ký tự này làm hỏng chuỗi JSON.
+
 Chỉ trả JSON theo schema.

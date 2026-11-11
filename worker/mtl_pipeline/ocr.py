@@ -61,6 +61,40 @@ def validate_ids(expected: list[str], items: list[OcrItem]) -> tuple[list[OcrIte
     return out, ok
 
 
+def is_blank(it: OcrItem) -> bool:
+    """LLM nói crop có chữ (`empty=false`) mà không chép ra gì: kết quả tự mâu thuẫn, không phải vùng không chữ.
+    Gặp khi structured output cắt chuỗi — chữ mở đầu bằng `"` (ASCII) thành `source=""`."""
+    return not it.empty and not it.source.strip()
+
+
+def reread_blank(
+    provider: LLMProvider, req: OcrRequest, items: list[OcrItem], usage: list[TokenUsage]
+) -> list[OcrItem]:
+    """Gửi lại riêng crop của item trống-mâu-thuẫn 1 lần. Vẫn trống hoặc lỗi → low_conf: khối hiện cờ cần soát, không
+    lặng lẽ thành SFX (giữ ảnh gốc, không dịch, ẩn khỏi lọc "cần xem"). Item đã low_conf (id lệch) không đọc lại —
+    người sửa đã thấy."""
+    ids = {it.id for it in items if is_blank(it) and not it.low_conf}
+    if not ids:
+        return items
+    again: dict[str, OcrItem] = {}
+    try:
+        res = provider.ocr_page(req.model_copy(update={"crops": [c for c in req.crops if c.id in ids]}))
+        usage.extend(res.usage)
+        for it in res.items:
+            if it.id in ids:
+                again.setdefault(it.id, it)
+    except ProviderError as e:
+        # Trang đã có kết quả dùng được: lỗi lần đọc lại không đánh hỏng cả job, chỉ để khối đó cần soát.
+        usage.extend(e.usage)
+    out: list[OcrItem] = []
+    for it in items:
+        if it.id in ids:
+            new = again.get(it.id)
+            it = new if new is not None and not is_blank(new) else it.model_copy(update={"low_conf": True})
+        out.append(it)
+    return out
+
+
 def keep_regions_without_text(regions: list[Region], result: OcrResult) -> OcrResult:
     """Vùng không có chữ/số (`...!`, `♥`, OCR rỗng) giữ nguyên ảnh gốc: đánh is_sfx để `restore_sfx` trả pixel và
     bước dịch bỏ qua. Chỉ dùng ở luồng prepare: vùng người dùng tự vẽ (`page.ocr_region`) vẫn được coi là chữ."""
@@ -77,7 +111,8 @@ def keep_regions_without_text(regions: list[Region], result: OcrResult) -> OcrRe
 def ocr_page(
     provider: LLMProvider, img: np.ndarray, regions: list[Region], page_ord: int, source_lang: str = "ko"
 ) -> OcrResult:
-    """Chép chữ mọi vùng chữ của trang trong 1 call; thiếu/thừa id → retry 1 lần rồi đánh low_conf."""
+    """Chép chữ mọi vùng chữ của trang trong 1 call; thiếu/thừa id → retry 1 lần rồi đánh low_conf; item trống mà
+    không `empty` → đọc lại riêng crop đó (`reread_blank`)."""
     local_empty: list[OcrItem] = []
     crops: list[OcrCrop] = []
     for r in text_regions(regions):
@@ -114,6 +149,7 @@ def ocr_page(
     if not ok:
         # Hết lượt retry mà id vẫn lệch → cả trang đánh low_conf để người sửa soát lại.
         items = [it.model_copy(update={"low_conf": True}) for it in items]
+    items = reread_blank(provider, req, items, usage)
 
     by_region = {r.id: r for r in regions}
     for i, it in enumerate(items):

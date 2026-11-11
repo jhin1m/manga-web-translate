@@ -12,9 +12,9 @@ import numpy as np
 import pytest
 from google.genai import errors
 
-from mtl_pipeline.ocr import ocr_page
+from mtl_pipeline.ocr import keep_regions_without_text, ocr_page
 from mtl_pipeline.providers.anthropic import AnthropicProvider
-from mtl_pipeline.providers.base import OCR_SCHEMA, TRANSLATE_SCHEMA, ProviderError, cost_usd
+from mtl_pipeline.providers.base import OCR_SCHEMA, TRANSLATE_SCHEMA, ProviderError, cost_usd, load_prompt
 from mtl_pipeline.providers.gemini import GeminiProvider, thinking_config
 from mtl_pipeline.schema import (
     BBox,
@@ -38,6 +38,7 @@ from mtl_pipeline.translate import (
     translate_chapter,
     update_context,
 )
+from mtl_worker import handlers
 
 OCR_JSON = {"items": [{"id": "r1", "source": "안녕", "is_sfx": False, "empty": False, "confidence": 0.9}]}
 TR_JSON = {
@@ -290,6 +291,76 @@ def test_ocr_marks_sfx_only_outside_bubbles():
     # LLM gắn SFX cho cả hai: chữ trong bóng vẫn là thoại (xoá + dịch), chữ tự do giữ SFX.
     assert not regions[1].is_sfx and regions[2].is_sfx
     assert [(i.id, i.is_sfx) for i in res.items] == [("r1", False), ("r2", True)]
+
+
+def _two_inked_regions():
+    img, regions = _page()
+    img[260:290, 60:200] = 0  # vùng chữ tự do r2 cũng có mực
+    return img, regions
+
+
+def _blank_r1(req):
+    """r1 trả `source=""` mà không `empty` (structured output cắt chuỗi mở đầu bằng `"`), r2 đọc bình thường."""
+    res = _echo(req)
+    res.items = [it.model_copy(update={"source": ""}) if it.id == "r1" else it for it in res.items]
+    return res
+
+
+def test_ocr_blank_source_rereads_only_that_crop():
+    img, regions = _two_inked_regions()
+    fixed = OcrResult(
+        items=[OcrItem(id="r1", source="“THAT GUY”?!", confidence=0.9)],
+        usage=[TokenUsage(provider="f", model="m", input_tokens=3)],
+    )
+    prov = ScriptedProvider(ocr=[_blank_r1, fixed])
+    res = ocr_page(prov, img, regions, 0)
+    assert [c.id for c in prov.ocr_reqs[1].crops] == ["r1"]
+    assert [(i.id, i.source, i.low_conf) for i in res.items] == [
+        ("r1", "“THAT GUY”?!", False),
+        ("r2", "말", False),
+    ]
+    assert sum(u.input_tokens for u in res.usage) == 3 and len(res.usage) == 2  # lần đọc lại vào ledger
+
+
+def test_ocr_blank_source_still_blank_is_flagged_for_review_not_hidden_as_sfx():
+    img, regions = _two_inked_regions()
+    prov = ScriptedProvider(ocr=[_blank_r1, _blank_r1])
+    res = keep_regions_without_text(regions, ocr_page(prov, img, regions, 0))
+    r1 = res.items[0]
+    assert r1.low_conf and not r1.empty
+    # Vẫn giữ ảnh gốc như vùng không chữ, nhưng khối hiện cờ cần soát.
+    assert handlers._flags(r1, False) == ["sfx", "low_conf"]
+    assert not res.items[1].low_conf
+
+
+def test_ocr_blank_reread_error_keeps_the_page_result():
+    img, regions = _two_inked_regions()
+    err = ProviderError("rate_limit", "429", 3, usage=[TokenUsage(provider="f", model="m", input_tokens=5)])
+    prov = ScriptedProvider(ocr=[_blank_r1, err])
+    res = ocr_page(prov, img, regions, 0)
+    assert res.items[0].low_conf and res.items[1].source == "말"
+    assert sum(u.input_tokens for u in res.usage) == 5
+
+
+def test_ocr_empty_crop_reported_by_llm_is_not_reread():
+    img, regions = _two_inked_regions()
+
+    def empty_r1(req):
+        res = _echo(req)
+        res.items = [
+            it.model_copy(update={"source": "", "empty": True}) if it.id == "r1" else it for it in res.items
+        ]
+        return res
+
+    prov = ScriptedProvider(ocr=[empty_r1])
+    res = ocr_page(prov, img, regions, 0)
+    assert len(prov.ocr_reqs) == 1 and res.items[0].empty and not res.items[0].low_conf
+
+
+@pytest.mark.parametrize("name", ["ocr_page", "translate_batch", "proofread_page"])
+def test_prompts_ask_for_curly_quotes(name):
+    """Chữ mở đầu bằng `"` ASCII làm structured output đóng chuỗi sớm (source/translation rỗng)."""
+    assert "“ ”" in load_prompt(name)
 
 
 # ---------- Dịch giai đoạn 2 ----------

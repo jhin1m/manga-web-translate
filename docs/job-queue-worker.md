@@ -380,6 +380,9 @@ chụp vào payload lúc enqueue:
   (manhua / webtoon chữ ngang). Engine local nạp ngay đầu handler (thiếu model → tải / lỗi trước khi tốn công detect). Không gọi LLM → usage rỗng; breaker LLM và kill-switch ngân sách
   bỏ qua `page.prepare` có `pipeline.ocr_engine` local (`isLlmPayload` ở shared, `llmJobSql` ở API). Worker `--no-llm`
   vẫn không nhận `page.prepare` (capability theo loại job).
+- OCR LLM (`mtl_pipeline/ocr.py`): item `empty=false` mà `source` trống là kết quả tự mâu thuẫn (structured output cắt
+  chuỗi khi chữ mở đầu bằng `"` ASCII) → `reread_blank` gửi lại riêng crop đó 1 lần; vẫn trống / lỗi → `low_conf`
+  (khối giữ ảnh gốc như SFX nhưng hiện cờ cần soát). Prompt OCR / dịch / hiệu đính bắt LLM viết ngoặc kép bằng “ ”.
 - Model mới là entry `optional` trong `worker/models.lock.json` (LaMa manga, MangaOCR encoder/decoder/vocab, PP-OCRv6
   det/rec, PP-OCRv5 rec tiếng Hàn): không kiểm lúc khởi động; lần đầu job cần → `ensure_model` tải đúng URL/revision,
   kiểm sha256 (lỗi → job `internal`, thử lại). `scripts/fetch_models.py` mặc định tải cả model optional.

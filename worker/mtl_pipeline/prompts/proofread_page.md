@@ -15,4 +15,6 @@ Không đề xuất khi bản dịch đã ổn hoặc chỉ khác về sở thí
 
 Đầu ra: `items` chỉ gồm các khối cần sửa — `id` (đúng id đầu vào, mỗi id tối đa 1 lần), `suggestion` (bản dịch đề xuất đầy đủ, viết bằng `target_lang`), `reason` (lý do ngắn bằng tiếng Việt, ≤ 120 ký tự, VD "sai xưng hô: A gọi B là anh"). Không cần sửa gì → `items` rỗng.
 
+Ngoặc kép trong `suggestion` / `reason`: viết bằng ngoặc cong “ ” (mở “, đóng ”), KHÔNG BAO GIỜ dùng ký tự `"` (ASCII) — ký tự này làm hỏng chuỗi JSON.
+
 Chỉ trả JSON theo schema.
