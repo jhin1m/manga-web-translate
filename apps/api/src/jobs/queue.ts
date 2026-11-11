@@ -134,6 +134,8 @@ type PickOptions = {
  *   transaction và làm worker khác nhảy cóc trang.
  * - Tầng ngoài phải kiểm lại `status = 'queued'`: dòng vừa bị worker khác claim và commit sau snapshot chỉ bị loại
  *   khi Postgres kiểm lại điều kiện của tầng khoá trên bản mới của dòng. Thiếu thì hai worker nhận cùng một job.
+ * - `cand` phải là `materialized`: để Postgres nhúng nó vào tầng ngoài thì mỗi lần kiểm lại một dòng vừa bị transaction
+ *   khác sửa, cả hai nhánh chạy lại từ đầu (kết quả vẫn đúng nhưng tốn vài ms mỗi lần hai worker đụng nhau).
  * - Trong hai nhánh bảng phải mang tên `jobs` (không alias): các bộ lọc dùng chung nhúng thẳng `"jobs"."cột"`.
  */
 export function pickClaimableSql(o: PickOptions): SQL {
@@ -161,7 +163,7 @@ export function pickClaimableSql(o: PickOptions): SQL {
       group by r.chapter_id
     ),
     over_quota as materialized (${overQuotaUsersSql()}),
-    cand as (
+    cand as materialized (
       (
         select ${jobs.id}, ${jobs.priority}, 0 as busy_n, ${jobs.createdAt}, ${pages.ord}
         from ${jobs} ${joinPages}
