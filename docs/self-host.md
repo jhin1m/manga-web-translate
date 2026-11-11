@@ -18,7 +18,10 @@ Bản nhiều người dùng trên VPS (S3/MinIO + đăng nhập) xem [deploymen
   Docker Desktop giới hạn RAM của VM thấp hơn RAM máy: chỉnh ở Settings → Resources → Memory. Đĩa ~2 GB cho model AI
   và chỗ cho ảnh truyện.
 - Internet: tải image, tải model lần đầu, gọi API AI khi dịch.
-- Kiến trúc `linux/amd64` hoặc `linux/arm64` (Apple Silicon chạy bản arm64). Chưa hỗ trợ GPU NVIDIA, Windows chưa kiểm.
+- Nút **Cập nhật ngay** cần Docker socket. **Docker rootless trên Linux** (không có `/var/run/docker.sock`): đặt
+  `MTL_DOCKER_SOCK=$XDG_RUNTIME_DIR/docker.sock` hoặc `MTL_UPDATER=0`, nếu không `docker compose up -d` báo lỗi mount.
+  **Docker Desktop bật Enhanced Container Isolation** chặn updater: cập nhật tay.
+- Kiến trúc `linux/amd64` hoặc `linux/arm64` (Apple Silicon chạy bản arm64). Chưa hỗ trợ GPU NVIDIA, Windows chưa kiểm (cập nhật trong app trên Windows cũng chưa kiểm, xem [Cập nhật](#cập-nhật)).
 
 ## Cài (3 lệnh)
 
@@ -57,6 +60,73 @@ theo vùng chữ.
 
 ## Cập nhật
 
+### Xem phiên bản
+
+Bấm avatar (góc phải trên): dòng cuối menu là `MTL v0.3.0`. Bản tự build, không qua Release, hiện `MTL dev`.
+
+### Thông báo bản mới
+
+App hỏi GitHub xem có bản mới không, tối đa 1 lần/ngày, chỉ khi bạn mở web. Việc hỏi do máy chủ app làm chứ không phải
+trình duyệt. Request chỉ gồm IP máy bạn và User-Agent `mtl-selfhost`. Có bản mới thì avatar có chấm nhỏ (mở menu một lần
+là tắt) và menu có mục **Có bản mới vX.Y.Z · Xem thay đổi**. Không hỏi GitHub nữa: ghi `MTL_UPDATE_CHECK=0` (cách ghi
+như mục [Tắt nút cập nhật](#tắt-nút-cập-nhật)).
+
+### Cập nhật ngay (từ 0.3.0)
+
+Trong menu có bản mới, bấm **Cập nhật ngay** rồi **Cập nhật**. App làm lần lượt:
+
+1. Tải bản mới trong lúc app vẫn chạy.
+2. Dừng worker (chờ job đang chạy tối đa 90 giây), sao lưu DB, migrate, chạy lại. Giai đoạn này app tạm không mở được.
+3. Khi app đã lên bản mới, trang đợi bộ cập nhật báo xong (tối đa 10 phút) rồi tự tải lại.
+
+Mất vài phút, có thể lâu hơn nếu mạng chậm. Không hạ cấp được. Lỗi thì hộp thoại báo lý do; log ở
+`docker logs mtl-local-update`. Nếu lỗi xảy ra khi app đã chạy bản mới (bước cuối), hộp thoại nói rõ app đã lên bản mới và
+chỉ dẫn xem log. Bấm lần hai trong vòng 60 giây thì báo "Vừa thử cập nhật. Đợi một phút rồi thử lại."
+
+Nút chỉ hiện khi: không ghim `MTL_TAG`, dùng đúng một file `docker-compose.yml` (không file override), service `updater`
+đang chạy, và app xác định chắc được thư mục dữ liệu trên máy. Không đủ điều kiện thì menu hiện **Cách cập nhật** kèm
+lệnh để chạy tay (kể cả khi app không xác định chắc được thư mục dữ liệu, mã `path_mismatch`: app dừng để an toàn).
+
+> **Windows**: cập nhật trong app chưa được kiểm trên máy Windows thật. Nếu app không xác nhận được đường dẫn thư mục
+> dữ liệu, nút tự đổi thành **Cách cập nhật** và bạn cập nhật tay như dưới.
+>
+> **Linux**: cập nhật trong app chưa kiểm trên máy Linux thật.
+
+### Bảo mật của nút cập nhật
+
+- Service `updater` giữ Docker socket, nghĩa là có quyền tương đương root/admin trên máy (Docker Desktop: trên VM và
+  các thư mục chia sẻ). Service `app` (nơi xử lý ảnh, ZIP, font) **không** có socket.
+- Updater không mở cổng, chỉ nói chuyện với `app` qua mạng nội bộ của compose, có token ở `data/secrets/updater-token`.
+- Updater chỉ làm đúng một việc: cập nhật lên bản phát hành chính thức mới hơn (prerelease chỉ nhận khi đúng bằng `MTL_UPDATE_TARGET` của app, dành cho người phát hành, và mới hơn bản đang chạy), bằng image `ghcr.io/jhin1m/mtl*` và
+  file compose của đúng tag đó trên GitHub.
+- Không muốn thì tắt (ngay dưới).
+
+### Tắt nút cập nhật
+
+Ghi `MTL_UPDATER=0` vào file `.env` cạnh `docker-compose.yml`, rồi `docker compose up -d`. Updater không chạy và không
+mount socket, và app không gọi đến updater. Menu vẫn báo bản mới (nếu chưa tắt `MTL_UPDATE_CHECK`) và hiện lệnh cập nhật tay.
+
+Tạo/sửa `.env`:
+
+- Windows: `notepad .env`, thêm dòng `MTL_UPDATER=0`, lưu. Đừng dùng `>` hay `Out-File` trong PowerShell: file bị lưu
+  UTF-16 và Compose đọc sai.
+- Linux/macOS: `echo MTL_UPDATER=0 >> .env`.
+
+### Cập nhật tay
+
+Dùng khi tắt updater, đang ghim `MTL_TAG`, hoặc bản đang chạy chưa có updater. Chạy trong thư mục chứa
+`docker-compose.yml`.
+
+Windows (PowerShell), gõ đúng `curl.exe`, từng dòng một:
+
+```powershell
+curl.exe -fsSLO https://raw.githubusercontent.com/jhin1m/manga-web-translate/main/docker-compose.yml
+docker compose pull
+docker compose up -d
+```
+
+Linux/macOS:
+
 ```bash
 curl -fsSLO https://raw.githubusercontent.com/jhin1m/manga-web-translate/main/docker-compose.yml
 docker compose pull && docker compose up -d
@@ -65,13 +135,31 @@ docker compose pull && docker compose up -d
 Lệnh `curl` tải lại `docker-compose.yml`, vì bản mới có thể đổi cả file này (vd thêm worker thứ 2). `pull` chỉ tải image
 mới. File cũ bị ghi đè, nên đừng sửa thẳng file: đặt tuỳ chỉnh bằng biến môi trường hoặc file `.env` cạnh nó (xem dưới).
 
-Khi cập nhật, compose tự dừng `jobs` + `worker` **trước** khi tạo lại `app`, chờ `app` mới backup DB + migrate xong
+### Lần đầu từ 0.2.0 trở xuống
+
+Bản cũ chưa có updater, nên cập nhật tay **một lần**:
+
+```powershell
+cd "C:\đường-dẫn\tới\thư-mục-mtl"
+curl.exe -fsSLO https://raw.githubusercontent.com/jhin1m/manga-web-translate/main/docker-compose.yml
+docker compose pull
+docker compose up -d
+docker compose ps
+```
+
+`docker compose ps` phải thấy service `updater` đang chạy. Từ đó về sau dùng nút trong app. (Linux/macOS: dùng khối bash
+ở trên rồi `docker compose ps`.)
+
+### Thứ tự khi cập nhật, ghim bản
+
+Khi cập nhật (tay hay trong app), compose tự dừng `jobs` + `worker` **trước** khi tạo lại `app`, chờ `app` mới backup DB + migrate xong
 (healthy) rồi mới chạy lại 2 service đó — code cũ không chạy trên schema mới (`depends_on … restart: true` trong compose).
 Job đang chạy dở: worker chờ tối đa 90s cho job xong, quá thì job bị đánh lỗi `internal` (server cho chạy lại nếu job còn lượt thử) — vì vậy bước dừng worker có thể mất tới ~100s. Chỉ hỗ trợ nâng cấp, **không hạ cấp**
 (DB đã migrate không chạy được với code cũ — muốn quay lại thì khôi phục bản backup trước nâng cấp, xem dưới).
 
 Ghim một bản thay vì `latest`: `MTL_TAG=1.2.3 docker compose up -d` (hoặc ghi `MTL_TAG=1.2.3` vào file `.env` cạnh
-`docker-compose.yml` để không phải gõ lại).
+`docker-compose.yml` để không phải gõ lại). Đang ghim thì app không hiện nút **Cập nhật ngay**, chỉ hiện lệnh tay; muốn
+dùng lại nút thì bỏ dòng `MTL_TAG` khỏi `.env`.
 
 ## Tuỳ chỉnh (biến môi trường của compose, đều tuỳ chọn)
 
@@ -83,6 +171,9 @@ Ghim một bản thay vì `latest`: `MTL_TAG=1.2.3 docker compose up -d` (hoặc
 | `MTL_SKIP_BOOT_BACKUP` | (trống) | `1` = bỏ backup DB lúc `app` khởi động — chỉ dùng khi `pg_dump` lỗi chặn app (xem Sự cố) |
 | `MTL_WORKERS` | `2` | Số worker, mỗi worker chạy 1 job một lúc. Mỗi worker cần ~4,6 GB RAM. Máy yếu → `MTL_WORKERS=1 docker compose up -d` (xem [Worker](#worker)) |
 | `MTL_THREADS` | (trống) | Số luồng xoá chữ + OCR của **mỗi** worker. Trống = số nhân CPU chia đều cho `MTL_WORKERS` |
+| `MTL_UPDATE_CHECK` | `1` | `0` = không hỏi GitHub có bản mới (xem [Thông báo bản mới](#thông-báo-bản-mới)) |
+| `MTL_UPDATER` | `1` | Chỉ nhận `0` hoặc `1` (`false`/`no` làm `docker compose` báo lỗi). `0` = không chạy service `updater`, không mount Docker socket (xem [Tắt nút cập nhật](#tắt-nút-cập-nhật)) |
+| `MTL_DOCKER_SOCK` | `/var/run/docker.sock` | Đường dẫn Docker socket mount cho `updater`. Docker rootless: `$XDG_RUNTIME_DIR/docker.sock` |
 
 Biến bên trong image (compose/image đã đặt sẵn, chỉ cần biết khi chạy tay hoặc dev):
 
@@ -92,6 +183,7 @@ Biến bên trong image (compose/image đã đặt sẵn, chỉ cần biết khi
 | `MTL_DATA_DIR` | `/data` | Gốc `secrets/`, `files/`, `backups/`, `worker/`. Dev chạy `MTL_LOCAL_MODE=1` ngoài Docker **phải** đặt (mặc định `/data` không ghi được trên macOS) |
 | `API_PORT` | `8080` | Local mode mặc định 8080 (bản VPS 8787) |
 | `SPA_DIR` | `/app/apps/web/dist` | API phục vụ luôn web build sẵn |
+| `MTL_VERSION` | số phiên bản của tag (`dev` nếu build tay) | Phiên bản hiện ở menu tài khoản; `dev` thì không hỏi GitHub |
 
 ## Dữ liệu (`./data`, cạnh `docker-compose.yml`)
 
@@ -172,6 +264,7 @@ Postgres được ghim major 17; nâng lên major mới (18…) là thủ tục 
 
 ```bash
 docker compose down --rmi all  # dừng + xoá container và image của compose, giữ ./data
+docker rm -f mtl-local-update  # container chạy cập nhật nằm ngoài compose nên `down` không xoá (báo lỗi nếu chưa từng cập nhật trong app: bỏ qua)
 sudo rm -rf data               # xoá hẳn dữ liệu (không lấy lại được); Linux cần sudo vì data/postgres
 ```
 
@@ -195,16 +288,42 @@ sudo rm -rf data               # xoá hẳn dữ liệu (không lấy lại đư
 - **Mở web báo "Không kết nối được máy chủ"**: `app` chưa chạy xong (lần đầu/sau cập nhật đang migrate) — đợi rồi bấm Thử lại.
 - **Bóng chỉ có dấu câu (`...!`) bị xoá trắng trên trang đã xử lý trước đây**: bản mới giữ nguyên hình gốc cho vùng không
   có chữ/số, nhưng trang cũ phải **Quét lại trang** mới áp dụng.
+- **Cập nhật trong app báo lỗi**: xem `docker logs mtl-local-update`. Lỗi trước bước khởi động lại (tải, kiểm tra) thì
+  app vẫn chạy bản cũ và `docker-compose.yml` chưa bị đổi: kiểm tra mạng rồi thử lại. Lỗi sau bước đó thì
+  `docker-compose.yml` đã là bản mới (bản cũ ở `docker-compose.yml.bak`, giữ nguyên chủ sở hữu và quyền của file gốc). Khi đó chạy `docker compose up -d`, xem
+  `docker compose logs app`, và đọc mục [Backup DB tự động + khôi phục](#backup-db-tự-động--khôi-phục).
+- **Menu báo không cập nhật được trong app** (nút là **Cách cập nhật**, kèm một dòng lý do): bản cài chưa có
+  `updater` (file compose cũ, hoặc `MTL_UPDATER=0`) / `updater` không truy cập được Docker (rootless: đặt
+  `MTL_DOCKER_SOCK`) / đang ghim `MTL_TAG` / dùng compose tuỳ chỉnh hoặc file override / app không xác định chắc được
+  thư mục dữ liệu (dừng để an toàn) / Docker quá cũ. Mọi trường hợp: cập nhật tay (mục [Cập nhật tay](#cập-nhật-tay)).
+- **Sau khi cập nhật trong app, chạy `docker compose up -d` thấy tạo lại container**: bình thường, dữ liệu không đổi.
 - **`403` khi mở bằng IP/tên máy**: chỉ `localhost`/`127.0.0.1` được phép (chống DNS rebinding) — mở đúng
   <http://localhost:8080>.
 
 ## Dành cho người phát hành (maintainer)
 
-1. Merge vào `main` (link cài và cập nhật `docker-compose.yml` trỏ vào `main`). Người dùng tải file này ngay khi cập
-   nhật, kể cả khi đang ghim `MTL_TAG` cũ → chỉ merge thay đổi compose cùng lúc với tag release có image tương ứng, và
-   giữ compose chạy được với image cũ (biến mới chỉ thêm, không bắt buộc).
-2. Lần đầu: push tag prerelease, VD `git tag v0.1.0-rc.1 && git push origin v0.1.0-rc.1` → `release.yml` chạy test rồi
-   build `ghcr.io/jhin1m/mtl:0.1.0-rc.1` và `ghcr.io/jhin1m/mtl-worker:0.1.0-rc.1` (prerelease không gắn `latest`).
-3. Sau lần push đầu, vào GitHub → Packages → `mtl` và `mtl-worker` → Package settings → đổi visibility thành **Public**
+1. Merge vào `main` (link cài và cập nhật tay trỏ `docker-compose.yml` vào `main`). Người dùng tải file này ngay khi
+   cập nhật, kể cả khi đang ghim `MTL_TAG` cũ → chỉ merge thay đổi compose cùng lúc với tag release có image tương ứng,
+   và giữ compose chạy được với image cũ (biến mới chỉ thêm, không bắt buộc).
+2. Viết `docs/releases/vX.Y.Z.md` (dòng đầu `# vX.Y.Z — tiêu đề`, dòng này thành tiêu đề Release) **trước** khi tag
+   chính thức. Thiếu file thì Release dùng ghi chú tự sinh (job `test` cảnh báo).
+3. Push tag prerelease, VD `git tag v0.3.0-rc.1 && git push origin v0.3.0-rc.1` → `release.yml` chạy test rồi build
+   `ghcr.io/jhin1m/mtl:0.3.0-rc.1` và `ghcr.io/jhin1m/mtl-worker:0.3.0-rc.1`. Prerelease không gắn `latest` và không
+   tạo GitHub Release.
+4. Lần đầu có image: GitHub → Packages → `mtl` và `mtl-worker` → Package settings → đổi visibility thành **Public**
    (mặc định private, người dùng `pull` sẽ báo `denied`).
-4. Thử bằng `MTL_TAG=0.1.0-rc.1 docker compose up -d` trên máy sạch; ổn thì push tag chính thức `v0.1.0` → gắn `0.1` + `latest`.
+5. Thử trên máy sạch: `MTL_TAG=0.3.0-rc.1 docker compose up -d` hoặc `infra/selfhost-smoke.sh` với image rc. Thử cập nhật
+   trong app giữa hai bản rc: `FROM=0.3.0-rc.1 TO=0.3.0-rc.2 infra/selfhost-update-smoke.sh` (script tự đặt
+   `MTL_UPDATE_TARGET`, biến chỉ dành cho người phát hành, thay kết quả hỏi GitHub và cho phép đích là prerelease;
+   cả hai tag phải đã push; cách dùng đầy đủ ở phần đầu script). Đổi updater, compose hoặc entrypoint thì thử cả trên Windows.
+6. Push tag chính thức `vX.Y.Z`. Workflow lần lượt test → build image → promote (gắn `X.Y` + `latest`) → tạo GitHub
+   Release. Release chỉ được tạo sau promote nên người dùng thấy thông báo khi `:latest` đã sẵn sàng.
+7. Compose thêm biến mới thì phải thêm vào bảng khôi phục biến của updater (`apps/api/src/updater/compose-vars.ts`);
+   test `updater-compose-vars` đỏ nếu quên.
+8. Nút "Cập nhật ngay" cố ý từ chối, trước khi đổi gì, khi compose mới:
+   - thêm, đổi hoặc bỏ một bind dưới `./data` của service có sẵn (kiểm hai chiều) → `path_mismatch`,
+   - bỏ hoặc đổi tên một service đang chạy (service đang chạy mà compose mới không có) → `invalid_compose`.
+
+   Bản như vậy phải ghi trong `docs/releases/vX.Y.Z.md` là cập nhật tay (lệnh ở mục Cập nhật). Bản bỏ hoặc đổi tên
+   service thì lệnh `up` trong ghi chú phải là `docker compose up -d --remove-orphans`, nếu không container cũ vẫn
+   chạy image cũ trên DB đã migrate, và mọi lần bấm nút sau đó tiếp tục báo `invalid_compose`.

@@ -32,6 +32,10 @@ Mọi test tự động hiện dùng worker giả lập; chưa có số đo vớ
 - [ ] **Đợt tính năng nhỏ (kiểm tay)**: soi ≥ 3 trang thật có chữ màu (màu chữ dịch khớp tông gốc, đọc rõ); parity
       chữ Konva ↔ render.py với font tuỳ chỉnh; đăng ký / đăng nhập thật qua `/login` với `SIGNUP_ENABLED=true` trên môi trường thử; kéo-thả sắp ảnh trên Safari; màn series hiện "Xuất lại" sau khi ẩn trang ở chương đã xuất.
 
+- [ ] **Cập nhật trong app (self-host)**: đã làm phiên bản trong menu, thông báo bản mới, nút **Cập nhật ngay** và
+      service `updater`. Còn kiểm trên máy thật: Windows (rc → rc, đường dẫn có dấu cách / tiếng Việt / ổ D:, tắt, mất mạng)
+      và Linux; `latest` (bản chính thức) chưa có smoke riêng, kiểm lại khi phát hành bản kế tiếp.
+
 ## Phải làm
 
 - [ ] **Deploy**: chạy migration mới (`0009_series_skip_images`, `0010_series_ignore_text`,
@@ -63,6 +67,10 @@ Mọi test tự động hiện dùng worker giả lập; chưa có số đo vớ
 
 ## Giới hạn đã biết
 
+- **Cập nhật trong app (self-host, 0.3.0)**: chưa kiểm trên Windows thật (nếu không xác nhận được đường dẫn thư mục dữ
+  liệu thì nút tự lùi về hướng dẫn cập nhật tay) và chưa kiểm trên Linux thật. Docker rootless phải đặt
+  `MTL_DOCKER_SOCK` (hoặc `MTL_UPDATER=0`). Docker Desktop bật Enhanced Container Isolation chặn updater, phải cập nhật
+  tay. Người dùng 0.2.0 cập nhật tay một lần để có updater. Chi tiết: [self-host.md](./self-host.md#cập-nhật).
 - Watermark: watermark detector không bắt thì còn trên ảnh.
 - Credit cùng mẫu nhưng đổi chữ (đổi tên người dịch) có thể không khớp ảnh đã học.
 - Ảnh rất cao (> 16k px) có thể không tính được dấu nhận dạng trên Safari → ảnh đó không tự bỏ (upload vẫn chạy).

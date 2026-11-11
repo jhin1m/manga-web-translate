@@ -15,8 +15,8 @@ Lần đầu worker tải model AI (~1–2 GB). Mở <http://localhost:8080> →
 Anthropic). Không cần `.env`, không cần tài khoản. Phát hiện chữ, OCR, xoá chữ chạy local trên máy; chỉ bước dịch gọi
 API AI.
 
-Cập nhật: tải lại `docker-compose.yml` (lệnh `curl` ở trên) rồi `docker compose pull && docker compose up -d` — xem
-[docs/self-host.md](./docs/self-host.md#cập-nhật).
+Cập nhật: từ 0.3.0 bấm **Cập nhật ngay** trong menu tài khoản (avatar góc phải trên), hoặc làm tay (tải lại
+`docker-compose.yml` rồi `docker compose pull && docker compose up -d`) — xem [docs/self-host.md](./docs/self-host.md#cập-nhật).
 
 > [!WARNING]
 > **Không có đăng nhập.** Chỉ dùng trên máy mình, đừng mở cổng ra LAN / Internet.
