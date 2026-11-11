@@ -22,18 +22,26 @@ export const dayStart = sql`date_trunc('day', now() at time zone 'utc') at time 
 export type QuotaStatus = { spent_usd: number; limit_usd: number | null; resets_at: string; exceeded: boolean };
 
 /**
- * SQL "user của cột này đã vượt hạn mức hôm nay". Hạn mức hiệu lực = DB ?? env; ngưỡng ≤ 0 = chặn hết (kể cả user
- * chưa có ledger hôm nay); không đặt = không giới hạn.
- *
- * Tập user đã vượt là subquery không phụ thuộc dòng ngoài: Postgres cộng ledger hôm nay một lần cho cả câu lệnh rồi
- * băm, thay vì cộng lại cho từng job (câu chọn job của claim duyệt mọi job đang chờ).
+ * Câu `select user_id` liệt kê user đã chi tới hạn mức hôm nay (hạn mức > 0). Cộng ledger hôm nay một lần cho cả câu
+ * lệnh, không phụ thuộc dòng ngoài.
  * `user_id is not null` là bắt buộc: ledger có dòng chi phí nền tảng không gắn user, và một NULL trong tập làm
  * `not (x in (...))` thành NULL → token Modal không claim được job nào, token Mac không claim được job LLM nào.
- * Cùng lý do, `userIdCol` phải là cột NOT NULL (hiện chỉ dùng với `jobs.user_id`).
  */
-export function overQuotaSql(userIdCol: AnyPgColumn): SQL {
+export function overQuotaUsersSql(): SQL {
+  return sql`select ${usageLedger.userId} from ${usageLedger} where ${usageLedger.userId} is not null and ${usageLedger.createdAt} >= ${dayStart} group by ${usageLedger.userId} having sum(${usageLedger.costUsd}) >= ${userDailyLimitSql()}`;
+}
+
+/**
+ * SQL "user của cột này đã vượt hạn mức hôm nay". Hạn mức hiệu lực = DB ?? env; ngưỡng ≤ 0 = chặn hết (kể cả user
+ * chưa có ledger hôm nay); không đặt = không giới hạn. `userIdCol` phải là cột NOT NULL (hiện chỉ dùng `jobs.user_id`).
+ *
+ * `overUsers` = subquery một cột chứa user đã vượt; mặc định là `overQuotaUsersSql()` đặt tại chỗ. Câu lệnh dùng bộ lọc
+ * này ở nhiều nhánh (câu chọn job của claim) truyền vào tham chiếu tới một CTE dựng từ `overQuotaUsersSql()` để ledger
+ * chỉ được cộng một lần.
+ */
+export function overQuotaSql(userIdCol: AnyPgColumn, overUsers: SQL = overQuotaUsersSql()): SQL {
   const limit = userDailyLimitSql();
-  return sql`(${limit} is not null and (${limit} <= 0 or ${userIdCol} in (select ${usageLedger.userId} from ${usageLedger} where ${usageLedger.userId} is not null and ${usageLedger.createdAt} >= ${dayStart} group by ${usageLedger.userId} having sum(${usageLedger.costUsd}) >= ${limit})))`;
+  return sql`(${limit} is not null and (${limit} <= 0 or ${userIdCol} in (${overUsers})))`;
 }
 
 /** Chủ job không bị khoá: job của tài khoản bị khoá nằm yên trong hàng đợi (mở khoá thì chạy tiếp). */
@@ -43,9 +51,9 @@ export const notDisabledOwnerSql = sql`not exists (select 1 from "user" u where 
  * Job worker loại `kind` được claim (ngoài trạng thái/loại/breaker): job LLM của người vượt hạn mức không ai nhận;
  * Modal không nhận job nào của họ; job của tài khoản bị khoá không ai nhận (job đang chạy thì chạy nốt). Dispatcher dùng chung để không bật Modal cho job Modal không được nhận.
  */
-export const claimableSql = (kind: "mac" | "modal"): SQL => {
-  const quota =
-    kind === "modal" ? not(overQuotaSql(jobs.userId)) : not(and(llmJobSql, overQuotaSql(jobs.userId)) as SQL);
+export const claimableSql = (kind: "mac" | "modal", overUsers?: SQL): SQL => {
+  const over = overQuotaSql(jobs.userId, overUsers);
+  const quota = kind === "modal" ? not(over) : not(and(llmJobSql, over) as SQL);
   return and(quota, notDisabledOwnerSql) as SQL;
 };
 

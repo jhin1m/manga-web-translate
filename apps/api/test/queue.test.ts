@@ -4,11 +4,11 @@
  */
 import { chapters, jobs, pages, scoped, series } from "@mtl/db";
 import { type JobPayload, pageId } from "@mtl/shared";
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { v7 as uuidv7 } from "uuid";
 import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { enqueueExport, INTERACTIVE_PRIORITY, inJobTx, insertJob } from "../src/jobs/enqueue.ts";
-import { compareVersion } from "../src/jobs/queue.ts";
+import { CLAIM_LOOKAHEAD, compareVersion } from "../src/jobs/queue.ts";
 import { reapExpiredLeases } from "../src/jobs/reaper.ts";
 import { CHAIN_PRIORITY } from "../src/jobs/translate-chain.ts";
 import { db, seedUser } from "./helpers.ts";
@@ -107,6 +107,22 @@ async function chapterWithPrepare(userId: string, label: string, n: number, crea
   const jobIds: string[] = [];
   for (let ord = 0; ord < n; ord++) jobIds.push(await prepareJob(userId, chapterId, ord, { createdAt }));
   return { chapterId, jobIds };
+}
+
+/** Job đang chạy (lease còn hạn) chèn thẳng vào DB: làm chương "bận" mà không cần claim thật. */
+async function runningJob(userId: string, chapterId: string, leaseOwner: string) {
+  await db.insert(jobs).values({
+    userId,
+    type: "chapter.translate",
+    status: "running",
+    priority: CHAIN_PRIORITY,
+    payload: { type: "chapter.translate", chapter_id: chapterId, page_ids: [] } as unknown as JobPayload,
+    inputRev: "r",
+    idempotencyKey: uuidv7(),
+    chapterId,
+    leaseOwner,
+    leaseExpiresAt: new Date(Date.now() + 120_000),
+  });
 }
 
 const ago = (s: number) => new Date(Date.now() - s * 1000);
@@ -348,6 +364,52 @@ describe("claim", () => {
     const caps = ["page.prepare", "chapter.export"];
     expect(await claimOne(mac, caps)).toBe(loose?.id);
     expect(await claimOne(mac, caps)).toBe(a.jobIds[1]);
+  });
+
+  it("skips rows at the head that another transaction holds locked and returns the next job in order", async () => {
+    const U = await seedUser("qlocked");
+    const a = await chapterWithPrepare(U.userId, "locked-a", 6, ago(120));
+    const mac = (await workerToken("mac", "w-locked")).token;
+    // Kết nối thứ hai giữ khoá 3 trang đầu (như một lượt claim khác chưa commit) trong lúc worker này claim.
+    await db.transaction(async (other) => {
+      await other
+        .select({ id: jobs.id })
+        .from(jobs)
+        .where(inArray(jobs.id, a.jobIds.slice(0, 3)))
+        .for("update");
+      // Chương chưa có job chạy → ứng viên đi theo đầu hàng đợi.
+      expect(await claimOne(mac)).toBe(a.jobIds[3]);
+      // Chương đã có job chạy → ứng viên là job của chương đang bận.
+      expect(await claimOne(mac)).toBe(a.jobIds[4]);
+    });
+    expect(await claimOne(mac)).toBe(a.jobIds[0]);
+  });
+
+  it("an idle chapter is found behind a long backlog of a busy chapter at the head of the queue", async () => {
+    const U = await seedUser("qbehind");
+    const mac = await workerToken("mac", "w-behind");
+    // Số job chờ của chương bận nhiều hơn số dòng một lượt claim đọc ở đầu hàng.
+    const a = await chapterWithPrepare(U.userId, "behind-a", CLAIM_LOOKAHEAD + 8, ago(120));
+    await runningJob(U.userId, a.chapterId, mac.id);
+    const b = await chapterWithPrepare(U.userId, "behind-b", 1, ago(60));
+    expect(await claimOne(mac.token)).toBe(b.jobIds[0]);
+    expect(await claimOne(mac.token)).toBe(a.jobIds[0]);
+  });
+
+  it("when every waiting chapter is busy, the one with fewer running jobs goes first", async () => {
+    const U = await seedUser("qallbusy");
+    const mac = await workerToken("mac", "w-allbusy");
+    // Chương bận hơn tạo trước và có nhiều job chờ hơn số dòng một lượt claim đọc: chương kia vẫn phải được thấy.
+    const a = await chapterWithPrepare(U.userId, "allbusy-a", CLAIM_LOOKAHEAD + 8, ago(120));
+    const b = await chapterWithPrepare(U.userId, "allbusy-b", 2, ago(60));
+    await runningJob(U.userId, a.chapterId, mac.id);
+    await runningJob(U.userId, a.chapterId, mac.id);
+    await runningJob(U.userId, b.chapterId, mac.id);
+    // A: 2 job chạy, B: 1 → B trước dù A tạo trước; sau đó hoà 2–2 → A (tạo trước); rồi A 3, B 2 → B.
+    expect(await claimOne(mac.token)).toBe(b.jobIds[0]);
+    expect(await claimOne(mac.token)).toBe(a.jobIds[0]);
+    expect(await claimOne(mac.token)).toBe(b.jobIds[1]);
+    expect(await claimOne(mac.token)).toBe(a.jobIds[1]);
   });
 
   it("4 concurrent claimers over 6 chapters get every job exactly once", async () => {

@@ -28,13 +28,18 @@ import {
   LLM_JOB_TYPES,
   storageKeys,
 } from "@mtl/shared";
-import { and, asc, eq, gt, inArray, isNotNull, lte, ne, not, sql } from "drizzle-orm";
-import { alias } from "drizzle-orm/pg-core";
+import { and, eq, gt, inArray, lte, ne, not, type SQL, sql } from "drizzle-orm";
 import type { z } from "zod";
 import { LlmConfigError, resolveLlmConfigs } from "../ai/llm-config.ts";
 import { budgetStatus, pauseQueuedPaidJobs } from "../billing/budget.ts";
 import { recordServerUsage, recordUsage } from "../billing/ledger.ts";
-import { claimableSql, lockQueuedOverQuotaLlmJobs, quotaFailMessage, userQuotaStatus } from "../billing/user-quota.ts";
+import {
+  claimableSql,
+  lockQueuedOverQuotaLlmJobs,
+  overQuotaUsersSql,
+  quotaFailMessage,
+  userQuotaStatus,
+} from "../billing/user-quota.ts";
 import { db } from "../db.ts";
 import { env } from "../env.ts";
 import type { WorkerIdentity } from "../lib/worker-token.ts";
@@ -91,60 +96,100 @@ export type ClaimedJobOut = {
 };
 
 /**
+ * Số dòng đầu hàng đang bị transaction khác khoá mà một lượt claim còn vượt qua được. Mỗi nhánh ứng viên của
+ * `pickClaimableSql` lấy `max + CLAIM_LOOKAHEAD` dòng trước khi khoá; nếu chừng đó dòng đầu của cả hai nhánh đều đang
+ * bị khoá (cần hơn 4 lượt claim `max = 8` cùng lúc) thì lượt này trả rỗng dù phía sau còn job, worker nghỉ một nhịp
+ * backoff rồi claim lại. Đổi lại câu chọn job chỉ đọc vài chục dòng đầu hàng thay vì xếp cả hàng đợi.
+ */
+export const CLAIM_LOOKAHEAD = 32;
+
+type PickOptions = {
+  kind: WorkerIdentity["kind"];
+  caps: Job["type"][];
+  blockLlm: boolean;
+  paused: string[];
+  max: number;
+};
+
+/**
  * Câu chọn job cho một lượt claim (khoá dòng job, bỏ dòng worker khác đang giữ).
  *
  * Thứ tự: priority → số job đang chạy của chương → created_at → thứ tự trang → id. Khoá thứ hai chia worker giữa
  * các chương: worker rảnh nhận job của chương đang có ít job chạy nhất, nên N worker chạy N chương cùng lúc thay vì
  * dồn hết vào chương tạo trước. Nó chỉ xếp thứ tự, không loại job nào: chương duy nhất còn job chờ vẫn được mọi worker
  * cùng làm.
+ *
+ * Khoá thứ hai không nằm trong index nào, nên xếp thẳng theo nó buộc Postgres đọc và xếp mọi job đang chờ. Câu này
+ * tách ứng viên thành hai nhánh, mỗi nhánh tự xếp và cắt `max + CLAIM_LOOKAHEAD` dòng:
+ * - chương rảnh (số đếm 0, kể cả job không gắn chương): thứ tự của chúng chính là thứ tự của `jobs_claim_idx`, nên
+ *   Postgres đi theo index và dừng sau vài chục dòng;
+ * - chương bận: chỉ job của các chương đang có job chạy (số chương ≤ số job đang chạy).
+ * Hai đầu danh sách gộp lại chắc chắn chứa các dòng đứng đầu thứ tự chung; tầng ngoài xếp lại và khoá.
+ *
+ * Các điểm phải giữ khi sửa câu này:
+ * - `busy`: đếm job `running` còn lease của chương, mọi loại và mọi priority (lô dịch hay export đang chạy cũng chiếm
+ *   một worker). Job hết lease (worker chết, reaper chưa quét) không tính, để chương đó không bị xếp sau oan.
+ * - Nhánh chương rảnh phải có `chapter_id is null or`: `NULL not in (...)` cho NULL và làm rơi job không gắn chương.
+ * - Khoá ở tầng ngoài, không khoá trong nhánh: dòng bị khoá trong nhánh mà bị LIMIT ngoài cắt sẽ nằm khoá tới hết
+ *   transaction và làm worker khác nhảy cóc trang.
+ * - Tầng ngoài phải kiểm lại `status = 'queued'`: dòng vừa bị worker khác claim và commit sau snapshot chỉ bị loại
+ *   khi Postgres kiểm lại điều kiện của tầng khoá trên bản mới của dòng. Thiếu thì hai worker nhận cùng một job.
+ * - Trong hai nhánh bảng phải mang tên `jobs` (không alias): các bộ lọc dùng chung nhúng thẳng `"jobs"."cột"`.
  */
-export function pickClaimable(
-  t: DbLike,
-  o: { kind: WorkerIdentity["kind"]; caps: Job["type"][]; blockLlm: boolean; paused: string[]; max: number },
-) {
-  // Chương đang giữ worker: đếm job `running` còn lease, mọi loại và mọi priority (lô dịch hay export đang chạy cũng
-  // chiếm một worker). Job hết lease (worker chết, reaper chưa quét) không tính, để chương đó không bị xếp sau oan.
-  // GROUP BY phải nằm trong bảng dẫn xuất: Postgres cấm FOR UPDATE ở tầng query có GROUP BY, và `of: jobs` bên dưới
-  // giữ cho khoá chỉ đặt lên dòng job chứ không lên bảng dẫn xuất này.
-  const running = alias(jobs, "running_jobs");
-  const busy = t
-    // Drizzle tham chiếu cột này không kèm tên bảng → tên phải khác mọi cột của `jobs` / `pages`.
-    .select({ chapterId: running.chapterId, n: sql<number>`count(*)::int`.as("busy_n") })
-    .from(running)
-    .where(and(eq(running.status, "running"), gt(running.leaseExpiresAt, sql`now()`), isNotNull(running.chapterId)))
-    .groupBy(running.chapterId)
-    .as("busy");
-  // Worker chung toàn hệ thống: mọi token claim job mọi người dùng. Modal (tốn GPU) không nhận job nào của người
-  // vượt hạn mức — job không-LLM của họ chỉ chạy trên Mac ($0) hoặc chờ sang ngày.
-  return (
-    t
-      .select({ id: jobs.id })
-      .from(jobs)
-      // Job cùng created_at (ingest tạo cả loạt page.prepare trong một transaction) → page đầu chương claim trước.
-      // Job không gắn page: ord NULL, xếp sau trong nhóm hoà.
-      .leftJoin(pages, eq(pages.id, jobs.pageId))
-      // Job không gắn chương không khớp dòng nào → coi như chương không có job chạy.
-      .leftJoin(busy, eq(busy.chapterId, jobs.chapterId))
-      .where(
-        and(
-          eq(jobs.status, "queued"),
-          lte(jobs.runAfter, sql`now()`),
-          inArray(jobs.type, o.caps),
-          o.blockLlm ? not(llmJobSql) : undefined,
-          o.paused.length ? not(breakerBlockedSql(o.paused)) : undefined,
-          claimableSql(o.kind),
-        ),
-      )
-      .orderBy(
-        asc(jobs.priority),
-        sql`coalesce(${busy.n}, 0)`,
-        asc(jobs.createdAt),
-        sql`${pages.ord} asc nulls last`,
-        asc(jobs.id),
-      )
-      .limit(o.max)
-      .for("update", { of: jobs, skipLocked: true })
+export function pickClaimableSql(o: PickOptions): SQL {
+  const take = o.max + CLAIM_LOOKAHEAD;
+  // Hạn mức người dùng: cộng ledger hôm nay một lần cho cả hai nhánh. CTE chỉ được tính khi có hạn mức hiệu lực.
+  const claimable = and(
+    eq(jobs.status, "queued"),
+    lte(jobs.runAfter, sql`now()`),
+    inArray(jobs.type, o.caps),
+    o.blockLlm ? not(llmJobSql) : undefined,
+    o.paused.length ? not(breakerBlockedSql(o.paused)) : undefined,
+    // Worker chung toàn hệ thống: mọi token claim job mọi người dùng. Modal (tốn GPU) không nhận job nào của người
+    // vượt hạn mức — job không-LLM của họ chỉ chạy trên Mac ($0) hoặc chờ sang ngày.
+    claimableSql(o.kind, sql`select user_id from over_quota`),
   );
+  // Job cùng created_at (ingest tạo cả loạt page.prepare trong một transaction) → page đầu chương claim trước.
+  // Job không gắn page: ord NULL, xếp sau trong nhóm hoà.
+  const joinPages = sql`left join ${pages} on ${pages.id} = ${jobs.pageId}`;
+  return sql`
+    with
+    busy as materialized (
+      select r.chapter_id, count(*)::int as busy_n
+      from ${jobs} r
+      where r.status = 'running' and r.lease_expires_at > now() and r.chapter_id is not null
+      group by r.chapter_id
+    ),
+    over_quota as materialized (${overQuotaUsersSql()}),
+    cand as (
+      (
+        select ${jobs.id}, ${jobs.priority}, 0 as busy_n, ${jobs.createdAt}, ${pages.ord}
+        from ${jobs} ${joinPages}
+        where ${claimable}
+          and (${jobs.chapterId} is null or ${jobs.chapterId} not in (select chapter_id from busy))
+        order by ${jobs.priority}, ${jobs.createdAt}, ${pages.ord} asc nulls last, ${jobs.id}
+        limit ${take}
+      )
+      union all
+      (
+        select ${jobs.id}, ${jobs.priority}, busy.busy_n, ${jobs.createdAt}, ${pages.ord}
+        from ${jobs} join busy on busy.chapter_id = ${jobs.chapterId} ${joinPages}
+        where ${claimable}
+        order by ${jobs.priority}, busy.busy_n, ${jobs.createdAt}, ${pages.ord} asc nulls last, ${jobs.id}
+        limit ${take}
+      )
+    )
+    select ${jobs.id} as id
+    from cand
+    join ${jobs} on ${jobs.id} = cand.id
+    where ${jobs.status} = 'queued' and ${jobs.runAfter} <= now()
+    order by cand.priority, cand.busy_n, cand.created_at, cand.ord asc nulls last, cand.id
+    limit ${o.max}
+    for update of ${jobs} skip locked`;
+}
+
+export async function pickClaimable(t: DbLike, o: PickOptions): Promise<{ id: string }[]> {
+  return [...(await t.execute<{ id: string }>(pickClaimableSql(o)))];
 }
 
 export async function claim(w: WorkerIdentity, req: z.infer<typeof ClaimRequest>): Promise<ClaimedJobOut[]> {
