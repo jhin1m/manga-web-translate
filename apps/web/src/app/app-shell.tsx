@@ -3,11 +3,14 @@
  * Mỗi người một tài khoản — dữ liệu luôn của người đang đăng nhập (`GET /api/me`). Editor toàn màn hình nằm ngoài
  * shell.
  */
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, Outlet } from "@tanstack/react-router";
-import { createContext, type ReactNode, useContext, useEffect, useRef } from "react";
+import { createContext, type ReactNode, useContext, useEffect, useRef, useState } from "react";
 import { ShellActivity } from "../features/chapter/activity-drawer.tsx";
-import { api, authClient, errorMessage, type Me, usd, useLocalMode } from "../lib/api.ts";
+import { readSeenVersion, UPDATE_STATUS_KEY, updateStatusQuery, writeSeenVersion } from "../features/update/api.ts";
+import { UpdateDialog, type UpdateDialogMode } from "../features/update/update-dialog.tsx";
+import { canUpdateInApp, failedRun, offeredVersion, showDot } from "../features/update/update-model.ts";
+import { api, authClient, errorMessage, type Me, usd, useAppConfig } from "../lib/api.ts";
 import { markDevSignedOut } from "../lib/dev-login.ts";
 import "./app-shell.css";
 
@@ -32,7 +35,9 @@ export function useMe(): Me {
 export function AppShell({ right, children }: { right?: ReactNode; children?: ReactNode }) {
   const q = useQuery(meQuery);
 
-  if (q.error) {
+  // Lỗi hỏi lại nền (vd app đang khởi động lại giữa lúc cập nhật) không được gỡ shell: còn data thì giữ nguyên.
+  // Phiên hết hạn (401) đã có onSessionLost đưa về màn đăng nhập.
+  if (q.error && !q.data) {
     return (
       <main className="auth">
         <h1>Không tải được tài khoản</h1>
@@ -70,8 +75,20 @@ const initials = (name: string) =>
 
 function AccountMenu() {
   const me = useMe();
-  const local = useLocalMode();
+  const config = useAppConfig().data;
+  const local = config?.local_mode === true;
+  const qc = useQueryClient();
   const ref = useRef<HTMLDetailsElement>(null);
+  const [seen, setSeen] = useState(readSeenVersion);
+  const [dialog, setDialog] = useState<UpdateDialogMode | null>(null);
+  const autoOpened = useRef(false);
+
+  // Chỉ bản local (admin duy nhất) có cập nhật trong app; route 404 / lỗi → không có gì hiện ra.
+  const status = useQuery(updateStatusQuery(local && me.is_admin)).data;
+  const offered = offeredVersion(status);
+  const dot = showDot(status, seen);
+  const failed = failedRun(status);
+  const running = status?.updater.run?.state === "running" ? status.updater.run : null;
 
   // Bấm ra ngoài → đóng menu.
   useEffect(() => {
@@ -82,30 +99,84 @@ function AccountMenu() {
     return () => document.removeEventListener("pointerdown", onDown);
   }, []);
 
+  // Mở lại trang giữa lúc đang cập nhật → tự mở hộp tiến độ.
+  useEffect(() => {
+    if (running && !autoOpened.current) {
+      autoOpened.current = true;
+      setDialog("running");
+    }
+  }, [running]);
+
+  const onToggle = (open: boolean) => {
+    if (!open || !offered) return;
+    writeSeenVersion(offered);
+    setSeen(offered);
+  };
+
+  const closeDialog = () => {
+    setDialog(null);
+    void qc.invalidateQueries({ queryKey: UPDATE_STATUS_KEY });
+  };
+
+  const dialogVersion = dialog === "running" || dialog === "error" ? (status?.updater.run?.target ?? offered) : offered;
+
   return (
-    <details ref={ref} className="shell-menu">
-      <summary aria-label="Tài khoản" className="shell-avatar">
-        {initials(me.name || me.email || "?")}
-      </summary>
-      {/* biome-ignore lint/a11y/noStaticElementInteractions: đóng menu sau khi chọn mục (click lan từ link) */}
-      {/* biome-ignore lint/a11y/useKeyWithClickEvents: phím Enter trên link cũng phát click */}
-      <div className="shell-menu-list" onClick={() => closeMenu(ref.current)}>
-        <span className="shell-menu-email muted small">{me.email}</span>
-        <Link to="/glossary">Glossary chung</Link>
-        <Link to="/fonts">Font của tôi</Link>
-        {me.is_admin && <Link to="/settings">Cài đặt</Link>}
-        {me.quota.limit_usd !== null && (
-          <span className="shell-menu-quota muted small" data-testid="quota-line">
-            Hạn mức AI hôm nay: {usd(me.quota.spent_usd)} / {usd(me.quota.limit_usd)}
-          </span>
-        )}
-        {/* Chế độ local không có tài khoản → không có đăng xuất. */}
-        {!local && (
-          <button type="button" onClick={() => void signOut()}>
-            Đăng xuất
-          </button>
-        )}
-      </div>
-    </details>
+    <>
+      <details ref={ref} className="shell-menu" onToggle={(e) => onToggle(e.currentTarget.open)}>
+        <summary
+          aria-label={dot && offered ? `Tài khoản · có bản mới v${offered}` : "Tài khoản"}
+          className="shell-avatar"
+        >
+          {initials(me.name || me.email || "?")}
+          {dot && <span className="shell-avatar-dot" data-testid="update-dot" aria-hidden="true" />}
+        </summary>
+        {/* biome-ignore lint/a11y/noStaticElementInteractions: đóng menu sau khi chọn mục (click lan từ link) */}
+        {/* biome-ignore lint/a11y/useKeyWithClickEvents: phím Enter trên link cũng phát click */}
+        <div className="shell-menu-list" onClick={() => closeMenu(ref.current)}>
+          <span className="shell-menu-email muted small">{me.email}</span>
+          <Link to="/glossary">Glossary chung</Link>
+          <Link to="/fonts">Font của tôi</Link>
+          {me.is_admin && <Link to="/settings">Cài đặt</Link>}
+          {me.quota.limit_usd !== null && (
+            <span className="shell-menu-quota muted small" data-testid="quota-line">
+              Hạn mức AI hôm nay: {usd(me.quota.spent_usd)} / {usd(me.quota.limit_usd)}
+            </span>
+          )}
+          {status && failed && (
+            <button type="button" className="shell-menu-failed" onClick={() => setDialog("error")}>
+              Cập nhật v{failed.target} lỗi
+            </button>
+          )}
+          {status && offered && status.latest && (
+            <>
+              <span className="shell-menu-update small">
+                Có bản mới <strong>v{offered}</strong> ·{" "}
+                <a href={status.latest.url} target="_blank" rel="noopener noreferrer">
+                  Xem thay đổi
+                </a>
+              </span>
+              <button type="button" onClick={() => setDialog(canUpdateInApp(status) ? "confirm" : "manual")}>
+                {canUpdateInApp(status) ? "Cập nhật ngay" : "Cách cập nhật"}
+              </button>
+            </>
+          )}
+          {/* Chỉ bản local: bản nhiều người dùng không hiện phiên bản. API cũ không có `version` → ẩn. */}
+          {local && config?.version && (
+            <span className="shell-menu-version muted small" data-testid="version-line">
+              MTL {config.version === "dev" ? "dev" : `v${config.version}`}
+            </span>
+          )}
+          {/* Chế độ local không có tài khoản → không có đăng xuất. */}
+          {!local && (
+            <button type="button" onClick={() => void signOut()}>
+              Đăng xuất
+            </button>
+          )}
+        </div>
+      </details>
+      {status && dialog && dialogVersion && (
+        <UpdateDialog status={status} mode={dialog} version={dialogVersion} onClose={closeDialog} />
+      )}
+    </>
   );
 }

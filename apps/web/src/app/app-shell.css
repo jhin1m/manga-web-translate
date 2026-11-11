@@ -27,6 +27,7 @@
   position: relative;
 }
 .shell-avatar {
+  position: relative;
   list-style: none;
   width: 32px;
   height: 32px;
@@ -81,6 +82,34 @@
 }
 .shell-menu-quota {
   padding: var(--sp-2) var(--sp-3);
+  border-top: 1px solid var(--c-line);
+  margin-top: var(--sp-1);
+}
+/* Chấm báo bản mới ở góc avatar (tắt sau khi mở menu một lần). */
+.shell-avatar-dot {
+  position: absolute;
+  top: -1px;
+  right: -1px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--c-accent);
+  border: 1.5px solid var(--c-bg);
+  box-sizing: content-box;
+}
+.shell-menu-update,
+.shell-menu-version {
+  padding: var(--sp-2) var(--sp-3);
+}
+.shell-menu-update {
+  border-top: 1px solid var(--c-line);
+  margin-top: var(--sp-1);
+  padding-bottom: var(--sp-1);
+}
+.shell-menu-list > .shell-menu-failed {
+  color: var(--c-danger);
+}
+.shell-menu-version {
   border-top: 1px solid var(--c-line);
   margin-top: var(--sp-1);
 }

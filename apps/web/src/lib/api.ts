@@ -79,8 +79,11 @@ export async function api<T>(path: string, init: Omit<RequestInit, "body"> & { b
   return data as T;
 }
 
-/** `GET /api/config` (public): chế độ chạy của server. `local_mode` = self-host 1 người dùng, không đăng nhập. */
-export type AppConfig = { local_mode: boolean };
+/**
+ * `GET /api/config` (public): chế độ chạy của server. `local_mode` = self-host 1 người dùng, không đăng nhập.
+ * `version` = phiên bản app ("0.3.0" hoặc "dev"); API cũ không có.
+ */
+export type AppConfig = { local_mode: boolean; version?: string };
 
 /**
  * API cũ chưa có route (web cập nhật trước API, hoặc rollback API) → bản nhiều người dùng: route lạ dưới /api trả 401
