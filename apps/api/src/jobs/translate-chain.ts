@@ -7,7 +7,8 @@
  *   lô trước xong/lỗi hẳn, nên hàng đợi không rỗng giữa hai lô.
  * - Frontier = trang chờ đầu tiên (theo ord, bỏ trang ẩn). Trang lỗi Bước 1 bị bỏ khỏi lượt; frontier còn ở Bước 1 → chờ.
  * - Lô đầu chạy ngay khi có ≥ 1 trang; lô sau chưa đầy mà còn trang phía sau đang ở Bước 1 → chờ cho đầy (không vụn lô).
- * - Ngữ cảnh: `neighbors` (trang ngay trước, dựng lúc claim) + `carry` (notes, tên nhân vật) của lô thành công gần nhất.
+ * - Ngữ cảnh: `neighbors` (trang ngay trước, dựng lúc claim) + `carry` (notes, tên nhân vật) của lô thành công gần nhất
+ *   trong lượt; lượt chưa có thì trí nhớ series (chương khác cùng cặp ngôn ngữ, lib/series-memory.ts).
  *
  * Thứ tự khoá cố định chapter → pages ở mọi nhánh (queue.ts khoá chương trước khi ghi page) để không deadlock.
  * File này import enqueue.ts, enqueue.ts không import ngược.
@@ -16,6 +17,7 @@ import { chapters, type DbLike, jobs, NotFoundError, pages } from "@mtl/db";
 import { type OcrResult, prepareOptions, type TranslateCarry } from "@mtl/shared";
 import { and, asc, desc, eq, gte, inArray, sql } from "drizzle-orm";
 import { userQuotaStatus } from "../billing/user-quota.ts";
+import { memoryCarry, rememberRunMemory } from "../lib/series-memory.ts";
 import { systemPipeline } from "../lib/system-settings.ts";
 import {
   activeJobOf,
@@ -207,6 +209,7 @@ export async function advanceTranslateChain(tx: DbLike, userId: string, chapterI
       .where(inArray(pages.id, [...dropped]));
   const live = rows.filter((p) => !dropped.has(p.id));
   if (live.length === 0) {
+    await rememberRunMemory(tx, ch, await seriesOf(tx, ch), await lastCarry(tx, ch.id));
     await closeRun(tx, userId, ch.id);
     return null;
   }
@@ -227,7 +230,10 @@ export async function advanceTranslateChain(tx: DbLike, userId: string, chapterI
     ch.id,
     batch.map((p) => p.id),
     context,
-    { priority: CHAIN_PRIORITY, carry: await lastCarry(tx, ch.id) },
+    {
+      priority: CHAIN_PRIORITY,
+      carry: (await lastCarry(tx, ch.id)) ?? (await memoryCarry(tx, ch, await seriesOf(tx, ch))),
+    },
   );
   return job;
 }

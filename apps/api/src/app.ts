@@ -26,6 +26,7 @@ import { proofreadRoutes } from "./routes/proofread.ts";
 import { seriesRoutes } from "./routes/series.ts";
 import { seriesIgnoreApplyRoutes } from "./routes/series-ignore-apply.ts";
 import { seriesSkipImageRoutes } from "./routes/series-skip-images.ts";
+import { seriesSuggestionRoutes } from "./routes/series-suggestions.ts";
 import { uploadRoutes } from "./routes/uploads.ts";
 import { workerRoutes } from "./routes/worker.ts";
 import { diskDriver } from "./storage.ts";
@@ -105,6 +106,7 @@ export function userApi() {
   app.route("/", pageRoutes);
   app.route("/", pageStateRoutes);
   app.route("/", glossaryRoutes);
+  app.route("/", seriesSuggestionRoutes);
   app.route("/", exportRoutes);
   app.route("/", findReplaceRoutes);
   app.route("/", fontRoutes);

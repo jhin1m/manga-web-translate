@@ -15,6 +15,7 @@ import {
   scoped,
   series,
   seriesSkipImages,
+  seriesSuggestions,
   sourceFiles,
   userFonts,
 } from "@mtl/db";
@@ -45,6 +46,8 @@ const skipImageOf: Record<string, string> = {};
 const fontOf: Record<string, string> = {};
 /** Gợi ý hiệu đính mẫu (route PATCH /proofread-suggestions/:id). */
 const suggestionOf: Record<string, string> = {};
+/** Gợi ý series mẫu (route PATCH /series-suggestions/:id). */
+const seriesSuggestionOf: Record<string, string> = {};
 
 beforeAll(async () => {
   [A, B] = await Promise.all([seedUser("a"), seedUser("b")]);
@@ -102,6 +105,15 @@ beforeAll(async () => {
         regionId: "r0",
         oldText: "cũ",
         suggestion: "mới",
+      })
+    ).id;
+    seriesSuggestionOf[s.userId] = (
+      await scoped(db, s.userId).insert(seriesSuggestions, {
+        seriesId: s.seriesId,
+        kind: "term",
+        key: "검",
+        data: { source: "검", target: "kiếm", kind: "term" },
+        chapterId: s.chapterId,
       })
     ).id;
     skipImageOf[s.userId] = (
@@ -186,6 +198,7 @@ const BODIES: Record<string, unknown> = {
   },
   "POST /api/pages/:pageId/ocr-region": { bbox: [0, 0, 10, 10] },
   "PATCH /api/proofread-suggestions/:suggestionId": { dismissed: true },
+  "PATCH /api/series-suggestions/:suggestionId": { dismissed: true },
   "POST /api/chapters/:chapterId/export": { format: "cbz", layout: "pages" },
   "POST /api/series/:seriesId/ignore-apply/preview": {},
   "POST /api/series/:seriesId/ignore-apply/apply": { versions: {} },
@@ -266,6 +279,8 @@ const RESOURCE_CASES: Record<string, (b: Seed) => Record<string, string>> = {
   "GET /api/chapters/:chapterId/proofread": (b) => ({ chapterId: b.chapterId }),
   "GET /api/chapters/:chapterId/proofread/estimate": (b) => ({ chapterId: b.chapterId }),
   "PATCH /api/proofread-suggestions/:suggestionId": (b) => ({ suggestionId: suggestionOf[b.userId] ?? "" }),
+  "GET /api/series/:seriesId/suggestions": (b) => ({ seriesId: b.seriesId }),
+  "PATCH /api/series-suggestions/:suggestionId": (b) => ({ suggestionId: seriesSuggestionOf[b.userId] ?? "" }),
   "DELETE /api/chapters/:chapterId": (b) => ({ chapterId: spareChapterOf[b.userId] ?? "" }),
   "DELETE /api/series/:seriesId": (b) => ({ seriesId: spareSeriesOf[b.userId] ?? "" }),
 };
