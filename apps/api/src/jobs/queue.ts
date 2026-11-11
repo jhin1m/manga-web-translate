@@ -150,10 +150,19 @@ type PickOptions = {
  *   khi Postgres kiểm lại điều kiện của tầng khoá trên bản mới của dòng. Thiếu thì hai worker nhận cùng một job.
  * - `cand` phải là `materialized`: để Postgres nhúng nó vào tầng ngoài thì mỗi lần kiểm lại một dòng vừa bị transaction
  *   khác sửa, cả hai nhánh chạy lại từ đầu (kết quả vẫn đúng nhưng tốn vài ms mỗi lần hai worker đụng nhau).
- * - Trong hai nhánh, planner chỉ được thấy `status = 'queued'`; mọi bộ lọc khác đi qua `opaque()`. Bỏ lớp bọc đó thì
- *   ước lượng số dòng của nhánh chương rảnh tụt dưới LIMIT khi vài bộ lọc cùng bật (hoặc khi bảng `user` chưa có thống
- *   kê), và Postgres chuyển sang đọc + xếp cả hàng đợi. Với lớp bọc, ước lượng luôn là nửa số job đang chờ: đường đi
- *   theo index chỉ thua khi hàng đợi còn khoảng dưới 200 job, lúc đó đọc hết cũng chưa tới 0,5 ms.
+ * - Nhánh chương rảnh xếp đúng theo hai cột của `jobs_claim_idx` (priority, created_at) và lấy trọn nhóm hoà cuối
+ *   (`with ties`); thứ tự trang và id để tầng ngoài xếp. Nhờ vậy nhánh này không cần bước xếp nào: Postgres chỉ việc
+ *   đi theo index rồi dừng. Xếp thêm theo trang ngay trong nhánh thì planner phải chọn giữa xếp tăng dần (dừng sớm) và
+ *   xếp toàn bộ (đọc hết hàng đợi), và nó chọn sai khi ước lượng số job chờ quá thấp.
+ * - Planner chỉ được thấy `status = 'queued'` ở đúng một chỗ: nhánh chương rảnh, nơi cần chứng minh điều kiện của
+ *   partial index. Mọi bộ lọc khác, và cả `status = 'queued'` ở nhánh chương bận lẫn tầng ngoài, đi qua `opaque()`:
+ *   - bộ lọc theo dòng để lộ thì ước lượng của nhánh chương rảnh tụt dưới LIMIT khi vài bộ lọc cùng bật (hoặc khi
+ *     bảng `user` chưa có thống kê), và Postgres chuyển sang đọc + xếp cả hàng đợi;
+ *   - `status = 'queued'` để lộ ở nhánh chương bận / tầng ngoài thì khi thống kê bảng jobs cũ (analyze lúc hàng đợi
+ *     trống, rồi một lô job mới vào) planner tưởng chỉ có 1 job chờ và quét cả `jobs_claim_idx` cho từng ứng viên. Che
+ *     đi thì hai chỗ đó chỉ còn đường qua `jobs_chapter_idx` và khoá chính.
+ *   Với thống kê mới, đường đi theo index ở nhánh chương rảnh chỉ thua khi hàng đợi còn khoảng dưới 200 job, lúc đó
+ *   đọc hết cũng chưa tới 0,5 ms.
  * - Trong hai nhánh bảng phải mang tên `jobs` (không alias): các bộ lọc dùng chung nhúng thẳng `"jobs"."cột"`.
  */
 export function pickClaimableSql(o: PickOptions): SQL {
@@ -175,6 +184,7 @@ export function pickClaimableSql(o: PickOptions): SQL {
   const idleChapter = sql`(${jobs.chapterId} is null or ${jobs.chapterId} not in (select chapter_id from busy))`;
   // Job cùng created_at (ingest tạo cả loạt page.prepare trong một transaction) → page đầu chương claim trước.
   // Job không gắn page: ord NULL, xếp sau trong nhóm hoà.
+  // Dùng trong nhánh chương bận; nhánh chương rảnh ghép pages sau khi đã cắt theo index.
   const joinPages = sql`left join ${pages} on ${pages.id} = ${jobs.pageId}`;
   return sql`
     with
@@ -187,17 +197,21 @@ export function pickClaimableSql(o: PickOptions): SQL {
     over_quota as materialized (${overQuotaUsersSql()}),
     cand as materialized (
       (
-        select ${jobs.id}, ${jobs.priority}, 0 as busy_n, ${jobs.createdAt}, ${pages.ord}
-        from ${jobs} ${joinPages}
-        where ${queued} and ${opaque(sql`${idleChapter} and ${filters}`)}
-        order by ${jobs.priority}, ${jobs.createdAt}, ${pages.ord} asc nulls last, ${jobs.id}
-        limit ${take}
+        select head.id, head.priority, 0 as busy_n, head.created_at, ${pages.ord}
+        from (
+          select ${jobs.id}, ${jobs.priority}, ${jobs.createdAt}, ${jobs.pageId}
+          from ${jobs}
+          where ${queued} and ${opaque(sql`${idleChapter} and ${filters}`)}
+          order by ${jobs.priority}, ${jobs.createdAt}
+          fetch first ${sql.raw(String(take))} rows with ties
+        ) head
+        left join ${pages} on ${pages.id} = head.page_id
       )
       union all
       (
         select ${jobs.id}, ${jobs.priority}, busy.busy_n, ${jobs.createdAt}, ${pages.ord}
         from ${jobs} join busy on busy.chapter_id = ${jobs.chapterId} ${joinPages}
-        where ${queued} and ${opaque(filters)}
+        where ${opaque(sql`${queued} and ${filters}`)}
         order by ${jobs.priority}, busy.busy_n, ${jobs.createdAt}, ${pages.ord} asc nulls last, ${jobs.id}
         limit ${take}
       )
@@ -205,7 +219,7 @@ export function pickClaimableSql(o: PickOptions): SQL {
     select ${jobs.id} as id
     from cand
     join ${jobs} on ${jobs.id} = cand.id
-    where ${jobs.status} = 'queued' and ${jobs.runAfter} <= now()
+    where ${opaque(sql`${queued} and ${jobs.runAfter} <= now()`)}
     order by cand.priority, cand.busy_n, cand.created_at, cand.ord asc nulls last, cand.id
     limit ${o.max}
     for update of ${jobs} skip locked`;

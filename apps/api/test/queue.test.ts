@@ -4,7 +4,7 @@
  */
 import { chapters, jobs, pages, scoped, series } from "@mtl/db";
 import { type JobPayload, pageId } from "@mtl/shared";
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray, sql, TransactionRollbackError } from "drizzle-orm";
 import { v7 as uuidv7 } from "uuid";
 import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { env } from "../src/env.ts";
@@ -205,6 +205,20 @@ describe("claim", () => {
     const mac = (await workerToken("mac", "w-ord")).token;
     const got = await claimJobs(mac, { caps: ["page.prepare"], max: N });
     expect(got.map((j) => String(j.payload.page_id))).toEqual(ids);
+  });
+
+  it("keeps page order inside a chapter that has more same-timestamp jobs than one claim reads ahead", async () => {
+    const U = await seedUser("qties");
+    const chapterId = await newChapter(U.userId, "ties");
+    // Nhiều gấp 8 lần số dòng đọc trước: nếu claim cắt giữa nhóm cùng created_at thì gần như chắc chắn hụt trang 0.
+    const N = (CLAIM_LOOKAHEAD + 1) * 8;
+    const at = ago(60);
+    // Chèn ngược: trang cuối trước. Mọi job cùng created_at nên thứ tự trong index không phải thứ tự trang.
+    const ids: string[] = [];
+    for (let ord = N - 1; ord >= 0; ord--) ids[ord] = await prepareJob(U.userId, chapterId, ord, { createdAt: at });
+    const mac = (await workerToken("mac", "w-ties")).token;
+    expect(await claimOne(mac)).toBe(ids[0]);
+    expect(await claimOne(mac)).toBe(ids[1]);
   });
 
   it("claims a finished chapter's export before another chapter's prepare and translate backlog", async () => {
@@ -472,30 +486,53 @@ describe("claim", () => {
 describe("job selection plan", () => {
   type PlanNode = {
     "Node Type": string;
+    "Relation Name"?: string;
     "Index Name"?: string;
     "Actual Rows"?: number;
+    "Actual Loops"?: number;
+    "Rows Removed by Filter"?: number;
     Plans?: PlanNode[];
   };
   const walk = (n: PlanNode): PlanNode[] => [n, ...(n.Plans ?? []).flatMap(walk)];
+  /** Số dòng một nút thật sự đọc: cả dòng bị bộ lọc loại, nhân số lần lặp. */
+  const rowsRead = (n: PlanNode) =>
+    ((n["Actual Rows"] ?? 0) + (n["Rows Removed by Filter"] ?? 0)) * (n["Actual Loops"] ?? 1);
+  const QUEUED = 3000;
 
-  it("walks the claim index from the head and stops early, with every row filter switched on", async () => {
-    const U = await seedUser("qplan");
-    const QUEUED = 3000;
-    // Một người, hàng đợi dài như self-host: 75 chương × 40 job, mỗi chương một created_at.
+  /**
+   * Một người, hàng đợi dài như self-host: 3.000 job đã xong, rồi 75 chương × 40 job chờ (mỗi chương một created_at),
+   * 2 chương cũ nhất đang có job chạy. `analyzeAt` = lúc bảng jobs được lấy thống kê: "empty" = khi hàng đợi còn trống
+   * (planner tưởng gần như không có job chờ), "full" = sau khi lô job đã vào.
+   */
+  async function longQueue(label: string, analyzeAt: "empty" | "full") {
+    const U = await seedUser(label);
+    const mac = await workerToken("mac", `w-${label}`);
     await db.execute(sql`
+      insert into jobs (id, user_id, type, status, payload, input_rev, idempotency_key, created_at)
+      select gen_random_uuid(), ${U.userId}, 'chapter.export', 'succeeded',
+             ${JSON.stringify(exportPayload(U.chapterId))}::jsonb, 'r', gen_random_uuid()::text, now() - interval '9 days'
+      from generate_series(1, ${QUEUED})`);
+    if (analyzeAt === "empty") await db.execute(sql`analyze jobs`);
+    const busy = await db.execute<{ id: string }>(sql`
       with ch as (
         insert into chapters (id, series_id, number, user_id)
         select gen_random_uuid(), ${U.seriesId}, 1000 + c, ${U.userId} from generate_series(1, ${QUEUED / 40}) c
         returning id, number
+      ), queued as (
+        insert into jobs (id, user_id, type, payload, input_rev, idempotency_key, chapter_id, created_at)
+        select gen_random_uuid(), ${U.userId}, 'chapter.export', ${JSON.stringify(exportPayload(U.chapterId))}::jsonb, 'r',
+               gen_random_uuid()::text, ch.id, now() - interval '1 day' + ch.number * interval '1 second'
+        from ch, generate_series(1, 40)
       )
-      insert into jobs (id, user_id, type, payload, input_rev, idempotency_key, chapter_id, created_at)
-      select gen_random_uuid(), ${U.userId}, 'chapter.export', ${JSON.stringify(exportPayload(U.chapterId))}::jsonb, 'r',
-             gen_random_uuid()::text, ch.id, now() - interval '1 day' + ch.number * interval '1 second'
-      from ch, generate_series(1, 40)`);
-    await db.execute(sql`analyze jobs`);
+      select id from ch order by number limit 2`);
+    for (const { id } of busy) await runningJob(U.userId, id, mac.id);
+    if (analyzeAt === "full") await db.execute(sql`analyze jobs`);
+  }
+
+  /** Plan thật (EXPLAIN ANALYZE) của câu chọn job với mọi bộ lọc theo dòng đang bật. */
+  async function explainPick(): Promise<PlanNode[]> {
     env.USER_DAILY_USD = 1000;
     try {
-      // Bật mọi bộ lọc theo dòng (hạn mức, breaker, chặn job LLM): không cái nào được làm planner bỏ đường đi theo index.
       const query = pickClaimableSql({
         kind: "modal",
         caps: ["chapter.export", "page.prepare"],
@@ -513,14 +550,34 @@ describe("job selection plan", () => {
           // EXPLAIN ANALYZE chạy thật câu lệnh (khoá 1 dòng) → bỏ transaction.
           t.rollback();
         })
-        .catch(() => {});
-      const head = nodes.filter((n) => n["Index Name"] === "jobs_claim_idx");
-      expect(head.map((n) => n["Node Type"])).toEqual(["Index Scan"]);
-      // Dừng sớm: chỉ đọc cỡ số dòng đọc trước, không đọc cả hàng đợi.
-      expect(head[0]?.["Actual Rows"]).toBeLessThan(CLAIM_LOOKAHEAD * 4);
+        .catch((err) => {
+          if (!(err instanceof TransactionRollbackError)) throw err;
+        });
+      return nodes;
     } finally {
       env.USER_DAILY_USD = undefined;
     }
+  }
+
+  /** Câu chọn job chỉ đọc đầu hàng: đi theo index claim rồi dừng, không lần đọc bảng jobs nào quét cả hàng đợi. */
+  function expectHeadOnly(nodes: PlanNode[]) {
+    const head = nodes.filter((n) => n["Index Name"] === "jobs_claim_idx");
+    expect(head.map((n) => n["Node Type"])).toEqual(["Index Scan"]);
+    // Một chương 40 job cùng created_at + 80 job của 2 chương bận đứng đầu hàng bị bỏ qua.
+    expect(rowsRead(head[0] as PlanNode)).toBeLessThan(CLAIM_LOOKAHEAD * 4 + 80);
+    const onJobs = nodes.filter((n) => n["Relation Name"] === "jobs");
+    expect(onJobs.length).toBeGreaterThan(0);
+    expect(onJobs.reduce((sum, n) => sum + rowsRead(n), 0)).toBeLessThan(QUEUED / 4);
+  }
+
+  it("reads only the head of a long queue, with every row filter switched on", async () => {
+    await longQueue("qplan", "full");
+    expectHeadOnly(await explainPick());
+  });
+
+  it("still reads only the head when the statistics were taken while the queue was empty", async () => {
+    await longQueue("qplanstale", "empty");
+    expectHeadOnly(await explainPick());
   });
 });
 
