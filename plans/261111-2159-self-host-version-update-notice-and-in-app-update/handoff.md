@@ -72,3 +72,7 @@ Không gắn tag `v0.3.0` khi user chưa báo checklist Windows đạt. Quyết 
 - amd64 chưa thử (máy dev là arm64).
 - Job `github-release` chưa chạy trên Actions thật.
 - Đường `latest` (bản chính thức) chưa smoke: chỉ khác giá trị `MTL_TAG`, unit test khoá giá trị.
+- Từ lúc push tới lúc tag `v0.3.0`: lệnh cài/cập nhật tay tải compose từ `main` (đã có `updater`) nhưng `:latest` vẫn là
+  0.2.0 (cùng digest). Container `updater` khởi động lại liên tục: `exec: updater: not found`, exit 127 (đã thử với image
+  0.2.0, 12/11). App, jobs, worker vẫn chạy. Hết khi tag `v0.3.0`. Về lâu dài: link cài nên lấy compose theo tag phát
+  hành thay vì `main`.
