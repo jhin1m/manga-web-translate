@@ -63,14 +63,18 @@ export function validateUploaded(
   return sniffImageMime(obj.prefix) === declaredMime ? null : "type_mismatch";
 }
 
+/** Cột `integer` (int4) ở Postgres: số lớn hơn → 400 thay vì lỗi DB 500. */
+const PG_INT_MAX = 2_147_483_647;
+const Px = z.number().int().max(PG_INT_MAX);
+
 const UploadFile = z.object({
   name: z.string().min(1).max(255),
   content_type: z.enum(Object.keys(CHAPTER_UPLOAD_TYPES) as [UploadMime, ...UploadMime[]]),
   bytes: z.number().int().min(1).max(MAX_FILE_BYTES),
   /** Dấu nhận dạng trình duyệt tính lúc thả ảnh (không tính được thì bỏ trống) — khớp ảnh credit đã học. */
   dhash: z.string().regex(DHASH_RE).optional(),
-  width: z.number().int().positive().optional(),
-  height: z.number().int().positive().optional(),
+  width: Px.positive().optional(),
+  height: Px.positive().optional(),
 });
 
 const ChapterNumber = z.union([z.number().nonnegative(), z.string().regex(/^\d+(\.\d+)?$/)]).transform(String);
@@ -94,11 +98,11 @@ const SourcePatchBody = z
     skip: z.enum(["user"]).nullable().optional(),
     /** Số px cắt mép trên/dưới (null = bỏ cắt); `by` luôn là "user" khi đặt từ API. */
     trim: z
-      .object({ top: z.number().int().min(0), bottom: z.number().int().min(0) })
+      .object({ top: Px.min(0), bottom: Px.min(0) })
       .nullable()
       .optional(),
     /** Cao thật web đo được; chỉ dùng khi hàng chưa có `height` (ảnh quá lớn để trình duyệt tính dấu). */
-    height: z.number().int().positive().optional(),
+    height: Px.positive().optional(),
   })
   .refine((b) => b.skip !== undefined || b.trim !== undefined, { message: "skip hoặc trim" });
 const SourceOrderBody = z.object({ ids: z.array(z.string().uuid()).min(1).max(MAX_FILES_PER_CHAPTER) });

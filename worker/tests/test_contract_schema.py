@@ -194,6 +194,7 @@ def test_ingest_inputs_carry_trim_per_source():
     src = {"source_file_id": "0192a3b4-c5d6-7e8f-9a0b-1c2d3e4f5b00", "url": "http://x/y", "width": 800, "height": 1200}
     validate_contract("inputs-chapter-ingest", {"sources": [{**src, "trim": {"top": 10, "bottom": 0}}]})
     validate_contract("inputs-chapter-ingest", {"sources": [{**src, "trim": None}]})
+    validate_contract("inputs-chapter-ingest", {"sources": [src]})  # API bản cũ (rollback) không gửi trim
     with pytest.raises(ContractError):
         validate_contract("inputs-chapter-ingest", {"sources": [{**src, "trim": {"top": -1, "bottom": 0}}]})
     with pytest.raises(ContractError):  # `by` chỉ lưu ở DB, không gửi cho worker

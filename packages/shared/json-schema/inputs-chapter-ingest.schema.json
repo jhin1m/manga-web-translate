@@ -73,8 +73,7 @@
           "source_file_id",
           "url",
           "width",
-          "height",
-          "trim"
+          "height"
         ],
         "additionalProperties": false
       }
