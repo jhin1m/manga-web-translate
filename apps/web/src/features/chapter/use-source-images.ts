@@ -4,11 +4,11 @@
  *
  * Bỏ qua / khôi phục ảnh: cập nhật lạc quan cả danh sách ảnh lẫn chi tiết chương (nút Bước 1 đếm ảnh còn dùng), rồi
  * ghi giá trị server trả về vào cache — không lấy lại danh sách (mỗi lần lấy là URL ký mới → trình duyệt tải lại mọi
- * ảnh đang hiện). Bấm liên tiếp trên cùng 1 ảnh: chỉ kết quả của lần bấm cuối được ghi. Đổi thứ tự cũng lạc quan và
+ * ảnh đang hiện). Cắt mép (trim) cũng vậy. Bấm liên tiếp trên cùng 1 ảnh: chỉ kết quả của lần bấm cuối được ghi. Đổi thứ tự cũng lạc quan và
  * chạy nối tiếp (mỗi PUT gửi cả bộ id, chạy song song thì thứ tự chốt ở server có thể khác thứ tự đang hiện); xong thì
  * ghi thứ tự server trả về; lỗi → trả về thứ tự trước đó (nếu chưa có lần đổi nào mới hơn).
  */
-import type { SourceSkipReason } from "@mtl/shared";
+import type { SourceSkipReason, SourceTrim } from "@mtl/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { uploadManager, useChapterUpload } from "../upload/upload-manager.ts";
@@ -19,6 +19,7 @@ import {
   type SourceFileImage,
   setSourceOrder,
   setSourceSkip,
+  setSourceTrim,
 } from "./api.ts";
 import { type SourceItem, sourceItems } from "./source-rail-model.ts";
 
@@ -86,6 +87,46 @@ export function useSetSourceSkip(chapterId: string, onError: (e: unknown) => voi
     },
     onSuccess: (row, { id }, ctx) => {
       if (latest.current.get(id) === ctx.n) write(id, row.skip);
+    },
+    onError: (e, { id }, ctx) => {
+      if (ctx && latest.current.get(id) === ctx.n) write(id, ctx.before);
+      onError(e);
+    },
+  });
+}
+
+type TrimVars = { id: string; trim: Pick<SourceTrim, "top" | "bottom"> | null; height?: number };
+
+/** Cắt / bỏ cắt mép 1 ảnh gốc: lạc quan vào cả 2 cache, lỗi → trả trim cũ; chỉ lần gọi mới nhất của ảnh được ghi. */
+export function useSetSourceTrim(chapterId: string, onError: (e: unknown) => void) {
+  const qc = useQueryClient();
+  const filesKey = chapterKeys.sourceFiles(chapterId);
+  const detailKey = chapterKeys.detail(chapterId);
+  const latest = useRef(new Map<string, number>());
+  const seq = useRef(0);
+
+  const write = (id: string, trim: SourceTrim | null) => {
+    const patch = <T extends { id: string; trim: SourceTrim | null }>(list: T[]) =>
+      list.map((f) => (f.id === id ? { ...f, trim } : f));
+    qc.setQueryData<FilesData>(filesKey, (d) => d && { ...d, files: patch(d.files) });
+    qc.setQueryData<ChapterDetail>(detailKey, (d) => d && { ...d, source_files: patch(d.source_files) });
+  };
+
+  return useMutation({
+    mutationFn: ({ id, trim, height }: TrimVars) => setSourceTrim(chapterId, id, trim, height),
+    onMutate: async ({ id, trim }: TrimVars) => {
+      await Promise.all([
+        qc.cancelQueries({ queryKey: filesKey, exact: true }),
+        qc.cancelQueries({ queryKey: detailKey, exact: true }),
+      ]);
+      const before = qc.getQueryData<FilesData>(filesKey)?.files.find((f) => f.id === id)?.trim ?? null;
+      const n = ++seq.current;
+      latest.current.set(id, n);
+      write(id, trim && trim.top + trim.bottom > 0 ? { ...trim, by: "user" } : null);
+      return { n, before };
+    },
+    onSuccess: (row, { id }, ctx) => {
+      if (latest.current.get(id) === ctx.n) write(id, row.trim);
     },
     onError: (e, { id }, ctx) => {
       if (ctx && latest.current.get(id) === ctx.n) write(id, ctx.before);

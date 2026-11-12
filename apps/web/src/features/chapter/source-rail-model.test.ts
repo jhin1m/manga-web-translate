@@ -1,6 +1,8 @@
+import { MIN_TRIM_KEEP_PX } from "@mtl/shared";
 import { describe, expect, it } from "vitest";
 import type { SourceFileImage } from "./api.ts";
 import {
+  clampTrim,
   creditHints,
   type IngestView,
   ingestTag,
@@ -9,6 +11,7 @@ import {
   sourceItems,
   sourceLabel,
   stepSource,
+  trimLabel,
 } from "./source-rail-model.ts";
 
 const file = (
@@ -16,11 +19,13 @@ const file = (
   ord: number,
   skip: SourceFileImage["skip"] = null,
   width: number | null = null,
+  trim: SourceFileImage["trim"] = null,
 ): SourceFileImage => ({
   id,
   ord,
   skip,
   width,
+  trim,
   url: `https://files/${id}`,
 });
 
@@ -137,5 +142,79 @@ describe("ingest tags", () => {
     // Job còn xếp hàng / worker cũ không đếm → không đoán ảnh nào đã tải.
     expect(ingestTag(0, ing({ stage: null, done: null, total: null })).label).toBe("Đang xử lý");
     expect(ingestTag(0, ing({ done: null, total: null })).label).toBe("Đang xử lý");
+  });
+});
+
+describe("clampTrim", () => {
+  const H = 1000;
+
+  it("keeps values that leave enough image", () => {
+    expect(clampTrim(100, 200, H, "top")).toEqual({ top: 100, bottom: 200 });
+    expect(clampTrim(0, 0, H, "bottom")).toEqual({ top: 0, bottom: 0 });
+  });
+
+  it("turns negative, fractional and non-finite input into whole non-negative px", () => {
+    expect(clampTrim(-5, -1, H, "top")).toEqual({ top: 0, bottom: 0 });
+    expect(clampTrim(10.6, 3.2, H, "top")).toEqual({ top: 11, bottom: 3 });
+    expect(clampTrim(Number.NaN, Number.POSITIVE_INFINITY, H, "bottom")).toEqual({
+      top: 0,
+      bottom: H - MIN_TRIM_KEEP_PX,
+    });
+  });
+
+  it("allows the kept part to shrink to exactly MIN_TRIM_KEEP_PX but no further", () => {
+    const max = H - MIN_TRIM_KEEP_PX;
+    expect(clampTrim(0, max, H, "bottom")).toEqual({ top: 0, bottom: max });
+    expect(clampTrim(0, max + 1, H, "bottom")).toEqual({ top: 0, bottom: max });
+  });
+
+  it("pulls back the edge being dragged, never the other one", () => {
+    const max = H - MIN_TRIM_KEEP_PX;
+    expect(clampTrim(500, 800, H, "bottom")).toEqual({ top: 500, bottom: max - 500 });
+    expect(clampTrim(800, 500, H, "top")).toEqual({ top: max - 500, bottom: 500 });
+  });
+
+  it("falls back to the other edge when the dragged one alone cannot fix the overflow", () => {
+    const max = H - MIN_TRIM_KEEP_PX;
+    expect(clampTrim(5000, 100, H, "top")).toEqual({ top: max - 100, bottom: 100 });
+    expect(clampTrim(100, 5000, H, "bottom")).toEqual({ top: 100, bottom: max - 100 });
+    expect(clampTrim(5000, 5000, H, "top").top + clampTrim(5000, 5000, H, "top").bottom).toBe(max);
+  });
+
+  it("an image no taller than the minimum cannot be trimmed", () => {
+    expect(clampTrim(10, 10, MIN_TRIM_KEEP_PX, "top")).toEqual({ top: 0, bottom: 0 });
+    expect(clampTrim(10, 10, 20, "bottom")).toEqual({ top: 0, bottom: 0 });
+    expect(clampTrim(10, 10, 0, "bottom")).toEqual({ top: 0, bottom: 0 });
+  });
+});
+
+describe("trim labels", () => {
+  it("names who set the trim", () => {
+    expect(trimLabel({ top: 0, bottom: 40, by: "user" })).toBe("Đã cắt mép");
+    expect(trimLabel({ top: 12, bottom: 0, by: "credit" })).toBe("Credit · tự cắt");
+  });
+
+  it("flags trimmed images after skip and upload state, before the credit hint", () => {
+    const trim = { top: 0, bottom: 40, by: "user" as const };
+    const items = sourceItems(
+      [
+        file("a", 0, "user", 500, trim),
+        file("b", 1, null, 500, trim),
+        file("c", 2, null, 800),
+        file("d", 3, null, 800, trim),
+        file("e", 4, null, 800),
+      ],
+      new Map(),
+      { d: "uploading" },
+      null,
+    );
+    expect(items.map(sourceLabel)).toEqual([
+      { label: "Đã xoá", tone: "muted" },
+      { label: "Đã cắt mép", tone: "trim" },
+      null,
+      { label: "Đang tải", tone: "busy" },
+      null,
+    ]);
+    expect(items[1]?.trim).toEqual(trim);
   });
 });

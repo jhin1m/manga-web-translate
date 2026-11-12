@@ -1,5 +1,5 @@
 /** Kiểu + gọi API của chương (khớp apps/api/src/routes/{chapters,pages,progress}.ts). */
-import type { PageState, SourceSkipReason } from "@mtl/shared";
+import type { PageState, SourceSkipReason, SourceTrim } from "@mtl/shared";
 import { api } from "../../lib/api.ts";
 import type { ChapterStatus, ChapterSummary } from "../series/api.ts";
 import type { ProofreadEstimate, Suggestion } from "./proofread-model.ts";
@@ -31,7 +31,14 @@ export type ChapterDetail = ChapterSummary & {
   ingest_rev: number;
   series: { id: string; title: string };
   lock: ChapterLock | null;
-  source_files: { id: string; ord: number; bytes: number; mime: string; skip: SourceSkipReason | null }[];
+  source_files: {
+    id: string;
+    ord: number;
+    bytes: number;
+    mime: string;
+    skip: SourceSkipReason | null;
+    trim: SourceTrim | null;
+  }[];
 };
 
 export type ProgressPage = {
@@ -113,6 +120,7 @@ export type SourceFileImage = {
   id: string;
   ord: number;
   skip: SourceSkipReason | null;
+  trim: SourceTrim | null;
   width: number | null;
   url: string;
 };
@@ -126,6 +134,20 @@ export const setSourceSkip = (ch: string, fileId: string, skip: "user" | null) =
   api<ChapterDetail["source_files"][number]>(base(ch, `/source-files/${fileId}`), {
     method: "PATCH",
     body: { skip },
+  });
+/**
+ * Cắt mép trên/dưới 1 ảnh gốc trước khi cắt trang (px ảnh thật); `trim: null` = bỏ cắt. `height` = chiều cao đo ở
+ * trình duyệt, server chỉ dùng khi ảnh chưa có chiều cao. 400 `trim_too_large` khi phần còn lại < MIN_TRIM_KEEP_PX.
+ */
+export const setSourceTrim = (
+  ch: string,
+  fileId: string,
+  trim: Pick<SourceTrim, "top" | "bottom"> | null,
+  height?: number,
+) =>
+  api<ChapterDetail["source_files"][number]>(base(ch, `/source-files/${fileId}`), {
+    method: "PATCH",
+    body: { trim, height },
   });
 /** Đổi thứ tự ảnh gốc trước khi cắt trang: `ids` = cả bộ ảnh theo thứ tự mới (400 `source_set_mismatch` khi lệch bộ). */
 export const setSourceOrder = (ch: string, ids: string[]) =>

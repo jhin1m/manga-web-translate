@@ -846,6 +846,77 @@
   max-width: 100%;
   height: auto;
 }
+/* Khung đúng bằng ảnh: lớp phủ cắt mép đặt theo % chiều cao ảnh nên không lệ thuộc cỡ hiển thị. */
+.cw-source-frame {
+  position: relative;
+}
+.cw-trim-shade {
+  position: absolute;
+  left: 0;
+  right: 0;
+  background: rgb(255 255 255 / 0.72);
+  pointer-events: none;
+}
+.cw-trim-shade[data-edge="top"] {
+  top: 0;
+  border-bottom: 1px dashed var(--c-accent);
+}
+.cw-trim-shade[data-edge="bottom"] {
+  bottom: 0;
+  border-top: 1px dashed var(--c-accent);
+}
+/* Thanh kéo: vùng bấm cao 24px nằm trong phần ảnh còn lại (không tràn ra ngoài ảnh khi chưa cắt), vạch kẻ ở mép. */
+.cw-trim-handle {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 24px;
+  cursor: ns-resize;
+  touch-action: none;
+  z-index: 2;
+}
+.cw-trim-handle[data-edge="bottom"] {
+  transform: translateY(-100%);
+}
+.cw-trim-handle::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: var(--c-accent);
+}
+.cw-trim-handle[data-edge="top"]::before {
+  top: 0;
+}
+.cw-trim-handle[data-edge="bottom"]::before {
+  bottom: 0;
+}
+.cw-trim-handle::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  width: 48px;
+  height: 10px;
+  margin-left: -24px;
+  border-radius: 5px;
+  background: var(--c-accent);
+}
+.cw-trim-handle[data-edge="top"]::after {
+  top: 0;
+}
+.cw-trim-handle[data-edge="bottom"]::after {
+  bottom: 0;
+}
+.cw-trim-handle:focus-visible {
+  outline: 2px solid var(--c-accent-hover);
+  outline-offset: -2px;
+}
+.cw-trim-bar {
+  gap: var(--sp-2);
+  padding: 4px 8px;
+  white-space: nowrap;
+}
 .cw-source-view figure[data-skipped] img {
   opacity: 0.4;
 }

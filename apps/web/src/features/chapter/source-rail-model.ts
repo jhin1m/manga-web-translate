@@ -2,7 +2,7 @@
  * Rail ảnh gốc (chương chưa có page): mục theo thứ tự upload, nhãn trạng thái tải / bỏ qua / gợi ý credit, đếm và
  * bước ←/→, đổi chỗ. Thuần, không gọi API.
  */
-import type { SourceSkipReason } from "@mtl/shared";
+import { MIN_TRIM_KEEP_PX, type SourceSkipReason, type SourceTrim } from "@mtl/shared";
 import type { ItemStatus } from "../upload/upload-queue.ts";
 import type { SourceFileImage } from "./api.ts";
 import type { Tone } from "./status.ts";
@@ -18,6 +18,8 @@ export type SourceItem = {
   /** Blob local khi file được thả trong tab này (hiện ngay, không chờ tải lên), không thì URL ký. */
   url: string;
   skip: SourceSkipReason | null;
+  /** Số px cắt ở mép trên/dưới ảnh gốc (theo pixel ảnh thật); null = giữ nguyên. */
+  trim: SourceTrim | null;
   /** Trạng thái tải; null = không có upload nào được biết (coi như đã lên storage). */
   upload: SourceUpload | null;
   /** Ảnh đầu/cuối lệch khổ so với chương — chỉ gợi ý, không tự bỏ. */
@@ -67,19 +69,52 @@ export function sourceItems(
     n: i + 1,
     url: localUrls.get(f.id) ?? f.url,
     skip: f.skip,
+    trim: f.trim,
     upload: uploads?.[f.id] ?? (uploaded && !uploaded.has(f.id) ? "missing" : null),
     maybeCredit: hints[i] ?? false,
   }));
+}
+
+/** Nhãn cờ / tooltip của ảnh đã cắt mép: tự khớp credit series đã học hay người dùng cắt tay. */
+export const trimLabel = (trim: SourceTrim) => (trim.by === "credit" ? "Credit · tự cắt" : "Đã cắt mép");
+
+/**
+ * Kẹp số px cắt mép trên/dưới vào miền hợp lệ cho ảnh cao `height` px: số nguyên không âm, phần còn lại luôn
+ * ≥ MIN_TRIM_KEEP_PX (ảnh thấp hơn mức đó không cắt được). Vượt thì lùi thanh đang kéo (`edge`); chưa đủ thì lùi
+ * tiếp thanh còn lại để tổng không bao giờ vượt `height − MIN_TRIM_KEEP_PX`.
+ */
+export function clampTrim(
+  top: number,
+  bottom: number,
+  height: number,
+  edge: "top" | "bottom",
+): { top: number; bottom: number } {
+  const room = Math.max(0, Math.floor(Number.isFinite(height) ? height : 0) - MIN_TRIM_KEEP_PX);
+  // Vô cực / NaN: coi như kéo hết cỡ (NaN → 0).
+  const whole = (v: number) => (Number.isNaN(v) ? 0 : Math.max(0, Math.min(room, Math.round(v))));
+  let t = whole(top);
+  let b = whole(bottom);
+  if (t + b > room) {
+    if (edge === "top") {
+      t = room - b;
+    } else {
+      b = room - t;
+    }
+  }
+  return { top: t, bottom: b };
 }
 
 /**
  * Nhãn dưới "Ảnh n": bỏ qua > trạng thái tải > gợi ý credit; tải xong / không tải trong tab này và không lệch khổ →
  * không nhãn.
  */
-export function sourceLabel(it: SourceItem): { label: string; tone: "busy" | "warn" | "danger" | "muted" } | null {
+export function sourceLabel(
+  it: SourceItem,
+): { label: string; tone: "busy" | "warn" | "danger" | "muted" | "trim" } | null {
   if (it.skip) return { label: SKIP_LABEL[it.skip], tone: "muted" };
   const upload = it.upload && UPLOAD_LABEL[it.upload];
   if (upload) return upload;
+  if (it.trim) return { label: trimLabel(it.trim), tone: "trim" };
   return it.maybeCredit ? { label: "Có thể là credit", tone: "warn" } : null;
 }
 

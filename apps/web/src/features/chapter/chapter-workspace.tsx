@@ -96,7 +96,7 @@ import { ToolRail } from "./tool-rail.tsx";
 import { type DocTab, isWidePanel, PANEL_TITLE, type PanelId, type RailTarget, railClick } from "./tool-rail-model.ts";
 import { undoStyleText } from "./undo-style-text.ts";
 import { useChapterData } from "./use-chapter-data.ts";
-import { useReorderSources, useSetSourceSkip, useSourceImages } from "./use-source-images.ts";
+import { useReorderSources, useSetSourceSkip, useSetSourceTrim, useSourceImages } from "./use-source-images.ts";
 
 const URL_SYNC_MS = 400;
 /** Thông báo kết quả (info) tự ẩn sau chừng này; lỗi giữ tới khi đóng. */
@@ -128,7 +128,7 @@ type Notice = {
   sticky?: boolean;
   actions?: { label: string; run(): void }[];
   /** Nhóm thông báo — "skip": khôi phục ảnh/trang chỉ đóng thông báo "Đã xoá / Đã ẩn…", không đụng lỗi khác. */
-  key?: "skip" | "reorder";
+  key?: "skip" | "reorder" | "trim";
 };
 
 /** Dịch chương mà có ảnh bị loại: giữ tới khi chương chạy xong lượt xử lý vừa bắt đầu. */
@@ -734,9 +734,16 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
   const sourceMode = !!data.progress && pages.length === 0;
   const sources = useSourceImages(chapterId, sourceMode);
   const [sourcePick, setSourcePick] = useState<string | null>(null);
+  /** Ảnh đang ở chế độ cắt mép (chỉ mở từ menu thumbnail); đổi ảnh đang xem hoặc hết sửa được thì thoát. */
+  const [trimId, setTrimId] = useState<string | null>(null);
   const sourceId = sources.some((it) => it.id === sourcePick) ? sourcePick : (sources[0]?.id ?? null);
   const sourceIdx = sources.findIndex((it) => it.id === sourceId);
+  const pickSource = (id: string) => {
+    setTrimId(null);
+    setSourcePick(id);
+  };
   const sourcesEditable = status === "draft" || (status === "partial_failed" && pages.length === 0);
+  const trimming = trimId !== null && trimId === sourceId && sourcesEditable;
   // Đang cắt trang → cột ảnh gốc hiện bước + đếm của job ingest (progress null = còn xếp hàng).
   const ingestJob = data.progress?.jobs.find((j) => j.type === "chapter.ingest" && j.status === "running");
   const ingest: IngestView | undefined =
@@ -809,6 +816,55 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
       ),
     [sourceSkip.mutate, notify, alwaysSkip],
   );
+  const sourceTrim = useSetSourceTrim(chapterId, (e) =>
+    notify({
+      tone: "danger",
+      text:
+        e instanceof ApiError && e.body.error === "trim_too_large"
+          ? "Phần ảnh còn lại quá ngắn — kéo thanh cắt ít hơn."
+          : errorMessage(e),
+    }),
+  );
+  /** Ghi số px cắt của ảnh `it` (null = bỏ cắt); toast "Hoàn tác" trả về trim trước đó. */
+  const trimSource = useCallback(
+    (it: SourceItem, trim: { top: number; bottom: number } | null, height?: number) => {
+      const prev = it.trim ? { top: it.trim.top, bottom: it.trim.bottom } : null;
+      sourceTrim.mutate(
+        { id: it.id, trim, height },
+        {
+          onSuccess: () =>
+            notify({
+              tone: "info",
+              key: "trim",
+              text: trim ? `Đã cắt mép ảnh ${it.n}.` : `Đã bỏ cắt ảnh ${it.n}.`,
+              actions: [
+                {
+                  label: "Hoàn tác",
+                  run: () =>
+                    sourceTrim.mutate(
+                      { id: it.id, trim: prev, height },
+                      { onSuccess: () => setNotice((n) => (n?.key === "trim" ? null : n)) },
+                    ),
+                },
+              ],
+            }),
+        },
+      );
+    },
+    [sourceTrim.mutate, notify],
+  );
+  /** Rời chế độ cắt và trả focus về thumbnail của ảnh đó (bàn phím không bị rơi về đầu trang). */
+  const closeTrim = useCallback((id: string) => {
+    setTrimId(null);
+    document.querySelector<HTMLElement>(`.cw-thumbs [data-source="${id}"] .cw-thumb`)?.focus();
+  }, []);
+  const finishTrim = (edges: { top: number; bottom: number }, height: number) => {
+    const it = sources[sourceIdx];
+    if (!it) return;
+    closeTrim(it.id);
+    const same = edges.top === (it.trim?.top ?? 0) && edges.bottom === (it.trim?.bottom ?? 0);
+    if (!same) trimSource(it, edges.top + edges.bottom > 0 ? edges : null, height);
+  };
   const sourceReorder = useReorderSources(chapterId, (e) => notify({ tone: "danger", text: errorMessage(e) }));
   /** Đưa ảnh `id` tới vị trí `to` (0-based); toast "Hoàn tác" trả đúng thứ tự trước đó. */
   const moveSource = useCallback(
@@ -938,7 +994,11 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
 
   const stepSourceBy = (dir: -1 | 1) => {
     const next = stepSource(sources, sourceId, dir);
-    if (next) setSourcePick(next);
+    if (next) pickSource(next);
+  };
+  const startTrim = (it: SourceItem) => {
+    setSourcePick(it.id);
+    setTrimId(it.id);
   };
 
   // ---- Ảnh + OCR của page active ----
@@ -1380,7 +1440,10 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
               item={sources[sourceIdx]}
               index={sourceIdx}
               total={sourceCounts(sources).total}
+              trimming={trimming}
               onStep={stepSourceBy}
+              onTrimDone={finishTrim}
+              onTrimCancel={() => sourceId && closeTrim(sourceId)}
             />
           </div>
         ) : (
@@ -1432,8 +1495,10 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
           activeId={sourceId}
           editable={sourcesEditable}
           ingest={ingest}
-          onPick={setSourcePick}
+          onPick={pickSource}
           onSkip={skipSource}
+          onTrim={startTrim}
+          onClearTrim={(it) => trimSource(it, null)}
           onMove={moveSource}
         />
       ) : (
