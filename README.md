@@ -34,7 +34,7 @@ Cần Docker Compose ≥ 2.17, RAM cho Docker ≥ 10 GB, nên 12 GB (2 worker m�
 - **AI hiệu đính**: gợi ý sửa theo khối, nhận / bỏ từng cái, báo trước chi phí.
 - **Series**: ngôn ngữ nguồn `ko | ja | zh | en` → đích `vi | en | id | es | pt | fr`, kính ngữ, xưng hô, giọng văn,
   font mặc định; glossary chung + riêng series (CSV), tìm & thay.
-- **Lọc rác**: ẩn trang, tự bỏ ảnh credit đã học theo series, danh sách chữ watermark bỏ qua.
+- **Lọc rác**: ẩn trang, tự bỏ ảnh credit đã học theo series, cắt dải credit dính ở mép ảnh (cắt tay hoặc tự cắt theo dải đã học), danh sách chữ watermark bỏ qua.
 - **Font**: upload TTF / OTF riêng, dùng cả trong editor và bản xuất.
 - **Xuất**: ZIP để đăng web hoặc CBZ, 3 mức chất lượng; chương sửa sau lần xuất cuối hiện "Xuất lại".
 

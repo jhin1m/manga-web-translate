@@ -273,7 +273,11 @@ override khi test/tool), ghi lại ở `chapters.ingest_mode`. Series mới khô
 
 `worker/mtl_pipeline/ingest.py`: slice liên tiếp cùng width → strip ảo → detector → cắt ở hàng không giao box (lề 16px),
 ưu tiên ~4500px trong cửa sổ 3000–6000; không có → kéo dài tới 12000px; vẫn không → hàng giao ít box nhất + `cut_flag`.
-Không overlap; `source_map` ghi slice gốc ↔ đoạn y của page. `mode: "pages"` (manga): 1 file = 1 page. Ingest lại khi
+Không overlap; `source_map` ghi slice gốc ↔ đoạn y của page. `mode: "pages"` (manga): 1 file = 1 page.
+Cắt mép (pipeline 0.12.0): `sources[].trim` (`{top, bottom}` | null; API đọc từ `source_files.trim`) được áp **trước** khi
+ghép strip / chia pages (`apply_trim`, giữ ≥ 1 hàng) nên mọi toạ độ — `src_y` của `source_map`, slice `original_slices` —
+tính theo ảnh **đã cắt** (bắt đầu từ 0), không theo ảnh gốc. Key `trim` thiếu thì coi như không cắt (API cũ sau rollback).
+`ingestKey` băm thêm trim; ảnh không cắt giữ nguyên chuỗi băm cũ. Ingest lại khi
 đã có `state_origin='user'` → 409 `chapter_has_user_edits` (tạo chương mới).
 
 ## Ngôn ngữ + thứ tự đọc
@@ -315,6 +319,9 @@ API `PIPELINE_VERSION` (muối input_rev) vẫn 0.4.0. 0.8.0 (`Region.style` ở
 0.11.0 (prompt dịch + hai key result optional `new_terms` / `pronoun_pairs`, trí nhớ series) **không** nâng
 `MIN_PIPELINE_VERSION` (giữ 0.10.0): API cũ bỏ qua key lạ, API mới nhận result thiếu key, payload không đổi; worker
 0.10.0 vẫn chạy nhưng không sinh gợi ý. API `PIPELINE_VERSION` vẫn 0.4.0.
+0.12.0 (`chapter.ingest` inputs `sources[].trim`, cắt mép ảnh gốc) nâng `MIN_PIPELINE_VERSION = 0.12.0`: schema input có
+`additionalProperties: false` nên worker cũ fail job có `trim`; worker < 0.12.0 nhận 426 khi claim. Worker 0.12.0 đọc được
+payload cũ không có `trim`. API `PIPELINE_VERSION` (muối input_rev) vẫn 0.4.0. Checklist ở [deployment-guide](./deployment-guide.md).
 
 ## Xoá chữ lại (`page.reinpaint`, pipeline 0.9.0)
 

@@ -258,6 +258,23 @@ worker theo thứ tự nào cũng được; `MIN_PIPELINE_VERSION` giữ 0.10.0 
 vẫn chạy, chỉ không sinh gợi ý). Rollback app không cần down DB; gỡ hẳn thì chạy
 `packages/db/migrations-down/0026_series_memory.down.sql` (đúng thứ tự ngược như checklist 0.10.0).
 
+### Checklist cắt mép credit (pipeline 0.12.0, migration 0027 + 0028)
+
+Cắt mép ảnh gốc trước Bước 1 + học dải credit theo series. `MIN_PIPELINE_VERSION = 0.12.0` (mặc định trong `env.ts`; nếu
+`.env` có ghi đè thì sửa); `PIPELINE_VERSION` API không đổi.
+
+1. Migration chỉ thêm: `0027_add_source_file_trim` (`source_files.trim` jsonb) và `0028_add_series_skip_image_edge`
+   (`series_skip_images.edge`, null = ảnh cả tấm). Down tay: `packages/db/migrations-down/0027_add_source_file_trim.down.sql`,
+   `0028_add_series_skip_image_edge.down.sql`.
+2. Nâng worker Mac, image Modal và worker self-host lên ≥ 0.12.0 **cùng lúc** với API. Worker < 0.12.0 nhận 426 khi claim
+   (hàng đợi dừng, không mất job); worker 0.12.0 vẫn đọc được payload cũ không có `trim`, nên có thể lên worker trước API.
+3. Web và API ship cùng nhau: `POST /series/:id/skip-images` đường dải bắt buộc `band_px`; web cũ không gửi `edge` nên không học dải.
+4. Rollback API: không cần down DB cho `trim` (bản cũ bỏ qua cột), nhưng **phải chạy down 0028** (rồi 0027 nếu gỡ hẳn, đúng
+   thứ tự ngược như checklist 0.10.0) — bản cũ không biết cột `edge` sẽ coi dải đã học là ảnh credit cả tấm và tự bỏ
+   nhầm ảnh. Down 0028 xoá các dải đã học (ảnh cả tấm giữ nguyên). Chương đã cắt mép mà ingest bằng API cũ sẽ không
+   cắt (API cũ không gửi `trim`).
+5. Phát hành một lần sau khi xong mọi phase: rc → smoke → tag cùng commit → GitHub Release.
+
 ### Checklist OCR local mặc định (MangaOCR / PaddleOCR)
 
 1. **Model OCR local giờ nằm trên đường mặc định** (`ja` → MangaOCR ~460MB, `ko`/`zh`/`en` → PaddleOCR ~45MB). Trước khi

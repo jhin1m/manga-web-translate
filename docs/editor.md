@@ -74,6 +74,16 @@ thumbnail + tooltip "Đang tải" / "Tải lỗi" / "Chưa tải"), còn lại d
 `source_files.skip = 'user'` (giữ hàng để hoàn tác và để tải tiếp khớp bộ file); commit/ingest bỏ ảnh `skip`, nút
 nút "Dịch chương" đếm ảnh còn dùng. Chương đang mở ở tab khác → 423; đã có page → 409.
 
+**Cắt mép ảnh** (bỏ dải credit dính ở mép trên / dưới ảnh mà vẫn giữ phần truyện; chỉ khi chương còn nháp, cùng guard với
+xoá ảnh): menu thumbnail → "Cắt mép ảnh n…" (ảnh `skip` không có mục này), ảnh đã cắt thêm "Bỏ cắt". Canvas vào chế độ
+cắt (`source-trim-overlay.tsx`): phủ mờ phần bị cắt + hai thanh kéo trên / dưới; **Tab** đổi thanh, **↑/↓** 1 px,
+**Shift+↑/↓** 10 px, **Enter** = Xong, **Esc** = Huỷ (đổi sang ảnh khác cũng bỏ bản nháp). Phần giữ lại tối thiểu
+`MIN_TRIM_KEEP_PX` (64 px, `packages/shared/src/job.ts`). Lưu bằng `PATCH …/source-files/:fileId {trim: {top, bottom} | null,
+height?}` vào `source_files.trim` (`{top, bottom, by}`; 0/0 = null). File gốc không đổi nên "Bỏ cắt" / toast "Hoàn tác" trả
+ảnh nguyên vẹn. Lỗi: 400 `trim_too_large` (cắt quá nhiều), 400 `no_size` (ảnh chưa có chiều cao — web gửi `height` đo
+được), 409 `chapter_not_draft`, 423. Cờ ở thumbnail: "Đã cắt mép" (`by: "user"`), "Credit · tự cắt" (`by: "credit"`, xem
+dưới). Lúc "Dịch chương" worker cắt `trim` trước khi ghép strip / pages ([job-queue-worker.md](./job-queue-worker.md#ingest-strip--pages)).
+
 Đổi thứ tự ảnh (cùng điều kiện `editable`, thứ tự này là thứ tự ghép/cắt trang): kéo-thả thumbnail (vạch xanh báo chỗ
 thả), menu chuột phải "Đưa lên đầu / Lên 1 / Xuống 1 / Đưa xuống cuối", hoặc Alt+↑/↓ trên thumbnail đang focus (focus đi
 theo ảnh). Cập nhật lạc quan, lỗi → trả thứ tự cũ + toast; toast "Đã đổi thứ tự" có "Hoàn tác". Ảnh đã xoá vẫn giữ chỗ.
@@ -101,8 +111,24 @@ từ chối ảnh không có hash (`no_hash`), ảnh gần trơn (≤ 8 hoặc �
 (`ws/{ws}/series/{id}/skip/…`, còn khi xoá chương nguồn) và quản lý ở Cài đặt series → "Ảnh tự bỏ" (xoá khỏi danh
 sách không đổi chương đã tạo); xoá series dọn cả thư mục đó.
 
-Giới hạn: credit cùng width với trang truyện đã bị ghép vào page lớn lúc cắt trang thì không tự bỏ được (chỉ ẩn cả
-trang); credit cùng mẫu nhưng đổi chữ có thể không khớp; chưa có AI phân loại credit.
+**Học dải credit ở mép**: toast sau khi cắt mép có thêm **"Luôn cắt ở series này"** — học từng mép đã cắt (px > 0) thành
+một "dải" (`POST /series/:id/skip-images {source_file_id, edge: "top" | "bottom", dhash, band_px}`; `series_skip_images.edge`,
+`edge IS NULL` = ảnh credit cả tấm như trên). Trình duyệt tính dHash của đúng dải (`bandFingerprint`); server lưu bề rộng
+ảnh + chiều cao dải từ trim đã lưu. Mỗi mép học riêng (một mép lỗi không chặn mép kia). Từ chối: 409 `no_trim` (ảnh chưa
+cắt), 409 `trim_changed` (`band_px` khác trim đã lưu — `band_px` bắt buộc), 409 `band_too_small` (dải < `MIN_BAND_PX` = 8 px),
+`no_hash`, `plain_image`, `not_uploaded`; học lại cùng dải → "đã có sẵn". Dải tính chung giới hạn 100 mục/series với ảnh
+cả tấm. "Ảnh tự bỏ" ở Cài đặt series hiện dải với nhãn "Dải đầu ảnh" / "Dải cuối ảnh" (chỉ đúng phần dải), xoá được như ảnh khác.
+Bộ khớp credit cả tấm chỉ đọc hàng `edge IS NULL`, dải không chặn việc học ảnh cả tấm.
+
+**Tự cắt khi thả chương** (`bandTrims`, `image-fingerprint.ts`): sau khi tính hash, trình duyệt so dải **đầu của 3 ảnh đầu** và
+**dải cuối của 3 ảnh cuối** với các dải đã học (cửa sổ co theo bề rộng ảnh, Hamming ≤ 6, bỏ qua cửa sổ gần trơn); khớp thì
+gửi `files[].trim` trong `POST /chapters`, server lưu `{top, bottom, by: "credit"}` → thumbnail "Credit · tự cắt". Server bỏ
+qua trim không vừa (thiếu chiều cao, phần giữ < 64 px, 0/0) hoặc ảnh đã `skip = 'credit'`, không làm hỏng request; lỗi lúc
+so dải thì chương vẫn tải lên như cũ. Muốn bỏ thì "Bỏ cắt" trước Bước 1; hoàn tác "Bỏ cắt" trả lại phần cắt nhưng nhãn thành
+"Đã cắt mép" (trim của người dùng). Banner khác chiều cao / có thêm lề thì không khớp → cắt tay rồi học lại.
+
+Giới hạn: credit nằm giữa ảnh (không chạm mép) hoặc đã bị ghép vào page lớn lúc cắt trang thì chỉ ẩn được cả trang;
+credit cùng mẫu nhưng đổi chữ có thể không khớp; chưa có AI phân loại credit.
 
 ## Dữ liệu và lưu
 

@@ -62,8 +62,9 @@ Mọi test tự động hiện dùng worker giả lập; chưa có số đo vớ
 - [ ] Thumbnail do server sinh (thứ tự ảnh trước khi cắt trang đã sắp tay được: kéo-thả / menu / Alt+↑↓).
 - [ ] Glossary: chuyển / sao chép entry giữa các cặp ngôn ngữ, cột cặp ngôn ngữ trong CSV.
 - [ ] Chống phát lại dispatch Modal triệt để (lưu `dispatch_id` đã nhận).
-- [ ] _(Ưu tiên sau cùng)_ AI phân loại ảnh credit / quảng cáo (hiện chỉ học theo dHash + gợi ý theo khổ ảnh); credit
-      cùng khổ đã bị ghép vào trang lớn lúc cắt trang chỉ ẩn được cả trang; logo watermark dạng hình.
+- [ ] _(Ưu tiên sau cùng)_ AI phân loại ảnh credit / quảng cáo (hiện chỉ học theo dHash + gợi ý theo khổ ảnh; banner dính
+      ở mép trên / dưới ảnh đã cắt được và học theo series); credit nằm giữa ảnh hoặc đã bị ghép vào trang lớn lúc cắt
+      trang chỉ ẩn được cả trang; logo watermark dạng hình.
 
 ## Giới hạn đã biết
 
@@ -73,6 +74,8 @@ Mọi test tự động hiện dùng worker giả lập; chưa có số đo vớ
   tay. Người dùng 0.2.0 cập nhật tay một lần để có updater. Chi tiết: [self-host.md](./self-host.md#cập-nhật).
 - Watermark: watermark detector không bắt thì còn trên ảnh.
 - Credit cùng mẫu nhưng đổi chữ (đổi tên người dịch) có thể không khớp ảnh đã học.
+- Cắt mép chỉ cho mép trên / dưới ảnh gốc, trước Bước 1; dải credit giữa ảnh không cắt được. Tự cắt chỉ xét 3 ảnh đầu /
+  3 ảnh cuối và cần banner cùng chiều cao (theo bề rộng ảnh) với dải đã học.
 - Ảnh rất cao (> 16k px) có thể không tính được dấu nhận dạng trên Safari → ảnh đó không tự bỏ (upload vẫn chạy).
 - Xem trước font trong danh sách thả xuống cần Chrome/Edge 135+ (`appearance: base-select`); Safari / Firefox chỉ hiện
   font ở ô đang chọn.
