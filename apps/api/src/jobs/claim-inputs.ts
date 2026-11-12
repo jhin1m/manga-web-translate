@@ -165,6 +165,7 @@ export async function buildInputs(tx: DbLike, job: Job): Promise<Record<string, 
             url: await get(s.storageKey),
             width: s.width,
             height: s.height,
+            trim: s.trim ? { top: s.trim.top, bottom: s.trim.bottom } : null,
           })),
         ),
       };

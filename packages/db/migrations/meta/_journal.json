@@ -190,6 +190,13 @@
       "when": 1794401412292,
       "tag": "0026_series_memory",
       "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1794496428294,
+      "tag": "0027_add_source_file_trim",
+      "breakpoints": true
     }
   ]
 }

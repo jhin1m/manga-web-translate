@@ -5,7 +5,7 @@
  */
 
 import { chapters, isUuid, NotFoundError, pages, type Scoped, scoped, series, sourceFiles } from "@mtl/db";
-import { DHASH_RE, PAGE_FORMATS, storageKeys } from "@mtl/shared";
+import { DHASH_RE, MIN_TRIM_KEEP_PX, PAGE_FORMATS, storageKeys } from "@mtl/shared";
 import { and, eq, inArray, isNull, type SQL } from "drizzle-orm";
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
@@ -89,7 +89,18 @@ const ChapterPatch = z
   .refine((b) => b.number !== undefined || b.series_id !== undefined, { message: "number hoặc series_id" });
 
 /** Chỉ "user" từ API: "credit" do server gán khi khớp ảnh credit đã học của series. */
-const SourceSkipBody = z.object({ skip: z.enum(["user"]).nullable() });
+const SourcePatchBody = z
+  .object({
+    skip: z.enum(["user"]).nullable().optional(),
+    /** Số px cắt mép trên/dưới (null = bỏ cắt); `by` luôn là "user" khi đặt từ API. */
+    trim: z
+      .object({ top: z.number().int().min(0), bottom: z.number().int().min(0) })
+      .nullable()
+      .optional(),
+    /** Cao thật web đo được; chỉ dùng khi hàng chưa có `height` (ảnh quá lớn để trình duyệt tính dấu). */
+    height: z.number().int().positive().optional(),
+  })
+  .refine((b) => b.skip !== undefined || b.trim !== undefined, { message: "skip hoặc trim" });
 const SourceOrderBody = z.object({ ids: z.array(z.string().uuid()).min(1).max(MAX_FILES_PER_CHAPTER) });
 const PresignBody = z.object({ file_ids: z.array(z.string().uuid()).min(1).max(MAX_FILES_PER_CHAPTER) });
 /**
@@ -110,7 +121,14 @@ const RescanBody = z.object({ page_ids: z.array(z.string().uuid()).min(1).max(10
 type SourceFile = typeof sourceFiles.$inferSelect;
 type Chapter = typeof chapters.$inferSelect;
 
-const sourceFileView = (f: SourceFile) => ({ id: f.id, ord: f.ord, bytes: f.bytes, mime: f.mime, skip: f.skip });
+const sourceFileView = (f: SourceFile) => ({
+  id: f.id,
+  ord: f.ord,
+  bytes: f.bytes,
+  mime: f.mime,
+  skip: f.skip,
+  trim: f.trim,
+});
 
 const conflict = (error: string, message: string) =>
   new HTTPException(409, { res: Response.json({ error, message }, { status: 409 }) });
@@ -334,9 +352,16 @@ chapterRoutes.post("/chapters/:chapterId/commit", async (c) => {
   return c.json({ job: jobView(job), created, accepted: valid.length, rejected: rejectedView }, 202);
 });
 
-/** Bỏ qua / dùng lại 1 ảnh gốc trước Bước 1 (hoàn tác được; hàng vẫn giữ để tải tiếp khớp đúng bộ file). */
+const badRequest = (error: string, message: string) =>
+  new HTTPException(400, { res: Response.json({ error, message }, { status: 400 }) });
+
+/**
+ * Bỏ qua / dùng lại 1 ảnh gốc, và/hoặc cắt mép trên-dưới của nó, trước Bước 1 (hoàn tác được; hàng vẫn giữ để tải
+ * tiếp khớp đúng bộ file, file gốc không bị sửa). Cắt phải chừa lại ≥ MIN_TRIM_KEEP_PX px: 400 `trim_too_large`;
+ * chưa biết cao ảnh (hàng chưa có `height`, body không gửi) → 400 `no_size`. Cắt 0/0 = bỏ cắt.
+ */
 chapterRoutes.patch("/chapters/:chapterId/source-files/:fileId", async (c) => {
-  const body = await parseJson(c, SourceSkipBody);
+  const body = await parseJson(c, SourcePatchBody);
   const userId = c.get("userId");
   const fileId = c.req.param("fileId");
   const ch = await c.get("sdb").byId(chapters, c.req.param("chapterId"), "chapter");
@@ -345,9 +370,27 @@ chapterRoutes.patch("/chapters/:chapterId/source-files/:fileId", async (c) => {
   const row = await inJobTx(async (tx) => {
     const t = scoped(tx, userId);
     await assertSourcesEditable(t, await lockChapter(tx, userId, ch.id), c.get("lockHolder"));
-    const [r] = await t.update(sourceFiles, and(eq(sourceFiles.chapterId, ch.id), eq(sourceFiles.id, fileId)) as SQL, {
-      skip: body.skip,
-    });
+    const where = and(eq(sourceFiles.chapterId, ch.id), eq(sourceFiles.id, fileId)) as SQL;
+    const [current] = await t.select(sourceFiles, where);
+    if (!current) return undefined;
+    const set: Partial<typeof sourceFiles.$inferInsert> = {};
+    if (body.skip !== undefined) set.skip = body.skip;
+    if (body.trim !== undefined) {
+      const top = body.trim?.top ?? 0;
+      const bottom = body.trim?.bottom ?? 0;
+      if (top + bottom === 0) {
+        set.trim = null;
+      } else {
+        const height = current.height ?? body.height;
+        if (!height) throw badRequest("no_size", "chưa biết chiều cao ảnh");
+        if (height - top - bottom < MIN_TRIM_KEEP_PX) {
+          throw badRequest("trim_too_large", `phải chừa lại ít nhất ${MIN_TRIM_KEEP_PX}px`);
+        }
+        set.trim = { top, bottom, by: "user" };
+        if (current.height === null) set.height = height;
+      }
+    }
+    const [r] = await t.update(sourceFiles, where, set);
     return r;
   });
   if (!row) throw new NotFoundError("source file");

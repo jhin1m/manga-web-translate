@@ -40,13 +40,41 @@
                 "type": "null"
               }
             ]
+          },
+          "trim": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "top": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "bottom": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "required": [
+                  "top",
+                  "bottom"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
           "source_file_id",
           "url",
           "width",
-          "height"
+          "height",
+          "trim"
         ],
         "additionalProperties": false
       }

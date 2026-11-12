@@ -468,6 +468,10 @@ describe("claim", () => {
     expect(
       (await wcall(tA, "/claim", { ...body, capabilities: ["page.prepare"], pipeline_version: "0.2.9" })).status,
     ).toBe(426);
+    // Worker chưa hiểu sources[].trim của ingest bị chặn ngay lúc claim (không để job fail schema).
+    expect(
+      (await wcall(tA, "/claim", { ...body, capabilities: ["page.prepare"], pipeline_version: "0.11.0" })).status,
+    ).toBe(426);
     expect((await wcall(tA, "/claim", { ...body, capabilities: ["bogus"], pipeline_version: VERSION })).status).toBe(
       400,
     );

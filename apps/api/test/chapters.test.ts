@@ -358,6 +358,116 @@ describe("skip source files before step 1", () => {
   });
 });
 
+describe("trim source file edges before step 1", () => {
+  type FileView = { id: string; skip: string | null; trim: { top: number; bottom: number; by: string } | null };
+  type Sized = { height?: number };
+  /** Chương nháp n ảnh đã upload; `sizes[i]` khai báo cao ảnh (bỏ trống = trình duyệt không đo được). */
+  async function draftChapter(number: string, sizes: Sized[]) {
+    const files = sizes.map((sz, i) => ({
+      name: `${i + 1}.png`,
+      content_type: "image/png",
+      bytes: PNG_1PX.length,
+      ...(sz.height ? { width: 800, height: sz.height } : {}),
+    }));
+    const created = await json<{ chapter: { id: string }; files: Upload[] }>(
+      await api("/chapters", { method: "POST", body: { series_id: A.seriesId, number, files } }),
+      201,
+    );
+    await Promise.all(created.files.map((f) => postFile(f, PNG_1PX)));
+    return { ch: created.chapter.id, ids: created.files.map((f) => f.id) };
+  }
+  const patch = (ch: string, id: string, body: unknown, headers?: Record<string, string>) =>
+    api(`/chapters/${ch}/source-files/${id}`, { method: "PATCH", body, headers });
+  const cancel = async (ch: string) => json(await api(`/chapters/${ch}/cancel`, { method: "POST", body: {} }), 200);
+
+  it("stores the trim as user-set, clears it with null or 0/0, and lists it on both read endpoints", async () => {
+    const { ch, ids } = await draftChapter("8", [{ height: 1000 }]);
+    const id = ids[0] as string;
+    const set = await json<FileView>(await patch(ch, id, { trim: { top: 100, bottom: 200 } }), 200);
+    expect(set.trim).toEqual({ top: 100, bottom: 200, by: "user" });
+    const listed = await json<{ files: FileView[] }>(await api(`/chapters/${ch}/source-files`), 200);
+    expect(listed.files[0]?.trim).toEqual({ top: 100, bottom: 200, by: "user" });
+    const detail = await json<{ source_files: FileView[] }>(await api(`/chapters/${ch}`), 200);
+    expect(detail.source_files[0]?.trim).toEqual({ top: 100, bottom: 200, by: "user" });
+
+    expect((await json<FileView>(await patch(ch, id, { trim: { top: 0, bottom: 0 } }), 200)).trim).toBeNull();
+    await json(await patch(ch, id, { trim: { top: 0, bottom: 50 } }), 200);
+    expect((await json<FileView>(await patch(ch, id, { trim: null }), 200)).trim).toBeNull();
+    const [row] = await db.select().from(sourceFiles).where(eq(sourceFiles.id, id));
+    expect(row?.trim).toBeNull();
+  });
+
+  it("keeps trim and skip independent; a body with neither is 400", async () => {
+    const { ch, ids } = await draftChapter("8.1", [{ height: 1000 }]);
+    const id = ids[0] as string;
+    await json(await patch(ch, id, { trim: { top: 10, bottom: 10 } }), 200);
+    const skipped = await json<FileView>(await patch(ch, id, { skip: "user" }), 200);
+    expect(skipped).toMatchObject({ skip: "user", trim: { top: 10, bottom: 10 } });
+    const both = await json<FileView>(await patch(ch, id, { skip: null, trim: { top: 5, bottom: 0 } }), 200);
+    expect(both).toMatchObject({ skip: null, trim: { top: 5, bottom: 0, by: "user" } });
+    expect((await patch(ch, id, {})).status).toBe(400);
+    expect((await patch(ch, id, { trim: { top: -1, bottom: 0 } })).status).toBe(400);
+  });
+
+  it("leaves at least MIN_TRIM_KEEP_PX rows (trim_too_large) and needs a known height (no_size)", async () => {
+    const { ch, ids } = await draftChapter("8.2", [{ height: 1000 }, {}]);
+    const [sized, unsized] = ids as [string, string];
+    const big = await json<{ error: string }>(await patch(ch, sized, { trim: { top: 500, bottom: 437 } }), 400);
+    expect(big.error).toBe("trim_too_large");
+    await json(await patch(ch, sized, { trim: { top: 500, bottom: 436 } }), 200);
+
+    const none = await json<{ error: string }>(await patch(ch, unsized, { trim: { top: 10, bottom: 0 } }), 400);
+    expect(none.error).toBe("no_size");
+    // Web đo được cao thật → dùng và ghi lại; vẫn phải đủ chừa lại.
+    const tooBig = await json<{ error: string }>(
+      await patch(ch, unsized, { trim: { top: 100, bottom: 100 }, height: 150 }),
+      400,
+    );
+    expect(tooBig.error).toBe("trim_too_large");
+    await json(await patch(ch, unsized, { trim: { top: 100, bottom: 100 }, height: 600 }), 200);
+    const [row] = await db.select().from(sourceFiles).where(eq(sourceFiles.id, unsized));
+    expect(row?.height).toBe(600);
+    // Cao đã lưu thắng cao client gửi.
+    const wins = await json<{ error: string }>(
+      await patch(ch, unsized, { trim: { top: 300, bottom: 300 }, height: 100000 }),
+      400,
+    );
+    expect(wins.error).toBe("trim_too_large");
+  });
+
+  it("is refused past step 1 (409), while another tab holds the lock (423), and for foreign files (404)", async () => {
+    const { ch, ids } = await draftChapter("8.3", [{ height: 1000 }]);
+    const other = await draftChapter("8.35", [{ height: 1000 }]);
+    const id = ids[0] as string;
+    expect((await patch(ch, other.ids[0] as string, { trim: { top: 1, bottom: 1 } })).status).toBe(404);
+    expect((await patch(ch, "not-a-uuid", { trim: { top: 1, bottom: 1 } })).status).toBe(404);
+    await json(await api(`/chapters/${ch}/lock`, { method: "POST" }), 200);
+    expect((await patch(ch, id, { trim: { top: 1, bottom: 1 } }, TAB_B)).status).toBe(423);
+    expect((await api(`/chapters/${ch}/lock`, { method: "DELETE" })).status).toBe(204);
+
+    await json(await patch(ch, id, { trim: { top: 100, bottom: 100 } }), 200);
+    await json(await api(`/chapters/${ch}/commit`, { method: "POST", body: {} }), 202);
+    const ij = (await claimFor(ch, "chapter.ingest")).find((j) => j.payload.chapter_id === ch) as Claimed;
+    expect((await doIngest(token, ij)).status).toBe(200);
+    expect((await patch(ch, id, { trim: null })).status).toBe(409);
+    await cancel(ch);
+    await cancel(other.ch);
+  });
+
+  it("ingest inputs carry top/bottom only (no `by`) and null for untrimmed images", async () => {
+    const { ch, ids } = await draftChapter("8.4", [{ height: 1000 }, { height: 1000 }]);
+    await json(await patch(ch, ids[0] as string, { trim: { top: 100, bottom: 200 } }), 200);
+    await json(await api(`/chapters/${ch}/commit`, { method: "POST", body: {} }), 202);
+    const ij = (await claimFor(ch, "chapter.ingest")).find((j) => j.payload.chapter_id === ch) as Claimed;
+    const sources = (ij.inputs as { sources: Record<string, unknown>[] }).sources;
+    expect(sources.map((s) => [s.source_file_id, s.trim])).toEqual([
+      [ids[0], { top: 100, bottom: 200 }],
+      [ids[1], null],
+    ]);
+    await cancel(ch);
+  });
+});
+
 describe("reorder source files before step 1", () => {
   async function draftChapter(n: number, number: string) {
     const files = Array.from({ length: n }, (_, i) => ({

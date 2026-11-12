@@ -18,8 +18,15 @@ export type JobKey = { inputRev: string; idempotencyKey: string };
 
 const sha = (s: string) => createHash("sha256").update(s).digest("hex");
 
-export function ingestKey(chapterId: string, ingestRev: number, mode: string, sourceIds: string[]): JobKey {
-  const inputRev = sha([ingestRev, [...sourceIds].sort().join(","), env.PIPELINE_VERSION].join("|"));
+/** Ảnh có cắt mép băm thành `id:top:bottom` (đổi số px cắt = input khác); ảnh không cắt giữ nguyên `id`. */
+export function ingestKey(
+  chapterId: string,
+  ingestRev: number,
+  mode: string,
+  sources: ReadonlyArray<{ id: string; trim: { top: number; bottom: number } | null }>,
+): JobKey {
+  const items = sources.map((s) => (s.trim ? `${s.id}:${s.trim.top}:${s.trim.bottom}` : s.id));
+  const inputRev = sha([ingestRev, items.sort().join(","), env.PIPELINE_VERSION].join("|"));
   return { inputRev, idempotencyKey: idempotencyKey("chapter.ingest", chapterId, inputRev, { mode }) };
 }
 

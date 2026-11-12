@@ -71,6 +71,7 @@ pageRoutes.get("/chapters/:chapterId/source-files", async (c) => {
         id: f.id,
         ord: f.ord,
         skip: f.skip,
+        trim: f.trim,
         /** Trình duyệt đo lúc thả ảnh (null = không đo được) — rail gợi ý ảnh lệch khổ có thể là credit. */
         width: f.width,
         url: await presignGet(f.storageKey, THUMB_TTL_S),

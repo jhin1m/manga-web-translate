@@ -192,7 +192,7 @@ export async function enqueueIngest(
   }
   // Khoá idempotency theo đúng bộ ảnh sẽ ghép (bỏ ảnh bỏ qua) → bỏ/dùng lại ảnh rồi cắt lại là lượt ingest mới.
   const sources = await tx
-    .select({ id: sourceFiles.id })
+    .select({ id: sourceFiles.id, trim: sourceFiles.trim })
     .from(sourceFiles)
     .where(and(eq(sourceFiles.chapterId, ch.id), isNull(sourceFiles.skip)))
     .orderBy(asc(sourceFiles.ord));
@@ -213,12 +213,7 @@ export async function enqueueIngest(
   return insertJob(tx, {
     userId: userId,
     payload: { type: "chapter.ingest", chapter_id: ch.id, ingest_rev: ingestRev, mode: ingestMode },
-    key: ingestKey(
-      ch.id,
-      ingestRev,
-      ingestMode,
-      sources.map((s) => s.id),
-    ),
+    key: ingestKey(ch.id, ingestRev, ingestMode, sources),
     chapterId: ch.id,
   });
 }

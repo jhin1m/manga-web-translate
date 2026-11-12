@@ -73,6 +73,17 @@ export const PAGE_STATUSES = ["pending", "preparing", "prepared", "translating",
 /** Lý do bỏ qua ảnh gốc trước Bước 1: người dùng xoá, hoặc khớp ảnh credit series đã học. Ảnh bỏ qua không vào ingest. */
 export const SOURCE_SKIP_REASONS = ["user", "credit"] as const;
 export type SourceSkipReason = (typeof SOURCE_SKIP_REASONS)[number];
+/** Ai đặt số px cắt mép ảnh gốc: người dùng kéo tay, hoặc khớp dải credit series đã học. */
+export const SOURCE_TRIM_SOURCES = ["user", "credit"] as const;
+/** Sau khi cắt mép trên + dưới, ảnh gốc còn lại ít nhất bằng ngần này px. */
+export const MIN_TRIM_KEEP_PX = 64;
+/** Số px cắt ở mép trên/dưới ảnh gốc (đã lưu ở `source_files.trim`; 0/0 lưu thành null). */
+export const SourceTrim = z.object({
+  top: z.number().int().min(0),
+  bottom: z.number().int().min(0),
+  by: z.enum(SOURCE_TRIM_SOURCES),
+});
+export type SourceTrim = z.infer<typeof SourceTrim>;
 export const USAGE_KINDS = [
   "pages",
   "llm_tokens_in",

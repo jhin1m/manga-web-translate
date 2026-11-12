@@ -193,6 +193,31 @@ describe("series skip images", () => {
     await json(await api(`/chapters/${ch}/cancel`, { method: "POST", body: {} }), 200);
   });
 
+  it("a page never counts a trimmed image as a whole image to learn", async () => {
+    const s = await newSeries("Credit trimmed");
+    const { ch, files } = await draft(s, "1", [credit]);
+    const a = files[0]?.id as string;
+    await json(await api(`/chapters/${ch}/commit`, { method: "POST", body: {} }), 202);
+    await makeRunnable();
+    const ij = (await claimJobs(token, { caps: ["chapter.ingest"], max: 4 })).find(
+      (j) => j.payload.chapter_id === ch,
+    ) as Claimed;
+    expect((await doIngest(token, ij)).status).toBe(200);
+    const [page] = await db.select().from(pages).where(eq(pages.chapterId, ch));
+    await db
+      .update(pages)
+      .set({ sourceMap: [{ source_file_id: a, src_y: 0, page_y: 0, h: 1200 }] })
+      .where(eq(pages.id, page?.id as string));
+    await db
+      .update(sourceFiles)
+      .set({ trim: { top: 100, bottom: 0, by: "user" } })
+      .where(eq(sourceFiles.id, a));
+    expect((await json<{ error: string }>(await learn(s, { page_id: page?.id as string }), 409)).error).toBe(
+      "no_whole_image",
+    );
+    await json(await api(`/chapters/${ch}/cancel`, { method: "POST", body: {} }), 200);
+  });
+
   it("other users can neither read, learn into nor delete a series' images", async () => {
     const B = await seedUser("skipimg-b");
     const s = await newSeries("Credit tenant");

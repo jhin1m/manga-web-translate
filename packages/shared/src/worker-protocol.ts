@@ -97,6 +97,8 @@ export const IngestInputs = z.object({
       url: Url,
       width: z.number().int().positive().nullable(),
       height: z.number().int().positive().nullable(),
+      /** Px cắt ở mép trên/dưới ảnh gốc trước khi ghép/cắt trang; null = giữ nguyên ảnh. */
+      trim: z.object({ top: z.number().int().nonnegative(), bottom: z.number().int().nonnegative() }).nullable(),
     }),
   ),
 });

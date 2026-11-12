@@ -5,7 +5,7 @@
  */
 import { chapters, NotFoundError, pages, type Scoped, scoped, series, seriesSkipImages, sourceFiles } from "@mtl/db";
 import { type ImageFingerprint, isPlainHash, sameImage, storageKeys } from "@mtl/shared";
-import { and, eq, inArray, ne, type SQL } from "drizzle-orm";
+import { and, eq, inArray, isNull, ne, type SQL } from "drizzle-orm";
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { v7 as uuidv7 } from "uuid";
@@ -54,7 +54,10 @@ async function chapterInSeries(sdb: Scoped, chapterId: string, seriesId: string,
   return ch;
 }
 
-/** Ảnh gốc nằm trọn trong trang: chỉ trang này tham chiếu tới nó trong source_map của chương. */
+/**
+ * Ảnh gốc nằm trọn trong trang: chỉ trang này tham chiếu tới nó trong source_map của chương. Ảnh đã cắt mép bị loại:
+ * trang chỉ chứa phần còn lại, không còn là ảnh gốc nguyên vẹn để học.
+ */
 async function filesInsidePage(sdb: Scoped, seriesId: string, pageId: string) {
   const p = await sdb.byId(pages, pageId, "page");
   const ch = await chapterInSeries(sdb, p.chapterId, seriesId, "page");
@@ -62,7 +65,10 @@ async function filesInsidePage(sdb: Scoped, seriesId: string, pageId: string) {
   const others = await sdb.select(pages, and(eq(pages.chapterId, ch.id), ne(pages.id, p.id)) as SQL);
   for (const o of others) for (const m of o.sourceMap as SourceMapEntry[]) ids.delete(m.source_file_id);
   const files = ids.size
-    ? await sdb.select(sourceFiles, and(eq(sourceFiles.chapterId, ch.id), inArray(sourceFiles.id, [...ids])) as SQL)
+    ? await sdb.select(
+        sourceFiles,
+        and(eq(sourceFiles.chapterId, ch.id), inArray(sourceFiles.id, [...ids]), isNull(sourceFiles.trim)) as SQL,
+      )
     : [];
   return { chapterId: ch.id, files };
 }

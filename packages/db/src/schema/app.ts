@@ -21,7 +21,9 @@ import {
   type PipelineSettings,
   type PreparePartial,
   SOURCE_SKIP_REASONS,
+  SOURCE_TRIM_SOURCES,
   type SourceSkipReason,
+  type SourceTrim,
   SUGGESTION_KINDS,
   type SuggestionKind,
   type TranslateMemory,
@@ -149,6 +151,11 @@ export const sourceFiles = pgTable(
     skip: text("skip").$type<SourceSkipReason>(),
     /** dHash 16 hex trình duyệt tính lúc thả ảnh (null = không tính được) — khớp/học ảnh credit của series. */
     dhash: text("dhash"),
+    /**
+     * Px cắt ở mép trên/dưới ảnh gốc, áp lúc Bước 1 (null = không cắt; 0/0 luôn lưu null). File gốc giữ nguyên nên
+     * bỏ cắt là hoàn tác được.
+     */
+    trim: jsonb("trim").$type<SourceTrim>(),
     ...timestamps,
   },
   (t) => [
@@ -157,6 +164,7 @@ export const sourceFiles = pgTable(
     ),
     index("source_files_chapter_idx").on(t.chapterId, t.ord),
     check("source_files_skip_chk", inList(sql`${t.skip}`, SOURCE_SKIP_REASONS)),
+    check("source_files_trim_chk", sql`${t.trim} is null or ${inList(sql`${t.trim}->>'by'`, SOURCE_TRIM_SOURCES)}`),
   ],
 );
 

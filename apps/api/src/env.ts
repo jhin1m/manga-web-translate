@@ -84,11 +84,12 @@ const Env = z
      * 0.8.0: Region.style + settings.thought_font/note_font — schema input/output của worker cũ (additionalProperties: false) từ chối.
      * 0.9.0: page.reinpaint.auto_text_bbox (OCR vùng tự xoá chữ gốc) — worker cũ đòi user_mask_key/user_mask → fail.
      * 0.10.0: payload `llm` + claim `llm` (key AI theo job), `model_tier` optional — schema worker cũ từ chối cả hai.
+     * 0.12.0: chapter.ingest inputs sources[].trim (cắt mép ảnh gốc) — schema worker cũ từ chối trường lạ → job ingest fail.
      */
     MIN_PIPELINE_VERSION: z
       .string()
       .regex(/^\d+\.\d+\.\d+$/)
-      .default("0.10.0"),
+      .default("0.12.0"),
     /**
      * Kill-switch ngân sách toàn cục (USD, cộng usage_ledger.cost_usd mọi người dùng + chi phí nền tảng, ngày/tháng
      * theo UTC). Bắt buộc ở production; 0 = chặn mọi job tốn tiền. Không đặt (dev/test) = không giới hạn.

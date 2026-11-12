@@ -1,0 +1,2 @@
+ALTER TABLE "source_files" ADD COLUMN "trim" jsonb;--> statement-breakpoint
+ALTER TABLE "source_files" ADD CONSTRAINT "source_files_trim_chk" CHECK ("source_files"."trim" is null or "source_files"."trim"->>'by' in ('user', 'credit'));
