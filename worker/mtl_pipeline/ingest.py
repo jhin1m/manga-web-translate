@@ -41,6 +41,19 @@ class IngestPage:
     cut_flag: bool = False
 
 
+def apply_trim(img: np.ndarray, trim: dict | None) -> np.ndarray:
+    """Cắt top/bottom px ở mép trên/dưới ảnh gốc (credit banner) trước khi ghép/cắt trang. Số liệu vượt ảnh thật bị
+    kẹp để còn ≥ 1 hàng. Toạ độ `src_y` của source_map về sau tính theo ảnh đã cắt, nên bản xuất không còn banner."""
+    if not trim:
+        return img
+    h = img.shape[0]
+    top = min(max(int(trim.get("top", 0)), 0), h - 1)
+    bottom = min(max(int(trim.get("bottom", 0)), 0), h - top - 1)
+    if top == 0 and bottom == 0:
+        return img
+    return np.ascontiguousarray(img[top : h - bottom])
+
+
 def group_slices(widths: Sequence[int], mode: str) -> list[list[int]]:
     """Chỉ số slice theo nhóm: strip = các slice liên tiếp cùng width; pages = mỗi file một nhóm."""
     if mode == "pages":

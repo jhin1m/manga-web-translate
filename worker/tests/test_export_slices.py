@@ -13,6 +13,7 @@ import pytest
 from PIL import Image
 
 from mtl_pipeline.images import encode_png
+from mtl_pipeline.ingest import SourceSlice, apply_trim, build_pages
 from mtl_pipeline.render import SliceAssembler
 from mtl_worker.client import WorkerClient
 from mtl_worker.handlers import HANDLERS
@@ -380,3 +381,22 @@ def test_upload_file_streams_with_content_length_and_headers(tmp_path):
     c.files = httpx.Client(transport=httpx.MockTransport(lambda r: httpx.Response(500)))
     with pytest.raises(httpx.HTTPStatusError):
         c.upload_file("http://files/put", str(f), ZIP_HEADERS)
+
+
+def test_trimmed_source_exports_a_slice_without_the_cut_banner():
+    # Ảnh gốc cao 1000 có banner trắng 100 hàng đầu + 200 hàng cuối; ingest cắt trước khi dựng page nên bản xuất
+    # "Giống lúc tải lên" chỉ còn 700 hàng truyện, không có dải banner.
+    src = np.full((1000, 200, 3), 80, np.uint8)
+    src[:100] = 255
+    src[800:] = 255
+    trimmed = apply_trim(src, {"top": 100, "bottom": 200})
+    built = build_pages([SourceSlice(SRC[0], trimmed)], "pages", lambda strip: [])
+    pages = [
+        {"width": 200, "translated": True, "source_map": p.source_map, "ord": i, "img": p.image}
+        for i, p in enumerate(built)
+    ]
+    asm = SliceAssembler(pages, include_untranslated=True)
+    out = [(sid, img) for pg in pages for sid, img in asm.add_page(pg, pg["img"])]
+    assert [sid for sid, _ in out] == [SRC[0]]
+    assert out[0][1].shape == (700, 200, 3)
+    assert not (out[0][1] == 255).any()

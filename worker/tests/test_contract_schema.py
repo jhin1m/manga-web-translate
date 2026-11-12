@@ -188,3 +188,13 @@ def test_claim_response_with_llm_config_and_payload_llm():
     validate_contract("claim-response", {"jobs": [{k: v for k, v in job.items() if k != "llm"}]})
     with pytest.raises(ContractError):
         validate_contract("claim-response", {"jobs": [{**job, "llm": {"ocr": {**cfg, "vision": True}}}]})
+
+
+def test_ingest_inputs_carry_trim_per_source():
+    src = {"source_file_id": "0192a3b4-c5d6-7e8f-9a0b-1c2d3e4f5b00", "url": "http://x/y", "width": 800, "height": 1200}
+    validate_contract("inputs-chapter-ingest", {"sources": [{**src, "trim": {"top": 10, "bottom": 0}}]})
+    validate_contract("inputs-chapter-ingest", {"sources": [{**src, "trim": None}]})
+    with pytest.raises(ContractError):
+        validate_contract("inputs-chapter-ingest", {"sources": [{**src, "trim": {"top": -1, "bottom": 0}}]})
+    with pytest.raises(ContractError):  # `by` chỉ lưu ở DB, không gửi cho worker
+        validate_contract("inputs-chapter-ingest", {"sources": [{**src, "trim": {"top": 1, "bottom": 0, "by": "user"}}]})

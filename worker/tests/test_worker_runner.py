@@ -529,6 +529,36 @@ def test_ingest_counts_images_and_pages():
     assert not any(s == "detect" for s, _, _ in ctx.reports)
 
 
+def test_ingest_crops_trimmed_sources_before_building_pages():
+    from mtl_worker.ingest import handle_ingest
+
+    banner = np.zeros((1000, 40, 3), np.uint8)
+    banner[:100] = 255  # dải trên bị cắt
+    banner[800:] = 255  # dải dưới bị cắt
+    png = encode_png(banner)
+
+    class TrimCtx(IngestCtx):
+        def download(self, url):
+            return png
+
+    ctx = TrimCtx(2)
+    ctx.inputs["sources"][0]["trim"] = {"top": 100, "bottom": 200}
+    ctx.inputs["sources"][1]["trim"] = None  # null và khoá vắng (ingest cũ) đều là không cắt
+
+    class _Det:
+        def detect(self, img):
+            return []
+
+    deps = Deps()
+    deps.pipeline.detector = _Det()  # type: ignore[attr-defined]
+    ctx.payload = {"mode": "pages"}
+    result = handle_ingest(ctx, deps)  # type: ignore[arg-type]
+    assert [(p["height"], p["source_map"]) for p in result["pages"]] == [
+        (700, [{"source_file_id": "f0", "src_y": 0, "page_y": 0, "h": 700}]),
+        (1000, [{"source_file_id": "f1", "src_y": 0, "page_y": 0, "h": 1000}]),
+    ]
+
+
 def test_early_heartbeat_leaves_usage_for_complete():
     # Heartbeat sớm vì đổi bước chỉ mang tiến độ; usage vẫn đi theo nhịp thường / complete như trước.
     def handler(ctx):

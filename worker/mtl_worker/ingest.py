@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from mtl_pipeline.images import open_rgb
-from mtl_pipeline.ingest import SourceSlice, build_pages
+from mtl_pipeline.ingest import SourceSlice, apply_trim, build_pages
 
 from .runner import Deps, JobContext, png_bytes
 
@@ -17,7 +17,8 @@ def handle_ingest(ctx: JobContext, deps: Deps) -> dict[str, Any]:
     # done = số ảnh đã tải xong (web đánh dấu từng ảnh gốc "Đã tải" / "Đang tải" / "Chờ").
     for i, s in enumerate(sources):
         ctx.report("download", 0.3 * i / max(1, n_src), done=i, total=n_src)
-        slices.append(SourceSlice(s["source_file_id"], open_rgb(ctx.download(s["url"]))))
+        img = apply_trim(open_rgb(ctx.download(s["url"])), s.get("trim"))
+        slices.append(SourceSlice(s["source_file_id"], img))
     ctx.report("download", 0.3, done=n_src, total=n_src)
 
     def on_group(i: int, n: int) -> None:

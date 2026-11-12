@@ -11,6 +11,7 @@ from mtl_pipeline.ingest import (
     HARD_CAP,
     TARGET_MAX,
     SourceSlice,
+    apply_trim,
     build_pages,
     choose_cuts,
     group_slices,
@@ -107,3 +108,34 @@ def test_pages_mode_keeps_one_file_one_page():
     slices = [SourceSlice(f"s{i}", np.zeros((1400, 1000, 3), np.uint8)) for i in range(3)]
     pages = build_pages(slices, "pages", lambda strip: [])
     assert [p.source_map[0]["source_file_id"] for p in pages] == ["s0", "s1", "s2"]
+
+
+def test_apply_trim_crops_top_and_bottom_rows():
+    img = np.arange(1000, dtype=np.uint8).reshape(1000, 1, 1).repeat(3, axis=2).repeat(4, axis=1)
+    out = apply_trim(img, {"top": 100, "bottom": 200})
+    assert out.shape[0] == 700
+    assert out.flags["C_CONTIGUOUS"]
+    np.testing.assert_array_equal(out, img[100:800])
+
+
+def test_apply_trim_without_trim_returns_same_image():
+    img = np.zeros((500, 10, 3), np.uint8)
+    assert apply_trim(img, None) is img
+    assert apply_trim(img, {"top": 0, "bottom": 0}) is img
+
+
+def test_apply_trim_clamps_values_beyond_the_image_and_keeps_a_row():
+    img = np.zeros((100, 10, 3), np.uint8)
+    assert apply_trim(img, {"top": 500, "bottom": 500}).shape[0] == 1
+    assert apply_trim(img, {"top": 20, "bottom": 500}).shape[0] == 1
+    assert apply_trim(img, {"top": 0, "bottom": 60}).shape[0] == 40
+
+
+def test_trimmed_slices_still_form_one_strip_and_src_y_is_relative_to_the_trimmed_image():
+    # Slice 0 cao 1000 cắt 100/200 → 700; slice 1 không cắt. Cùng bề rộng nên vẫn ghép thành strip.
+    a = apply_trim(np.zeros((1000, 300, 3), np.uint8), {"top": 100, "bottom": 200})
+    b = apply_trim(np.zeros((1000, 300, 3), np.uint8), None)
+    pages = build_pages([SourceSlice("s0", a), SourceSlice("s1", b)], "strip", lambda strip: [])
+    assert sum(p.image.shape[0] for p in pages) == 1700
+    assert pages[0].source_map[0] == {"source_file_id": "s0", "src_y": 0, "page_y": 0, "h": 700}
+    assert pages[0].source_map[1] == {"source_file_id": "s1", "src_y": 0, "page_y": 700, "h": 1000}
