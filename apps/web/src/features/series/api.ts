@@ -85,11 +85,23 @@ export const deleteSeries = (id: string) => api<void>(`/api/series/${id}`, { met
 export const deleteChapter = (id: string) => api<void>(`/api/chapters/${id}`, { method: "DELETE" });
 
 /** Ảnh credit series đã học — chương tạo sau có ảnh khớp được bỏ qua sẵn. */
-export type SkipImage = { id: string; width: number; height: number; url: string; created_at: string };
+export type SkipImage = {
+  id: string;
+  /** null = cả ảnh; 'top' / 'bottom' = dải mép (height = chiều cao dải, thumbnail là cả ảnh gốc). */
+  edge: "top" | "bottom" | null;
+  width: number;
+  height: number;
+  url: string;
+  created_at: string;
+};
 export const fetchSkipImages = (seriesId: string) =>
   api<{ images: SkipImage[] }>(`/api/series/${seriesId}/skip-images`);
-/** "Luôn bỏ ở series này": học 1 ảnh gốc, hoặc mọi ảnh gốc nằm trọn trong 1 trang. */
-export const learnSkipImage = (seriesId: string, from: { source_file_id: string } | { page_id: string }) =>
+/** "Luôn bỏ ở series này": học 1 ảnh gốc, mọi ảnh gốc nằm trọn trong 1 trang, hoặc 1 dải mép đã cắt của ảnh gốc. */
+export type LearnFrom =
+  | { source_file_id: string }
+  | { page_id: string }
+  | { source_file_id: string; edge: "top" | "bottom"; dhash: string };
+export const learnSkipImage = (seriesId: string, from: LearnFrom) =>
   api<{ learned: number; known: number }>(`/api/series/${seriesId}/skip-images`, {
     method: "POST",
     body: from,

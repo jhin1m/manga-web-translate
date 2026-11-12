@@ -1,13 +1,15 @@
 /**
  * Cài đặt series — "Ảnh tự bỏ": ảnh credit đã học từ "Luôn bỏ ở series này". Chương tạo sau có ảnh giống được bỏ qua
  * sẵn (khôi phục được ở rail). Xoá ảnh khỏi danh sách không đổi chương đã tạo. Mỗi lần xoá gọi API ngay, không đi
- * qua nút Lưu của form.
+ * qua nút Lưu của form. Dải mép đã cắt ("Luôn cắt ở series này") hiện chỉ đúng dải đó.
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { InfoTip } from "../../app/info-tip.tsx";
 import { errorMessage } from "../../lib/api.ts";
 import { TrashIcon } from "../home/row-icons.tsx";
 import { deleteSkipImage, fetchSkipImages, seriesKeys } from "./api.ts";
+
+const bandLabel = (edge: "top" | "bottom") => (edge === "top" ? "Dải đầu ảnh" : "Dải cuối ảnh");
 
 export function SkipImagesSection({ seriesId }: { seriesId: string }) {
   const qc = useQueryClient();
@@ -31,13 +33,26 @@ export function SkipImagesSection({ seriesId }: { seriesId: string }) {
       {images.length > 0 && (
         <ul className="skip-images-grid">
           {images.map((img, i) => (
-            <li key={img.id}>
-              <img src={img.url} alt={`Ảnh tự bỏ ${i + 1}`} loading="lazy" decoding="async" />
+            <li key={img.id} data-band={img.edge ? "" : undefined}>
+              {img.edge ? (
+                <>
+                  <div
+                    className="skip-band"
+                    data-edge={img.edge}
+                    style={{ aspectRatio: `${img.width} / ${img.height}` }}
+                  >
+                    <img src={img.url} alt={bandLabel(img.edge)} loading="lazy" decoding="async" />
+                  </div>
+                  <span className="skip-band-label small">{bandLabel(img.edge)}</span>
+                </>
+              ) : (
+                <img src={img.url} alt={`Ảnh tự bỏ ${i + 1}`} loading="lazy" decoding="async" />
+              )}
               <button
                 type="button"
                 className="icon-btn"
                 data-danger
-                aria-label={`Xoá ảnh tự bỏ ${i + 1}`}
+                aria-label={img.edge ? `Xoá ${bandLabel(img.edge).toLowerCase()} ${i + 1}` : `Xoá ảnh tự bỏ ${i + 1}`}
                 title="Xoá khỏi danh sách"
                 disabled={del.isPending}
                 onClick={() => del.mutate(img.id)}

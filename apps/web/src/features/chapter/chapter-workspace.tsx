@@ -50,6 +50,7 @@ import { ApplyGlossaryPanel } from "../glossary/ApplyGlossary.tsx";
 import { fetchSeries, learnSkipImage, seriesKeys } from "../series/api.ts";
 import { ChapterUploadStatus, resumeFromFiles } from "../upload/chapter-upload-status.tsx";
 import { DropZone } from "../upload/drop-zone.tsx";
+import { bandFingerprint } from "../upload/image-fingerprint.ts";
 import { uploadManager, useChapterUpload } from "../upload/upload-manager.ts";
 import { ActivityDrawer, chapterActivityCount, useUploadCount } from "./activity-drawer.tsx";
 import {
@@ -816,6 +817,44 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
       ),
     [sourceSkip.mutate, notify, alwaysSkip],
   );
+  // "Luôn cắt ở series này" (toast sau khi cắt mép): học dải đã cắt ở từng mép → chương sau tự cắt dải giống.
+  // Dải đọc từ chính ảnh đang hiện (blob local hoặc URL ký); chiều cao dải do server lấy từ trim đã lưu.
+  const learnBands = useCallback(
+    async (it: SourceItem, trim: { top: number; bottom: number }) => {
+      const retry = { label: "Thử lại", run: () => void learnBands(it, trim) };
+      notify({ tone: "info", text: "Đang lưu dải tự cắt…" });
+      try {
+        const res = await fetch(it.url);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const blob = await res.blob();
+        let learned = 0;
+        let known = 0;
+        for (const edge of ["top", "bottom"] as const) {
+          if (trim[edge] <= 0) continue;
+          const fp = await bandFingerprint(blob, edge, trim[edge]);
+          if (!fp) {
+            notify({ tone: "danger", text: "Không đọc được dải ảnh để học.", actions: [retry] });
+            return;
+          }
+          const r = await learnSkipImage(seriesId, { source_file_id: it.id, edge, dhash: fp.dhash });
+          learned += r.learned;
+          known += r.known;
+        }
+        void queryClient.invalidateQueries({ queryKey: seriesKeys.skipImages(seriesId) });
+        notify({
+          tone: "info",
+          text: learned
+            ? `Đã học ${learned} dải — chương sau của series tự cắt dải giống.`
+            : `Đã có sẵn ${known} dải này trong danh sách tự cắt của series.`,
+        });
+      } catch (e) {
+        const text =
+          e instanceof ApiError ? errorMessage(e) : "Không đọc được ảnh để học dải — kiểm tra mạng rồi thử lại.";
+        notify({ tone: "danger", text, actions: [retry] });
+      }
+    },
+    [notify, queryClient, seriesId],
+  );
   const sourceTrim = useSetSourceTrim(chapterId, (e) =>
     notify({
       tone: "danger",
@@ -846,12 +885,13 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
                       { onSuccess: () => setNotice((n) => (n?.key === "trim" ? null : n)) },
                     ),
                 },
+                ...(trim ? [{ label: "Luôn cắt ở series này", run: () => void learnBands(it, trim) }] : []),
               ],
             }),
         },
       );
     },
-    [sourceTrim.mutate, notify],
+    [sourceTrim.mutate, notify, learnBands],
   );
   /** Rời chế độ cắt và trả focus về thumbnail của ảnh đó (bàn phím không bị rơi về đầu trang). */
   const closeTrim = useCallback((id: string) => {

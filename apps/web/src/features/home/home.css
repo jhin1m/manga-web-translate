@@ -647,6 +647,34 @@ button.link-danger:hover {
   right: 2px;
   background: var(--c-surface);
 }
+/* Dải mép đã học: chỉ hiện đúng dải (khung theo tỉ lệ dải, ảnh cả tấm bám mép trên/dưới), nhãn + Xoá ở hàng dưới. */
+.skip-images-grid .skip-band {
+  position: relative;
+  overflow: hidden;
+}
+.skip-images-grid .skip-band img {
+  position: absolute;
+  left: 0;
+  width: 100%;
+  height: auto;
+  aspect-ratio: auto;
+}
+.skip-images-grid .skip-band[data-edge="top"] img {
+  top: 0;
+}
+.skip-images-grid .skip-band[data-edge="bottom"] img {
+  bottom: 0;
+}
+.skip-images-grid .skip-band-label {
+  display: block;
+  padding: 4px 28px 4px 6px;
+  min-height: 24px;
+  box-sizing: border-box;
+}
+.skip-images-grid li[data-band] .icon-btn {
+  top: auto;
+  bottom: 2px;
+}
 .danger-zone {
   border: 1px solid var(--c-danger);
   border-radius: 6px;
