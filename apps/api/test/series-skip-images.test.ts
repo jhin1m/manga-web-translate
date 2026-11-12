@@ -12,7 +12,7 @@ import { type Claimed, claimJobs, doIngest, makeRunnable, PNG_1PX, workerToken }
 
 type Seed = Awaited<ReturnType<typeof seedUser>>;
 type Upload = { id: string; url: string; fields: Record<string, string> };
-type Fp = { dhash?: string; width?: number; height?: number };
+type Fp = { dhash?: string; width?: number; height?: number; trim?: { top: number; bottom: number } };
 type SkipImage = { id: string; width: number; height: number; url: string; edge: "top" | "bottom" | null };
 
 let A: Seed;
@@ -50,10 +50,9 @@ async function draft(seriesId: string, number: string, fps: Fp[]) {
     201,
   );
   await Promise.all(created.files.map(postFile));
-  const detail = await json<{ source_files: { id: string; skip: string | null }[] }>(
-    await api(`/chapters/${created.chapter.id}`),
-    200,
-  );
+  const detail = await json<{
+    source_files: { id: string; skip: string | null; trim: { top: number; bottom: number; by: string } | null }[];
+  }>(await api(`/chapters/${created.chapter.id}`), 200);
   return { ch: created.chapter.id, files: detail.source_files };
 }
 
@@ -121,7 +120,7 @@ describe("series skip images", () => {
   it("learning keeps one copy per image, lists signed thumbnails, deletes row and copy", async () => {
     const s = await newSeries("Credit manage");
     const one = await draft(s, "1", [credit, {}]);
-    const [withHash, noHash] = one.files as [{ id: string; skip: string | null }, { id: string; skip: string | null }];
+    const [withHash, noHash] = one.files as [(typeof one.files)[number], (typeof one.files)[number]];
     expect((await json<{ error: string }>(await learn(s, { source_file_id: noHash.id }), 409)).error).toBe("no_hash");
     // Ảnh gần trơn (hash gần hết bit 0) không học: trang trắng / khoảng trống giữa slice cũng ra hash như vậy.
     const plain = await draft(s, "0", [{ dhash: "0000000000000001", width: 800, height: 1200 }]);
@@ -270,7 +269,7 @@ describe("series skip images", () => {
       await trimFile(ch, id, { top: 120, bottom: 0 });
       expect(await json(await learnBand(s, id, "top"), 200)).toEqual({ learned: 1, known: 0 });
       const [img] = await list(s);
-      expect(img).toMatchObject({ edge: "top", width: 800, height: 120 });
+      expect(img).toMatchObject({ edge: "top", dhash: BASE, width: 800, height: 120 });
       expect((await fetch(img?.url ?? "")).status).toBe(200);
       const [row] = await db.select().from(seriesSkipImages).where(eq(seriesSkipImages.seriesId, s));
       expect(row).toMatchObject({ edge: "top", dhash: BASE, learnedFromChapterId: ch });
@@ -377,5 +376,61 @@ describe("series skip images", () => {
       const three = await draft(s, "3", [{ dhash: BASE, width: 800, height: 1136 }]);
       expect(three.files.map((f) => f.skip)).toEqual(["credit"]);
     });
+  });
+});
+
+describe("trim given when the chapter is created", () => {
+  it("stores it as credit-set, keeps the saved height, and drops it when it does not fit or is empty", async () => {
+    const s = await newSeries("Trim on create");
+    const base = { dhash: "0f0f0f0f0f0f0f0f", width: 800 };
+    const d = await draft(s, "1", [
+      { ...base, height: 1000, trim: { top: 0, bottom: 120 } },
+      { ...base, height: 1000, trim: { top: 30, bottom: 80 } },
+      // Chừa lại 63px < tối thiểu → bỏ cắt riêng ảnh này, chương vẫn tạo.
+      { ...base, height: 1000, trim: { top: 500, bottom: 437 } },
+      // Không biết chiều cao → không kiểm được biên.
+      { trim: { top: 10, bottom: 10 } },
+      { ...base, height: 1000, trim: { top: 0, bottom: 0 } },
+      { ...base, height: 1000 },
+    ]);
+    expect(d.files.map((f) => f.trim)).toEqual([
+      { top: 0, bottom: 120, by: "credit" },
+      { top: 30, bottom: 80, by: "credit" },
+      null,
+      null,
+      null,
+      null,
+    ]);
+  });
+
+  it("rejects negative or oversized pixel values", async () => {
+    const s = await newSeries("Trim bad values");
+    const file = { name: "1.png", content_type: "image/png", bytes: 10, dhash: BASE, width: 800, height: 1000 };
+    for (const trim of [
+      { top: -1, bottom: 0 },
+      { top: 0, bottom: 3_000_000_000 },
+      { top: 1.5, bottom: 0 },
+      { top: 1 },
+    ]) {
+      const res = await api("/chapters", {
+        method: "POST",
+        body: { series_id: s, number: "1", files: [{ ...file, trim }] },
+      });
+      expect(res.status).toBe(400);
+    }
+  });
+
+  it("an image skipped as a learned credit loses its trim; the others keep theirs", async () => {
+    const s = await newSeries("Trim vs credit");
+    const one = await draft(s, "1", [credit]);
+    await json(await learn(s, { source_file_id: one.files[0]?.id as string }), 200);
+    const two = await draft(s, "2", [
+      { ...credit, trim: { top: 0, bottom: 100 } },
+      { dhash: FAR, width: 800, height: 1200, trim: { top: 0, bottom: 100 } },
+    ]);
+    expect(two.files.map((f) => [f.skip, f.trim])).toEqual([
+      ["credit", null],
+      [null, { top: 0, bottom: 100, by: "credit" }],
+    ]);
   });
 });

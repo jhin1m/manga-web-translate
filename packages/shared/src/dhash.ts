@@ -3,6 +3,8 @@
  * `dhashFromGray`; API so bằng `sameImage` (Hamming + tỉ lệ khung). Thuần, dùng chung web + api.
  */
 
+import { MIN_TRIM_KEEP_PX } from "./job.ts";
+
 export const DHASH_W = 9;
 export const DHASH_H = 8;
 /** Tối đa bit khác nhau để coi là cùng ảnh (ảnh nén lại / đổi kích thước vẫn khớp). */
@@ -70,3 +72,27 @@ export function sameImage(a: ImageFingerprint, known: ImageFingerprint): boolean
   const rb = known.width / known.height;
   return hamming(a.dhash, known.dhash) <= DHASH_MAX_DISTANCE && Math.abs(ra - rb) / rb <= ASPECT_TOLERANCE;
 }
+
+/** Dải mép đã học: bề rộng ảnh lúc học + chiều cao dải (px ảnh gốc lúc đó). */
+export type LearnedBand = { width: number; height: number };
+
+/**
+ * Cửa sổ của dải đã học trong ảnh `imgW`×`imgH` ở mép `edge`: dải co theo bề rộng ảnh (720 ↔ 800 vẫn là cùng dải nên
+ * chiều cao dải co theo), `sy` = hàng đầu cửa sổ. null khi dải thấp hơn MIN_BAND_PX (hash chỉ là nhiễu) hoặc phần
+ * còn lại sau khi cắt thấp hơn MIN_TRIM_KEEP_PX.
+ */
+export function bandWindow(
+  imgW: number,
+  imgH: number,
+  band: LearnedBand,
+  edge: "top" | "bottom",
+): { sy: number; sh: number } | null {
+  if (!(imgW > 0 && imgH > 0 && band.width > 0 && band.height > 0)) return null;
+  const sh = Math.round((band.height * imgW) / band.width);
+  if (sh < MIN_BAND_PX || imgH - sh < MIN_TRIM_KEEP_PX) return null;
+  return { sy: edge === "top" ? 0 : imgH - sh, sh };
+}
+
+/** Hash của cửa sổ ảnh khớp hash dải đã học (tỉ lệ đã khớp nhờ `bandWindow` co dải theo bề rộng). */
+export const sameBand = (hash: string, band: { dhash: string }): boolean =>
+  hamming(hash, band.dhash) <= DHASH_MAX_DISTANCE;

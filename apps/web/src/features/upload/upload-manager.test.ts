@@ -62,6 +62,7 @@ function fakeServer(post: (fileId: string, attempt: number) => Promise<void> = a
     storage: memoryStorage(),
     backoff: () => 0,
     fingerprints: async (blobs) => blobs.map(() => null),
+    autoTrims: async (_s, blobs) => blobs.map(() => null),
   };
   return { deps, calls };
 }
@@ -112,6 +113,43 @@ describe("upload manager", () => {
       { name: "2.png", content_type: "image/png", bytes: 2 },
     ]);
     await settled(m, "ch-1");
+  });
+
+  it("sends the auto trim of an image that matches a learned band, and none for the others", async () => {
+    const { deps, calls } = fakeServer();
+    const seen: unknown[] = [];
+    deps.autoTrims = async (seriesId, blobs, fps) => {
+      seen.push([seriesId, blobs.map((b) => b.size), fps.length]);
+      return [null, { top: 0, bottom: 120 }];
+    };
+    const m = createUploadManager(deps);
+    await m.startNewChapter({ seriesId: "s", number: "1", pages: [png("2.png", 2), png("1.png", 1)] });
+    expect(seen).toEqual([["s", [1, 2], 2]]);
+    expect(calls.createFiles[0]).toEqual([
+      { name: "1.png", content_type: "image/png", bytes: 1 },
+      { name: "2.png", content_type: "image/png", bytes: 2, trim: { top: 0, bottom: 120 } },
+    ]);
+    await settled(m, "ch-1");
+  });
+
+  it("uploads as usual when no band matches or the learned bands cannot be fetched", async () => {
+    for (const autoTrims of [
+      async () => [null, null],
+      async () => {
+        throw new Error("network");
+      },
+    ]) {
+      const { deps, calls } = fakeServer();
+      deps.autoTrims = autoTrims;
+      const m = createUploadManager(deps);
+      await m.startNewChapter({ seriesId: "s", number: "1", pages: [png("1.png", 1), png("2.png", 2)] });
+      expect(calls.createFiles[0]).toEqual([
+        { name: "1.png", content_type: "image/png", bytes: 1 },
+        { name: "2.png", content_type: "image/png", bytes: 2 },
+      ]);
+      await settled(m, "ch-1");
+      expect(calls.post.sort()).toEqual(["f0", "f1"]);
+    }
   });
 
   it("still creates the chapter when fingerprinting fails outright", async () => {

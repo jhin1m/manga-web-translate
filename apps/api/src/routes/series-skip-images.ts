@@ -96,6 +96,7 @@ async function filesInsidePage(sdb: Scoped, seriesId: string, pageId: string) {
 const skipImageView = async (r: SkipImage) => ({
   id: r.id,
   edge: r.edge as Edge | null,
+  dhash: r.dhash,
   width: r.width,
   height: r.height,
   url: await presignGet(r.thumbKey, MAX_GET_TTL_S),

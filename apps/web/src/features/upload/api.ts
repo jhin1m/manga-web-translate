@@ -14,7 +14,16 @@ export const createChapter = (body: {
   number: string;
   title: string;
   /** dhash/width/height: dấu nhận dạng ảnh (bỏ trống khi không tính được) — server bỏ qua sẵn ảnh credit đã học. */
-  files: { name: string; content_type: string; bytes: number; dhash?: string; width?: number; height?: number }[];
+  files: {
+    name: string;
+    content_type: string;
+    bytes: number;
+    dhash?: string;
+    width?: number;
+    height?: number;
+    /** Dải mép khớp banner đã học của series (px ảnh gốc) — server lưu thành cắt tự động nếu vừa biên. */
+    trim?: { top: number; bottom: number };
+  }[];
 }) =>
   api<{ chapter: ChapterSummary; files: (PresignedTarget & { name: string })[] }>("/api/chapters", {
     method: "POST",

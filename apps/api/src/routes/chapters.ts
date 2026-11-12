@@ -5,7 +5,7 @@
  */
 
 import { chapters, isUuid, NotFoundError, pages, type Scoped, scoped, series, sourceFiles } from "@mtl/db";
-import { DHASH_RE, MIN_TRIM_KEEP_PX, PAGE_FORMATS, storageKeys } from "@mtl/shared";
+import { DHASH_RE, MIN_TRIM_KEEP_PX, PAGE_FORMATS, type SourceTrim, storageKeys } from "@mtl/shared";
 import { and, eq, inArray, isNull, type SQL } from "drizzle-orm";
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
@@ -75,6 +75,8 @@ const UploadFile = z.object({
   dhash: z.string().regex(DHASH_RE).optional(),
   width: Px.positive().optional(),
   height: Px.positive().optional(),
+  /** Dải mép trình duyệt đã nhận ra là banner đã học của series: lưu thành cắt `by: "credit"` nếu vừa biên. */
+  trim: z.object({ top: Px.min(0), bottom: Px.min(0) }).optional(),
 });
 
 const ChapterNumber = z.union([z.number().nonnegative(), z.string().regex(/^\d+(\.\d+)?$/)]).transform(String);
@@ -196,6 +198,16 @@ chapterRoutes.get("/recent-chapters", async (c) => {
 });
 
 /**
+ * Cắt do trình duyệt đề xuất lúc thả ảnh: chỉ giữ khi biết chiều cao và còn lại ≥ MIN_TRIM_KEEP_PX (cùng ngưỡng với
+ * PATCH); không vừa thì bỏ cắt riêng ảnh đó, không làm hỏng cả request.
+ */
+function creditTrim(f: z.infer<typeof UploadFile>): SourceTrim | null {
+  const { top, bottom } = f.trim ?? { top: 0, bottom: 0 };
+  if (top + bottom === 0 || f.height === undefined) return null;
+  return f.height - top - bottom >= MIN_TRIM_KEEP_PX ? { top, bottom, by: "credit" } : null;
+}
+
+/**
  * Tạo chương (draft) + source_files theo thứ tự + presigned POST cho từng file. Ảnh khớp ảnh credit series đã học
  * được bỏ qua sẵn (`skip = 'credit'`, khôi phục được như ảnh xoá tay).
  */
@@ -209,6 +221,7 @@ chapterRoutes.post("/chapters", async (c) => {
     const files: SourceFile[] = [];
     for (const [ord, f] of body.files.entries()) {
       const key = storageKeys.source(userId, chapter.id, uuidv7(), CHAPTER_UPLOAD_TYPES[f.content_type]);
+      const skip = credit(f);
       files.push(
         await tx.insert(sourceFiles, {
           chapterId: chapter.id,
@@ -219,7 +232,8 @@ chapterRoutes.post("/chapters", async (c) => {
           dhash: f.dhash,
           width: f.width,
           height: f.height,
-          skip: credit(f),
+          skip,
+          trim: skip ? null : creditTrim(f),
         }),
       );
     }

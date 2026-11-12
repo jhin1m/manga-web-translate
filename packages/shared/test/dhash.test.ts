@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { dhashFromGray, hamming, isPlainHash, sameImage } from "../src/dhash.ts";
+import { bandWindow, dhashFromGray, hamming, isPlainHash, sameBand, sameImage } from "../src/dhash.ts";
 
 /** 9×8 điểm xám từ hàm f(x, y). */
 const grid = (f: (x: number, y: number) => number) => Array.from({ length: 72 }, (_, i) => f(i % 9, Math.floor(i / 9)));
@@ -43,5 +43,43 @@ describe("dhash", () => {
     expect(isPlainHash("0f0f0f0f0f0f0f0f")).toBe(false);
     expect(isPlainHash("ffffffffffffff00")).toBe(true);
     expect(isPlainHash("fffffffffffffe00")).toBe(false);
+  });
+});
+
+describe("bandWindow", () => {
+  const band = { width: 720, height: 100 };
+
+  it("takes the band height as-is for an image of the same width", () => {
+    expect(bandWindow(720, 1000, band, "bottom")).toEqual({ sy: 900, sh: 100 });
+    expect(bandWindow(720, 1000, band, "top")).toEqual({ sy: 0, sh: 100 });
+  });
+
+  it("scales the band with the image width (720 <-> 800)", () => {
+    expect(bandWindow(800, 1000, band, "bottom")).toEqual({ sy: 889, sh: 111 });
+    expect(bandWindow(360, 1000, band, "top")).toEqual({ sy: 0, sh: 50 });
+  });
+
+  it("is null when the band would leave too little of the image", () => {
+    expect(bandWindow(720, 160, band, "bottom")).toBeNull();
+    expect(bandWindow(720, 164, band, "bottom")).toEqual({ sy: 64, sh: 100 });
+  });
+
+  it("is null when the scaled band is too thin to hash", () => {
+    expect(bandWindow(720, 1000, { width: 720, height: 7 }, "top")).toBeNull();
+    expect(bandWindow(72, 1000, { width: 720, height: 70 }, "top")).toBeNull();
+    expect(bandWindow(720, 1000, { width: 720, height: 8 }, "top")).toEqual({ sy: 0, sh: 8 });
+  });
+
+  it("is null for empty sizes", () => {
+    expect(bandWindow(0, 1000, band, "top")).toBeNull();
+    expect(bandWindow(720, 1000, { width: 0, height: 10 }, "top")).toBeNull();
+  });
+});
+
+describe("sameBand", () => {
+  it("matches within 6 bits, not beyond", () => {
+    const band = { dhash: "0000000000000000" };
+    expect(sameBand("000000000000003f", band)).toBe(true);
+    expect(sameBand("000000000000007f", band)).toBe(false);
   });
 });

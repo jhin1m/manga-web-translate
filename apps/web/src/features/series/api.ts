@@ -89,6 +89,8 @@ export type SkipImage = {
   id: string;
   /** null = cả ảnh; 'top' / 'bottom' = dải mép (height = chiều cao dải, thumbnail là cả ảnh gốc). */
   edge: "top" | "bottom" | null;
+  /** dHash 9×8 của ảnh / dải (16 hex) — trình duyệt so dải mép của ảnh vừa thả. */
+  dhash: string;
   width: number;
   height: number;
   url: string;

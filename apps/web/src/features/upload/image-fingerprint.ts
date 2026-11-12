@@ -2,7 +2,16 @@
  * Dấu nhận dạng ảnh lúc thả file (trước khi tạo chương): kích thước + dHash để server bỏ qua sẵn ảnh credit series đã
  * học. Không giải mã được (định dạng lạ, ảnh quá cao trên Safari…) → null, không chặn upload.
  */
-import { DHASH_H, DHASH_W, dhashFromGray, type ImageFingerprint } from "@mtl/shared";
+import {
+  bandWindow,
+  DHASH_H,
+  DHASH_W,
+  dhashFromGray,
+  type ImageFingerprint,
+  isPlainHash,
+  MIN_TRIM_KEEP_PX,
+  sameBand,
+} from "@mtl/shared";
 
 const CONCURRENCY = 4;
 
@@ -70,5 +79,56 @@ export async function fingerprintAll(
     for (let i = next++; i < blobs.length; i = next++) out[i] = await one(blobs[i] as Blob).catch(() => null);
   };
   await Promise.all(Array.from({ length: Math.min(CONCURRENCY, blobs.length) }, run));
+  return out;
+}
+
+/** Dải đã học của series (hàng `edge` khác null của danh sách ảnh tự bỏ). */
+export type LearnedEdgeBand = { edge: "top" | "bottom"; dhash: string; width: number; height: number };
+export type AutoTrim = { top: number; bottom: number };
+
+/** Số ảnh đầu / cuối chương được xét: banner chỉ dính ở đầu ảnh đầu / cuối ảnh cuối. */
+export const BAND_CANDIDATES = 3;
+
+/**
+ * Cắt mép tự động cho từng ảnh (cùng thứ tự `blobs`): mép trên của 3 ảnh đầu, mép dưới của 3 ảnh cuối so với dải đã
+ * học. Chỉ xét ảnh có dấu (`fps[i]` ≠ null). Mỗi ảnh giải mã 1 lần, mỗi mép lấy dải khớp đầu tiên; dải co theo bề rộng
+ * ảnh (`bandWindow`). Cửa sổ gần trơn (nền trắng/đen) không bao giờ khớp. Lỗi giải mã 1 ảnh → ảnh đó không cắt.
+ */
+export async function bandTrims(
+  blobs: Blob[],
+  fps: (ImageFingerprint | null)[],
+  bands: LearnedEdgeBand[],
+): Promise<(AutoTrim | null)[]> {
+  const out = new Array<AutoTrim | null>(blobs.length).fill(null);
+  if (!bands.length) return out;
+  const last = blobs.length - BAND_CANDIDATES;
+  const candidates = blobs.flatMap((_, i) => (fps[i] && (i < BAND_CANDIDATES || i >= last) ? [i] : []));
+  await Promise.all(
+    candidates.map(async (i) => {
+      const edges = [...(i < BAND_CANDIDATES ? (["top"] as const) : []), ...(i >= last ? (["bottom"] as const) : [])];
+      let bmp: ImageBitmap | undefined;
+      try {
+        bmp = await createImageBitmap(blobs[i] as Blob);
+        const trim: AutoTrim = { top: 0, bottom: 0 };
+        for (const edge of edges) {
+          for (const band of bands) {
+            if (band.edge !== edge) continue;
+            const win = bandWindow(bmp.width, bmp.height, band, edge);
+            if (!win || bmp.height - trim.top - trim.bottom - win.sh < MIN_TRIM_KEEP_PX) continue;
+            const hash = dhashOfRegion(bmp, 0, win.sy, bmp.width, win.sh);
+            if (hash && !isPlainHash(hash) && sameBand(hash, band)) {
+              trim[edge] = win.sh;
+              break;
+            }
+          }
+        }
+        if (trim.top + trim.bottom > 0) out[i] = trim;
+      } catch {
+        // không giải mã được: ảnh này không tự cắt
+      } finally {
+        bmp?.close();
+      }
+    }),
+  );
   return out;
 }
