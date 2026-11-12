@@ -112,10 +112,18 @@ test("new series defaults to an English source; settings edit target language, p
   await login(page);
   await page.goto("/");
   await page.getByRole("button", { name: "+ Series" }).click();
-  const form = page.getByRole("form", { name: "Tạo series mới" });
+  const form = page.getByRole("dialog", { name: "Tạo series mới" });
+  await expect(form.getByLabel("Dịch từ")).toHaveValue("en");
+  await expect(form.getByLabel("Sang")).toHaveValue("vi");
+  // Esc đóng modal, trả focus về "+ Series".
+  await page.keyboard.press("Escape");
+  await expect(form).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "+ Series" })).toBeFocused();
+  await page.getByRole("button", { name: "+ Series" }).click();
   await form.getByLabel("Tên series").fill("Manga Nhật e2e");
   await form.getByLabel("Loại truyện").selectOption({ label: "Manga" });
-  await page.getByRole("button", { name: "Tạo series" }).click();
+  // Enter ở ô tên = Tạo series.
+  await form.getByLabel("Tên series").press("Enter");
   await expect(page.getByRole("heading", { level: 1, name: "Manga Nhật e2e" })).toBeVisible();
   const head = page.locator(".series-head");
   await expect(head.getByText(/Anh → Việt/)).toBeVisible();

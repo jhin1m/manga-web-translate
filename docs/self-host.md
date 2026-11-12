@@ -53,8 +53,8 @@ Với Anthropic, worker chưa chạy được Sonnet 5.5, Opus 5.5, Fable, Mytho
 Phát hiện chữ, xoá chữ và OCR mặc định chạy local trên máy: không tốn token, key chỉ dùng cho dịch và hiệu đính. Nếu
 chọn OCR bằng AI ở cài đặt pipeline thì tác vụ **OCR** phải có model Vision.
 
-**Series mới mặc định nguồn tiếng Anh**, loại truyện chỉ quyết định định dạng trang. Dịch raw Hàn / Nhật / Trung thì đổi
-ngôn ngữ nguồn ở Cài đặt series. Nguồn Nhật hoặc Anh dạng từng trang đọc phải sang trái. Comic phương Tây dạng trang bị
+**Series mới mặc định nguồn tiếng Anh**, loại truyện chỉ quyết định định dạng trang. Dịch raw Hàn / Nhật / Trung thì chọn
+"Dịch từ" ngay trong modal tạo series (hoặc đổi sau ở Cài đặt series). Nguồn Nhật hoặc Anh dạng từng trang đọc phải sang trái. Comic phương Tây dạng trang bị
 đảo thứ tự: đổi định dạng sang Cuộn dọc chỉ áp dụng cho chương tải lên sau đó, và cuộn dọc sẽ ghép rồi cắt lại trang
 theo vùng chữ.
 

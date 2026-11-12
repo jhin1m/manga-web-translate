@@ -24,9 +24,14 @@ test("sign up → empty home → create a series", async ({ browser }) => {
   await expect(page.getByText("Series e2e")).toHaveCount(0);
 
   await page.getByRole("button", { name: "+ Series" }).click();
-  await page.getByRole("form", { name: "Tạo series mới" }).getByLabel("Tên series").fill("Series của người mới");
-  await page.getByRole("button", { name: "Tạo series" }).click();
+  const dialog = page.getByRole("dialog", { name: "Tạo series mới" });
+  // Modal mở → con trỏ ở ô tên; chọn ngôn ngữ ngay khi tạo.
+  await expect(dialog.getByLabel("Tên series")).toBeFocused();
+  await dialog.getByLabel("Tên series").fill("Series của người mới");
+  await dialog.getByLabel("Dịch từ").selectOption("ko");
+  await dialog.getByRole("button", { name: "Tạo series" }).click();
   await expect(page.getByRole("heading", { level: 1, name: "Series của người mới" })).toBeVisible();
+  await expect(page.locator(".series-head").getByText(/Hàn → Việt/)).toBeVisible();
 
   // Series của người dùng seed không mở được từ tài khoản mới.
   expect((await page.request.get(`/api/series/${state.seriesId}`)).status()).toBe(404);

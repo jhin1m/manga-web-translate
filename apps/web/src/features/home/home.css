@@ -190,30 +190,6 @@ label.file-pick input {
 .block-head button {
   height: 32px;
 }
-/* Form "+ Series" / tạo series: một dòng — tên, loại truyện, Tạo, ✕. */
-.inline-form {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-2);
-  flex-wrap: wrap;
-}
-.inline-form input:not([type="file"]) {
-  flex: 1;
-  min-width: 160px;
-  width: auto;
-  height: 32px;
-}
-.inline-form select {
-  width: auto;
-  height: 32px;
-}
-.inline-form button {
-  height: 32px;
-}
-.inline-form button.icon-btn {
-  width: 32px;
-  padding: 0;
-}
 .rows {
   border: 1px solid var(--c-line);
   border-radius: 6px;
@@ -503,9 +479,20 @@ label.file-pick input {
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 0 var(--sp-4);
 }
-/* Modal Cài đặt dịch hẹp hơn modal mặc định (620px). */
+/* Modal Cài đặt dịch hẹp hơn modal mặc định (620px); modal tạo series chỉ 4 ô (560px). */
 .drawer.modal:has(.settings-dialog) {
   width: min(620px, calc(100vw - 32px));
+}
+.drawer.modal:has(.new-series-dialog) {
+  width: min(560px, calc(100vw - 32px));
+}
+.new-series-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--sp-3);
+}
+.new-series-dialog > .hint {
+  margin: 0;
 }
 .settings-dialog {
   display: flex;
@@ -752,7 +739,8 @@ button.link-danger:hover {
   .series-main {
     padding-inline: var(--sp-4);
   }
-  .settings-grid {
+  .settings-grid,
+  .new-series-grid {
     grid-template-columns: minmax(0, 1fr);
   }
   .row-open,

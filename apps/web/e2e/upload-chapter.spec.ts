@@ -278,7 +278,23 @@ test("files the app cannot take as-is fall back to the confirm row with the prob
   const confirm = page.getByRole("form", { name: "Sau khi thả file" });
   await expect(confirm.getByText("1 file không hợp lệ — bỏ chúng trước khi upload.")).toBeVisible();
   await expect(confirm.getByRole("button", { name: "Tạo và mở chương" })).toBeDisabled();
+
+  // "+ Series mới…" mở modal tạo series; tạo xong dòng chọn sẵn series mới, con trỏ sang ô số chương.
+  const pick = confirm.getByLabel("Series", { exact: true });
+  await pick.selectOption({ label: "+ Series mới…" });
+  const dialog = page.getByRole("dialog", { name: "Tạo series mới" });
+  await dialog.getByLabel("Tên series").fill("Series từ dòng thả e2e");
+  await dialog.getByLabel("Dịch từ").selectOption("ja");
+  await dialog.getByRole("button", { name: "Tạo series" }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(pick.locator("option:checked")).toHaveText("Series từ dòng thả e2e");
+  await expect(confirm.getByLabel("Chương số")).toBeFocused();
   await expect(page).toHaveURL(/\/$/);
+  const { series } = await (await page.request.get("/api/series")).json();
+  const made = series.find((x: { title: string }) => x.title === "Series từ dòng thả e2e");
+  expect(made.source_lang).toBe("ja");
+  // Dọn: series dư làm đổi series tự đoán ở các test thả file sau.
+  expect((await page.request.delete(`/api/series/${made.id}`)).status()).toBe(204);
 });
 
 test("shell activity button shows only while an upload has failed, and its drawer retries the upload to completion", async ({

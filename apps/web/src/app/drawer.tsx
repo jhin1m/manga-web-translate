@@ -1,6 +1,7 @@
 /**
  * Drawer phải (420px) dùng ở màn chương + app shell: scrim xám (không blur), `role="dialog"` + `aria-labelledby`,
- * Esc / bấm scrim / nút Đóng = đóng. Mở → focus vào drawer, Tab vòng trong drawer; đóng → trả focus về phần tử
+ * Esc / bấm scrim / nút Đóng = đóng. Mở → focus vào drawer (hoặc phần tử `data-autofocus` bên trong), Tab vòng
+ * trong drawer; đóng → trả focus về phần tử
  * đang focus lúc mở (VD nút "Xuất"). Chỉ mount khi đang mở. `variant="modal"`: cùng hành vi nhưng là hộp giữa màn
  * (rộng hơn — cài đặt dịch / glossary của series).
  */
@@ -24,7 +25,8 @@ export function Drawer(props: {
 
   useEffect(() => {
     const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    ref.current?.focus();
+    // `data-autofocus` (không dùng autoFocus: nó chạy trước effect này → `opener` thành ô trong drawer).
+    (ref.current?.querySelector<HTMLElement>("[data-autofocus]") ?? ref.current)?.focus();
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape" || e.defaultPrevented) return;
       e.preventDefault();

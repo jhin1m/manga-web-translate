@@ -1,7 +1,8 @@
 /**
  * Dòng "Vừa thả" inline ngay dưới dải thả (Home + Series) — chỉ hiện khi thả file không tự tạo chương được
  * (drop-to-translate.ts: chưa đoán được series, hoặc file có vấn đề). Một dòng: tên file + kích thước, series (có
- * "+ Series mới…"), số chương (đoán từ tên file / số tiếp theo), [Tạo] [✕]. Enter = tạo, Esc = bỏ. Tạo xong mở màn
+ * "+ Series mới…" → modal tạo series như nút "+ Series", tạo xong chọn sẵn series đó), số chương (đoán từ tên file /
+ * số tiếp theo), [Tạo] [✕]. Enter = tạo, Esc = bỏ. Tạo xong mở màn
  * chương, chương dừng ở nháp tới khi bấm "Dịch chương" như đường tự động. Nhiều file: mỗi ZIP = 1 chương; nhiều ảnh
  * lẻ → hỏi "1 chương gồm N ảnh" (mặc định) hay "N chương".
  */
@@ -10,9 +11,8 @@ import { useNavigate } from "@tanstack/react-router";
 import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { errorMessage } from "../../lib/api.ts";
 import { fmtBytes } from "../../lib/format.ts";
-import { createSeries, type SeriesListItem } from "../series/api.ts";
-import { ComicKindPicker } from "../series/comic-kind-picker.tsx";
-import { COMIC_KIND_SETTINGS, type ComicKind } from "../series/lang-labels.ts";
+import type { Series, SeriesListItem } from "../series/api.ts";
+import { NewSeriesDialog } from "../series/new-series-dialog.tsx";
 import { isZip, listProblems, type PageFile } from "../upload/files.ts";
 import { naturalSortBy } from "../upload/natural-sort.ts";
 import { parseChapterFilename } from "../upload/parse-chapter-filename.ts";
@@ -79,11 +79,13 @@ export function NewChapterConfirmRow(props: {
     const looseOnly = files.length > 1 && !files.some(isZip);
     return looseOnly ? { ...g, number: null } : g;
   }, [files, props.series]);
-  const [seriesId, setSeriesId] = useState(
-    () => props.fixedSeriesId ?? guess.series?.id ?? props.series[0]?.id ?? NEW_SERIES,
-  );
-  const [newTitle, setNewTitle] = useState("");
-  const [newKind, setNewKind] = useState<ComicKind>("manhwa");
+  // "" = chưa có series nào để chọn (tài khoản mới) → phải tạo series trước.
+  const [seriesId, setSeriesId] = useState(() => props.fixedSeriesId ?? guess.series?.id ?? props.series[0]?.id ?? "");
+  const [addingSeries, setAddingSeries] = useState(false);
+  // Series vừa tạo từ modal: thêm vào ô chọn ngay, không chờ danh sách series tải lại.
+  const [newSeries, setNewSeries] = useState<Series | null>(null);
+  const options: Pick<Series, "id" | "title">[] =
+    newSeries && !props.series.some((s) => s.id === newSeries.id) ? [...props.series, newSeries] : props.series;
   const [number, setNumber] = useState<string | null>(null);
   const [each, setEach] = useState(false);
 
@@ -108,28 +110,28 @@ export function NewChapterConfirmRow(props: {
     numberRef.current?.focus();
     numberRef.current?.select();
   }, [d]);
+  // Tạo series xong → sang ô số chương (chạy sau khi modal đóng và trả focus về ô chọn series).
+  useEffect(() => {
+    if (newSeries) numberRef.current?.focus();
+  }, [newSeries]);
 
-  // Đã tạo ở lần bấm trước (lỗi giữa chừng) → bấm lại không tạo trùng series/chương.
-  const made = useRef<{ seriesId?: string; chapters: Map<number, string> }>({ chapters: new Map() });
+  // Đã tạo ở lần bấm trước (lỗi giữa chừng) → bấm lại không tạo trùng chương.
+  const made = useRef(new Map<number, string>());
   const create = useMutation({
     mutationFn: async () => {
-      let sid = seriesId === NEW_SERIES ? made.current.seriesId : seriesId;
-      if (!sid) {
-        sid = (await createSeries({ title: newTitle.trim(), ...COMIC_KIND_SETTINGS[newKind] })).id;
-        made.current.seriesId = sid;
-      }
+      const sid = seriesId;
       const base = Number(chapterNumber);
       for (const [i, g] of groups.entries()) {
-        if (made.current.chapters.has(i)) continue;
+        if (made.current.has(i)) continue;
         const num = groups.length > 1 ? String(base + i) : chapterNumber;
         const { chapterId } = await uploadManager.startNewChapter({
           seriesId: sid,
           number: num,
           pages: g,
         });
-        made.current.chapters.set(i, chapterId);
+        made.current.set(i, chapterId);
       }
-      return { seriesId: sid, created: [...made.current.chapters.values()] };
+      return { seriesId: sid, created: [...made.current.values()] };
     },
     onSuccess: ({ seriesId: sid, created }) => {
       void qc.invalidateQueries({ queryKey: ["series"] });
@@ -145,7 +147,7 @@ export function NewChapterConfirmRow(props: {
     groups.length > 0 &&
     problems.length === 0 &&
     NUMBER_RE.test(chapterNumber) &&
-    (seriesId !== NEW_SERIES || !!newTitle.trim()) &&
+    !!seriesId &&
     !create.isPending;
   const submit = (e: FormEvent) => {
     e.preventDefault();
@@ -161,90 +163,105 @@ export function NewChapterConfirmRow(props: {
   const lastNumber = String(Number(chapterNumber) + groups.length - 1);
 
   return (
-    <form
-      ref={ref}
-      aria-label="Sau khi thả file"
-      className="confirm-row"
-      onSubmit={submit}
-      onKeyDown={(e) => {
-        if (e.key === "Escape") {
-          e.preventDefault();
-          props.onCancel();
-        }
-      }}
-    >
-      <div className="confirm-fields">
-        <span className="confirm-file" title={`${fileLabel} · ${sizeLabel}`}>
-          <span className="small muted">Vừa thả</span> <b>{fileLabel}</b> · {sizeLabel}
-        </span>
-        {!props.fixedSeriesId && (
-          <select
-            aria-label="Series"
-            title="Series (đoán từ tên file)"
-            value={seriesId}
-            onChange={(e) => setSeriesId(e.target.value)}
-          >
-            {props.series.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.title}
-              </option>
-            ))}
-            <option value={NEW_SERIES}>+ Series mới…</option>
-          </select>
-        )}
-        {seriesId === NEW_SERIES && (
-          <input
-            aria-label="Tên series mới"
-            value={newTitle}
-            onChange={(e) => setNewTitle(e.target.value)}
-            placeholder="Tên series mới"
-          />
-        )}
-        {seriesId === NEW_SERIES && <ComicKindPicker value={newKind} onChange={setNewKind} />}
-        <label className="confirm-number">
-          {groups.length > 1 ? "Từ ch." : "Ch."}
-          <input
-            ref={numberRef}
-            className="num"
-            inputMode="decimal"
-            aria-label={groups.length > 1 ? "Từ chương số" : "Chương số"}
-            value={chapterNumber}
-            onChange={(e) => setNumber(e.target.value.trim())}
-          />
-        </label>
-        <button type="submit" className="btn-primary" disabled={!canCreate}>
-          {groups.length > 1 ? `Tạo ${groups.length} chương` : "Tạo và mở chương"}
-        </button>
-        <button type="button" className="icon-btn" aria-label="Bỏ" title="Bỏ" onClick={props.onCancel}>
-          <CloseIcon />
-        </button>
-      </div>
-      {askMode && d && (
-        <div className="confirm-modes" role="radiogroup" aria-label="Cách chia chương">
-          <label>
-            <input type="radio" name="mode" checked={!each} onChange={() => setEach(false)} />1 chương gồm{" "}
-            {d.loose.length} ảnh
+    <>
+      <form
+        ref={ref}
+        aria-label="Sau khi thả file"
+        className="confirm-row"
+        onSubmit={submit}
+        onKeyDown={(e) => {
+          if (e.key === "Escape") {
+            e.preventDefault();
+            props.onCancel();
+          }
+        }}
+      >
+        <div className="confirm-fields">
+          <span className="confirm-file" title={`${fileLabel} · ${sizeLabel}`}>
+            <span className="small muted">Vừa thả</span> <b>{fileLabel}</b> · {sizeLabel}
+          </span>
+          {!props.fixedSeriesId && options.length === 0 && (
+            <button type="button" onClick={() => setAddingSeries(true)}>
+              + Series mới…
+            </button>
+          )}
+          {!props.fixedSeriesId && options.length > 0 && (
+            // "+ Series mới…" không phải giá trị chọn: mở modal, ô chọn giữ series cũ tới khi tạo xong.
+            <select
+              aria-label="Series"
+              title="Series (đoán từ tên file)"
+              value={seriesId}
+              onChange={(e) => (e.target.value === NEW_SERIES ? setAddingSeries(true) : setSeriesId(e.target.value))}
+            >
+              {!seriesId && (
+                <option value="" disabled>
+                  Chọn series
+                </option>
+              )}
+              {options.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.title}
+                </option>
+              ))}
+              <option value={NEW_SERIES}>+ Series mới…</option>
+            </select>
+          )}
+          <label className="confirm-number">
+            {groups.length > 1 ? "Từ ch." : "Ch."}
+            <input
+              ref={numberRef}
+              className="num"
+              inputMode="decimal"
+              aria-label={groups.length > 1 ? "Từ chương số" : "Chương số"}
+              value={chapterNumber}
+              onChange={(e) => setNumber(e.target.value.trim())}
+            />
           </label>
-          <label>
-            <input type="radio" name="mode" checked={each} onChange={() => setEach(true)} />
-            {d.loose.length} chương, mỗi ảnh 1 chương
-          </label>
+          <button type="submit" className="btn-primary" disabled={!canCreate}>
+            {groups.length > 1 ? `Tạo ${groups.length} chương` : "Tạo và mở chương"}
+          </button>
+          <button type="button" className="icon-btn" aria-label="Bỏ" title="Bỏ" onClick={props.onCancel}>
+            <CloseIcon />
+          </button>
         </div>
+        {askMode && d && (
+          <div className="confirm-modes" role="radiogroup" aria-label="Cách chia chương">
+            <label>
+              <input type="radio" name="mode" checked={!each} onChange={() => setEach(false)} />1 chương gồm{" "}
+              {d.loose.length} ảnh
+            </label>
+            <label>
+              <input type="radio" name="mode" checked={each} onChange={() => setEach(true)} />
+              {d.loose.length} chương, mỗi ảnh 1 chương
+            </label>
+          </div>
+        )}
+        {groups.length > 1 && NUMBER_RE.test(chapterNumber) && (
+          <span className="small muted">
+            Tạo chương {chapterNumber}–{lastNumber}, đánh số liên tiếp
+            {d && d.zips.length > 1 ? " (mỗi ZIP 1 chương)" : ""}.
+          </span>
+        )}
+        {!NUMBER_RE.test(chapterNumber) && <span className="small error">Số chương phải là số, VD 13 hoặc 13.5.</span>}
+        {problems.map((p) => (
+          <span key={p} className="small error">
+            {p}
+          </span>
+        ))}
+        {read.error !== undefined && <span className="small error">{errorMessage(read.error)}</span>}
+        {create.error && <span className="small error">{errorMessage(create.error)}</span>}
+      </form>
+      {/* Ngoài <form> của dòng: form lồng form không hợp lệ. */}
+      {addingSeries && (
+        <NewSeriesDialog
+          onClose={() => setAddingSeries(false)}
+          onCreated={(s) => {
+            setAddingSeries(false);
+            setNewSeries(s);
+            setSeriesId(s.id);
+          }}
+        />
       )}
-      {groups.length > 1 && NUMBER_RE.test(chapterNumber) && (
-        <span className="small muted">
-          Tạo chương {chapterNumber}–{lastNumber}, đánh số liên tiếp
-          {d && d.zips.length > 1 ? " (mỗi ZIP 1 chương)" : ""}.
-        </span>
-      )}
-      {!NUMBER_RE.test(chapterNumber) && <span className="small error">Số chương phải là số, VD 13 hoặc 13.5.</span>}
-      {problems.map((p) => (
-        <span key={p} className="small error">
-          {p}
-        </span>
-      ))}
-      {read.error !== undefined && <span className="small error">{errorMessage(read.error)}</span>}
-      {create.error && <span className="small error">{errorMessage(create.error)}</span>}
-    </form>
+    </>
   );
 }

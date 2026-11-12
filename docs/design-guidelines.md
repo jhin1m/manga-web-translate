@@ -108,12 +108,14 @@ Khung 1280×800, không chọn gì: canvas rộng 1160px (1280 − rail 48 − c
   OCR x/N", "Đang dịch · x/y trang · lô k/n") → Xuất. Chương có trang lỗi: nút chính "Chạy lại N trang", "Xuất" và
   "Dịch lại cả chương" nằm trong menu "⋯"; Xuất mở cùng menu dưới nút ⋯.
 - **Drawer phải 420px** (`app/drawer.tsx`): Hoạt động (upload + job chương + lượt xuất, kèm "Chi tiết kỹ thuật" của lỗi) và
-  Phím tắt. Cùng component có biến thể `modal` (hộp giữa màn) cho Glossary / Cài đặt dịch của series. Không dùng modal
+  Phím tắt. Cùng component có biến thể `modal` (hộp giữa màn) cho Glossary / Cài đặt dịch / Tạo series mới. Không dùng modal
   cho thao tác chính của màn chương. Chi tiết: [editor.md](./editor.md).
 - **Home** (`/`): dải thả 56px một dòng ("Thả ảnh / ZIP" · chọn file; chưa có series nào thì vùng lớn; thả bất kỳ đâu trên
   trang cũng được). Đoán được series → tạo chương nháp + upload + mở màn chương, chờ bấm "Dịch chương" (không tự chạy);
-  không đoán được / file lỗi → dòng "Vừa thả" một dòng (file, series, số chương, Tạo; chọn "+ Series mới…" thì thêm
-  ô tên + ngôn ngữ gốc). Dưới đó: ô tìm + "+ Series" (form một dòng: tên, loại truyện — select, Tạo series) và hàng series
+  không đoán được / file lỗi → dòng "Vừa thả" một dòng (file, series, số chương, Tạo; "+ Series mới…" mở cùng modal
+  tạo series, tạo xong chọn sẵn series đó và focus ô số chương; chưa có series nào thì ô chọn là nút "+ Series mới…").
+  Dưới đó: ô tìm + "+ Series" (modal "Tạo series mới" 560px: Tên, Loại truyện, Dịch từ — mặc định tiếng Anh, Sang —
+  mặc định tiếng Việt; Enter = Tạo series, tạo xong mở màn series) và hàng series
   một dòng (tên dài cắt "…" + `title`, chấm + trạng thái, "N ch"; bấm hàng để mở, icon Sửa → modal Cài đặt dịch,
   icon Xoá xác nhận tại chỗ rồi xoá cả series). Không có tiêu đề "Series · N". Nút Hoạt động của app shell chỉ hiện
   khi có chương đang tải ảnh; menu tài khoản giữ Glossary chung / Font / Cài đặt.

@@ -1,22 +1,21 @@
 /**
  * Home, từ trên xuống: dải thả (thả bất kỳ đâu trên trang cũng được; chưa có series nào thì là vùng lớn; đoán được
- * series → tạo chương + tải ảnh + mở màn chương, không thì dòng "Vừa thả" inline) → ô tìm + "+ Series" → danh sách
- * series một dòng mỗi hàng (bấm hàng để mở series, icon Sửa → cài đặt series, icon Xoá → xác nhận tại chỗ rồi xoá
- * cả series).
+ * series → tạo chương + tải ảnh + mở màn chương, không thì dòng "Vừa thả" inline) → ô tìm + "+ Series" (mở modal
+ * tạo series: tên, loại truyện, Dịch từ / Sang) → danh sách series một dòng mỗi hàng (bấm hàng để mở series, icon
+ * Sửa → cài đặt series, icon Xoá → xác nhận tại chỗ rồi xoá cả series).
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link, useNavigate } from "@tanstack/react-router";
-import { type FormEvent, useState } from "react";
+import { Link } from "@tanstack/react-router";
+import { useState } from "react";
 import { ApiError, errorMessage } from "../../lib/api.ts";
 import { needsWork, nextAction } from "../chapter/next-action.ts";
-import { createSeries, deleteSeries, fetchSeriesList, type SeriesListItem, seriesKeys } from "../series/api.ts";
-import { ComicKindPicker } from "../series/comic-kind-picker.tsx";
-import { COMIC_KIND_SETTINGS, type ComicKind } from "../series/lang-labels.ts";
+import { deleteSeries, fetchSeriesList, type SeriesListItem, seriesKeys } from "../series/api.ts";
+import { NewSeriesDialog } from "../series/new-series-dialog.tsx";
 import { DropZone, usePageDrop } from "../upload/drop-zone.tsx";
 import { normalizeName } from "../upload/parse-chapter-filename.ts";
 import { useDropToTranslate } from "./drop-to-translate.ts";
 import { NewChapterConfirmRow } from "./new-chapter-confirm-row.tsx";
-import { CloseIcon, PencilIcon, TrashIcon } from "./row-icons.tsx";
+import { PencilIcon, TrashIcon } from "./row-icons.tsx";
 import "./home.css";
 
 type Pending = { files: File[]; seriesId?: string; seq: number };
@@ -65,25 +64,8 @@ export function HomePage() {
 }
 
 function SeriesRows(props: { series: SeriesListItem[] | undefined; error: unknown }) {
-  const qc = useQueryClient();
-  const navigate = useNavigate();
   const [search, setSearch] = useState("");
   const [adding, setAdding] = useState(false);
-  const [title, setTitle] = useState("");
-  const [kind, setKind] = useState<ComicKind>("manhwa");
-  const create = useMutation({
-    mutationFn: () => createSeries({ title: title.trim(), ...COMIC_KIND_SETTINGS[kind] }),
-    onSuccess: (s) => {
-      setTitle("");
-      setAdding(false);
-      void qc.invalidateQueries({ queryKey: seriesKeys.list() });
-      void navigate({ to: "/s/$seriesId", params: { seriesId: s.id } });
-    },
-  });
-  const submit = (e: FormEvent) => {
-    e.preventDefault();
-    if (title.trim()) create.mutate();
-  };
   const needle = normalizeName(search);
   const list = (props.series ?? []).filter((s) => !needle || normalizeName(s.title).includes(needle));
 
@@ -97,38 +79,12 @@ function SeriesRows(props: { series: SeriesListItem[] | undefined; error: unknow
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
-        {!adding && (
-          <button type="button" onClick={() => setAdding(true)}>
-            + Series
-          </button>
-        )}
+        <button type="button" onClick={() => setAdding(true)}>
+          + Series
+        </button>
       </div>
-      {adding && (
-        // Một dòng: tên → loại truyện → Tạo → ✕. Esc ở bất kỳ ô nào = Huỷ.
-        <form
-          className="inline-form"
-          aria-label="Tạo series mới"
-          onSubmit={submit}
-          onKeyDown={(e) => e.key === "Escape" && setAdding(false)}
-        >
-          <input
-            aria-label="Tên series"
-            placeholder="Tên series"
-            // biome-ignore lint/a11y/noAutofocus: vừa bấm "+ Series" → gõ tên ngay
-            autoFocus
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-          />
-          <ComicKindPicker value={kind} onChange={setKind} />
-          <button type="submit" className="btn-primary" disabled={create.isPending || !title.trim()}>
-            {create.isPending ? "Đang tạo…" : "Tạo series"}
-          </button>
-          <button type="button" className="icon-btn" aria-label="Huỷ" title="Huỷ" onClick={() => setAdding(false)}>
-            <CloseIcon />
-          </button>
-        </form>
-      )}
-      {(props.error || create.error) && <p className="notice danger">{errorMessage(props.error ?? create.error)}</p>}
+      {adding && <NewSeriesDialog onClose={() => setAdding(false)} />}
+      {!!props.error && <p className="notice danger">{errorMessage(props.error)}</p>}
       <div className="rows">
         {props.series && list.length === 0 && (
           <div className="rows-empty">
