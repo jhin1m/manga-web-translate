@@ -94,6 +94,7 @@ import {
   sourceCounts,
   stepSource,
 } from "./source-rail-model.ts";
+import type { TrimEdges } from "./source-trim-model.ts";
 import { SourceViewer } from "./source-viewer.tsx";
 import { stageLabel } from "./stage-labels.ts";
 import { chapterChip, chapterProgress, chipWithActivity, isChapterSettled, nextReviewPage } from "./status.ts";
@@ -543,6 +544,9 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
         await runAi(() => retranslate(chapterId));
         return info("Đã xếp dịch lại cả chương (chỉnh sửa tay được giữ nguyên).");
       }
+      // Cắt mép chưa lưu / đang lưu phải xong trước: sau khi chạy, ảnh gốc không sửa được nữa. Lỗi ghi → không chạy.
+      const trimFailure = await flushTrim();
+      if (trimFailure) return trimFailure;
       // Thành công: chip đã đổi ("Đang cắt trang", …) — chỉ báo khi có ảnh bị loại.
       const r = await commitChapter(chapterId, kind === "prepare_only" ? "prepared" : "translated");
       return r.rejected.length ? rejectedNotice(r.accepted, r.rejected) : null;
@@ -902,45 +906,69 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
     },
     [notify, queryClient, seriesId],
   );
-  const sourceTrim = useSetSourceTrim(chapterId, (e) =>
-    notify({
-      tone: "danger",
-      text:
-        e instanceof ApiError && e.body.error === "trim_too_large"
-          ? "Phần ảnh còn lại quá ngắn — kéo thanh cắt ít hơn."
-          : errorMessage(e),
-    }),
-  );
-  /** Ghi số px cắt của ảnh `it` (null = bỏ cắt); toast "Hoàn tác" trả về trim trước đó. */
-  const trimSource = useCallback(
-    (it: SourceItem, trim: { top: number; bottom: number } | null, height?: number) => {
-      const prev = it.trim ? { top: it.trim.top, bottom: it.trim.bottom } : null;
-      sourceTrim.mutate(
-        { id: it.id, trim, height },
-        {
-          onSuccess: () =>
-            notify({
-              tone: "info",
-              key: "trim",
-              text: trim ? `Đã cắt mép ảnh ${it.n}.` : `Đã bỏ cắt ảnh ${it.n}.`,
-              actions: [
-                {
-                  label: "Hoàn tác",
-                  run: () =>
-                    sourceTrim.mutate(
-                      { id: it.id, trim: prev, height },
-                      { onSuccess: () => setNotice((n) => (n?.key === "trim" ? null : n)) },
-                    ),
-                },
-                ...(trim ? [{ label: "Luôn cắt ở series này", run: () => void learnBands(it, trim) }] : []),
-              ],
-            }),
-        },
-      );
-    },
-    [sourceTrim.mutate, notify, learnBands],
-  );
-  const trimState = useSourceTrim({ item: sources[sourceIdx], active: trimming, save: trimSource });
+  const sourceTrim = useSetSourceTrim(chapterId);
+  /** Các lượt ghi cắt mép đang bay — "Dịch chương" chờ chúng xong rồi mới chạy. */
+  const trimInflight = useRef(new Set<Promise<Notice | null>>());
+  const trimSourceRef =
+    useRef<(it: SourceItem, trim: TrimEdges | null, height?: number) => Promise<Notice | null>>(undefined);
+  /** Ghi số px cắt của ảnh `it` (null = bỏ cắt); trả null khi xong, hoặc thông báo lỗi (đã hiện) kèm "Thử lại" ghi lại đúng số đó. */
+  const writeTrim = async (it: SourceItem, trim: TrimEdges | null, height?: number): Promise<Notice | null> => {
+    try {
+      await sourceTrim.mutateAsync({ id: it.id, trim, height });
+      return null;
+    } catch (e) {
+      const tooLarge = e instanceof ApiError && e.body.error === "trim_too_large";
+      const fail: Notice = {
+        tone: "danger",
+        text: tooLarge ? "Phần ảnh còn lại quá ngắn — kéo thanh cắt ít hơn." : `Không lưu được cắt mép ảnh ${it.n}.`,
+        actions: tooLarge
+          ? undefined
+          : [{ label: "Thử lại", run: () => void trimSourceRef.current?.(it, trim, height) }],
+      };
+      notify(fail);
+      return fail;
+    }
+  };
+  /** Ghi số px cắt của ảnh `it` (null = bỏ cắt); toast "Hoàn tác" trả về trim trước đó. Trả lỗi nếu ghi không được. */
+  const trimSource = (it: SourceItem, trim: TrimEdges | null, height?: number): Promise<Notice | null> => {
+    const prev = it.trim ? { top: it.trim.top, bottom: it.trim.bottom } : null;
+    const job = writeTrim(it, trim, height).then((fail) => {
+      if (!fail)
+        notify({
+          tone: "info",
+          key: "trim",
+          text: trim ? `Đã cắt mép ảnh ${it.n}.` : `Đã bỏ cắt ảnh ${it.n}.`,
+          actions: [
+            {
+              label: "Hoàn tác",
+              run: () =>
+                void writeTrim(it, prev, height).then((f) => {
+                  if (!f) setNotice((n) => (n?.key === "trim" ? null : n));
+                }),
+            },
+            ...(trim ? [{ label: "Luôn cắt ở series này", run: () => void learnBands(it, trim) }] : []),
+          ],
+        });
+      return fail;
+    });
+    trimInflight.current.add(job);
+    void job.finally(() => trimInflight.current.delete(job));
+    return job;
+  };
+  trimSourceRef.current = trimSource;
+  const trimState = useSourceTrim({
+    item: sources[sourceIdx],
+    active: trimming,
+    save: async (it, trim, height) => (await trimSource(it, trim, height)) === null,
+  });
+  const trimStateRef = useRef(trimState);
+  trimStateRef.current = trimState;
+  /** Trước khi chạy: ghi bản nháp cắt mép chưa lưu và chờ mọi lượt ghi đang bay; trả lỗi ghi (nếu có) để không chạy. */
+  const flushTrim = async (): Promise<Notice | null> => {
+    trimStateRef.current.commit();
+    const results = await Promise.all([...trimInflight.current]);
+    return results.find((r) => r !== null) ?? null;
+  };
   /** Đóng panel Cắt mép và trả focus về nút rail của nó (panel ẩn đi thì focus không được rơi về <body>). */
   const closeTrim = () => {
     setPanel((p) => (p === "trim" ? null : p));

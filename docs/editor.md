@@ -82,7 +82,7 @@ phần giữ lại ≥ `MIN_TRIM_KEEP_PX`), **Lưu** / **Huỷ**, "Bỏ cắt" k
 ảnh `skip` chỉ báo "Ảnh đã xoá". Canvas (`source-trim-overlay.tsx`) phủ mờ phần bị cắt + hai thanh kéo trên / dưới, đồng
 bộ hai chiều với ô số (state ở `use-source-trim.ts`, logic thuần ở `source-trim-model.ts`); **↑/↓** 1 px,
 **Shift+↑/↓** 10 px trên thanh. **Enter** (cả trong ô số) = Lưu rồi đóng panel, **Esc** / Huỷ / đóng panel = bỏ nháp chưa
-lưu. Đổi sang ảnh khác (thumbnail, ←/→, nút ‹ ›) khi nháp khác số đã lưu → **tự lưu** ảnh cũ, panel ở lại để cắt tiếp. Phần giữ lại tối thiểu
+lưu. Đổi sang ảnh khác (thumbnail, ←/→, nút ‹ ›) khi nháp khác số đã lưu → **tự lưu** ảnh cũ, panel ở lại để cắt tiếp (lưu lỗi: toast "Không lưu được cắt mép ảnh n" + "Thử lại"). **Dịch chương** với nháp chưa lưu cũng tự lưu trước và chờ lượt lưu xong rồi mới chạy; lưu lỗi thì không chạy. Ô số chỉ nhận chữ số; ô trống khi đang gõ không đổi mép, rời ô thì về số hợp lệ gần nhất. Phần giữ lại tối thiểu
 `MIN_TRIM_KEEP_PX` (64 px, `packages/shared/src/job.ts`). Lưu bằng `PATCH …/source-files/:fileId {trim: {top, bottom} | null,
 height?}` vào `source_files.trim` (`{top, bottom, by}`; 0/0 = null). File gốc không đổi nên "Bỏ cắt" / toast "Hoàn tác" trả
 ảnh nguyên vẹn. Lỗi: 400 `trim_too_large` (cắt quá nhiều), 400 `no_size` (ảnh chưa có chiều cao — web gửi `height` đo

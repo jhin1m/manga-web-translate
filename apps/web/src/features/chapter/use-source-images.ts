@@ -97,8 +97,8 @@ export function useSetSourceSkip(chapterId: string, onError: (e: unknown) => voi
 
 type TrimVars = { id: string; trim: Pick<SourceTrim, "top" | "bottom"> | null; height?: number };
 
-/** Cắt / bỏ cắt mép 1 ảnh gốc: lạc quan vào cả 2 cache, lỗi → trả trim cũ; chỉ lần gọi mới nhất của ảnh được ghi. */
-export function useSetSourceTrim(chapterId: string, onError: (e: unknown) => void) {
+/** Cắt / bỏ cắt mép 1 ảnh gốc: lạc quan vào cả 2 cache, lỗi → trả trim cũ (người gọi tự báo lỗi); chỉ lần gọi mới nhất của ảnh được ghi. */
+export function useSetSourceTrim(chapterId: string) {
   const qc = useQueryClient();
   const filesKey = chapterKeys.sourceFiles(chapterId);
   const detailKey = chapterKeys.detail(chapterId);
@@ -128,9 +128,8 @@ export function useSetSourceTrim(chapterId: string, onError: (e: unknown) => voi
     onSuccess: (row, { id }, ctx) => {
       if (latest.current.get(id) === ctx.n) write(id, row.trim);
     },
-    onError: (e, { id }, ctx) => {
+    onError: (_e, { id }, ctx) => {
       if (ctx && latest.current.get(id) === ctx.n) write(id, ctx.before);
-      onError(e);
     },
   });
 }

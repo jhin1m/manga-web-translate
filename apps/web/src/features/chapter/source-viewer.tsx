@@ -57,6 +57,8 @@ export function SourceViewer(props: {
   /** Gắn với id ảnh: đổi ảnh → coi như Vừa khung, không cần effect đặt lại. */
   const [zoomState, setZoomState] = useState<{ id: string; scale: number } | null>(null);
   const zoom = item && zoomState?.id === item.id ? zoomState.scale : null;
+  // Rời ảnh đã zoom là bỏ zoom của nó: quay lại ảnh đó cũng bắt đầu từ Vừa khung.
+  if (zoomState && zoomState.id !== item?.id) setZoomState(null);
   /** Bề ngang vùng chứa ảnh (khung cuộn trừ padding), để tính cỡ "Vừa khung". */
   const [avail, setAvail] = useState(0);
   const fit = natural ? fitScale(natural.width, avail) : 1;
@@ -134,14 +136,34 @@ export function SourceViewer(props: {
       if (!live.current.natural) return;
       zoomTo(wheelZoom(wanted.current ?? live.current.scale, e.deltaY), e.clientX, e.clientY);
     };
+    // Safari: chụm trackpad bắn gesture* (không phải wheel + ctrl) và zoom cả trang nếu không chặn.
+    let pinchBase = 1;
+    const onGestureStart = (e: Event) => {
+      e.preventDefault();
+      pinchBase = wanted.current ?? live.current.scale;
+    };
+    const onGestureChange = (e: Event) => {
+      e.preventDefault();
+      const g = e as Event & { scale: number; clientX: number; clientY: number };
+      if (live.current.natural) zoomTo(pinchBase * g.scale, g.clientX, g.clientY);
+    };
     box.addEventListener("wheel", onWheel, { passive: false });
+    box.addEventListener("gesturestart", onGestureStart);
+    box.addEventListener("gesturechange", onGestureChange);
     return () => {
       ro.disconnect();
       box.removeEventListener("wheel", onWheel);
+      box.removeEventListener("gesturestart", onGestureStart);
+      box.removeEventListener("gesturechange", onGestureChange);
     };
   }, [item?.id]);
 
   const ready = natural !== null && !missing;
+  /** Vừa mở chế độ cắt: thanh trên nhận focus một lần; đổi ảnh khi panel đang mở không giành focus của rail. */
+  const focusHandle = useRef(false);
+  useLayoutEffect(() => {
+    focusHandle.current = trimming;
+  }, [trimming]);
   const isLast = index >= 0 && index === total - 1;
   // Vào chế độ cắt ở ảnh cuối: cuộn sẵn xuống đáy, nơi thường là banner.
   // biome-ignore lint/correctness/useExhaustiveDependencies: chỉ chạy khi vào chế độ cắt / ảnh vừa tải xong
@@ -199,6 +221,7 @@ export function SourceViewer(props: {
                   bottom={edges.bottom}
                   editing={trimming}
                   frame={frame}
+                  focusOnMount={focusHandle}
                   onChange={props.onEdgeChange}
                 />
               )}

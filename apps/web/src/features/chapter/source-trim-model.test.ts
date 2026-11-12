@@ -31,13 +31,19 @@ describe("trimPayload / savedEdges", () => {
 });
 
 describe("parseTrimInput", () => {
-  it("accepts digits, empty counts as 0", () => {
+  it("accepts digits only", () => {
     expect(parseTrimInput("12")).toBe(12);
-    expect(parseTrimInput("")).toBe(0);
     expect(parseTrimInput(" 7 ")).toBe(7);
+    expect(parseTrimInput("007")).toBe(7);
+    expect(parseTrimInput("0")).toBe(0);
   });
-  it("rejects signs, decimals and exponents", () => {
-    for (const bad of ["-3", "1.5", "1e3", "abc", "+4"]) expect(parseTrimInput(bad)).toBeNull();
+  it("empty or blank text is not a value (the box is mid-typing)", () => {
+    expect(parseTrimInput("")).toBeNull();
+    expect(parseTrimInput("   ")).toBeNull();
+  });
+  it("rejects signs, decimals, exponents and absurdly long numbers", () => {
+    for (const bad of ["-3", "-", "1.5", "1.", "120e", "1e3", "abc", "+4", "9".repeat(10)])
+      expect(parseTrimInput(bad)).toBeNull();
   });
 });
 

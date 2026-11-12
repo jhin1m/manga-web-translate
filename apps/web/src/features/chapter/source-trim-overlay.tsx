@@ -21,6 +21,8 @@ export function SourceTrimOverlay(props: {
   editing: boolean;
   /** Phần tử có đúng chiều cao ảnh đang hiển thị — gốc quy đổi toạ độ con trỏ. */
   frame: RefObject<HTMLElement | null>;
+  /** true = thanh trên vừa hiện nhận focus (một lần, rồi tự về false); false = không giành focus. */
+  focusOnMount: RefObject<boolean>;
   onChange(edge: TrimEdge, value: number): void;
 }) {
   const { height, top, bottom } = props;
@@ -30,12 +32,20 @@ export function SourceTrimOverlay(props: {
       {bottom > 0 && <div className="cw-trim-shade" data-edge="bottom" style={{ height: pct(bottom, height) }} />}
       {props.editing && (
         <>
-          <TrimHandle edge="top" at={top} height={height} frame={props.frame} onChange={props.onChange} />
+          <TrimHandle
+            edge="top"
+            at={top}
+            height={height}
+            frame={props.frame}
+            focusOnMount={props.focusOnMount}
+            onChange={props.onChange}
+          />
           <TrimHandle
             edge="bottom"
             at={height - bottom}
             height={height}
             frame={props.frame}
+            focusOnMount={props.focusOnMount}
             onChange={props.onChange}
           />
         </>
@@ -50,16 +60,20 @@ function TrimHandle(props: {
   at: number;
   height: number;
   frame: RefObject<HTMLElement | null>;
+  focusOnMount: RefObject<boolean>;
   onChange(edge: TrimEdge, value: number): void;
 }) {
   const { edge, at, height } = props;
   const ref = useRef<HTMLDivElement>(null);
   /** Đang kéo: khoảng lệch (px ảnh thật) từ đường cắt tới con trỏ lúc bấm, để đường không nhảy theo con trỏ. */
   const grab = useRef<number | null>(null);
-  // Vào chế độ cắt: focus thanh trên để bàn phím dùng được ngay.
+  // Vừa mở chế độ cắt: focus thanh trên để bàn phím dùng được ngay (đổi ảnh khi đang cắt thì giữ focus ở chỗ cũ).
+  // biome-ignore lint/correctness/useExhaustiveDependencies: chỉ chạy lúc thanh hiện ra
   useEffect(() => {
-    if (edge === "top") ref.current?.focus({ preventScroll: true });
-  }, [edge]);
+    if (edge !== "top" || !props.focusOnMount.current) return;
+    props.focusOnMount.current = false;
+    ref.current?.focus({ preventScroll: true });
+  }, []);
 
   /** Đặt số px cắt của thanh này theo vị trí đường cắt `y` (px ảnh thật, tính từ đỉnh ảnh). */
   const setLine = (y: number) => props.onChange(edge, edge === "top" ? y : height - y);

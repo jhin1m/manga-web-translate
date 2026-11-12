@@ -22,11 +22,13 @@ export const trimDirty = (draft: TrimEdges | null, saved: SourceTrim | null | un
 /** Giá trị gửi API: cắt 0 / 0 nghĩa là bỏ cắt (null). */
 export const trimPayload = (edges: TrimEdges): TrimEdges | null => (edges.top + edges.bottom > 0 ? edges : null);
 
-/** Chữ trong ô số → px: trống = 0, số nguyên không âm; chữ khác (dấu trừ, thập phân, "e") → null (bỏ qua lần gõ). */
+/**
+ * Chữ trong ô số → px: chỉ chuỗi chữ số (tối đa 9 chữ số) mới hợp lệ. Trống, dấu trừ, thập phân, "e", chữ khác → null:
+ * lần gõ đó không đổi mép (ô trống là trạng thái đang gõ, không phải "0").
+ */
 export function parseTrimInput(text: string): number | null {
   const t = text.trim();
-  if (t === "") return 0;
-  return /^\d+$/.test(t) ? Number(t) : null;
+  return /^\d{1,9}$/.test(t) ? Number(t) : null;
 }
 
 /** Đổi một mép của `edges` sang `value`, kẹp để phần còn lại ≥ MIN_TRIM_KEEP_PX của ảnh cao `height` px. */

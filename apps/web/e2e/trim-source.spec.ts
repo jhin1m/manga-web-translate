@@ -1,7 +1,7 @@
 /**
  * Cắt mép ảnh gốc trước "Dịch chương": nút Cắt mép ở rail trái → panel (ô số Trên / Dưới) + 2 thanh kéo trên canvas
  * (cùng số) → Enter / Lưu, Esc / Huỷ; đổi ảnh khi nháp đã khác thì tự lưu; zoom (nút, Ctrl+cuộn) không làm lệch px
- * ảnh thật; trim giữ sau khi tải lại, "Bỏ cắt" + Hoàn tác; sau "Dịch chương" trang cuối cao đúng phần ảnh còn lại
+ * ảnh thật; trim giữ sau khi tải lại, "Bỏ cắt" + Hoàn tác; "Dịch chương" tự lưu nháp chưa lưu rồi mới chạy, trang cuối cao đúng phần ảnh còn lại
  * (worker giả tính theo trim trong inputs).
  */
 import { expect, test } from "@playwright/test";
@@ -103,7 +103,22 @@ test("trim the bottom edge of the last image, keep it across reload, then transl
   await expect(top).toHaveAttribute("aria-valuenow", "20");
   await bottomField.fill("9999");
   await expect(bottomField).toHaveValue(String(H - 20 - 64));
+  // Ô trống / chữ không phải số khi đang gõ: thanh đứng yên; rời ô thì ô về giá trị hợp lệ gần nhất.
   await bottomField.fill("");
+  await expect(bottom).toHaveAttribute("aria-valuenow", String(20 + 64));
+  await bottomField.pressSequentially("-");
+  await expect(bottomField).toHaveValue("");
+  await expect(bottom).toHaveAttribute("aria-valuenow", String(20 + 64));
+  // Ký tự lạ bị bỏ, chữ số trước đó giữ nguyên (không bị coi là 0).
+  await bottomField.pressSequentially("120e");
+  await expect(bottomField).toHaveValue("120");
+  await expect(bottom).toHaveAttribute("aria-valuenow", String(H - 120));
+  await bottomField.pressSequentially(".5");
+  await expect(bottomField).toHaveValue(String(H - 20 - 64));
+  await bottomField.fill("");
+  await bottomField.blur();
+  await expect(bottomField).toHaveValue(String(H - 20 - 64));
+  await bottomField.fill("0");
   await expect(bottom).toHaveAttribute("aria-valuenow", String(H));
   await topField.fill("9999");
   await expect(topField).toHaveValue(String(H - 64));
@@ -168,6 +183,11 @@ test("trim the bottom edge of the last image, keep it across reload, then transl
   await thumb1.click();
   await expect(page.getByRole("button", { name: /^Đang vừa khung/ })).toBeVisible();
   await thumb2.click();
+  await expect(page.getByRole("button", { name: /^Đang vừa khung/ })).toBeVisible();
+  await page.getByRole("button", { name: "Phóng to" }).click();
+  await thumb1.click();
+  await thumb2.click();
+  await expect(page.getByRole("button", { name: /^Đang vừa khung/ })).toBeVisible();
   await panel.getByRole("button", { name: "Huỷ" }).click();
   await expect.poll(trimmedOnServer).toEqual([null, [0, 40]]);
 
@@ -212,7 +232,25 @@ test("trim the bottom edge of the last image, keep it across reload, then transl
   await expect(thumb2).toHaveAccessibleName("Ảnh 2 · Đã cắt mép");
   await expect.poll(trimmedOnServer).toEqual([null, [0, BOTTOM]]);
 
-  // Dịch chương: trang cuối cao H − bottom, trang đầu giữ nguyên.
+  // Lưu lỗi lúc bấm "Dịch chương" với nháp chưa lưu: không chạy, báo lỗi nêu số ảnh, "Thử lại" ghi lại đúng số đó.
+  await thumb2.click();
+  await railTrim.click();
+  await bottomField.fill("70");
+  const failPatch = (route: import("@playwright/test").Route) => route.fulfill({ status: 500, body: "{}" });
+  await page.route("**/api/chapters/*/source-files/*", failPatch);
+  await step1.click();
+  const failToast = page.getByRole("alert").filter({ hasText: "Không lưu được cắt mép ảnh 2" });
+  await expect(failToast).toBeVisible();
+  await expect(step1).toBeEnabled();
+  const draftRes = await page.request.get(`/api/chapters/${chapterId}/pages`);
+  expect(((await draftRes.json()) as { pages: unknown[] }).pages).toHaveLength(0);
+  await page.unroute("**/api/chapters/*/source-files/*", failPatch);
+  await failToast.getByRole("button", { name: "Thử lại" }).click();
+  await expect.poll(trimmedOnServer).toEqual([null, [0, 70]]);
+
+  // Dịch chương với nháp chưa lưu: tự lưu trước rồi mới chạy; trang cuối cao H − bottom, trang đầu giữ nguyên.
+  await expect(panel).toBeVisible();
+  await bottomField.fill("80");
   let ready = false;
   const worker = runFakeWorker(state.token, () => ready, 60_000);
   await expect(step1).toBeEnabled();
@@ -226,7 +264,7 @@ test("trim the bottom edge of the last image, keep it across reload, then transl
       },
       { timeout: 30_000 },
     )
-    .toEqual([1000, H - BOTTOM]);
+    .toEqual([1000, H - 80]);
   ready = true;
   await worker;
 });
