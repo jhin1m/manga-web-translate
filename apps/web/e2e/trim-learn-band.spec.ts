@@ -11,6 +11,8 @@ const H = 300;
 const BAND = 50;
 /** Sọc dọc xen kẽ → dHash có nhiều bit 1, không bị coi là ảnh trơn. */
 const stripes = (x: number) => (Math.floor(x / 13) % 2 ? 30 : 220);
+/** Chỉ dải đáy có sọc; phần còn lại là dốc sáng dần (hash trơn) → băm nhầm vùng khác (đầu ảnh, cả ảnh) bị từ chối. */
+const banner = (x: number, y: number) => (y >= H - BAND ? stripes(x) : x * 2);
 
 /** Series tạo trong test; dọn cả khi test lỗi để không làm đổi series tự đoán ở các test thả file sau. */
 let sid: string | null = null;
@@ -38,8 +40,8 @@ test("learn the trimmed bottom band, see it in the series settings, learning twi
     .getByRole("region", { name: "Thêm chương tiếp theo" })
     .locator('input[type="file"]')
     .setInputFiles([
-      { name: "p1.png", mimeType: "image/png", buffer: grayPng(120, H, stripes) },
-      { name: "p2.png", mimeType: "image/png", buffer: grayPng(120, H, stripes) },
+      { name: "p1.png", mimeType: "image/png", buffer: grayPng(120, H, banner) },
+      { name: "p2.png", mimeType: "image/png", buffer: grayPng(120, H, banner) },
     ]);
   await expect(page).toHaveURL(new RegExp(`/s/${sid}/c/[0-9a-f-]{36}$`), { timeout: 30_000 });
   await expect(page.getByRole("button", { name: "Dịch chương", exact: true })).toBeEnabled({ timeout: 30_000 });

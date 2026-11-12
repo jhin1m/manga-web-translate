@@ -4,7 +4,7 @@
  * Hash do trình duyệt gửi: tin trong dữ liệu của chính người dùng (sai chỉ làm khớp/không khớp sai, người dùng khôi phục được).
  */
 import { chapters, NotFoundError, pages, type Scoped, scoped, series, seriesSkipImages, sourceFiles } from "@mtl/db";
-import { DHASH_RE, type ImageFingerprint, isPlainHash, sameImage, storageKeys } from "@mtl/shared";
+import { DHASH_RE, type ImageFingerprint, isPlainHash, MIN_BAND_PX, sameImage, storageKeys } from "@mtl/shared";
 import { and, eq, inArray, isNull, ne, type SQL } from "drizzle-orm";
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
@@ -30,7 +30,13 @@ const WholeBody = z
 
 /** Dải mép đã cắt của 1 ảnh gốc; dHash do trình duyệt tính từ đúng vùng dải. */
 const BandBody = z
-  .object({ source_file_id: z.string().uuid(), edge: z.enum(SKIP_EDGES), dhash: z.string().regex(DHASH_RE) })
+  .object({
+    source_file_id: z.string().uuid(),
+    edge: z.enum(SKIP_EDGES),
+    dhash: z.string().regex(DHASH_RE),
+    /** Số px dải mà trình duyệt đã băm; phải bằng trim đang lưu của mép đó. */
+    band_px: z.number().int().positive(),
+  })
   .strict();
 
 const LearnBody = z.union([WholeBody, BandBody]);
@@ -193,7 +199,7 @@ async function storeLearned(
 
 /**
  * Học dải mép đã cắt. Chiều cao dải lấy từ `trim` đã lưu, bề rộng từ ảnh — chỉ dhash do trình duyệt gửi. 409: mép đó
- * chưa cắt (`no_trim`), ảnh không có bề rộng (`no_hash`), dải gần trơn (`plain_image`), đầy danh sách.
+ * chưa cắt (`no_trim`), số px khác trim đã lưu (`trim_changed`), dải dưới `MIN_BAND_PX` (`band_too_small`), ảnh không có bề rộng (`no_hash`), dải gần trơn (`plain_image`), đầy danh sách.
  */
 async function learnBand(
   sdb: Scoped,
@@ -204,6 +210,12 @@ async function learnBand(
   const chapter = await chapterInSeries(sdb, f.chapterId, seriesId, "source file");
   const bandHeight = f.trim?.[body.edge] ?? 0;
   if (bandHeight <= 0) throw conflict("no_trim", "Mép này của ảnh chưa được cắt — không học được dải.");
+  if (bandHeight !== body.band_px) {
+    throw conflict("trim_changed", "Số px cắt của mép này đã đổi — cắt lại rồi học lại.");
+  }
+  if (bandHeight < MIN_BAND_PX) {
+    throw conflict("band_too_small", `Dải cắt dưới ${MIN_BAND_PX} px — quá mỏng để nhận lại.`);
+  }
   if (!f.width) throw conflict("no_hash", "Ảnh này không có kích thước — không học được dải.");
   if (isPlainHash(body.dhash)) {
     throw conflict("plain_image", "Dải gần như trơn — không học được (dễ tự cắt nhầm trang truyện).");

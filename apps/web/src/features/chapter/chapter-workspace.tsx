@@ -67,6 +67,7 @@ import {
   translatePrepared,
   undoBatch,
 } from "./api.ts";
+import { type BandResult, bandSummary, failedBand, retryEdges } from "./band-learn-model.ts";
 import { CanvasPager } from "./canvas-controls.tsx";
 import { ChapterTopbar, type EditAccess, LockBand } from "./chapter-topbar.tsx";
 import { ContextPanel, type FocusRequest } from "./context-panel.tsx";
@@ -831,48 +832,75 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
     [sourceSkip.mutate, notify, alwaysSkip],
   );
   // "Luôn cắt ở series này" (toast sau khi cắt mép): học dải đã cắt ở từng mép → chương sau tự cắt dải giống.
-  // Dải đọc từ chính ảnh đang hiện (blob local hoặc URL ký); chiều cao dải do server lấy từ trim đã lưu.
+  // Dải đọc từ ảnh hiện hành của danh sách (không dùng blob đã bị thu hồi); mỗi mép học riêng, mép lỗi không chặn mép
+  // kia; chiều cao dải do server lấy từ trim đã lưu và phải khớp `band_px` đã băm.
   const learnBands = useCallback(
     async (it: SourceItem, trim: { top: number; bottom: number }) => {
-      // Thử lại đọc số cắt hiện tại của ảnh (có thể đã đổi từ lúc toast hiện); mép không còn cắt thì không có dải để học.
-      const retry = {
-        label: "Thử lại",
-        run: () => {
-          const now = currentBandTrim(trim, sourcesRef.current.find((f) => f.id === it.id)?.trim);
-          if (now) void learnBands(it, now);
-          else notify({ tone: "danger", text: "Ảnh không còn cắt mép này — không có dải để học." });
-        },
-      };
+      const edges = (["top", "bottom"] as const).filter((edge) => trim[edge] > 0);
+      const cur = sourcesRef.current.find((f) => f.id === it.id);
+      if (!cur) {
+        notify({ tone: "danger", text: "Ảnh không còn trong chương — không học được dải." });
+        return;
+      }
       notify({ tone: "info", text: "Đang lưu dải tự cắt…" });
+      let blob: Blob | null = null;
+      let fetchError: unknown;
       try {
-        const res = await fetch(it.url);
+        const res = await fetch(cur.url);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const blob = await res.blob();
-        let learned = 0;
-        let known = 0;
-        for (const edge of ["top", "bottom"] as const) {
-          if (trim[edge] <= 0) continue;
+        blob = await res.blob();
+      } catch (e) {
+        fetchError = e;
+      }
+      const results: BandResult[] = [];
+      for (const edge of edges) {
+        if (!blob) {
+          results.push(failedBand(edge, fetchError));
+          continue;
+        }
+        try {
           const fp = await bandFingerprint(blob, edge, trim[edge]);
           if (!fp) {
-            notify({ tone: "danger", text: "Không đọc được dải ảnh để học.", actions: [retry] });
-            return;
+            results.push({ edge, ok: false, reason: "không đọc được dải ảnh", retry: true });
+            continue;
           }
-          const r = await learnSkipImage(seriesId, { source_file_id: it.id, edge, dhash: fp.dhash });
-          learned += r.learned;
-          known += r.known;
+          const r = await learnSkipImage(seriesId, {
+            source_file_id: it.id,
+            edge,
+            dhash: fp.dhash,
+            band_px: trim[edge],
+          });
+          results.push({ edge, ok: true, learned: r.learned, known: r.known });
+        } catch (e) {
+          results.push(failedBand(edge, e));
         }
-        void queryClient.invalidateQueries({ queryKey: seriesKeys.skipImages(seriesId) });
-        notify({
-          tone: "info",
-          text: learned
-            ? `Đã học ${learned} dải — chương sau của series tự cắt dải giống.`
-            : `Đã có sẵn ${known} dải này trong danh sách tự cắt của series.`,
-        });
-      } catch (e) {
-        const text =
-          e instanceof ApiError ? errorMessage(e) : "Không đọc được ảnh để học dải — kiểm tra mạng rồi thử lại.";
-        notify({ tone: "danger", text, actions: [retry] });
       }
+      if (results.some((r) => r.ok)) void queryClient.invalidateQueries({ queryKey: seriesKeys.skipImages(seriesId) });
+      const again = retryEdges(results);
+      const { text, tone } = bandSummary(results);
+      notify({
+        tone,
+        text,
+        // Thử lại chỉ các mép lỗi tạm, theo số px cắt hiện tại của ảnh (có thể đã đổi từ lúc toast hiện).
+        ...(again.length
+          ? {
+              actions: [
+                {
+                  label: "Thử lại",
+                  run: () => {
+                    const want = {
+                      top: again.includes("top") ? trim.top : 0,
+                      bottom: again.includes("bottom") ? trim.bottom : 0,
+                    };
+                    const now = currentBandTrim(want, sourcesRef.current.find((f) => f.id === it.id)?.trim);
+                    if (now) void learnBands(it, now);
+                    else notify({ tone: "danger", text: "Ảnh không còn cắt mép này — không có dải để học." });
+                  },
+                },
+              ],
+            }
+          : {}),
+      });
     },
     [notify, queryClient, seriesId],
   );

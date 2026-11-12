@@ -9,6 +9,8 @@ export const DHASH_H = 8;
 export const DHASH_MAX_DISTANCE = 6;
 /** Lệch tỉ lệ khung (w/h) tối đa, tương đối — chặn ảnh khác khổ có hash tình cờ gần. */
 export const ASPECT_TOLERANCE = 0.05;
+/** Dải mép thấp hơn mức này (px ảnh gốc) không học / không so được: hash 9×8 từ vài hàng điểm chủ yếu là nhiễu. */
+export const MIN_BAND_PX = DHASH_H;
 export const DHASH_RE = /^[0-9a-f]{16}$/;
 
 /**

@@ -3,6 +3,7 @@
  * khi xoá series.
  */
 import { pages, seriesSkipImages, sourceFiles } from "@mtl/db";
+import { MIN_BAND_PX } from "@mtl/shared";
 import { eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { deletePrefix, head } from "../src/storage.ts";
@@ -58,8 +59,12 @@ async function draft(seriesId: string, number: string, fps: Fp[]) {
 
 const learn = (seriesId: string, body: Record<string, unknown>) =>
   api(`/series/${seriesId}/skip-images`, { method: "POST", body });
-const learnBand = (seriesId: string, sourceFileId: string, edge: string, dhash = BASE) =>
-  learn(seriesId, { source_file_id: sourceFileId, edge, dhash });
+/** `bandPx` mặc định = trim đang lưu của mép đó (như trình duyệt vừa băm đúng dải đã cắt). */
+async function learnBand(seriesId: string, sourceFileId: string, edge: string, dhash = BASE, bandPx?: number) {
+  const [row] = await db.select().from(sourceFiles).where(eq(sourceFiles.id, sourceFileId));
+  const stored = (row?.trim as Record<string, number> | null)?.[edge] ?? 0;
+  return learn(seriesId, { source_file_id: sourceFileId, edge, dhash, band_px: bandPx ?? Math.max(1, stored) });
+}
 const trimFile = async (ch: string, fileId: string, trim: { top: number; bottom: number }) =>
   json(await api(`/chapters/${ch}/source-files/${fileId}`, { method: "PATCH", body: { trim } }), 200);
 const list = async (seriesId: string) =>
@@ -303,6 +308,22 @@ describe("series skip images", () => {
         "plain_image",
       );
       expect(await list(s)).toEqual([]);
+    });
+
+    it("rejects a band whose size differs from the saved trim, and one too thin to match", async () => {
+      const s = await newSeries("Band size");
+      const { ch, files } = await draft(s, "1", [credit]);
+      const id = files[0]?.id as string;
+      await trimFile(ch, id, { top: 150, bottom: MIN_BAND_PX - 1 });
+      const err = async (edge: string, bandPx?: number) =>
+        (await json<{ error: string }>(await learnBand(s, id, edge, BASE, bandPx), 409)).error;
+      expect(await err("top", 100)).toBe("trim_changed");
+      expect(await err("bottom", MIN_BAND_PX)).toBe("trim_changed");
+      expect(await err("bottom")).toBe("band_too_small");
+      expect((await learn(s, { source_file_id: id, edge: "top", dhash: BASE })).status).toBe(400);
+      await trimFile(ch, id, { top: 150, bottom: MIN_BAND_PX });
+      expect(await json(await learnBand(s, id, "bottom"), 200)).toEqual({ learned: 1, known: 0 });
+      expect(await list(s)).toHaveLength(1);
     });
 
     it("an image without a stored width cannot learn a band", async () => {

@@ -100,7 +100,7 @@ export const fetchSkipImages = (seriesId: string) =>
 export type LearnFrom =
   | { source_file_id: string }
   | { page_id: string }
-  | { source_file_id: string; edge: "top" | "bottom"; dhash: string };
+  | { source_file_id: string; edge: "top" | "bottom"; dhash: string; band_px: number };
 export const learnSkipImage = (seriesId: string, from: LearnFrom) =>
   api<{ learned: number; known: number }>(`/api/series/${seriesId}/skip-images`, {
     method: "POST",
