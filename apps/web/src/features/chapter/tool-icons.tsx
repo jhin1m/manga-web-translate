@@ -148,3 +148,23 @@ export const ProofreadIcon = (p: P) => (
     <path d="M15 19l2 2 4-4" />
   </Icon>
 );
+/** Cắt mép ảnh gốc: kéo. */
+export const ScissorsIcon = (p: P) => (
+  <Icon {...p}>
+    <circle cx="6" cy="6" r="2.5" />
+    <circle cx="6" cy="18" r="2.5" />
+    <path d="M8 7.5L20 18" />
+    <path d="M8 16.5L20 6" />
+  </Icon>
+);
+export const MinusIcon = (p: P) => (
+  <Icon {...p}>
+    <path d="M6 12h12" />
+  </Icon>
+);
+export const PlusIcon = (p: P) => (
+  <Icon {...p}>
+    <path d="M12 6v12" />
+    <path d="M6 12h12" />
+  </Icon>
+);

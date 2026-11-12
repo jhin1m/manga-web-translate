@@ -764,6 +764,13 @@
 .cw-zoom-btn:hover {
   color: var(--c-fg);
 }
+/* Cụm zoom ở giữa pager: − % + đều có vạch ngăn với số trang. */
+.cw-zoom-btn + .icon-btn {
+  border-radius: 0 4px 4px 0;
+}
+.cw-zoom-btn {
+  border-right: 0;
+}
 /* Thanh phụ của công cụ Chữ / Tẩy chữ / Quét chữ: nổi giữa mép trên canvas, tự xuống dòng khi hẹp. */
 .cw-toolbar {
   position: absolute;
@@ -846,6 +853,14 @@
   max-width: 100%;
   height: auto;
 }
+/* Đã zoom: ảnh theo cỡ đặt từ viewer (có thể rộng hơn khung → cuộn ngang). */
+.cw-source-view[data-zoomed] {
+  overflow: auto;
+}
+.cw-source-view[data-zoomed] figure,
+.cw-source-view[data-zoomed] img {
+  max-width: none;
+}
 /* Khung đúng bằng ảnh: lớp phủ cắt mép đặt theo % chiều cao ảnh nên không lệ thuộc cỡ hiển thị. */
 .cw-source-frame {
   position: relative;
@@ -912,10 +927,38 @@
   outline: 2px solid var(--c-accent-hover);
   outline-offset: -2px;
 }
-.cw-trim-bar {
+/* Panel Cắt mép: số px Trên / Dưới + Lưu / Huỷ. */
+.cw-trim-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  padding: var(--sp-3) var(--sp-4);
+}
+.cw-trim-title {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
   gap: var(--sp-2);
-  padding: 4px 8px;
-  white-space: nowrap;
+}
+.cw-trim-field {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+.cw-trim-field > span:first-child {
+  width: 40px;
+}
+.cw-trim-field input {
+  flex: 1;
+  min-width: 0;
+  font-variant-numeric: tabular-nums;
+}
+.cw-trim-actions {
+  display: flex;
+  gap: var(--sp-2);
+}
+.cw-trim-clear {
+  align-self: flex-start;
 }
 .cw-source-view figure[data-skipped] img {
   opacity: 0.4;

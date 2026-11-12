@@ -1,7 +1,8 @@
 /**
- * Cắt mép ảnh gốc trước "Dịch chương": menu chuột phải thumbnail → "Cắt mép ảnh n…" → kéo thanh bằng chuột / phím →
- * Enter (Xong) / Esc (Huỷ); trim giữ sau khi tải lại, "Bỏ cắt" + Hoàn tác; sau "Dịch chương" trang cuối cao đúng
- * phần ảnh còn lại (worker giả tính theo trim trong inputs).
+ * Cắt mép ảnh gốc trước "Dịch chương": nút Cắt mép ở rail trái → panel (ô số Trên / Dưới) + 2 thanh kéo trên canvas
+ * (cùng số) → Enter / Lưu, Esc / Huỷ; đổi ảnh khi nháp đã khác thì tự lưu; zoom (nút, Ctrl+cuộn) không làm lệch px
+ * ảnh thật; trim giữ sau khi tải lại, "Bỏ cắt" + Hoàn tác; sau "Dịch chương" trang cuối cao đúng phần ảnh còn lại
+ * (worker giả tính theo trim trong inputs).
  */
 import { expect, test } from "@playwright/test";
 import { WEB_URL } from "./env.ts";
@@ -47,10 +48,15 @@ test("trim the bottom edge of the last image, keep it across reload, then transl
   await expect(step1).toBeEnabled({ timeout: 30_000 });
 
   const sources = page.getByRole("complementary", { name: "Danh sách ảnh gốc" });
+  const thumb1 = sources.getByRole("button", { name: /^Ảnh 1/ });
   const thumb2 = sources.getByRole("button", { name: /^Ảnh 2/ });
+  const railTrim = page.getByRole("button", { name: "Cắt mép", exact: true });
+  const panel = page.getByRole("complementary", { name: "Cắt mép" });
+  const topField = panel.getByLabel("Trên");
+  const bottomField = panel.getByLabel("Dưới");
   const openTrim = async () => {
-    await thumb2.click({ button: "right" });
-    await page.getByRole("menuitem", { name: "Cắt mép ảnh 2…" }).click();
+    await thumb2.click();
+    await railTrim.click();
   };
   const top = page.getByRole("slider", { name: "Mép trên" });
   const bottom = page.getByRole("slider", { name: "Mép dưới" });
@@ -62,45 +68,126 @@ test("trim the bottom edge of the last image, keep it across reload, then transl
     return [...body.source_files].sort((a, b) => a.ord - b.ord).map((f) => f.trim && [f.trim.top, f.trim.bottom]);
   };
 
-  // Ảnh chưa cắt: menu không có "Bỏ cắt"; không có thanh kéo ngoài chế độ cắt.
+  // Không còn mục cắt trong menu chuột phải thumbnail; ngoài chế độ cắt không có thanh kéo.
   await thumb2.click({ button: "right" });
-  await expect(page.getByRole("menuitem", { name: "Bỏ cắt" })).toHaveCount(0);
+  await expect(page.getByRole("menuitem", { name: /Cắt mép|Bỏ cắt/ })).toHaveCount(0);
   await page.keyboard.press("Escape");
   await expect(top).toHaveCount(0);
+  await expect(panel).toBeHidden();
 
-  // Chuột: kéo thanh trên xuống rồi Esc → không lưu gì, focus về thumbnail.
+  // Mở panel từ rail: thanh kéo hiện, panel báo "Ảnh 2/2", chưa cắt nên không có "Bỏ cắt".
   await openTrim();
   await expect(page.getByRole("img", { name: "Ảnh gốc 2" })).toBeVisible();
+  await expect(panel.getByText("Ảnh 2/2")).toBeVisible();
   await expect(top).toBeFocused();
-  await expect(page.getByRole("button", { name: "Ảnh trước" })).toHaveCount(0);
+  await expect(panel.getByRole("button", { name: "Bỏ cắt" })).toHaveCount(0);
+  await expect(topField).toHaveValue("0");
+
+  // Chuột: kéo thanh trên xuống → ô Trên theo; Esc → không lưu, panel đóng, focus về nút rail.
   const box = await top.boundingBox();
   if (!box) throw new Error("top handle has no box");
   await page.mouse.move(box.x + box.width / 2, box.y + 2);
   await page.mouse.down();
   await page.mouse.move(box.x + box.width / 2, box.y + 42, { steps: 4 });
   await page.mouse.up();
-  await expect(page.getByText(/Trên [1-9]\d* px · Dưới 0 px/)).toBeVisible();
+  await expect(topField).not.toHaveValue("0");
   await page.keyboard.press("Escape");
   await expect(top).toHaveCount(0);
-  await expect(thumb2).toBeFocused();
-  await expect(thumb2).toHaveAccessibleName("Ảnh 2");
+  await expect(panel).toBeHidden();
+  await expect(railTrim).toBeFocused();
   expect(await trimmedOnServer()).toEqual([null, null]);
 
-  // Bàn phím: thanh dưới ↑ 1 px, Shift+↑ 10 px; kẹp ở mép trên ảnh còn lại ≥ MIN_TRIM_KEEP_PX; Enter = Xong.
-  await openTrim();
-  // Kéo thanh trên quá xa → kẹp, ảnh còn lại đúng 64 px (MIN_TRIM_KEEP_PX); rồi về 0.
+  // Gõ số: ô → thanh; kẹp ở ảnh còn lại ≥ MIN_TRIM_KEEP_PX; Huỷ không lưu.
+  await railTrim.click();
+  await topField.fill("20");
+  await expect(top).toHaveAttribute("aria-valuenow", "20");
+  await bottomField.fill("9999");
+  await expect(bottomField).toHaveValue(String(H - 20 - 64));
+  await bottomField.fill("");
+  await expect(bottom).toHaveAttribute("aria-valuenow", String(H));
+  await topField.fill("9999");
+  await expect(topField).toHaveValue(String(H - 64));
+  await panel.getByRole("button", { name: "Huỷ" }).click();
+  await expect(panel).toBeHidden();
+  expect(await trimmedOnServer()).toEqual([null, null]);
+
+  // Đổi ảnh khi nháp đã khác: tự lưu ảnh cũ, panel ở lại ở ảnh mới (nháp ảnh 1 chưa đổi nên không lưu gì).
+  await railTrim.click();
+  await bottomField.fill("30");
+  await thumb1.click();
+  await expect(panel.getByText("Ảnh 1/2")).toBeVisible();
+  await expect(bottomField).toHaveValue("0");
+  await expect(thumb2).toHaveAccessibleName("Ảnh 2 · Đã cắt mép");
+  await expect.poll(trimmedOnServer).toEqual([null, [0, 30]]);
+  await thumb2.click();
+  await expect(bottomField).toHaveValue("30");
+  // Enter trong ô = Lưu; số vẫn đúng sau đó.
+  await bottomField.fill("40");
+  await bottomField.press("Enter");
+  await expect(panel).toBeHidden();
+  await expect.poll(trimmedOnServer).toEqual([null, [0, 40]]);
+
+  // Zoom (nút, Ctrl+cuộn): thanh cắt vẫn đúng px ảnh thật.
+  await railTrim.click();
+  const img = page.getByRole("img", { name: "Ảnh gốc 2" });
+  const imgBox = async () => {
+    const b = await img.boundingBox();
+    if (!b) throw new Error("image has no box");
+    return b;
+  };
+  const fit = await imgBox();
+  await page.getByRole("button", { name: "Phóng to" }).click();
+  await expect.poll(async () => (await imgBox()).width).toBeGreaterThan(fit.width * 1.2);
+  const zoomed = await imgBox();
+  await page.keyboard.down("Control");
+  await page.mouse.move(zoomed.x + zoomed.width / 2, zoomed.y + 40);
+  await page.mouse.wheel(0, -400);
+  await page.keyboard.up("Control");
+  await expect.poll(async () => (await imgBox()).width).toBeGreaterThan(zoomed.width * 1.2);
+  const big = await imgBox();
+  const scale = big.width / 120;
+  // Đường cắt của thanh dưới (mép dưới ô kéo) nằm đúng H − 40 px ảnh thật trên ảnh đang phóng.
+  const handle = await bottom.boundingBox();
+  if (!handle) throw new Error("bottom handle has no box");
+  expect((handle.y + handle.height - big.y) / scale).toBeCloseTo(H - 40, -1);
+  // Kéo thanh dưới lên 60 px màn hình = thêm 60 / scale px ảnh thật vào số cắt dưới.
+  const bottomBox = await bottom.boundingBox();
+  if (!bottomBox) throw new Error("bottom handle has no box");
+  const gx = bottomBox.x + bottomBox.width / 2;
+  const gy = bottomBox.y + bottomBox.height / 2;
+  await page.mouse.move(gx, gy);
+  await page.mouse.down();
+  await page.mouse.move(gx, gy - 60, { steps: 6 });
+  await page.mouse.up();
+  await expect.poll(async () => Math.abs(Number(await bottomField.inputValue()) - (40 + 60 / scale))).toBeLessThan(3);
+  await bottomField.fill("40");
+  // Về Vừa khung bằng nút %; đổi ảnh cũng về Vừa khung.
+  await page.getByRole("button", { name: /^Đang \d+%\. Bấm để/ }).click();
+  await expect.poll(async () => (await imgBox()).width).toBeCloseTo(fit.width, 0);
+  await page.getByRole("button", { name: "Phóng to" }).click();
+  await thumb1.click();
+  await expect(page.getByRole("button", { name: /^Đang vừa khung/ })).toBeVisible();
+  await thumb2.click();
+  await panel.getByRole("button", { name: "Huỷ" }).click();
+  await expect.poll(trimmedOnServer).toEqual([null, [0, 40]]);
+
+  // Bàn phím: thanh dưới ↑ 1 px, Shift+↑ 10 px; kẹp ở mép trên ảnh còn lại ≥ MIN_TRIM_KEEP_PX; Enter = Lưu.
+  await thumb2.click();
+  await railTrim.click();
+  await bottomField.fill("0");
+  await top.focus();
   for (let i = 0; i < 30; i++) await page.keyboard.press("Shift+ArrowDown");
-  await expect(page.getByText(`Trên ${H - 64} px · Dưới 0 px`)).toBeVisible();
+  await expect(topField).toHaveValue(String(H - 64));
   for (let i = 0; i < 30; i++) await page.keyboard.press("Shift+ArrowUp");
-  await expect(page.getByText("Trên 0 px · Dưới 0 px")).toBeVisible();
+  await expect(topField).toHaveValue("0");
   await bottom.focus();
   for (let i = 0; i < 5; i++) await page.keyboard.press("Shift+ArrowUp");
   for (let i = 0; i < 3; i++) await page.keyboard.press("ArrowUp");
-  await expect(page.getByText(`Trên 0 px · Dưới ${BOTTOM} px`)).toBeVisible();
+  await expect(bottomField).toHaveValue(String(BOTTOM));
   await expect(bottom).toHaveAttribute("aria-valuenow", String(H - BOTTOM));
   await page.keyboard.press("Enter");
   await expect(bottom).toHaveCount(0);
-  await expect(thumb2).toBeFocused();
+  await expect(railTrim).toBeFocused();
   await expect(thumb2).toHaveAccessibleName("Ảnh 2 · Đã cắt mép");
   await expect(page.getByRole("status").filter({ hasText: "Đã cắt mép ảnh 2" })).toBeVisible();
   await expect(page.getByText("Phần mờ bị bỏ khi cắt trang")).toBeVisible();
@@ -111,8 +198,10 @@ test("trim the bottom edge of the last image, keep it across reload, then transl
   await expect(thumb2).toHaveAccessibleName("Ảnh 2 · Đã cắt mép");
 
   // Bỏ cắt → Hoàn tác trả đúng trim trước đó.
-  await thumb2.click({ button: "right" });
-  await page.getByRole("menuitem", { name: "Bỏ cắt" }).click();
+  await thumb2.click();
+  await railTrim.click();
+  await expect(bottomField).toHaveValue(String(BOTTOM));
+  await panel.getByRole("button", { name: "Bỏ cắt" }).click();
   await expect(thumb2).toHaveAccessibleName("Ảnh 2");
   await expect.poll(trimmedOnServer).toEqual([null, null]);
   await page

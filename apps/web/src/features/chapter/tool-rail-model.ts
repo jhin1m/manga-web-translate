@@ -1,5 +1,5 @@
 /**
- * Rail công cụ màn chương (5 nút). Icon công cụ (V/T/B/R) đặt công cụ: Chọn mở/thu panel khối (bấm lại icon đang mở thì
+ * Rail công cụ màn chương (5 nút; chương nháp thêm nút Cắt mép). Icon công cụ (V/T/B/R) đặt công cụ: Chọn mở/thu panel khối (bấm lại icon đang mở thì
  * thu, công cụ giữ nguyên); Chữ / Tẩy chữ / Quét chữ dùng thanh phụ trên canvas nên không mở panel (panel khối chỉ ở
  * lại khi còn nội dung phải xử lý). Tẩy nét (E) không có icon riêng — nó là chế độ của Tẩy chữ (đổi trong thanh phụ hoặc
  * phím E), nên trên rail đứng chung nút Tẩy chữ. "Văn bản" chỉ mở/thu panel 4 tab (Bản dịch, Tìm / Thay, Glossary,
@@ -7,14 +7,17 @@
  */
 import type { Tool } from "../editor/store.ts";
 
-/** `tool` = panel khối (đè canvas); `doc` = panel Văn bản (chiếm cột, nhiều tab). */
-export type PanelId = "tool" | "doc";
-export type RailTarget = Tool | "doc";
+/**
+ * `tool` = panel khối (đè canvas); `doc` = panel Văn bản (chiếm cột, nhiều tab); `trim` = panel Cắt mép ảnh gốc (chỉ
+ * ở chương nháp; mở panel = bật chế độ cắt trên canvas).
+ */
+export type PanelId = "tool" | "doc" | "trim";
+export type RailTarget = Tool | "doc" | "trim";
 /** Tab của panel Văn bản. */
 export type DocTab = "table" | "find" | "glossary" | "proofread";
 export const DOC_TABS: readonly DocTab[] = ["table", "find", "glossary", "proofread"];
 /** Icon chỉ mở/thu panel của nó (không phải công cụ vẽ). */
-export const isPanelOnly = (t: RailTarget): t is "doc" => t === "doc";
+export const isPanelOnly = (t: RailTarget): t is "doc" | "trim" => t === "doc" || t === "trim";
 export type RailState = { panel: PanelId | null; tool: Tool };
 
 /** Nút rail của một công cụ: Tẩy nét mask dùng chung nút Mask. */
@@ -28,11 +31,14 @@ export const railTool = (t: Tool): Tool => (t === "eraser" ? "brush" : t);
 export type RailHas = { content: boolean; selection: boolean };
 
 export function railClick(
-  cur: RailState,
+  state: RailState,
   t: RailTarget,
   has: RailHas = { content: false, selection: false },
 ): RailState {
-  if (isPanelOnly(t)) return { panel: cur.panel === t ? (has.content ? "tool" : null) : t, tool: cur.tool };
+  if (isPanelOnly(t))
+    return { panel: state.panel === t ? (t === "doc" && has.content ? "tool" : null) : t, tool: state.tool };
+  // Panel Cắt mép chỉ sống khi chính nút của nó đang mở: chọn công cụ khác là rời chế độ cắt.
+  const cur: RailState = state.panel === "trim" ? { panel: null, tool: state.tool } : state;
   // Bấm nút của công cụ đang dùng (Tẩy chữ khi đang Tẩy nét cũng vậy) → giữ nguyên công cụ.
   const tool = railTool(cur.tool) === t ? cur.tool : t;
   if (t === "select") {
@@ -46,6 +52,7 @@ export function railClick(
 export const PANEL_TITLE: Record<PanelId, string> = {
   tool: "Chọn & sửa",
   doc: "Văn bản",
+  trim: "Cắt mép",
 };
 
 /** Panel rộng: bảng nhiều cột (Văn bản: bảng dịch, xem trước Tìm/Thay, bảng Áp glossary). */

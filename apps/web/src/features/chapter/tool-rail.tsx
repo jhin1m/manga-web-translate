@@ -1,5 +1,5 @@
 /**
- * Rail công cụ trái màn chương (48px, chỉ icon): Chọn · Chữ · Tẩy chữ · Quét chữ · ── · Văn bản. Tên + phím nằm ở
+ * Rail công cụ trái màn chương (48px, chỉ icon): Chọn · Chữ · Tẩy chữ · Quét chữ · (Cắt mép, chỉ khi chương chưa có page) · ── · Văn bản. Tên + phím nằm ở
  * tooltip (rê chuột hoặc focus bằng phím) và `aria-label`. Nút đang mở panel của nó (Chọn: panel khối; Văn bản) hoặc
  * công cụ có thanh phụ đang dùng (Chữ, Tẩy chữ, Quét chữ) có nền nhấn (`aria-pressed`); Chọn đang chọn mà panel thu /
  * đang ở panel khác chỉ có icon màu nhấn (`aria-current`).
@@ -7,10 +7,10 @@
  */
 import type { ReactNode } from "react";
 import type { Tool } from "../editor/store.ts";
-import { MaskIcon, OcrIcon, SelectIcon, TableIcon, TextIcon } from "./tool-icons.tsx";
+import { MaskIcon, OcrIcon, ScissorsIcon, SelectIcon, TableIcon, TextIcon } from "./tool-icons.tsx";
 import { isPanelOnly, type PanelId, type RailTarget, railTool } from "./tool-rail-model.ts";
 
-type Item = { id: RailTarget; name: string; key: string; icon: ReactNode };
+type Item = { id: RailTarget; name: string; key?: string; icon: ReactNode };
 
 const TOOLS: Item[] = [
   { id: "select", name: "Chọn", key: "V", icon: <SelectIcon /> },
@@ -18,16 +18,20 @@ const TOOLS: Item[] = [
   { id: "brush", name: "Tẩy chữ", key: "B", icon: <MaskIcon /> },
   { id: "ocr", name: "Quét chữ", key: "R", icon: <OcrIcon /> },
 ];
+/** Chỉ ở chương chưa có page (nháp): cắt mép ảnh gốc, không có phím tắt. */
+const TRIM: Item = { id: "trim", name: "Cắt mép", icon: <ScissorsIcon /> };
 const PANELS: Item[] = [{ id: "doc", name: "Văn bản", key: "Ctrl+F tìm", icon: <TableIcon /> }];
 
 /** Tên truy cập của nút: "Chọn (V)". */
-export const railLabel = (it: Pick<Item, "name" | "key">) => `${it.name} (${it.key})`;
+export const railLabel = (it: Pick<Item, "name" | "key">) => (it.key ? `${it.name} (${it.key})` : it.name);
 
 export function ToolRail(props: {
   panel: PanelId | null;
   tool: Tool;
   /** Nút bị tắt → lý do (tooltip + mô tả truy cập). */
   disabled: Partial<Record<RailTarget, string>>;
+  /** Hiện nút Cắt mép (chương chưa có page); bị tắt thì có lý do ở `disabled.trim`. */
+  showTrim?: boolean;
   onClick(t: RailTarget): void;
 }) {
   const { panel } = props;
@@ -59,7 +63,7 @@ export function ToolRail(props: {
         {it.icon}
         <span className="cw-tip" aria-hidden="true">
           <strong>{it.name}</strong>
-          <kbd>{it.key}</kbd>
+          {it.key && <kbd>{it.key}</kbd>}
           {reason && <em>{reason}</em>}
         </span>
         {reason && (
@@ -73,6 +77,7 @@ export function ToolRail(props: {
   return (
     <nav className="cw-toolrail" aria-label="Công cụ">
       {TOOLS.map(button)}
+      {props.showTrim && button(TRIM)}
       <span className="cw-toolrail-sep" />
       {PANELS.map(button)}
     </nav>

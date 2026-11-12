@@ -4,8 +4,7 @@
  * Trạng thái (Đã xoá / Credit · tự bỏ / Đang tải / Tải lỗi / Chưa tải / Có thể là credit) = cờ ở góc thumbnail + tên
  * truy cập + tooltip, không chữ dưới thumbnail. Xoá / Khôi phục ảnh bằng nút góc thumbnail (hiện khi rê chuột / focus)
  * hoặc menu chuột phải (Shift+F10 / phím Menu) khi còn sửa được bộ ảnh (trước khi cắt trang); ảnh bỏ qua mờ đi, lúc
- * cắt trang không ghép chúng. Menu còn có "Cắt mép ảnh n…" / "Bỏ cắt" (bỏ dải credit dính ở mép trên / dưới; cờ ✂ ở
- * góc thumbnail khi ảnh đã cắt). Cũng khi còn sửa được: kéo-thả thumbnail (vạch báo chỗ thả), menu "Đưa lên đầu / Lên 1 /
+ * cắt trang không ghép chúng. Ảnh đã cắt mép (cắt ở panel Cắt mép của rail trái) có cờ ✂ ở góc thumbnail. Cũng khi còn sửa được: kéo-thả thumbnail (vạch báo chỗ thả), menu "Đưa lên đầu / Lên 1 /
  * Xuống 1 / Đưa xuống cuối" hoặc Alt+↑/↓ trên thumbnail đang focus để đổi thứ tự ghép. Đang cắt trang → đầu cột hiện
  * bước + đếm ("Đang tải ảnh 3/10"), ảnh được ghép có viền "đang xử lý" và cờ Đã tải / Đang tải / Chờ / Đang xử lý.
  */
@@ -40,10 +39,6 @@ export const SourceRail = memo(function SourceRail(props: {
   ingest?: IngestView;
   onPick(id: string): void;
   onSkip(it: SourceItem, skip: "user" | null): void;
-  /** Mở chế độ cắt mép ảnh (canvas hiện ảnh đó với 2 thanh kéo). */
-  onTrim(it: SourceItem): void;
-  /** Bỏ cắt mép ảnh. */
-  onClearTrim(it: SourceItem): void;
   /** Đưa ảnh `id` tới vị trí `to` (0-based). */
   onMove(id: string, to: number): void;
 }) {
@@ -218,12 +213,6 @@ export const SourceRail = memo(function SourceRail(props: {
           label={`Ảnh ${menu.item.n}`}
           items={[
             ...moveItems(menu.item.id),
-            ...(menu.item.skip
-              ? []
-              : [
-                  { label: `Cắt mép ảnh ${menu.item.n}…`, run: () => props.onTrim(menu.item) },
-                  ...(menu.item.trim ? [{ label: "Bỏ cắt", run: () => props.onClearTrim(menu.item) }] : []),
-                ]),
             menu.item.skip
               ? { label: `Khôi phục ảnh ${menu.item.n}`, run: () => props.onSkip(menu.item, null) }
               : {

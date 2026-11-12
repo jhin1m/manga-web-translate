@@ -6,7 +6,7 @@
  */
 import { chapterStore, useChapterStore } from "../editor/chapter-store.ts";
 import { useEditor } from "../editor/store.ts";
-import { ChevronLeftIcon, ChevronRightIcon } from "./tool-icons.tsx";
+import { ChevronLeftIcon, ChevronRightIcon, MinusIcon, PlusIcon } from "./tool-icons.tsx";
 
 /** Tên + tooltip nút %: nói trạng thái hiện tại và việc bấm sẽ làm. */
 export function zoomLabel(percent: number, zoomed: boolean): string {
@@ -15,13 +15,66 @@ export function zoomLabel(percent: number, zoomed: boolean): string {
   return `Đang ${percent}%. Bấm để xem cỡ thật 100%`;
 }
 
+/** Nút % của cụm zoom (dùng chung với canvas ảnh gốc ở màn nháp). */
+export function ZoomPercentButton(props: { percent: number; zoomed: boolean; onClick(): void }) {
+  const label = zoomLabel(props.percent, props.zoomed);
+  return (
+    <button
+      type="button"
+      className="cw-zoom-btn mono"
+      data-fit={!props.zoomed || undefined}
+      aria-label={label}
+      title={label}
+      onClick={props.onClick}
+    >
+      {props.percent}%
+    </button>
+  );
+}
+
+/** Cụm − · % · + của canvas ảnh gốc (màn nháp): thu / phóng từng bước, % đổi Vừa khung ↔ 100% như editor. */
+export function ZoomControls(props: {
+  percent: number;
+  zoomed: boolean;
+  canOut: boolean;
+  canIn: boolean;
+  onOut(): void;
+  onIn(): void;
+  onToggle(): void;
+}) {
+  return (
+    <>
+      <button
+        type="button"
+        className="icon-btn"
+        disabled={!props.canOut}
+        onClick={props.onOut}
+        aria-label="Thu nhỏ"
+        title="Thu nhỏ (Ctrl/⌘ + cuộn)"
+      >
+        <MinusIcon size={16} />
+      </button>
+      <ZoomPercentButton percent={props.percent} zoomed={props.zoomed} onClick={props.onToggle} />
+      <button
+        type="button"
+        className="icon-btn"
+        disabled={!props.canIn}
+        onClick={props.onIn}
+        aria-label="Phóng to"
+        title="Phóng to (Ctrl/⌘ + cuộn)"
+      >
+        <PlusIcon size={16} />
+      </button>
+    </>
+  );
+}
+
 export function CanvasPager(props: { onStep(dir: -1 | 1): void }) {
   const total = useChapterStore((s) => s.pages.length);
   const ord = useChapterStore((s) => s.pages.findIndex((p) => p.id === s.activePageId));
   const zoomed = useChapterStore((s) => s.zoomed);
   const scale = useEditor((s) => s.view.scale);
   const percent = Math.round(scale * 100);
-  const label = zoomLabel(percent, zoomed);
   return (
     <div className="cw-pager">
       <button
@@ -47,16 +100,11 @@ export function CanvasPager(props: { onStep(dir: -1 | 1): void }) {
       >
         <ChevronRightIcon size={16} />
       </button>
-      <button
-        type="button"
-        className="cw-zoom-btn mono"
-        data-fit={!zoomed || undefined}
-        aria-label={label}
-        title={label}
+      <ZoomPercentButton
+        percent={percent}
+        zoomed={zoomed}
         onClick={() => chapterStore.getState().fitView(zoomed && percent === 100 ? undefined : 1)}
-      >
-        {percent}%
-      </button>
+      />
     </div>
   );
 }

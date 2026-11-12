@@ -51,11 +51,15 @@ test("learn the trimmed bottom band, see it in the series settings, learning twi
   const thumb2 = sources.getByRole("button", { name: /^Ảnh 2/ });
   await expect(sources.locator("img")).toHaveCount(2);
 
-  await thumb2.click({ button: "right" });
-  await page.getByRole("menuitem", { name: "Cắt mép ảnh 2…" }).click();
+  const trimPanel = page.getByRole("complementary", { name: "Cắt mép" });
+  const openTrim = async () => {
+    await thumb2.click();
+    await page.getByRole("button", { name: "Cắt mép", exact: true }).click();
+  };
+  await openTrim();
   await page.getByRole("slider", { name: "Mép dưới" }).focus();
   for (let i = 0; i < BAND / 10; i++) await page.keyboard.press("Shift+ArrowUp");
-  await expect(page.getByText(`Trên 0 px · Dưới ${BAND} px`)).toBeVisible();
+  await expect(trimPanel.getByLabel("Dưới")).toHaveValue(String(BAND));
   await page.keyboard.press("Enter");
 
   const toast = page.getByRole("status").filter({ hasText: "Đã cắt mép ảnh 2" });
@@ -63,10 +67,9 @@ test("learn the trimmed bottom band, see it in the series settings, learning twi
   await expect(page.getByText("Đã học 1 dải")).toBeVisible();
 
   // Cắt lại đúng như vậy → học lần nữa: đã có sẵn.
-  await thumb2.click({ button: "right" });
-  await page.getByRole("menuitem", { name: "Bỏ cắt" }).click();
-  await thumb2.click({ button: "right" });
-  await page.getByRole("menuitem", { name: "Cắt mép ảnh 2…" }).click();
+  await openTrim();
+  await trimPanel.getByRole("button", { name: "Bỏ cắt" }).click();
+  await openTrim();
   await page.getByRole("slider", { name: "Mép dưới" }).focus();
   for (let i = 0; i < BAND / 10; i++) await page.keyboard.press("Shift+ArrowUp");
   await page.keyboard.press("Enter");

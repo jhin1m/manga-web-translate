@@ -75,14 +75,24 @@ thumbnail + tooltip "Đang tải" / "Tải lỗi" / "Chưa tải"), còn lại d
 nút "Dịch chương" đếm ảnh còn dùng. Chương đang mở ở tab khác → 423; đã có page → 409.
 
 **Cắt mép ảnh** (bỏ dải credit dính ở mép trên / dưới ảnh mà vẫn giữ phần truyện; chỉ khi chương còn nháp, cùng guard với
-xoá ảnh): menu thumbnail → "Cắt mép ảnh n…" (ảnh `skip` không có mục này), ảnh đã cắt thêm "Bỏ cắt". Canvas vào chế độ
-cắt (`source-trim-overlay.tsx`): phủ mờ phần bị cắt + hai thanh kéo trên / dưới; **Tab** đổi thanh, **↑/↓** 1 px,
-**Shift+↑/↓** 10 px, **Enter** = Xong, **Esc** = Huỷ (đổi sang ảnh khác cũng bỏ bản nháp). Phần giữ lại tối thiểu
+xoá ảnh): nút **Cắt mép** (icon kéo) ở rail trái — chỉ hiện khi chương chưa có page (hết ở Bước 1 như mọi mục chỉ của
+nháp), tắt có lý do khi đang cắt trang; không còn mục cắt trong menu chuột phải thumbnail. Bấm → panel "Cắt mép"
+(`trim-panel.tsx`, mở panel = bật chế độ cắt) cho ảnh đang xem: "Ảnh n/N", ô số **Trên** / **Dưới** (px ảnh thật, kẹp để
+phần giữ lại ≥ `MIN_TRIM_KEEP_PX`), **Lưu** / **Huỷ**, "Bỏ cắt" khi ảnh đã cắt, nhãn "Credit · tự cắt" khi `by: "credit"`;
+ảnh `skip` chỉ báo "Ảnh đã xoá". Canvas (`source-trim-overlay.tsx`) phủ mờ phần bị cắt + hai thanh kéo trên / dưới, đồng
+bộ hai chiều với ô số (state ở `use-source-trim.ts`, logic thuần ở `source-trim-model.ts`); **↑/↓** 1 px,
+**Shift+↑/↓** 10 px trên thanh. **Enter** (cả trong ô số) = Lưu rồi đóng panel, **Esc** / Huỷ / đóng panel = bỏ nháp chưa
+lưu. Đổi sang ảnh khác (thumbnail, ←/→, nút ‹ ›) khi nháp khác số đã lưu → **tự lưu** ảnh cũ, panel ở lại để cắt tiếp. Phần giữ lại tối thiểu
 `MIN_TRIM_KEEP_PX` (64 px, `packages/shared/src/job.ts`). Lưu bằng `PATCH …/source-files/:fileId {trim: {top, bottom} | null,
 height?}` vào `source_files.trim` (`{top, bottom, by}`; 0/0 = null). File gốc không đổi nên "Bỏ cắt" / toast "Hoàn tác" trả
 ảnh nguyên vẹn. Lỗi: 400 `trim_too_large` (cắt quá nhiều), 400 `no_size` (ảnh chưa có chiều cao — web gửi `height` đo
 được), 409 `chapter_not_draft`, 423. Cờ ở thumbnail: "Đã cắt mép" (`by: "user"`), "Credit · tự cắt" (`by: "credit"`, xem
-dưới). Lúc "Dịch chương" worker cắt `trim` trước khi ghép strip / pages ([job-queue-worker.md](./job-queue-worker.md#ingest-strip--pages)).
+dưới). Sau khi lưu có toast "Hoàn tác" / "Luôn cắt ở series này". Lúc "Dịch chương" worker cắt `trim` trước khi ghép strip / pages ([job-queue-worker.md](./job-queue-worker.md#ingest-strip--pages)).
+
+**Zoom ảnh gốc** (`source-viewer.tsx`, `source-zoom.ts`): cụm − · % · + cạnh pager (dùng chung `canvas-controls.tsx`; % đổi
+Vừa khung ↔ 100% như editor), Ctrl/⌘ + cuộn và chụm trackpad (wheel kèm `ctrlKey`) zoom quanh con trỏ (0,1×–4×), cuộn thường =
+cuộn ảnh; đổi ảnh → về Vừa khung. Chưa có phím tắt zoom (editor cũng chưa có). Thanh cắt đặt theo % chiều cao ảnh nên vẫn đúng
+px ảnh thật ở mọi mức zoom.
 
 Đổi thứ tự ảnh (cùng điều kiện `editable`, thứ tự này là thứ tự ghép/cắt trang): kéo-thả thumbnail (vạch xanh báo chỗ
 thả), menu chuột phải "Đưa lên đầu / Lên 1 / Xuống 1 / Đưa xuống cuối", hoặc Alt+↑/↓ trên thumbnail đang focus (focus đi
@@ -224,7 +234,8 @@ Rail công cụ (`tool-rail.tsx`, hành vi ở `tool-rail-model.ts`, 48px, chỉ
 nổi trên canvas, không có panel riêng (panel khối thu lại trừ khi còn nội dung phải xử lý); **Văn bản** chỉ mở/thu panel Văn
 bản, không đổi công cụ. Mỗi nút có `aria-label` "Tên (phím)", `aria-pressed`, và tooltip (tên + phím) hiện khi rê chuột
 **hoặc focus bàn phím** (CSS `:hover` / `:focus-visible`, `.cw-tip`); nút tắt có lý do trong tooltip và `aria-describedby`.
-Phím V/T/B/E/R đổi công cụ (đổi khỏi Chọn → panel khối thu nếu hết nội dung; về Chọn khi còn khối đang chọn → panel khối mở lại). `PanelId` chỉ còn `tool` | `doc`; tab của
+Phím V/T/B/E/R đổi công cụ (đổi khỏi Chọn → panel khối thu nếu hết nội dung; về Chọn khi còn khối đang chọn → panel khối mở lại). Chương nháp (chưa có page) có thêm nút **Cắt mép** sau Quét chữ: chỉ mở / thu panel Cắt mép (không đổi công cụ; chọn công cụ khác
+là rời panel này) — xem mục ảnh gốc ở trên. `PanelId` là `tool` | `doc` | `trim`; tab của
 panel Văn bản là `DocTab` (`table` | `find` | `glossary` | `proofread`).
 
 **Panel khối** (272px, `role="complementary"` "Chọn & sửa") đóng mặc định, **đè lên mép trái canvas** (cùng ô lưới với canvas

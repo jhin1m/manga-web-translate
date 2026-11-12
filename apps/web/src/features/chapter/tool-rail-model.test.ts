@@ -47,4 +47,17 @@ describe("railClick", () => {
   it("bấm công cụ Chọn khi panel đang là Văn bản và có khối đang chọn thì mở panel khối", () => {
     expect(railClick({ panel: "doc", tool: "select" }, "select", selected)).toEqual({ panel: "tool", tool: "select" });
   });
+  it("Cắt mép bật tắt panel của nó, không đổi công cụ", () => {
+    expect(railClick({ panel: null, tool: "select" }, "trim")).toEqual({ panel: "trim", tool: "select" });
+    expect(railClick({ panel: "trim", tool: "select" }, "trim")).toEqual({ panel: null, tool: "select" });
+    expect(railClick({ panel: "doc", tool: "select" }, "trim")).toEqual({ panel: "trim", tool: "select" });
+    // Thu Cắt mép không kéo panel khối ra dù còn nội dung.
+    expect(railClick({ panel: "trim", tool: "select" }, "trim", content)).toEqual({ panel: null, tool: "select" });
+  });
+  it("chọn công cụ khác khi đang ở Cắt mép thì rời panel Cắt mép", () => {
+    expect(railClick({ panel: "trim", tool: "select" }, "select", nothing)).toEqual({ panel: null, tool: "select" });
+    expect(railClick({ panel: "trim", tool: "select" }, "select", selected)).toEqual({ panel: "tool", tool: "select" });
+    expect(railClick({ panel: "trim", tool: "select" }, "text")).toEqual({ panel: null, tool: "text" });
+    expect(railClick({ panel: "trim", tool: "select" }, "doc")).toEqual({ panel: "doc", tool: "select" });
+  });
 });

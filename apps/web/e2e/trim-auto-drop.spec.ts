@@ -74,11 +74,15 @@ test("a chapter dropped with the learned bottom banner is trimmed on creation; o
   await drop([png("p1.png", plain), png("p2.png", banner)]);
   await page.reload();
   await expect(sources.locator("img")).toHaveCount(2);
-  await sources.getByRole("button", { name: /^Ảnh 2/ }).click({ button: "right" });
-  await page.getByRole("menuitem", { name: "Cắt mép ảnh 2…" }).click();
+  const trimPanel = page.getByRole("complementary", { name: "Cắt mép" });
+  const openTrim = async (n: number) => {
+    await sources.getByRole("button", { name: new RegExp(`^Ảnh ${n}`) }).click();
+    await page.getByRole("button", { name: "Cắt mép", exact: true }).click();
+  };
+  await openTrim(2);
   await page.getByRole("slider", { name: "Mép dưới" }).focus();
   for (let i = 0; i < BAND / 10; i++) await page.keyboard.press("Shift+ArrowUp");
-  await expect(page.getByText(`Trên 0 px · Dưới ${BAND} px`)).toBeVisible();
+  await expect(trimPanel.getByLabel("Dưới")).toHaveValue(String(BAND));
   await page.keyboard.press("Enter");
   await page
     .getByRole("status")
@@ -101,8 +105,11 @@ test("a chapter dropped with the learned bottom banner is trimmed on creation; o
   await expect(sources.getByRole("button", { name: /^Ảnh 1/ })).toHaveAccessibleName("Ảnh 1");
 
   // Bỏ cắt → Hoàn tác không lỗi; trim trở lại (đặt lại bằng tay nên không còn là cắt tự động).
-  await thumb3.click({ button: "right" });
-  await page.getByRole("menuitem", { name: "Bỏ cắt" }).click();
+  await openTrim(3);
+  // Banner tự cắt: panel gắn nhãn "Credit · tự cắt" và hiện đúng số px đã cắt.
+  await expect(trimPanel.getByText("Credit · tự cắt")).toBeVisible();
+  await expect(trimPanel.getByLabel("Dưới")).toHaveValue(String(BAND));
+  await trimPanel.getByRole("button", { name: "Bỏ cắt" }).click();
   await expect(thumb3).toHaveAccessibleName("Ảnh 3");
   await expect.poll(() => trims(chapterId)).toEqual([null, null, null]);
   await page

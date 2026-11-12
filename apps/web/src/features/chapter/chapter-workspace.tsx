@@ -103,9 +103,11 @@ import { describeWriteError } from "./text-utils.ts";
 import { CanvasToolBar, OcrToolBar, TextToolBar } from "./tool-panels.tsx";
 import { ToolRail } from "./tool-rail.tsx";
 import { type DocTab, isWidePanel, PANEL_TITLE, type PanelId, type RailTarget, railClick } from "./tool-rail-model.ts";
+import { TrimPanel } from "./trim-panel.tsx";
 import { undoStyleText } from "./undo-style-text.ts";
 import { useChapterData } from "./use-chapter-data.ts";
 import { useReorderSources, useSetSourceSkip, useSetSourceTrim, useSourceImages } from "./use-source-images.ts";
+import { useSourceTrim } from "./use-source-trim.ts";
 
 const URL_SYNC_MS = 400;
 /** Thông báo kết quả (info) tự ẩn sau chừng này; lỗi giữ tới khi đóng. */
@@ -743,20 +745,16 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
   const sourceMode = !!data.progress && pages.length === 0;
   const sources = useSourceImages(chapterId, sourceMode);
   const [sourcePick, setSourcePick] = useState<string | null>(null);
-  /** Ảnh đang ở chế độ cắt mép (chỉ mở từ menu thumbnail); đổi ảnh đang xem hoặc hết sửa được thì thoát. */
-  const [trimId, setTrimId] = useState<string | null>(null);
   const sourceId = sources.some((it) => it.id === sourcePick) ? sourcePick : (sources[0]?.id ?? null);
   const sourceIdx = sources.findIndex((it) => it.id === sourceId);
-  const pickSource = (id: string) => {
-    setTrimId(null);
-    setSourcePick(id);
-  };
   const sourcesEditable = status === "draft" || (status === "partial_failed" && pages.length === 0);
-  const trimming = trimId !== null && trimId === sourceId && sourcesEditable && !sources[sourceIdx]?.skip;
-  // Hết sửa được / ảnh vừa bị bỏ qua giữa lúc cắt → thoát hẳn chế độ cắt (không tự mở lại khi sửa được trở lại).
+  // Panel Cắt mép mở = chế độ cắt ảnh đang xem (ảnh đã xoá thì panel chỉ báo, không có thanh kéo).
+  const trimming =
+    panel === "trim" && sourceMode && sourcesEditable && !!sources[sourceIdx] && !sources[sourceIdx]?.skip;
+  // Hết ảnh gốc (đã cắt trang) / hết sửa được giữa lúc mở → đóng panel Cắt mép (nút rail cũng ẩn / tắt theo).
   useEffect(() => {
-    if (trimId !== null && !trimming) setTrimId(null);
-  }, [trimId, trimming]);
+    if (panel === "trim" && !(sourceMode && sourcesEditable)) setPanel(null);
+  }, [panel, sourceMode, sourcesEditable]);
   const sourcesRef = useRef(sources);
   sourcesRef.current = sources;
   // Đang cắt trang → cột ảnh gốc hiện bước + đếm của job ingest (progress null = còn xếp hàng).
@@ -942,17 +940,30 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
     },
     [sourceTrim.mutate, notify, learnBands],
   );
-  /** Rời chế độ cắt và trả focus về thumbnail của ảnh đó (bàn phím không bị rơi về đầu trang). */
-  const closeTrim = useCallback((id: string) => {
-    setTrimId(null);
-    document.querySelector<HTMLElement>(`.cw-thumbs [data-source="${id}"] .cw-thumb`)?.focus();
-  }, []);
-  const finishTrim = (edges: { top: number; bottom: number }, height: number) => {
+  const trimState = useSourceTrim({ item: sources[sourceIdx], active: trimming, save: trimSource });
+  /** Đóng panel Cắt mép và trả focus về nút rail của nó (panel ẩn đi thì focus không được rơi về <body>). */
+  const closeTrim = () => {
+    setPanel((p) => (p === "trim" ? null : p));
+    document.querySelector<HTMLElement>('.cw-toolrail button[aria-label="Cắt mép"]')?.focus();
+  };
+  const saveTrim = () => {
+    trimState.commit();
+    closeTrim();
+  };
+  const cancelTrim = () => {
+    trimState.discard();
+    closeTrim();
+  };
+  const clearTrim = () => {
     const it = sources[sourceIdx];
-    if (!it) return;
-    closeTrim(it.id);
-    const same = edges.top === (it.trim?.top ?? 0) && edges.bottom === (it.trim?.bottom ?? 0);
-    if (!same) trimSource(it, edges.top + edges.bottom > 0 ? edges : null, height);
+    trimState.discard();
+    if (it?.trim) trimSource(it, null);
+    closeTrim();
+  };
+  /** Xem ảnh khác; đang cắt mà nháp đã khác số đã lưu thì lưu trước (panel ở lại để cắt tiếp ảnh mới). */
+  const pickSource = (id: string) => {
+    if (id !== sourceId) trimState.commit();
+    setSourcePick(id);
   };
   const sourceReorder = useReorderSources(chapterId, (e) => notify({ tone: "danger", text: errorMessage(e) }));
   /** Đưa ảnh `id` tới vị trí `to` (0-based); toast "Hoàn tác" trả đúng thứ tự trước đó. */
@@ -1085,10 +1096,6 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
     const next = stepSource(sources, sourceId, dir);
     if (next) pickSource(next);
   };
-  const startTrim = (it: SourceItem) => {
-    setSourcePick(it.id);
-    setTrimId(it.id);
-  };
 
   // ---- Ảnh + OCR của page active ----
   const slotImages = useMemo(() => {
@@ -1167,6 +1174,7 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
     if (sourceMode) railDisabled[t] = "Dùng được khi chương đã cắt trang";
     else if (readOnly) railDisabled[t] = "Đang chỉ xem";
   }
+  if (!sourcesEditable) railDisabled.trim = "Không sửa được khi đang cắt trang";
   // Tab Tìm / Thay, Glossary, Hiệu đính cần chương đã dịch; đang ở tab đó mà chương chạy lại thì về Bản dịch.
   const docDisabled: Partial<Record<DocTab, string>> = canTools
     ? {}
@@ -1367,7 +1375,7 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
         hiddenAi={panel !== "tool" && aiUpdate}
         onShowHidden={() => setPanel("tool")}
       />
-      <ToolRail panel={panel} tool={tool} disabled={railDisabled} onClick={onRail} />
+      <ToolRail panel={panel} tool={tool} disabled={railDisabled} showTrim={sourceMode} onClick={onRail} />
       <ContextPanel
         title={PANEL_TITLE[panel ?? "tool"]}
         heading={toolOpen && currentRow ? `Khối ${currentRow.index}/${activeBlocks}` : undefined}
@@ -1407,6 +1415,19 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
               onApplyKind={(row) => applyKind.mutate(row)}
             />
           </div>
+        )}
+        {panel === "trim" && sourceMode && (
+          <TrimPanel
+            item={sources[sourceIdx]}
+            index={sourceIdx}
+            total={sourceCounts(sources).total}
+            edges={trimState.edges}
+            height={trimState.natural?.height ?? null}
+            onChange={trimState.change}
+            onSave={saveTrim}
+            onCancel={cancelTrim}
+            onClear={clearTrim}
+          />
         )}
         {/* Mỗi tab đã mở giữ mount (chỉ ẩn khi chuyển): bảng Bản dịch, kết quả xem trước Tìm/Thay (hộp xác nhận Hiệu đính đóng khi rời tab). */}
         {seenTabs.size > 0 && (
@@ -1530,9 +1551,13 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
               index={sourceIdx}
               total={sourceCounts(sources).total}
               trimming={trimming}
+              edges={trimState.edges}
+              natural={trimState.natural}
+              onMeasure={trimState.measure}
+              onEdgeChange={trimState.change}
               onStep={stepSourceBy}
-              onTrimDone={finishTrim}
-              onTrimCancel={() => sourceId && closeTrim(sourceId)}
+              onTrimSave={saveTrim}
+              onTrimCancel={cancelTrim}
             />
           </div>
         ) : (
@@ -1586,8 +1611,6 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
           ingest={ingest}
           onPick={pickSource}
           onSkip={skipSource}
-          onTrim={startTrim}
-          onClearTrim={(it) => trimSource(it, null)}
           onMove={moveSource}
         />
       ) : (
