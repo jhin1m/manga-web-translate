@@ -39,7 +39,7 @@ export function OriginalToggle() {
 
 export function MoreMenu(props: {
   /** Mục phụ của nút chính (primary-action.ts) đưa vào menu. */
-  commands: { command: ChapterCommand; label: string }[];
+  commands: { command: ChapterCommand; label: string; title?: string }[];
   pending: boolean;
   onCommand(cmd: ChapterCommand, opener?: HTMLElement): void;
   /** Mở Hoạt động — lối vào cố định (nút riêng đã bỏ khỏi thanh trên). */
@@ -60,6 +60,7 @@ export function MoreMenu(props: {
     },
     ...props.commands.map((m) => ({
       label: m.label,
+      title: m.title,
       disabled: props.pending,
       run: () => props.onCommand(m.command, btn.current ?? undefined),
     })),

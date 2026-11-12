@@ -85,7 +85,7 @@ describe("primary action", () => {
     expect(p).toMatchObject({ command: "retry", label: "Chạy lại 2 trang" });
     expect(p.menu).toEqual([
       { command: "export", label: "Xuất" },
-      { command: "retranslate", label: "Dịch lại cả chương" },
+      expect.objectContaining({ command: "retranslate", label: "Dịch lại cả chương (không OCR lại)" }),
     ]);
   });
 

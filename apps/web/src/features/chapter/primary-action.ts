@@ -22,7 +22,8 @@ export type PrimaryAction = {
   label: string;
   disabled: boolean;
   title?: string;
-  menu: { command: ChapterCommand; label: string }[];
+  /** `title` = tooltip giải thích mục menu (VD dịch lại không OCR lại). */
+  menu: { command: ChapterCommand; label: string; title?: string }[];
 };
 
 const TRANSLATE_LABEL = "Dịch chương";
@@ -60,7 +61,12 @@ export function primaryAction(input: {
   failed: number;
 }): PrimaryAction {
   const { status, upload } = input;
-  const retranslate = { command: "retranslate" as const, label: "Dịch lại cả chương" };
+  const retranslate = {
+    command: "retranslate" as const,
+    label: "Dịch lại cả chương (không OCR lại)",
+    title:
+      "Dịch lại mọi trang trên chữ đã nhận dạng, giữ chỉnh sửa tay. Chữ quét sai/thiếu: chuột phải trang → Quét lại trang.",
+  };
   if (status === "draft") {
     if (upload?.phase === "uploading") {
       return {

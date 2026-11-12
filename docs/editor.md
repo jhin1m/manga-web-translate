@@ -49,7 +49,7 @@ Nút chính ở thanh trên (`primary-action.ts`) theo trạng thái chương: T
 một mạch, không cần bấm lần hai. Menu ⋯ của nút có **"Chỉ xoá chữ + OCR (soát trước)"** (commit `target: "prepared"`): dừng ở
 "Chờ dịch" để soát mask / OCR rồi bấm "Dịch chương" (chương `prepared`) — lựa chọn này không nhớ theo series. Chương
 `partial_failed` → "Chạy lại N trang" (N = số trang lỗi; "Xuất" và "Dịch lại cả chương" vào menu ⋯); đã xong → "Xuất" (+ "Dịch lại
-cả chương" trong ⋯); đang chạy → nút chính "Huỷ" (+ vạch tiến độ 2px ở đáy thanh trên). Gọi dịch (dịch lại, dịch N trang, chạy lại trang lỗi) khi chương còn lượt đang chạy → 409 `translate_running` (thông báo "Đang có lượt
+cả chương (không OCR lại)" trong ⋯ — chỉ dịch trên chữ đã quét, giữ chỉnh sửa tay; OCR lại = "Quét lại trang" ở menu trang); đang chạy → nút chính "Huỷ" (+ vạch tiến độ 2px ở đáy thanh trên). Gọi dịch (dịch lại, dịch N trang, chạy lại trang lỗi) khi chương còn lượt đang chạy → 409 `translate_running` (thông báo "Đang có lượt
 dịch — chờ lượt này xong hoặc huỷ rồi thử lại.").
 
 **Chọn trang để dịch riêng** (`page-selection.ts`, cột thumbnail): ⌘-click (macOS) / Ctrl-click (nơi khác) bật/tắt 1
