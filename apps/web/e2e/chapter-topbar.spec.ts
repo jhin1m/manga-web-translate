@@ -187,7 +187,7 @@ test("running: a single Huỷ button and a 2px progress bar", async ({ page }) =
   expect(await controls(page).count()).toBeLessThanOrEqual(9);
 });
 
-test("done: Xuất is the primary button and the lang pair lives in the chapter popover", async ({ page }) => {
+test("done: Xuất is the primary button and the lang chip opens its own language popover", async ({ page }) => {
   await login(page);
   const chapterId = await apiReadyChapter(page, chapterNumber(6));
   await page.goto(`/s/${state.seriesId}/c/${chapterId}`);
@@ -199,9 +199,14 @@ test("done: Xuất is the primary button and the lang pair lives in the chapter 
   await expect(title).toHaveAccessibleName(new RegExp(`^Chương ${chapterNumber(6)}`));
   expect(await controls(page).count()).toBeLessThanOrEqual(9);
 
+  // Tên chương chỉ đổi series / số chương; ngôn ngữ ở chip riêng.
   await title.click();
-  const dlg = page.getByRole("dialog", { name: /Đổi series/ });
-  await expect(dlg.getByLabel("Ngôn ngữ gốc (chữ trên ảnh)")).toBeVisible();
+  await expect(page.getByRole("dialog", { name: "Đổi series / số chương" }).getByLabel("Dịch sang")).toHaveCount(0);
+  await title.click();
+  const chip = top(page).getByRole("button", { name: /— đổi ngôn ngữ$/ });
+  await chip.click();
+  const dlg = page.getByRole("dialog", { name: "Đổi ngôn ngữ" });
+  await expect(dlg.getByLabel("Ngôn ngữ gốc (chữ trên ảnh)")).toBeFocused();
   await expect(dlg.getByLabel("Dịch sang")).toBeVisible();
   // Chưa đổi gì → chưa lưu được; đổi ngôn ngữ đích rồi lưu → PATCH series.
   await expect(dlg.getByRole("button", { name: "Lưu", exact: true })).toBeDisabled();
@@ -213,8 +218,8 @@ test("done: Xuất is the primary button and the lang pair lives in the chapter 
   const s = (await (await page.request.get(`/api/series/${state.seriesId}`)).json()) as { target_lang: string };
   expect(s.target_lang).toBe("en");
   // Trả lại để spec khác không bị ảnh hưởng.
-  await title.click();
-  await page.getByLabel("Dịch sang").selectOption("vi");
-  await page.getByRole("button", { name: "Lưu", exact: true }).click();
-  await expect(page.getByRole("dialog", { name: /Đổi series/ })).toBeHidden();
+  await chip.click();
+  await dlg.getByLabel("Dịch sang").selectOption("vi");
+  await dlg.getByRole("button", { name: "Lưu", exact: true }).click();
+  await expect(dlg).toBeHidden();
 });

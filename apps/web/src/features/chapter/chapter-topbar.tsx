@@ -1,5 +1,5 @@
 /**
- * Thanh trên màn chương (tối đa 9 mục): ‹ series, "Ch.12" + cặp ngôn ngữ (bấm → đổi series / số chương / ngôn ngữ), chip trạng thái
+ * Thanh trên màn chương (tối đa 9 mục): ‹ series, "Ch.12" (bấm → đổi series / số chương) + chip ngôn ngữ (bấm → đổi ngôn ngữ), chip trạng thái
  * chương (nút: có trang cần xem → nhảy tới trang đó, không thì mở Hoạt động; chỗ duy nhất nói chương đang ở đâu),
  * chỉ báo sửa/lưu (chỉ hiện khi đang lưu / lỗi / chưa lưu / chỉ xem) · Gốc (trang có bản dịch) · Hoàn tác / Làm lại · menu ⋯ (Chia đôi,
  * Xuất, Dịch lại cả chương, Hoạt động, Phím tắt) · nút chính theo trạng thái (primary-action.ts; đang chạy = Huỷ,

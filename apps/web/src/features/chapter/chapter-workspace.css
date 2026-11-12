@@ -1064,7 +1064,7 @@ label.cw-field-head {
   color: var(--c-fg-muted);
 }
 
-/* Tên chương bấm được → popover đổi series / số chương. */
+/* Tên chương bấm được → popover đổi series / số chương; chip ngôn ngữ → popover đổi ngôn ngữ. */
 .cw-meta {
   position: relative;
   flex-shrink: 0;
@@ -1086,17 +1086,24 @@ label.cw-field-head {
 .cw-meta-toggle:hover {
   border-color: var(--c-line-strong);
 }
+/* Chip ngôn ngữ: viền + icon để thấy được là nút bấm đổi ngôn ngữ (trước là chữ mờ, không viền → khó nhận ra). */
 .cw-lang-chip {
   flex: none;
-  padding: 0 var(--sp-2);
-  font-size: var(--fs-xs);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px var(--sp-2);
+  font-size: var(--fs-sm);
   white-space: nowrap;
-  color: var(--c-fg-muted);
-  border-color: transparent;
+  color: var(--c-fg);
+  border: 1px solid var(--c-line-strong);
+  border-radius: 999px;
   background: transparent;
 }
-.cw-lang-chip:hover {
-  border-color: var(--c-line-strong);
+.cw-lang-chip:hover,
+.cw-lang-chip[aria-expanded="true"] {
+  border-color: var(--c-fg-muted);
+  background: var(--c-surface);
 }
 .cw-meta-pop {
   position: absolute;

@@ -114,6 +114,14 @@ export const RetranslateIcon = (p: P) => (
     <path d="M20 4v7h-7" />
   </Icon>
 );
+/** Ngôn ngữ (chip cặp ngôn ngữ trên thanh trên). */
+export const GlobeIcon = (p: P) => (
+  <Icon {...p}>
+    <circle cx="12" cy="12" r="9" />
+    <path d="M3 12h18" />
+    <path d="M12 3a14 14 0 0 1 0 18a14 14 0 0 1 0-18z" />
+  </Icon>
+);
 export const CopyIcon = (p: P) => (
   <Icon {...p}>
     <rect x="9" y="9" width="11" height="11" rx="1.5" />
