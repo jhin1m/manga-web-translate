@@ -1,6 +1,6 @@
 ---
 title: "Cắt mép ở rail trái + zoom ảnh gốc ở màn nháp"
-status: in-progress
+status: completed
 priority: P1
 created: 2026-11-13
 ---
@@ -30,7 +30,7 @@ phải). Yêu cầu: "đừng chuột phải hay gì hết, cứ ném sang sideb
 | # | Việc | Status |
 |---|------|--------|
 | 1 | Rail + panel cắt mép, bỏ mục menu, zoom nháp, test + e2e | Done (13/11, nhánh `feat/trim-rail-panel`) |
-| 2 | Review + sửa | Pending |
+| 2 | Review + sửa | Completed |
 | 3 | Docs (`docs/editor.md`) | Done (làm cùng phase 1) |
 
 ## Tiêu chí xong
@@ -39,3 +39,7 @@ phải). Yêu cầu: "đừng chuột phải hay gì hết, cứ ném sang sideb
 - [x] Đổi ảnh khi đang cắt → ảnh cũ tự lưu.
 - [x] Màn nháp zoom được (nút, Ctrl/⌘+cuộn, pinch), cắt vẫn đúng px khi đang zoom.
 - [x] e2e `trim-source`, `trim-learn-band`, `trim-auto-drop`, `upload-chapter` cập nhật + xanh; gate chung xanh.
+
+## Kết quả
+- `4b1b645` rail + panel + zoom; review 8/10 → `2b2a4cd` sửa M1 (ô số), M2 (tự lưu trước Dịch chương), L1–L5.
+- Gate + e2e trim/upload/full-flow xanh. Safari pinch chưa kiểm tay.
