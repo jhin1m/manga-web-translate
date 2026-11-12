@@ -7,7 +7,7 @@ import { zipSync } from "fflate";
 import { emptyPageState, type PageState } from "../../../packages/shared/src/index.ts";
 import { API_URL } from "./env.ts";
 
-const VERSION = "0.10.0";
+const VERSION = "0.12.0";
 const SHA = "ab".repeat(32);
 /** PNG 1×1 hợp lệ. */
 export const PNG_1PX = Buffer.from(
@@ -91,8 +91,23 @@ const ALL_CAPABILITIES = ["chapter.ingest", "page.prepare", "chapter.translate",
 async function handle(token: string, j: Claimed, opts: FakeWorkerOptions) {
   if (j.type === "chapter.ingest") {
     const k = opts.pagesPerSource ?? 1;
-    const sources = (j.inputs as { sources: { source_file_id: string }[] }).sources;
-    const cuts = sources.flatMap((s) => Array.from({ length: k }, (_, i) => ({ id: s.source_file_id, i })));
+    const sources = (
+      j.inputs as {
+        sources: {
+          source_file_id: string;
+          height: number | null;
+          trim: { top: number; bottom: number } | null;
+        }[];
+      }
+    ).sources;
+    // Ảnh có cắt mép → page cao đúng phần còn lại (như worker thật); không cắt thì giữ cỡ 1000 cố định.
+    const cuts = sources.flatMap((s) =>
+      Array.from({ length: k }, (_, i) => ({
+        id: s.source_file_id,
+        i,
+        h: s.trim ? Math.max(1, (s.height ?? 1000) - s.trim.top - s.trim.bottom) : 1000,
+      })),
+    );
     const names = cuts.map((_, i) => `page:${i}`);
     const { outputs } = await call<{ outputs: Record<string, { put: string }> }>(
       token,
@@ -105,9 +120,9 @@ async function handle(token: string, j: Claimed, opts: FakeWorkerOptions) {
       pages: cuts.map((c, ord) => ({
         ord,
         width: 720,
-        height: 1000,
+        height: c.h,
         original_sha256: SHA,
-        source_map: [{ source_file_id: c.id, src_y: c.i * 1000, page_y: 0, h: 1000 }],
+        source_map: [{ source_file_id: c.id, src_y: c.i * 1000, page_y: 0, h: c.h }],
         cut_flag: false,
       })),
     });
