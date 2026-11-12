@@ -12,7 +12,7 @@ import { type Claimed, claimJobs, doIngest, makeRunnable, PNG_1PX, workerToken }
 type Seed = Awaited<ReturnType<typeof seedUser>>;
 type Upload = { id: string; url: string; fields: Record<string, string> };
 type Fp = { dhash?: string; width?: number; height?: number };
-type SkipImage = { id: string; width: number; height: number; url: string };
+type SkipImage = { id: string; width: number; height: number; url: string; edge: "top" | "bottom" | null };
 
 let A: Seed;
 let token: string;
@@ -56,8 +56,12 @@ async function draft(seriesId: string, number: string, fps: Fp[]) {
   return { ch: created.chapter.id, files: detail.source_files };
 }
 
-const learn = (seriesId: string, body: Record<string, string>) =>
+const learn = (seriesId: string, body: Record<string, unknown>) =>
   api(`/series/${seriesId}/skip-images`, { method: "POST", body });
+const learnBand = (seriesId: string, sourceFileId: string, edge: string, dhash = BASE) =>
+  learn(seriesId, { source_file_id: sourceFileId, edge, dhash });
+const trimFile = async (ch: string, fileId: string, trim: { top: number; bottom: number }) =>
+  json(await api(`/chapters/${ch}/source-files/${fileId}`, { method: "PATCH", body: { trim } }), 200);
 const list = async (seriesId: string) =>
   (await json<{ images: SkipImage[] }>(await api(`/series/${seriesId}/skip-images`), 200)).images;
 
@@ -251,5 +255,106 @@ describe("series skip images", () => {
         .from(sourceFiles)
         .where(eq(sourceFiles.id, files[0]?.id as string)),
     ).toEqual([]);
+  });
+
+  describe("edge bands", () => {
+    it("learns the trimmed band of an image and lists it with its edge, width and server-side height", async () => {
+      const s = await newSeries("Band learn");
+      const { ch, files } = await draft(s, "1", [credit]);
+      const id = files[0]?.id as string;
+      await trimFile(ch, id, { top: 120, bottom: 0 });
+      expect(await json(await learnBand(s, id, "top"), 200)).toEqual({ learned: 1, known: 0 });
+      const [img] = await list(s);
+      expect(img).toMatchObject({ edge: "top", width: 800, height: 120 });
+      expect((await fetch(img?.url ?? "")).status).toBe(200);
+      const [row] = await db.select().from(seriesSkipImages).where(eq(seriesSkipImages.seriesId, s));
+      expect(row).toMatchObject({ edge: "top", dhash: BASE, learnedFromChapterId: ch });
+      // Học lại cùng dải / dải gần giống (cùng mép, hash lệch ≤ 6 bit, chiều cao lệch ≤ 5%) → đã học.
+      expect(await json(await learnBand(s, id, "top"), 200)).toEqual({ learned: 0, known: 1 });
+      await trimFile(ch, id, { top: 123, bottom: 300 });
+      expect(await json(await learnBand(s, id, "top", NEAR), 200)).toEqual({ learned: 0, known: 1 });
+      // Cùng hash nhưng mép khác, hoặc chiều cao lệch quá 5% → dải mới.
+      expect(await json(await learnBand(s, id, "bottom"), 200)).toEqual({ learned: 1, known: 0 });
+      await trimFile(ch, id, { top: 200, bottom: 300 });
+      expect(await json(await learnBand(s, id, "top"), 200)).toEqual({ learned: 1, known: 0 });
+      expect((await list(s)).map((i) => [i.edge, i.height])).toEqual([
+        ["top", 120],
+        ["bottom", 300],
+        ["top", 200],
+      ]);
+      // Xoá như mục cũ.
+      const [first] = await list(s);
+      expect((await api(`/series/${s}/skip-images/${first?.id}`, { method: "DELETE" })).status).toBe(204);
+      expect(await list(s)).toHaveLength(2);
+    });
+
+    it("rejects an edge without a trim, a malformed or plain hash, and a bad body", async () => {
+      const s = await newSeries("Band reject");
+      const { ch, files } = await draft(s, "1", [credit]);
+      const id = files[0]?.id as string;
+      expect((await json<{ error: string }>(await learnBand(s, id, "top"), 409)).error).toBe("no_trim");
+      await trimFile(ch, id, { top: 100, bottom: 0 });
+      expect((await json<{ error: string }>(await learnBand(s, id, "bottom"), 409)).error).toBe("no_trim");
+      expect((await learnBand(s, id, "top", "xyz")).status).toBe(400);
+      expect((await learnBand(s, id, "middle")).status).toBe(400);
+      expect((await learn(s, { source_file_id: id, edge: "top" })).status).toBe(400);
+      expect((await learn(s, { page_id: id, edge: "top", dhash: BASE })).status).toBe(400);
+      expect((await json<{ error: string }>(await learnBand(s, id, "top", "0000000000000001"), 409)).error).toBe(
+        "plain_image",
+      );
+      expect(await list(s)).toEqual([]);
+    });
+
+    it("an image without a stored width cannot learn a band", async () => {
+      const s = await newSeries("Band no size");
+      const { ch, files } = await draft(s, "1", [{}]);
+      const id = files[0]?.id as string;
+      await json(
+        await api(`/chapters/${ch}/source-files/${id}`, {
+          method: "PATCH",
+          body: { trim: { top: 100, bottom: 0 }, height: 900 },
+        }),
+        200,
+      );
+      expect((await json<{ error: string }>(await learnBand(s, id, "top"), 409)).error).toBe("no_hash");
+    });
+
+    it("shares the per-series limit with whole images and scopes to the series", async () => {
+      const s = await newSeries("Band limit");
+      const { ch, files } = await draft(s, "1", [credit]);
+      const id = files[0]?.id as string;
+      await trimFile(ch, id, { top: 100, bottom: 0 });
+      const rows = Array.from({ length: 100 }, (_, i) => ({
+        id: crypto.randomUUID(),
+        userId: A.userId,
+        seriesId: s,
+        dhash: i.toString(16).padStart(16, "0"),
+        width: 800,
+        height: 1200,
+        thumbKey: `u/${A.userId}/series/${s}/filler-${i}.png`,
+      }));
+      await db.insert(seriesSkipImages).values(rows);
+      expect((await json<{ error: string }>(await learnBand(s, id, "top"), 409)).error).toBe("skip_images_full");
+      const other = await newSeries("Band other");
+      expect((await learnBand(other, id, "top")).status).toBe(404);
+    });
+
+    it("bands never match whole images and whole images never match bands", async () => {
+      const s = await newSeries("Band matcher");
+      const one = await draft(s, "1", [credit]);
+      const id = one.files[0]?.id as string;
+      await trimFile(one.ch, id, { top: 1200 - 64, bottom: 0 });
+      // Dải 800x1136 có cùng hash + tỉ lệ khung với một ảnh cả tấm 800x1136.
+      await json(await learnBand(s, id, "top"), 200);
+      const two = await draft(s, "2", [{ dhash: BASE, width: 800, height: 1136 }]);
+      expect(two.files.map((f) => f.skip)).toEqual([null]);
+      // Học ảnh cả tấm sau đó vẫn hoạt động bình thường, không bị dải chặn là "đã học".
+      expect(await json(await learn(s, { source_file_id: two.files[0]?.id as string }), 200)).toEqual({
+        learned: 1,
+        known: 0,
+      });
+      const three = await draft(s, "3", [{ dhash: BASE, width: 800, height: 1136 }]);
+      expect(three.files.map((f) => f.skip)).toEqual(["credit"]);
+    });
   });
 });

@@ -1,0 +1,2 @@
+ALTER TABLE "series_skip_images" ADD COLUMN "edge" text;--> statement-breakpoint
+ALTER TABLE "series_skip_images" ADD CONSTRAINT "series_skip_images_edge_chk" CHECK ("series_skip_images"."edge" is null or "series_skip_images"."edge" in ('top', 'bottom'));

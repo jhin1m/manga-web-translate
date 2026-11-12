@@ -182,6 +182,8 @@ export const seriesSkipImages = pgTable(
     width: integer("width").notNull(),
     height: integer("height").notNull(),
     thumbKey: text("thumb_key").notNull(),
+    /** null = cả ảnh; 'top' / 'bottom' = dải cắt ở mép đó (height = chiều cao dải, width = bề rộng ảnh). */
+    edge: text("edge"),
     /** Chương học ra ảnh — chỉ để tra cứu, không FK (xoá chương vẫn giữ ảnh đã học). */
     learnedFromChapterId: uuid("learned_from_chapter_id"),
     createdBy: text("created_by"),
@@ -190,6 +192,7 @@ export const seriesSkipImages = pgTable(
   (t) => [
     foreignKey({ columns: [t.userId, t.seriesId], foreignColumns: [series.userId, series.id] }).onDelete("cascade"),
     index("series_skip_images_series_idx").on(t.seriesId),
+    check("series_skip_images_edge_chk", sql`${t.edge} is null or ${t.edge} in ('top', 'bottom')`),
   ],
 );
 

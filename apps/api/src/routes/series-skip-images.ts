@@ -4,7 +4,7 @@
  * Hash do trình duyệt gửi: tin trong dữ liệu của chính người dùng (sai chỉ làm khớp/không khớp sai, người dùng khôi phục được).
  */
 import { chapters, NotFoundError, pages, type Scoped, scoped, series, seriesSkipImages, sourceFiles } from "@mtl/db";
-import { type ImageFingerprint, isPlainHash, sameImage, storageKeys } from "@mtl/shared";
+import { DHASH_RE, type ImageFingerprint, isPlainHash, sameImage, storageKeys } from "@mtl/shared";
 import { and, eq, inArray, isNull, ne, type SQL } from "drizzle-orm";
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
@@ -15,14 +15,25 @@ import { parseJson } from "../lib/validate.ts";
 import type { AppEnv } from "../middleware/user.ts";
 import { copyObject, deleteObject, head, MAX_GET_TTL_S, presignGet } from "../storage.ts";
 
+const SKIP_EDGES = ["top", "bottom"] as const;
+type Edge = (typeof SKIP_EDGES)[number];
+
 /** Trần ảnh đã học / series — mỗi lần tạo chương so với cả danh sách. */
 export const MAX_SKIP_IMAGES = 100;
 
-const LearnBody = z
+const WholeBody = z
   .object({ source_file_id: z.string().uuid().optional(), page_id: z.string().uuid().optional() })
+  .strict()
   .refine((b) => (b.source_file_id === undefined) !== (b.page_id === undefined), {
     message: "source_file_id hoặc page_id",
   });
+
+/** Dải mép đã cắt của 1 ảnh gốc; dHash do trình duyệt tính từ đúng vùng dải. */
+const BandBody = z
+  .object({ source_file_id: z.string().uuid(), edge: z.enum(SKIP_EDGES), dhash: z.string().regex(DHASH_RE) })
+  .strict();
+
+const LearnBody = z.union([WholeBody, BandBody]);
 
 type SourceFile = typeof sourceFiles.$inferSelect;
 type SkipImage = typeof seriesSkipImages.$inferSelect;
@@ -39,7 +50,10 @@ const fingerprintOf = (f: SourceFile): ImageFingerprint | null =>
  * (hoặc ảnh không có hash).
  */
 export async function creditMatcher(sdb: Scoped, seriesId: string) {
-  const known = await sdb.select(seriesSkipImages, eq(seriesSkipImages.seriesId, seriesId));
+  const known = await sdb.select(
+    seriesSkipImages,
+    and(eq(seriesSkipImages.seriesId, seriesId), isNull(seriesSkipImages.edge)) as SQL,
+  );
   return (fp: Partial<ImageFingerprint>): "credit" | null => {
     if (!fp.dhash || !fp.width || !fp.height) return null;
     const f = fp as ImageFingerprint;
@@ -75,6 +89,7 @@ async function filesInsidePage(sdb: Scoped, seriesId: string, pageId: string) {
 
 const skipImageView = async (r: SkipImage) => ({
   id: r.id,
+  edge: r.edge as Edge | null,
   width: r.width,
   height: r.height,
   url: await presignGet(r.thumbKey, MAX_GET_TTL_S),
@@ -100,7 +115,8 @@ seriesSkipImageRoutes.post("/series/:seriesId/skip-images", async (c) => {
       .where(and(eq(series.userId, userId), eq(series.id, seriesId)))
       .for("update");
     if (!locked) throw new NotFoundError("series");
-    return learnInto(scoped(tx, userId), locked.id, body);
+    const sdb = scoped(tx, userId);
+    return "edge" in body ? learnBand(sdb, locked.id, body) : learnInto(sdb, locked.id, body);
   });
   return c.json(result);
 });
@@ -108,7 +124,7 @@ seriesSkipImageRoutes.post("/series/:seriesId/skip-images", async (c) => {
 async function learnInto(
   sdb: Scoped,
   seriesId: string,
-  body: z.infer<typeof LearnBody>,
+  body: z.infer<typeof WholeBody>,
 ): Promise<{ learned: number; known: number }> {
   let source: { chapterId: string; files: SourceFile[] };
   if (body.source_file_id) {
@@ -129,33 +145,76 @@ async function learnInto(
   if (hashed.every((h) => isPlainHash(h.fp.dhash))) {
     throw conflict("plain_image", "Ảnh gần như trơn — không học được (dễ tự bỏ nhầm trang truyện).");
   }
-  const known: ImageFingerprint[] = await sdb.select(seriesSkipImages, eq(seriesSkipImages.seriesId, seriesId));
+  const all = await sdb.select(seriesSkipImages, eq(seriesSkipImages.seriesId, seriesId));
+  const known: ImageFingerprint[] = all.filter((k) => k.edge === null);
   const fresh: typeof hashed = [];
   for (const h of hashed) {
     if (isPlainHash(h.fp.dhash)) continue;
     if (![...known, ...fresh.map((x) => x.fp)].some((k) => sameImage(h.fp, k))) fresh.push(h);
   }
-  if (known.length + fresh.length > MAX_SKIP_IMAGES) {
-    throw conflict("skip_images_full", `Series đã có ${known.length} ảnh tự bỏ (tối đa ${MAX_SKIP_IMAGES}).`);
-  }
-  for (const { file } of fresh) {
-    if (!(await head(file.storageKey))) throw conflict("not_uploaded", "Ảnh chưa tải lên xong — thử lại sau.");
-  }
-  // Chép ảnh trước, ghi hàng sau: lỗi giữa chừng chỉ để lại object mồ côi, không có hàng trỏ tới object thiếu.
-  for (const { file, fp } of fresh) {
-    const id = uuidv7();
-    const thumbKey = storageKeys.seriesSkip(sdb.userId, seriesId, id, file.storageKey.split(".").pop() ?? "img");
-    await copyObject(file.storageKey, thumbKey);
-    await sdb.insert(seriesSkipImages, {
-      id,
-      seriesId: seriesId,
-      ...fp,
-      thumbKey,
-      learnedFromChapterId: source.chapterId,
-      createdBy: sdb.userId,
-    });
-  }
+  assertRoom(all.length, fresh.length);
+  for (const { file } of fresh) await assertUploaded(file);
+  for (const { file, fp } of fresh) await storeLearned(sdb, seriesId, source.chapterId, file, fp, null);
   return { learned: fresh.length, known: hashed.length - fresh.length };
+}
+
+function assertRoom(existing: number, adding: number) {
+  if (existing + adding > MAX_SKIP_IMAGES) {
+    throw conflict("skip_images_full", `Series đã có ${existing} ảnh tự bỏ (tối đa ${MAX_SKIP_IMAGES}).`);
+  }
+}
+
+async function assertUploaded(file: SourceFile) {
+  if (!(await head(file.storageKey))) throw conflict("not_uploaded", "Ảnh chưa tải lên xong — thử lại sau.");
+}
+
+/** Chép ảnh trước, ghi hàng sau: lỗi giữa chừng chỉ để lại object mồ côi, không có hàng trỏ tới object thiếu. */
+async function storeLearned(
+  sdb: Scoped,
+  seriesId: string,
+  chapterId: string,
+  file: SourceFile,
+  fp: ImageFingerprint,
+  edge: Edge | null,
+) {
+  const id = uuidv7();
+  const thumbKey = storageKeys.seriesSkip(sdb.userId, seriesId, id, file.storageKey.split(".").pop() ?? "img");
+  await copyObject(file.storageKey, thumbKey);
+  await sdb.insert(seriesSkipImages, {
+    id,
+    seriesId,
+    ...fp,
+    edge,
+    thumbKey,
+    learnedFromChapterId: chapterId,
+    createdBy: sdb.userId,
+  });
+}
+
+/**
+ * Học dải mép đã cắt. Chiều cao dải lấy từ `trim` đã lưu, bề rộng từ ảnh — chỉ dhash do trình duyệt gửi. 409: mép đó
+ * chưa cắt (`no_trim`), ảnh không có bề rộng (`no_hash`), dải gần trơn (`plain_image`), đầy danh sách.
+ */
+async function learnBand(
+  sdb: Scoped,
+  seriesId: string,
+  body: z.infer<typeof BandBody>,
+): Promise<{ learned: number; known: number }> {
+  const f = await sdb.byId(sourceFiles, body.source_file_id, "source file");
+  const chapter = await chapterInSeries(sdb, f.chapterId, seriesId, "source file");
+  const bandHeight = f.trim?.[body.edge] ?? 0;
+  if (bandHeight <= 0) throw conflict("no_trim", "Mép này của ảnh chưa được cắt — không học được dải.");
+  if (!f.width) throw conflict("no_hash", "Ảnh này không có kích thước — không học được dải.");
+  if (isPlainHash(body.dhash)) {
+    throw conflict("plain_image", "Dải gần như trơn — không học được (dễ tự cắt nhầm trang truyện).");
+  }
+  const fp: ImageFingerprint = { dhash: body.dhash, width: f.width, height: bandHeight };
+  const all = await sdb.select(seriesSkipImages, eq(seriesSkipImages.seriesId, seriesId));
+  if (all.some((k) => k.edge === body.edge && sameImage(fp, k))) return { learned: 0, known: 1 };
+  assertRoom(all.length, 1);
+  await assertUploaded(f);
+  await storeLearned(sdb, seriesId, chapter.id, f, fp, body.edge);
+  return { learned: 1, known: 0 };
 }
 
 seriesSkipImageRoutes.get("/series/:seriesId/skip-images", async (c) => {

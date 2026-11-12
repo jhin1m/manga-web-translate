@@ -197,6 +197,13 @@
       "when": 1794496428294,
       "tag": "0027_add_source_file_trim",
       "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1794498083033,
+      "tag": "0028_add_series_skip_image_edge",
+      "breakpoints": true
     }
   ]
 }
