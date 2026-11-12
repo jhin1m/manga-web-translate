@@ -19,6 +19,8 @@ import { type ItemState, type ItemStatus, postToPresigned, runUploadQueue } from
 
 const CONCURRENCY = 4;
 const MAX_ATTEMPTS = 3;
+/** Lấy dải đã học chỉ là phần thêm: quá hạn này thì bỏ qua, upload không chờ. */
+const BANDS_TIMEOUT_MS = 3000;
 const MARKER_PREFIX = "mtl.upload.";
 
 export type ChapterUpload = {
@@ -52,14 +54,13 @@ export type UploadDeps = {
   backoff: (attempt: number) => number;
   /** Dấu nhận dạng theo thứ tự trang (null = không tính được, gửi thiếu — không chặn upload). */
   fingerprints: (blobs: Blob[]) => Promise<({ dhash: string; width: number; height: number } | null)[]>;
-  /**
-   * Cắt mép tự động theo dải banner đã học của series, theo thứ tự trang (null = không cắt). Lỗi / không có dải →
-   * upload như thường (không chặn).
-   */
+  /** Dải banner đã học của series (lỗi / quá hạn → ném; bên gọi coi như không có dải, không chặn upload). */
+  learnedBands: (seriesId: string) => Promise<LearnedEdgeBand[]>;
+  /** Cắt mép tự động theo thứ tự trang (null = không cắt). */
   autoTrims: (
-    seriesId: string,
     blobs: Blob[],
     fps: ({ dhash: string; width: number; height: number } | null)[],
+    bands: LearnedEdgeBand[],
   ) => Promise<(AutoTrim | null)[]>;
 };
 
@@ -176,14 +177,11 @@ export function createUploadManager(deps: UploadDeps) {
     /** Tạo chương nháp + bắt đầu upload; resolve ngay sau khi có chapterId (upload chạy tiếp ở nền). */
     async startNewChapter(o: { seriesId: string; number: string; title?: string; pages: PageFile[] }) {
       const pages = orderPages(o.pages);
-      const fps = await deps.fingerprints(pages.map((p) => p.blob)).catch(() => []);
-      const trims = await deps
-        .autoTrims(
-          o.seriesId,
-          pages.map((p) => p.blob),
-          fps,
-        )
-        .catch(() => []);
+      const blobs = pages.map((p) => p.blob);
+      // Lấy dải đã học song song với việc tính dấu; lỗi / không có dải thì thôi, không chặn upload.
+      const bandsReq = deps.learnedBands(o.seriesId).catch((): LearnedEdgeBand[] => []);
+      const fps = await deps.fingerprints(blobs).catch(() => []);
+      const trims = await bandsReq.then((bands) => deps.autoTrims(blobs, fps, bands)).catch(() => []);
       const res = await deps.createChapter({
         series_id: o.seriesId,
         number: o.number,
@@ -297,11 +295,11 @@ export const uploadManager = createUploadManager({
   storage: safeStorage(),
   backoff: (n) => 1000 * 2 ** (n - 2),
   fingerprints: (blobs) => fingerprintAll(blobs),
-  autoTrims: async (seriesId, blobs, fps) => {
-    const { images } = await fetchSkipImages(seriesId);
-    const bands = images.flatMap((im): LearnedEdgeBand[] => (im.edge ? [{ ...im, edge: im.edge }] : []));
-    return bandTrims(blobs, fps, bands);
+  learnedBands: async (seriesId) => {
+    const { images } = await fetchSkipImages(seriesId, AbortSignal.timeout(BANDS_TIMEOUT_MS));
+    return images.flatMap((im): LearnedEdgeBand[] => (im.edge ? [{ ...im, edge: im.edge }] : []));
   },
+  autoTrims: bandTrims,
 });
 
 // Rời tab khi còn file đang upload → trình duyệt hỏi xác nhận.

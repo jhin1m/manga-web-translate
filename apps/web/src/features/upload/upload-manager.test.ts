@@ -62,7 +62,8 @@ function fakeServer(post: (fileId: string, attempt: number) => Promise<void> = a
     storage: memoryStorage(),
     backoff: () => 0,
     fingerprints: async (blobs) => blobs.map(() => null),
-    autoTrims: async (_s, blobs) => blobs.map(() => null),
+    learnedBands: async () => [],
+    autoTrims: async (blobs) => blobs.map(() => null),
   };
   return { deps, calls };
 }
@@ -117,14 +118,19 @@ describe("upload manager", () => {
 
   it("sends the auto trim of an image that matches a learned band, and none for the others", async () => {
     const { deps, calls } = fakeServer();
+    const band = { edge: "bottom" as const, dhash: "0f0f0f0f0f0f0f0f", width: 800, height: 120 };
     const seen: unknown[] = [];
-    deps.autoTrims = async (seriesId, blobs, fps) => {
-      seen.push([seriesId, blobs.map((b) => b.size), fps.length]);
+    deps.learnedBands = async (seriesId) => {
+      seen.push(seriesId);
+      return [band];
+    };
+    deps.autoTrims = async (blobs, fps, bands) => {
+      seen.push([blobs.map((b) => b.size), fps.length, bands]);
       return [null, { top: 0, bottom: 120 }];
     };
     const m = createUploadManager(deps);
     await m.startNewChapter({ seriesId: "s", number: "1", pages: [png("2.png", 2), png("1.png", 1)] });
-    expect(seen).toEqual([["s", [1, 2], 2]]);
+    expect(seen).toEqual(["s", [[1, 2], 2, [band]]]);
     expect(calls.createFiles[0]).toEqual([
       { name: "1.png", content_type: "image/png", bytes: 1 },
       { name: "2.png", content_type: "image/png", bytes: 2, trim: { top: 0, bottom: 120 } },
@@ -132,15 +138,45 @@ describe("upload manager", () => {
     await settled(m, "ch-1");
   });
 
-  it("uploads as usual when no band matches or the learned bands cannot be fetched", async () => {
-    for (const autoTrims of [
-      async () => [null, null],
-      async () => {
-        throw new Error("network");
+  it("fetches the learned bands while the fingerprints are still being computed", async () => {
+    const { deps } = fakeServer();
+    const order: string[] = [];
+    let release = () => {};
+    deps.fingerprints = async (blobs) => {
+      order.push("fingerprints start");
+      await new Promise<void>((r) => {
+        release = r;
+      });
+      return blobs.map(() => null);
+    };
+    deps.learnedBands = async () => {
+      order.push("bands start");
+      return [];
+    };
+    const m = createUploadManager(deps);
+    const started = m.startNewChapter({ seriesId: "s", number: "1", pages: [png("1.png")] });
+    await vi.waitFor(() => expect([...order].sort()).toEqual(["bands start", "fingerprints start"]));
+    release();
+    await started;
+  });
+
+  it("uploads as usual when no band matches or the learned bands cannot be fetched or matched", async () => {
+    const cases: Partial<UploadDeps>[] = [
+      { autoTrims: async () => [null, null] },
+      {
+        learnedBands: async () => {
+          throw new Error("network");
+        },
       },
-    ]) {
+      {
+        autoTrims: async () => {
+          throw new Error("decode");
+        },
+      },
+    ];
+    for (const c of cases) {
       const { deps, calls } = fakeServer();
-      deps.autoTrims = autoTrims;
+      Object.assign(deps, c);
       const m = createUploadManager(deps);
       await m.startNewChapter({ seriesId: "s", number: "1", pages: [png("1.png", 1), png("2.png", 2)] });
       expect(calls.createFiles[0]).toEqual([

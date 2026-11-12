@@ -96,3 +96,52 @@ export function bandWindow(
 /** Hash của cửa sổ ảnh khớp hash dải đã học (tỉ lệ đã khớp nhờ `bandWindow` co dải theo bề rộng). */
 export const sameBand = (hash: string, band: { dhash: string }): boolean =>
   hamming(hash, band.dhash) <= DHASH_MAX_DISTANCE;
+
+/**
+ * Lưới xám 9×8 của ảnh RGBA `w`×`h` bằng trung bình theo diện tích: mỗi ô là trung bình độ sáng (cùng công thức xám với
+ * đường băm cả ảnh) trên khoảng điểm ảnh phân số của ô, điểm biên tính theo phần diện tích rơi vào ô. Kết quả làm tròn về số nguyên. Tất định và gần
+ * bất biến theo bề rộng (dải 720 và 800 cho lưới gần nhau), không phụ thuộc bộ lấy mẫu của trình duyệt.
+ */
+export function grayGridFromRgba(rgba: ArrayLike<number>, w: number, h: number): Float64Array {
+  if (!(Number.isInteger(w) && Number.isInteger(h) && w > 0 && h > 0) || rgba.length < w * h * 4) {
+    throw new RangeError("ảnh RGBA không khớp kích thước");
+  }
+  // Trọng số theo trục: phần của cột/hàng i nằm trong ô k (độ dài giao của [i, i+1) và [k·n/cells, (k+1)·n/cells)).
+  const axis = (n: number, cells: number) => {
+    const spans: { from: number; to: number; weight: (i: number) => number }[] = [];
+    for (let k = 0; k < cells; k++) {
+      const lo = (k * n) / cells;
+      const hi = ((k + 1) * n) / cells;
+      spans.push({
+        from: Math.floor(lo),
+        to: Math.min(n, Math.ceil(hi)),
+        weight: (i) => Math.max(0, Math.min(i + 1, hi) - Math.max(i, lo)),
+      });
+    }
+    return spans;
+  };
+  const xs = axis(w, DHASH_W);
+  const ys = axis(h, DHASH_H);
+  const luma = (i: number) =>
+    0.299 * (rgba[i] as number) + 0.587 * (rgba[i + 1] as number) + 0.114 * (rgba[i + 2] as number);
+  const out = new Float64Array(DHASH_W * DHASH_H);
+  for (let cy = 0; cy < DHASH_H; cy++) {
+    const ySpan = ys[cy] as (typeof ys)[number];
+    for (let cx = 0; cx < DHASH_W; cx++) {
+      const xSpan = xs[cx] as (typeof xs)[number];
+      let sum = 0;
+      let weight = 0;
+      for (let y = ySpan.from; y < ySpan.to; y++) {
+        const wy = ySpan.weight(y);
+        for (let x = xSpan.from; x < xSpan.to; x++) {
+          const wxy = wy * xSpan.weight(x);
+          sum += luma((y * w + x) * 4) * wxy;
+          weight += wxy;
+        }
+      }
+      // Làm tròn như đường băm cả ảnh (xám 8 bit): ô phẳng bằng nhau không bị rác dấu phẩy động quyết định bit.
+      out[cy * DHASH_W + cx] = Math.round(sum / weight);
+    }
+  }
+  return out;
+}

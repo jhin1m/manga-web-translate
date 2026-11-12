@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { bandWindow, dhashFromGray, hamming, isPlainHash, sameBand, sameImage } from "../src/dhash.ts";
+import {
+  bandWindow,
+  dhashFromGray,
+  grayGridFromRgba,
+  hamming,
+  isPlainHash,
+  sameBand,
+  sameImage,
+} from "../src/dhash.ts";
 
 /** 9×8 điểm xám từ hàm f(x, y). */
 const grid = (f: (x: number, y: number) => number) => Array.from({ length: 72 }, (_, i) => f(i % 9, Math.floor(i / 9)));
@@ -81,5 +89,65 @@ describe("sameBand", () => {
     const band = { dhash: "0000000000000000" };
     expect(sameBand("000000000000003f", band)).toBe(true);
     expect(sameBand("000000000000007f", band)).toBe(false);
+  });
+});
+
+describe("grayGridFromRgba", () => {
+  const rgba = (w: number, h: number, f: (x: number, y: number) => [number, number, number]) => {
+    const out = new Uint8ClampedArray(w * h * 4);
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) out.set([...f(x, y), 255], (y * w + x) * 4);
+    return out;
+  };
+
+  it("averages whole pixels per cell with the luminance weights of the whole-image path", () => {
+    // 9×8 ảnh: mỗi điểm là 1 ô.
+    const g = grayGridFromRgba(
+      rgba(9, 8, (x) => [x * 10, 0, 0]),
+      9,
+      8,
+    );
+    expect(g).toHaveLength(72);
+    expect(g[3]).toBe(Math.round(0.299 * 30));
+    const white = grayGridFromRgba(
+      rgba(9, 8, () => [255, 255, 255]),
+      9,
+      8,
+    );
+    expect(white[40]).toBe(255);
+  });
+
+  it("splits fractional pixel ranges by area", () => {
+    // Rộng 18 → mỗi ô 2 cột; cao 16 → mỗi ô 2 hàng. Cột chẵn tối, cột lẻ sáng → mỗi ô trung bình 2 cột.
+    const g = grayGridFromRgba(
+      rgba(18, 16, (x) => (x % 2 ? [200, 200, 200] : [0, 0, 0])),
+      18,
+      16,
+    );
+    for (const v of g) expect(v).toBeCloseTo(100, 6);
+    // Rộng 10: ô 0 phủ [0, 1.111) → cột 0 trọn + 0.111 cột 1.
+    const h = grayGridFromRgba(
+      rgba(10, 8, (x) => (x === 0 ? [0, 0, 0] : [90, 90, 90])),
+      10,
+      8,
+    );
+    expect(h[0]).toBe(Math.round((90 * (10 / 9 - 1)) / (10 / 9)));
+    expect(h[8]).toBeCloseTo(90, 6);
+  });
+
+  it("gives nearly the same grid for the same picture at two widths", () => {
+    const pic = (w: number, h: number) =>
+      rgba(w, h, (x, y) => {
+        const v = Math.floor(((x / w) * 9) % 2) ? 220 : 30 + ((y / h) * 8 > 4 ? 40 : 0);
+        return [v, v, v];
+      });
+    const a = grayGridFromRgba(pic(720, 100), 720, 100);
+    const b = grayGridFromRgba(pic(800, 111), 800, 111);
+    for (let i = 0; i < 72; i++) expect(Math.abs((a[i] as number) - (b[i] as number))).toBeLessThan(25);
+    expect(dhashFromGray(a)).toBe(dhashFromGray(b));
+  });
+
+  it("rejects a buffer that does not fit the size", () => {
+    expect(() => grayGridFromRgba(new Uint8ClampedArray(10), 9, 8)).toThrow(RangeError);
+    expect(() => grayGridFromRgba(new Uint8ClampedArray(0), 0, 8)).toThrow(RangeError);
   });
 });

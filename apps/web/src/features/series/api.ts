@@ -96,8 +96,8 @@ export type SkipImage = {
   url: string;
   created_at: string;
 };
-export const fetchSkipImages = (seriesId: string) =>
-  api<{ images: SkipImage[] }>(`/api/series/${seriesId}/skip-images`);
+export const fetchSkipImages = (seriesId: string, signal?: AbortSignal) =>
+  api<{ images: SkipImage[] }>(`/api/series/${seriesId}/skip-images`, { signal });
 /** "Luôn bỏ ở series này": học 1 ảnh gốc, mọi ảnh gốc nằm trọn trong 1 trang, hoặc 1 dải mép đã cắt của ảnh gốc. */
 export type LearnFrom =
   | { source_file_id: string }

@@ -3,6 +3,7 @@
  * "Bỏ cắt" + Hoàn tác không lỗi, "Dịch chương" cho trang cuối cao H − dải; chương không banner không bị cắt gì. Đo thời
  * gian so dải cho chương 96 ảnh với 5 dải.
  */
+import { hamming } from "@mtl/shared";
 import { expect, test } from "@playwright/test";
 import { WEB_URL } from "./env.ts";
 import { runFakeWorker } from "./fake-worker.ts";
@@ -16,6 +17,8 @@ const BAND = 50;
 const stripes = (x: number) => (Math.floor(x / 13) % 2 ? 30 : 220);
 /** Chỉ dải đáy có sọc; phần còn lại là dốc sáng dần (hash trơn). */
 const banner = (x: number, y: number) => (y >= H - BAND ? stripes(x) : x * 2);
+/** Cùng banner đáy nhưng tranh phía trên khác hẳn (không giống từng điểm ảnh với `banner`). */
+const bannerOverOtherArt = (x: number, y: number) => (y >= H - BAND ? stripes(x) : (x * 3 + y * 5) % 200);
 const plain = (x: number, y: number) => x + y / 4;
 
 /** Series tạo trong test; dọn cả khi test lỗi để không làm đổi series tự đoán ở các test thả file sau. */
@@ -89,7 +92,7 @@ test("a chapter dropped with the learned bottom banner is trimmed on creation; o
   expect(await trims(clean)).toEqual([null, null, null]);
 
   // Chương có banner ở ảnh cuối: cắt sẵn đúng dải, cờ "Credit · tự cắt".
-  const chapterId = await drop([png("p1.png", plain), png("p2.png", plain), png("p3.png", banner)]);
+  const chapterId = await drop([png("p1.png", plain), png("p2.png", plain), png("p3.png", bannerOverOtherArt)]);
   expect(await trims(chapterId)).toEqual([null, null, [0, BAND, "credit"]]);
   await page.reload();
   await expect(sources.locator("img")).toHaveCount(3);
@@ -166,4 +169,115 @@ test("matching 5 learned bands against a 96-image chapter stays well under the t
   expect(result.fingerprinted).toBe(96);
   expect(result.matched).toBe(0);
   expect(result.ms).toBeLessThan(300);
+});
+
+/**
+ * Băm dải thật trong Chromium: cùng banner dưới nền tranh khác nhau, cùng banner ở bề rộng 720 và 800 (co lại), mép
+ * trên, và đáy không có banner. Khoảng cách Hamming đo được in ra; ngưỡng khớp là 6.
+ */
+test("the band hash of one banner stays within the match threshold across art, widths and edges", async ({ page }) => {
+  await login(page);
+  const r = await page.evaluate(async () => {
+    const mod = await import(/* @vite-ignore */ "/src/features/upload/image-fingerprint.ts");
+    const BAND_H = 100;
+    const BASE_W = 720;
+    /** Số giả ngẫu nhiên tất định. */
+    const rng = (seed: number) => () => {
+      seed = (seed * 1664525 + 1013904223) >>> 0;
+      return seed / 2 ** 32;
+    };
+    /** Banner 720×100: nền màu, khung, nhiều khối chữ giả. */
+    const bannerCanvas = () => {
+      const c = new OffscreenCanvas(BASE_W, BAND_H);
+      const g = c.getContext("2d") as OffscreenCanvasRenderingContext2D;
+      const grad = g.createLinearGradient(0, 0, BASE_W, 0);
+      grad.addColorStop(0, "#1b3a6b");
+      grad.addColorStop(1, "#7a2150");
+      g.fillStyle = grad;
+      g.fillRect(0, 0, BASE_W, BAND_H);
+      const r = rng(7);
+      g.fillStyle = "#f4e9c8";
+      for (let i = 0; i < 40; i++) g.fillRect(20 + r() * 640, 10 + r() * 70, 12 + r() * 90, 6 + r() * 12);
+      g.fillStyle = "#ffcc00";
+      g.fillRect(560, 20, 120, 60);
+      return c;
+    };
+    const artCanvas = (w: number, h: number, seed: number, light: boolean) => {
+      const c = new OffscreenCanvas(w, h);
+      const g = c.getContext("2d") as OffscreenCanvasRenderingContext2D;
+      const r = rng(seed);
+      g.fillStyle = light ? "#fafafa" : "#d9d3c4";
+      g.fillRect(0, 0, w, h);
+      for (let i = 0; i < 120; i++) {
+        g.fillStyle = `hsl(${Math.floor(r() * 360)} ${Math.floor(r() * 60)}% ${Math.floor(20 + r() * 70)}%)`;
+        g.fillRect(r() * w, r() * h, 20 + r() * 200, 20 + r() * 200);
+      }
+      return c;
+    };
+    /** Trang rộng `w`: tranh (cao 600) rồi banner ở đáy (hoặc banner rồi tranh khi edge = top); gutter = dải trắng đệm. */
+    const page = async (w: number, edge: "top" | "bottom", seed: number, gutter: number, withBanner = true) => {
+      const scale = w / BASE_W;
+      const bh = Math.round(BAND_H * scale);
+      const artH = 600;
+      const c = new OffscreenCanvas(w, artH + gutter + (withBanner ? bh : 0));
+      const g = c.getContext("2d") as OffscreenCanvasRenderingContext2D;
+      g.imageSmoothingQuality = "high";
+      g.fillStyle = "#fff";
+      g.fillRect(0, 0, c.width, c.height);
+      const art = artCanvas(w, artH, seed, false);
+      const banner = bannerCanvas();
+      if (edge === "bottom") {
+        g.drawImage(art, 0, 0);
+        if (withBanner) g.drawImage(banner, 0, artH + gutter, w, bh);
+      } else {
+        if (withBanner) g.drawImage(banner, 0, 0, w, bh);
+        g.drawImage(art, 0, bh + gutter);
+      }
+      return c.convertToBlob({ type: "image/jpeg", quality: 0.85 });
+    };
+    const band = async (blob: Blob, edge: "top" | "bottom", w: number) => {
+      const f = await mod.bandFingerprint(blob, edge, Math.round(BAND_H * (w / BASE_W)));
+      return f?.dhash ?? null;
+    };
+
+    const out: Record<string, string | null | boolean> = {};
+    for (const edge of ["bottom", "top"] as const) {
+      out[`${edge}.learn`] = await band(await page(720, edge, 1, 0), edge, 720);
+      out[`${edge}.art2`] = await band(await page(720, edge, 2, 0), edge, 720);
+      out[`${edge}.art3.gutter40`] = await band(await page(720, edge, 3, 40), edge, 720);
+      out[`${edge}.art4.gutter150`] = await band(await page(720, edge, 4, 150), edge, 720);
+      out[`${edge}.w800`] = await band(await page(800, edge, 5, 0), edge, 800);
+      out[`${edge}.w690`] = await band(await page(690, edge, 6, 0), edge, 690);
+      out[`${edge}.nobanner`] = await band(await page(720, edge, 8, 0, false), edge, 720);
+    }
+
+    // Đường chạy thật (bandTrims): học ở 720, thả ở 800 / tranh khác; đáy không banner không khớp.
+    const learnedBlob = await page(720, "bottom", 1, 0);
+    const learned = await mod.bandFingerprint(learnedBlob, "bottom", BAND_H);
+    const bands = [{ edge: "bottom", ...learned }];
+    const targets = [
+      await page(720, "bottom", 11, 0),
+      await page(800, "bottom", 12, 0),
+      await page(720, "bottom", 13, 0, false),
+    ];
+    const fps = await mod.fingerprintAll(targets);
+    const trims = await mod.bandTrims(targets, fps, bands);
+    return { hashes: out, trims };
+  });
+
+  const d = (a: string | null | boolean, b: string | null | boolean) => hamming(a as string, b as string);
+  const report: Record<string, number> = {};
+  for (const edge of ["bottom", "top"]) {
+    const learn = r.hashes[`${edge}.learn`];
+    for (const k of ["art2", "art3.gutter40", "art4.gutter150", "w800", "w690"]) {
+      report[`${edge}.${k}`] = d(learn, r.hashes[`${edge}.${k}`]);
+    }
+    report[`${edge}.nobanner`] = d(learn, r.hashes[`${edge}.nobanner`]);
+  }
+  console.log(`band hamming distances (threshold 6): ${JSON.stringify(report)}`);
+  for (const [k, v] of Object.entries(report)) {
+    if (k.endsWith("nobanner")) expect(v, k).toBeGreaterThan(6);
+    else expect(v, k).toBeLessThanOrEqual(6);
+  }
+  expect(r.trims).toEqual([{ top: 0, bottom: 100 }, { top: 0, bottom: 111 }, null]);
 });

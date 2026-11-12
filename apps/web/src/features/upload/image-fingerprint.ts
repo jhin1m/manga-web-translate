@@ -7,6 +7,7 @@ import {
   DHASH_H,
   DHASH_W,
   dhashFromGray,
+  grayGridFromRgba,
   type ImageFingerprint,
   isPlainHash,
   MIN_TRIM_KEEP_PX,
@@ -29,6 +30,18 @@ function dhashOfRegion(bmp: ImageBitmap, sx: number, sy: number, sw: number, sh:
       0.299 * (rgba[i * 4] as number) + 0.587 * (rgba[i * 4 + 1] as number) + 0.114 * (rgba[i * 4 + 2] as number);
   }
   return dhashFromGray(gray);
+}
+
+/**
+ * dHash của dải ngang [sy, sy + sh) toàn bề rộng: chép dải 1:1 sang canvas riêng (không co → không lẫn điểm ảnh ngoài
+ * dải như khi co cả bitmap về 9×8) rồi lấy trung bình theo diện tích về 9×8. Một hàm cho cả học dải và so dải.
+ */
+function dhashOfBand(bmp: ImageBitmap, sy: number, sh: number): string | null {
+  const canvas = new OffscreenCanvas(bmp.width, sh);
+  const ctx = canvas.getContext("2d", { willReadFrequently: true });
+  if (!ctx) return null;
+  ctx.drawImage(bmp, 0, sy, bmp.width, sh, 0, 0, bmp.width, sh);
+  return dhashFromGray(grayGridFromRgba(ctx.getImageData(0, 0, bmp.width, sh).data, bmp.width, sh));
 }
 
 export async function fingerprint(blob: Blob): Promise<ImageFingerprint | null> {
@@ -59,7 +72,7 @@ export async function bandFingerprint(
     bmp = await createImageBitmap(blob);
     if (bmp.height < bandPx) return null;
     const sy = edge === "top" ? 0 : bmp.height - bandPx;
-    const dhash = dhashOfRegion(bmp, 0, sy, bmp.width, bandPx);
+    const dhash = dhashOfBand(bmp, sy, bandPx);
     return dhash ? { dhash, width: bmp.width, height: bandPx } : null;
   } catch {
     return null;
@@ -103,8 +116,10 @@ export async function bandTrims(
   if (!bands.length) return out;
   const last = blobs.length - BAND_CANDIDATES;
   const candidates = blobs.flatMap((_, i) => (fps[i] && (i < BAND_CANDIDATES || i >= last) ? [i] : []));
-  await Promise.all(
-    candidates.map(async (i) => {
+  let next = 0;
+  const worker = async () => {
+    for (let n = next++; n < candidates.length; n = next++) {
+      const i = candidates[n] as number;
       const edges = [...(i < BAND_CANDIDATES ? (["top"] as const) : []), ...(i >= last ? (["bottom"] as const) : [])];
       let bmp: ImageBitmap | undefined;
       try {
@@ -115,7 +130,7 @@ export async function bandTrims(
             if (band.edge !== edge) continue;
             const win = bandWindow(bmp.width, bmp.height, band, edge);
             if (!win || bmp.height - trim.top - trim.bottom - win.sh < MIN_TRIM_KEEP_PX) continue;
-            const hash = dhashOfRegion(bmp, 0, win.sy, bmp.width, win.sh);
+            const hash = dhashOfBand(bmp, win.sy, win.sh);
             if (hash && !isPlainHash(hash) && sameBand(hash, band)) {
               trim[edge] = win.sh;
               break;
@@ -128,7 +143,8 @@ export async function bandTrims(
       } finally {
         bmp?.close();
       }
-    }),
-  );
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(CONCURRENCY, candidates.length) }, worker));
   return out;
 }
