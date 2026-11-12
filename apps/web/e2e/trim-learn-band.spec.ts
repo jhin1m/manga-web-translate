@@ -12,6 +12,16 @@ const BAND = 50;
 /** Sọc dọc xen kẽ → dHash có nhiều bit 1, không bị coi là ảnh trơn. */
 const stripes = (x: number) => (Math.floor(x / 13) % 2 ? 30 : 220);
 
+/** Series tạo trong test; dọn cả khi test lỗi để không làm đổi series tự đoán ở các test thả file sau. */
+let sid: string | null = null;
+
+test.afterEach(async ({ page }) => {
+  if (!sid) return;
+  const id = sid;
+  sid = null;
+  await page.request.delete(`/api/series/${id}`, { headers: { origin: WEB_URL } });
+});
+
 test("learn the trimmed bottom band, see it in the series settings, learning twice says it already exists", async ({
   page,
 }) => {
@@ -21,7 +31,7 @@ test("learn the trimmed bottom band, see it in the series settings, learning twi
     data: { title: "Series học dải e2e" },
   });
   expect(created.status()).toBe(201);
-  const sid = ((await created.json()) as { id: string }).id;
+  sid = ((await created.json()) as { id: string }).id;
 
   await page.goto(`/s/${sid}`);
   await page
@@ -72,6 +82,4 @@ test("learn the trimmed bottom band, see it in the series settings, learning twi
   await expect(learned.getByRole("listitem")).toHaveCount(1);
   await learned.getByRole("button", { name: /^Xoá dải cuối ảnh/ }).click();
   await expect(learned.getByText("Chưa có ảnh nào.")).toBeVisible();
-
-  expect((await page.request.delete(`/api/series/${sid}`, { headers: { origin: WEB_URL } })).status()).toBe(204);
 });

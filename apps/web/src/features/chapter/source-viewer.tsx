@@ -3,12 +3,18 @@
  * webtoon. File chưa tải lên (URL ký 404) → ô "Chưa tải", thử lại mỗi khi upload xong thêm file.
  *
  * Ảnh đã cắt mép: dải bị cắt phủ mờ + chú thích. Chế độ cắt (`trimming`, mở từ menu thumbnail): kéo 2 thanh mép
- * trên / dưới, thanh dưới canvas thay pager bằng số px + Huỷ / Xong; Enter = Xong, Esc = Huỷ ở bất cứ đâu trên màn.
+ * trên / dưới, thanh dưới canvas thay pager bằng số px + Huỷ / Xong; Enter = Xong, Esc = Huỷ trên màn (trừ khi
+ * focus đang ở ô nhập / menu / hộp thoại: các phần tử đó tự xử lý phím).
  */
 import { useEffect, useRef, useState } from "react";
 import { useChapterUpload } from "../upload/upload-manager.ts";
 import { clampTrim, SKIP_LABEL, type SourceItem } from "./source-rail-model.ts";
 import { SourceTrimOverlay, type TrimEdge } from "./source-trim-overlay.tsx";
+
+/** Phần tử tự xử lý Enter / Esc: ô nhập, menu, hộp thoại / popover. Nút / liên kết chỉ giữ Enter (Esc vẫn huỷ). */
+const OWN_KEYS =
+  'input, textarea, select, [contenteditable]:not([contenteditable="false"]), form, [role="menu"], [role="menuitem"], [role="dialog"], [role="listbox"], [role="combobox"]';
+const OWN_ENTER = `${OWN_KEYS}, button, a[href]`;
 
 type Edges = { top: number; bottom: number };
 
@@ -36,9 +42,22 @@ export function SourceViewer(props: {
   // Đổi ảnh / upload xong thêm file → thử tải lại.
   // biome-ignore lint/correctness/useExhaustiveDependencies: retryKey chỉ dùng để kích hoạt thử lại
   useEffect(() => setMissing(false), [item?.url, retryKey]);
-  // Vào / rời chế độ cắt hoặc đổi ảnh → bỏ bản nháp.
+  /** Đã bấm Xong: bản nháp ở lại hiển thị tới khi dữ liệu ảnh mang số mới (hoặc bị trả lại), không chớp số cũ. */
+  const committed = useRef(false);
+  // Đổi ảnh, hoặc vào chế độ cắt → bản nháp mới; rời chế độ cắt mà không bấm Xong (Huỷ / bị thoát) → bỏ nháp.
   // biome-ignore lint/correctness/useExhaustiveDependencies: các giá trị này chỉ dùng để kích hoạt đặt lại
-  useEffect(() => setDraft(null), [trimming, item?.id]);
+  useEffect(() => {
+    if (trimming || !committed.current) setDraft(null);
+    if (trimming) committed.current = false;
+  }, [trimming, item?.id]);
+  // Dữ liệu ảnh đã nhận số cắt mới (hoặc được hoàn lại khi lỗi) → bỏ nháp đã chốt.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: chỉ chạy khi trim của ảnh đổi
+  useEffect(() => {
+    if (committed.current) {
+      committed.current = false;
+      setDraft(null);
+    }
+  }, [item?.trim]);
 
   const edges: Edges = draft ?? item?.trim ?? { top: 0, bottom: 0 };
   const ready = natural !== null && !missing;
@@ -57,23 +76,27 @@ export function SourceViewer(props: {
     );
   };
   const done = () => {
-    if (natural !== null) props.onTrimDone(edges, natural);
+    if (natural === null) return;
+    committed.current = true;
+    props.onTrimDone(edges, natural);
   };
   const latest = useRef({ done, cancel: props.onTrimCancel });
   latest.current = { done, cancel: props.onTrimCancel };
   useEffect(() => {
     if (!trimming) return;
+    // Pha nổi bọt trên document: menu / popover / ô nhập xử lý phím trước (việc của chúng không bị coi là Xong / Huỷ),
+    // còn phím tắt cấp cửa sổ của màn chương chạy sau nên không giành mất Enter / Esc.
     const on = (e: KeyboardEvent) => {
-      if (e.isComposing) return;
+      if (e.isComposing || e.defaultPrevented) return;
+      if (e.target instanceof Element && e.target.closest(e.key === "Enter" ? OWN_ENTER : OWN_KEYS)) return;
       if (e.key === "Escape") latest.current.cancel();
-      // Enter trên nút Huỷ / Xong là bấm nút đó.
-      else if (e.key === "Enter" && !(e.target instanceof Element && e.target.closest("button"))) latest.current.done();
+      else if (e.key === "Enter") latest.current.done();
       else return;
       e.preventDefault();
       e.stopPropagation();
     };
-    addEventListener("keydown", on, true);
-    return () => removeEventListener("keydown", on, true);
+    document.addEventListener("keydown", on);
+    return () => document.removeEventListener("keydown", on);
   }, [trimming]);
 
   return (

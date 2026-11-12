@@ -54,7 +54,8 @@ function TrimHandle(props: {
 }) {
   const { edge, at, height } = props;
   const ref = useRef<HTMLDivElement>(null);
-  const dragging = useRef(false);
+  /** Đang kéo: khoảng lệch (px ảnh thật) từ đường cắt tới con trỏ lúc bấm, để đường không nhảy theo con trỏ. */
+  const grab = useRef<number | null>(null);
   // Vào chế độ cắt: focus thanh trên để bàn phím dùng được ngay.
   useEffect(() => {
     if (edge === "top") ref.current?.focus({ preventScroll: true });
@@ -63,20 +64,27 @@ function TrimHandle(props: {
   /** Đặt số px cắt của thanh này theo vị trí đường cắt `y` (px ảnh thật, tính từ đỉnh ảnh). */
   const setLine = (y: number) => props.onChange(edge, edge === "top" ? y : height - y);
 
+  /** Vị trí con trỏ theo px ảnh thật tính từ đỉnh ảnh; null khi chưa đo được khung. */
+  const pointerY = (e: PointerEvent<HTMLDivElement>) => {
+    const box = props.frame.current?.getBoundingClientRect();
+    return box && box.height > 0 ? ((e.clientY - box.top) / box.height) * height : null;
+  };
   const onPointerDown = (e: PointerEvent<HTMLDivElement>) => {
     if (e.button !== 0 && e.pointerType === "mouse") return;
     e.preventDefault();
     e.currentTarget.setPointerCapture(e.pointerId);
     e.currentTarget.focus({ preventScroll: true });
-    dragging.current = true;
+    const y = pointerY(e);
+    grab.current = y === null ? 0 : y - at;
   };
   const onPointerMove = (e: PointerEvent<HTMLDivElement>) => {
-    const box = props.frame.current?.getBoundingClientRect();
-    if (!dragging.current || !box || box.height <= 0) return;
-    setLine(((e.clientY - box.top) / box.height) * height);
+    const y = pointerY(e);
+    if (grab.current === null || y === null) return;
+    setLine(y - grab.current);
   };
+  // Cũng chạy khi mất capture không kèm pointerup (nhả chuột ngoài cửa sổ, chuyển ứng dụng).
   const endDrag = (e: PointerEvent<HTMLDivElement>) => {
-    dragging.current = false;
+    grab.current = null;
     if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
   };
 
@@ -107,6 +115,7 @@ function TrimHandle(props: {
       onPointerMove={onPointerMove}
       onPointerUp={endDrag}
       onPointerCancel={endDrag}
+      onLostPointerCapture={endDrag}
       onKeyDown={onKeyDown}
     />
   );

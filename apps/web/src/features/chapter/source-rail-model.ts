@@ -105,6 +105,20 @@ export function clampTrim(
 }
 
 /**
+ * Số px cắt để học lại dải khi thử lại: mỗi mép đã yêu cầu (`requested` > 0) lấy số hiện tại của ảnh; mép nào nay
+ * không còn cắt (0 / null) → null (không còn dải để học).
+ */
+export function currentBandTrim(
+  requested: { top: number; bottom: number },
+  current: { top: number; bottom: number } | null | undefined,
+): { top: number; bottom: number } | null {
+  const pick = (edge: "top" | "bottom") => (requested[edge] > 0 ? (current?.[edge] ?? 0) : 0);
+  const next = { top: pick("top"), bottom: pick("bottom") };
+  const gone = (["top", "bottom"] as const).some((edge) => requested[edge] > 0 && next[edge] <= 0);
+  return gone ? null : next;
+}
+
+/**
  * Nhãn dưới "Ảnh n": bỏ qua > trạng thái tải > gợi ý credit; tải xong / không tải trong tab này và không lệch khổ →
  * không nhãn.
  */

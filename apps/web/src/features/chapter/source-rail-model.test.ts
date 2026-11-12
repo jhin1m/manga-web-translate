@@ -4,6 +4,7 @@ import type { SourceFileImage } from "./api.ts";
 import {
   clampTrim,
   creditHints,
+  currentBandTrim,
   type IngestView,
   ingestTag,
   moveItem,
@@ -216,5 +217,17 @@ describe("trim labels", () => {
       null,
     ]);
     expect(items[1]?.trim).toEqual(trim);
+  });
+});
+
+describe("currentBandTrim", () => {
+  it("uses the current value of each requested edge", () => {
+    expect(currentBandTrim({ top: 0, bottom: 50 }, { top: 7, bottom: 80 })).toEqual({ top: 0, bottom: 80 });
+    expect(currentBandTrim({ top: 20, bottom: 50 }, { top: 30, bottom: 40 })).toEqual({ top: 30, bottom: 40 });
+  });
+  it("returns null when a requested edge is no longer trimmed", () => {
+    expect(currentBandTrim({ top: 0, bottom: 50 }, null)).toBeNull();
+    expect(currentBandTrim({ top: 0, bottom: 50 }, { top: 10, bottom: 0 })).toBeNull();
+    expect(currentBandTrim({ top: 20, bottom: 50 }, { top: 0, bottom: 50 })).toBeNull();
   });
 });

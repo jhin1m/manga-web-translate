@@ -85,7 +85,14 @@ import { ProofreadPanel, usePendingProofread } from "./proofread-panel.tsx";
 import { BlockActions, SelectPanel } from "./select-panel.tsx";
 import { ShortcutHelp } from "./shortcut-help.tsx";
 import { SourceRail } from "./source-rail.tsx";
-import { type IngestView, moveItem, type SourceItem, sourceCounts, stepSource } from "./source-rail-model.ts";
+import {
+  currentBandTrim,
+  type IngestView,
+  moveItem,
+  type SourceItem,
+  sourceCounts,
+  stepSource,
+} from "./source-rail-model.ts";
 import { SourceViewer } from "./source-viewer.tsx";
 import { stageLabel } from "./stage-labels.ts";
 import { chapterChip, chapterProgress, chipWithActivity, isChapterSettled, nextReviewPage } from "./status.ts";
@@ -744,7 +751,13 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
     setSourcePick(id);
   };
   const sourcesEditable = status === "draft" || (status === "partial_failed" && pages.length === 0);
-  const trimming = trimId !== null && trimId === sourceId && sourcesEditable;
+  const trimming = trimId !== null && trimId === sourceId && sourcesEditable && !sources[sourceIdx]?.skip;
+  // Hết sửa được / ảnh vừa bị bỏ qua giữa lúc cắt → thoát hẳn chế độ cắt (không tự mở lại khi sửa được trở lại).
+  useEffect(() => {
+    if (trimId !== null && !trimming) setTrimId(null);
+  }, [trimId, trimming]);
+  const sourcesRef = useRef(sources);
+  sourcesRef.current = sources;
   // Đang cắt trang → cột ảnh gốc hiện bước + đếm của job ingest (progress null = còn xếp hàng).
   const ingestJob = data.progress?.jobs.find((j) => j.type === "chapter.ingest" && j.status === "running");
   const ingest: IngestView | undefined =
@@ -821,7 +834,15 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
   // Dải đọc từ chính ảnh đang hiện (blob local hoặc URL ký); chiều cao dải do server lấy từ trim đã lưu.
   const learnBands = useCallback(
     async (it: SourceItem, trim: { top: number; bottom: number }) => {
-      const retry = { label: "Thử lại", run: () => void learnBands(it, trim) };
+      // Thử lại đọc số cắt hiện tại của ảnh (có thể đã đổi từ lúc toast hiện); mép không còn cắt thì không có dải để học.
+      const retry = {
+        label: "Thử lại",
+        run: () => {
+          const now = currentBandTrim(trim, sourcesRef.current.find((f) => f.id === it.id)?.trim);
+          if (now) void learnBands(it, now);
+          else notify({ tone: "danger", text: "Ảnh không còn cắt mép này — không có dải để học." });
+        },
+      };
       notify({ tone: "info", text: "Đang lưu dải tự cắt…" });
       try {
         const res = await fetch(it.url);

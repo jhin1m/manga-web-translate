@@ -12,6 +12,16 @@ import { login, state } from "./helpers.ts";
 const H = 300;
 const BOTTOM = 53;
 
+/** Series tạo trong test; dọn cả khi test lỗi để không làm đổi series tự đoán ở các test thả file sau. */
+let sid: string | null = null;
+
+test.afterEach(async ({ page }) => {
+  if (!sid) return;
+  const id = sid;
+  sid = null;
+  await page.request.delete(`/api/series/${id}`, { headers: { origin: WEB_URL } });
+});
+
 test("trim the bottom edge of the last image, keep it across reload, then translate with the trimmed height", async ({
   page,
 }) => {
@@ -21,7 +31,7 @@ test("trim the bottom edge of the last image, keep it across reload, then transl
     data: { title: "Series cắt mép e2e" },
   });
   expect(created.status()).toBe(201);
-  const sid = ((await created.json()) as { id: string }).id;
+  sid = ((await created.json()) as { id: string }).id;
 
   await page.goto(`/s/${sid}`);
   await page
@@ -130,7 +140,4 @@ test("trim the bottom edge of the last image, keep it across reload, then transl
     .toEqual([1000, H - BOTTOM]);
   ready = true;
   await worker;
-
-  // Dọn: series dư làm đổi series tự đoán ở các test thả file sau.
-  expect((await page.request.delete(`/api/series/${sid}`, { headers: { origin: WEB_URL } })).status()).toBe(204);
 });
