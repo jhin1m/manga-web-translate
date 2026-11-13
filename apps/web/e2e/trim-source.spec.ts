@@ -1,7 +1,7 @@
 /**
  * Cắt mép ảnh gốc trước "Dịch chương": nút Cắt mép ở rail trái → panel (ô số Trên / Dưới) + 2 thanh kéo trên canvas
  * (cùng số) → Enter / Lưu, Esc / Huỷ; đổi ảnh khi nháp đã khác thì tự lưu; zoom (nút, Ctrl+cuộn) không làm lệch px
- * ảnh thật; trim giữ sau khi tải lại, "Bỏ cắt" + Hoàn tác; "Dịch chương" tự lưu nháp chưa lưu rồi mới chạy, trang cuối cao đúng phần ảnh còn lại
+ * ảnh thật và giữ khi đổi ảnh; trim giữ sau khi tải lại, "Bỏ cắt" + Hoàn tác; "Dịch chương" tự lưu nháp chưa lưu rồi mới chạy, trang cuối cao đúng phần ảnh còn lại
  * (worker giả tính theo trim trong inputs).
  */
 import { expect, test } from "@playwright/test";
@@ -176,17 +176,22 @@ test("trim the bottom edge of the last image, keep it across reload, then transl
   await page.mouse.up();
   await expect.poll(async () => Math.abs(Number(await bottomField.inputValue()) - (40 + 60 / scale))).toBeLessThan(3);
   await bottomField.fill("40");
-  // Về Vừa khung bằng nút %; đổi ảnh cũng về Vừa khung.
+  // Về Vừa khung bằng nút %; mức zoom giữ khi đổi ảnh (như editor giữ khi đổi trang).
   await page.getByRole("button", { name: /^Đang \d+%\. Bấm để/ }).click();
   await expect.poll(async () => (await imgBox()).width).toBeCloseTo(fit.width, 0);
   await page.getByRole("button", { name: "Phóng to" }).click();
+  const kept = page.getByRole("button", { name: "Đang 125%. Bấm để xem cỡ thật 100%" });
+  await expect(kept).toBeVisible();
   await thumb1.click();
-  await expect(page.getByRole("button", { name: /^Đang vừa khung/ })).toBeVisible();
+  await expect(kept).toBeVisible();
+  const img1 = page.getByRole("img", { name: "Ảnh gốc 1" });
+  await expect.poll(async () => (await img1.boundingBox())?.width ?? 0).toBeCloseTo(120 * 1.25, 0);
   await thumb2.click();
-  await expect(page.getByRole("button", { name: /^Đang vừa khung/ })).toBeVisible();
-  await page.getByRole("button", { name: "Phóng to" }).click();
-  await thumb1.click();
-  await thumb2.click();
+  await expect(kept).toBeVisible();
+  await expect.poll(async () => (await imgBox()).width).toBeCloseTo(120 * 1.25, 0);
+  // % : 125% → 100% → Vừa khung.
+  await kept.click();
+  await page.getByRole("button", { name: "Đang 100%. Bấm để vừa khung" }).click();
   await expect(page.getByRole("button", { name: /^Đang vừa khung/ })).toBeVisible();
   await panel.getByRole("button", { name: "Huỷ" }).click();
   await expect.poll(trimmedOnServer).toEqual([null, [0, 40]]);

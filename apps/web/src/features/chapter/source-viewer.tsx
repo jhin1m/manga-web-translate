@@ -3,14 +3,19 @@
  * webtoon. File chưa tải lên (URL ký 404) → ô "Chưa tải", thử lại mỗi khi upload xong thêm file.
  *
  * Zoom: cụm − / % / + cạnh pager (% đổi Vừa khung ↔ 100% như editor), Ctrl/⌘+cuộn và chụm trackpad (wheel kèm ctrlKey)
- * zoom quanh con trỏ, cuộn thường = cuộn ảnh; đổi ảnh → về Vừa khung. Thanh cắt đặt theo % chiều cao ảnh nên đúng
- * px ảnh thật ở mọi mức zoom.
+ * zoom quanh con trỏ, cuộn thường = cuộn ảnh. Mức zoom giữ khi đổi ảnh (như editor giữ khi đổi trang); ảnh mới rộng
+ * hơn khung thì cuộn ngang căn giữa. Thanh cắt đặt theo % chiều cao ảnh nên đúng px ảnh thật ở mọi mức zoom.
+ *
+ * Cuộn quá mép dưới / trên = sang ảnh sau / trước (`editor/wheel-page-flip.ts`, cùng ngưỡng + khoá quán tính với
+ * editor), qua `onStep` như pager; cuộn lên vào cuối ảnh trước. Tắt khi đang cắt mép (kéo thanh dưới sát đáy không lỡ
+ * tay đổi ảnh rồi tự lưu).
  *
  * Ảnh đã cắt mép: dải bị cắt phủ mờ + chú thích. Chế độ cắt (`trimming`, panel Cắt mép đang mở): kéo 2 thanh mép
  * trên / dưới (số nằm ở panel, hai bên đồng bộ qua `edges`); Enter = Lưu, Esc = Huỷ trên màn (trừ khi focus đang ở ô
  * nhập / menu / hộp thoại: các phần tử đó tự xử lý phím).
  */
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { type FlipState, initialFlip, stepFlip } from "../editor/wheel-page-flip.ts";
 import { useChapterUpload } from "../upload/upload-manager.ts";
 import { ZoomControls } from "./canvas-controls.tsx";
 import { SKIP_LABEL, type SourceItem } from "./source-rail-model.ts";
@@ -49,26 +54,29 @@ export function SourceViewer(props: {
   const [missing, setMissing] = useState(false);
   const frame = useRef<HTMLDivElement>(null);
   const scroller = useRef<HTMLDivElement>(null);
+  const canvas = useRef<HTMLDivElement>(null);
   // Đổi ảnh / upload xong thêm file → thử tải lại.
   // biome-ignore lint/correctness/useExhaustiveDependencies: retryKey chỉ dùng để kích hoạt thử lại
   useEffect(() => setMissing(false), [item?.url, retryKey]);
 
   // ---- Zoom ----
-  /** Gắn với id ảnh: đổi ảnh → coi như Vừa khung, không cần effect đặt lại. */
-  const [zoomState, setZoomState] = useState<{ id: string; scale: number } | null>(null);
-  const zoom = item && zoomState?.id === item.id ? zoomState.scale : null;
-  // Rời ảnh đã zoom là bỏ zoom của nó: quay lại ảnh đó cũng bắt đầu từ Vừa khung.
-  if (zoomState && zoomState.id !== item?.id) setZoomState(null);
+  /** Scale tuyệt đối đã chọn (null = Vừa khung); giữ qua đổi ảnh. */
+  const [zoom, setZoom] = useState<number | null>(null);
   /** Bề ngang vùng chứa ảnh (khung cuộn trừ padding), để tính cỡ "Vừa khung". */
   const [avail, setAvail] = useState(0);
   const fit = natural ? fitScale(natural.width, avail) : 1;
   const scale = zoom ?? fit;
   const percent = Math.round(scale * 100);
+  /** Ảnh đã đo xong mới đặt cỡ zoom; trước đó (vừa đổi ảnh, chưa tải) ảnh chưa hiện gì. */
+  const sized = zoom !== null && natural !== null;
   const anchor = useRef<Anchor | null>(null);
-  const live = useRef({ item, natural, scale, fit });
-  live.current = { item, natural, scale, fit };
+  const { onStep } = props;
+  const live = useRef({ item, natural, scale, fit, index, total, trimming, onStep });
+  live.current = { item, natural, scale, fit, index, total, trimming, onStep };
   /** Scale mới nhất đã yêu cầu nhưng React chưa vẽ (nhiều wheel đến liên tiếp). */
   const wanted = useRef<number | null>(null);
+  /** Trạng thái cuộn quá mép; sống qua đổi ảnh để khoá quán tính nuốt cả wheel rơi vào khung cuộn mới. */
+  const flip = useRef<FlipState>(initialFlip);
   // biome-ignore lint/correctness/useExhaustiveDependencies: xoá scale đang chờ khi React đã vẽ xong
   useEffect(() => {
     wanted.current = null;
@@ -89,7 +97,7 @@ export function SourceViewer(props: {
       cy: clientY,
     };
     wanted.current = clampZoom(next);
-    setZoomState({ id: cur.item.id, scale: wanted.current });
+    setZoom(wanted.current);
   };
   const centre = () => {
     const box = scroller.current?.getBoundingClientRect();
@@ -101,9 +109,32 @@ export function SourceViewer(props: {
   };
   const zoomToggle = () => {
     const c = centre();
-    if (zoom !== null && percent === 100) setZoomState(null);
+    if (zoom !== null && percent === 100) setZoom(null);
     else zoomTo(1, c.x, c.y);
   };
+
+  // ---- Vị trí cuộn khi vào ảnh mới ----
+  /** Lần đổi ảnh sắp tới đến từ cuộn lên quá mép trên → vào ở cuối ảnh. */
+  const enterFromBottom = useRef(false);
+  /** Ảnh vừa vào, chờ tải + đo xong để đặt vị trí cuộn ban đầu. */
+  const entry = useRef<{ id: string; fromBottom: boolean } | null>(null);
+  // Khung cuộn mới (key = id ảnh) mở ở đầu ảnh; chỉ cần đặt thêm khi vào từ đáy hoặc ảnh đang zoom rộng hơn khung.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: chỉ chạy khi đổi ảnh
+  useLayoutEffect(() => {
+    entry.current = item ? { id: item.id, fromBottom: enterFromBottom.current } : null;
+    enterFromBottom.current = false;
+  }, [item?.id]);
+  // Ảnh đã đo xong (đã vẽ đúng cỡ zoom): căn giữa ngang, vào từ đáy thì cuộn xuống cuối.
+  useLayoutEffect(() => {
+    const e = entry.current;
+    const box = scroller.current;
+    const img = frame.current?.querySelector("img");
+    // Chờ <img> có cỡ thật (ảnh chưa tải dù `natural` đã biết): lần đo sau `onLoad` gọi lại effect này.
+    if (!e || e.id !== item?.id || !box || natural === null || !img?.complete || img.naturalHeight === 0) return;
+    entry.current = null;
+    if (box.scrollWidth > box.clientWidth) box.scrollLeft = (box.scrollWidth - box.clientWidth) / 2;
+    if (e.fromBottom) box.scrollTop = box.scrollHeight;
+  }, [item?.id, natural]);
 
   // Sau khi cỡ ảnh đổi: kéo cuộn để điểm neo về lại dưới con trỏ.
   useLayoutEffect(() => {
@@ -118,7 +149,7 @@ export function SourceViewer(props: {
     box.scrollTop += anchorShift(rect.top, a.ny, zoom, a.cy);
   }, [zoom]);
 
-  // Đo bề ngang khung; Ctrl/⌘+cuộn + chụm cần listener không-passive để chặn zoom của trình duyệt.
+  // Đo bề ngang khung cuộn (mỗi ảnh một khung mới).
   // biome-ignore lint/correctness/useExhaustiveDependencies: gắn lại khi khung cuộn mới (đổi ảnh)
   useEffect(() => {
     const box = scroller.current;
@@ -130,33 +161,75 @@ export function SourceViewer(props: {
     measureBox();
     const ro = new ResizeObserver(measureBox);
     ro.observe(box);
+    return () => ro.disconnect();
+  }, [item?.id]);
+
+  // Wheel / chụm: listener không-passive (chặn zoom của trình duyệt, nuốt quán tính sau khi đổi ảnh) gắn MỘT lần lên
+  // `.cw-canvas` (không bị key), đọc khung cuộn hiện tại lúc có sự kiện. Gắn theo khung cuộn thì giữa lúc khung mới vào
+  // DOM và lúc effect gắn lại có khe hở: wheel quán tính lọt qua, cuộn lệch ảnh vừa vào.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: chỉ đọc ref / live.current, các hàm dùng đều ổn định
+  useEffect(() => {
+    const root = canvas.current;
+    if (!root) return;
+    /** Khung cuộn đang hiện, nếu sự kiện rơi vào nó (không tính cụm pager / zoom bên dưới). */
+    const target = (e: Event) => {
+      const box = scroller.current;
+      return box && e.target instanceof Node && box.contains(e.target) ? box : null;
+    };
     const onWheel = (e: WheelEvent) => {
-      if (!(e.ctrlKey || e.metaKey)) return;
-      e.preventDefault();
-      if (!live.current.natural) return;
-      zoomTo(wheelZoom(wanted.current ?? live.current.scale, e.deltaY), e.clientX, e.clientY);
+      const box = target(e);
+      if (!box) return;
+      const cur = live.current;
+      if (e.ctrlKey || e.metaKey) {
+        e.preventDefault();
+        if (cur.natural) zoomTo(wheelZoom(wanted.current ?? cur.scale, e.deltaY), e.clientX, e.clientY);
+        return;
+      }
+      if (cur.trimming) return;
+      const r = stepFlip(flip.current, {
+        t: e.timeStamp,
+        deltaX: e.deltaX,
+        deltaY: e.deltaY,
+        deltaMode: e.deltaMode,
+        modified: e.shiftKey,
+        // Ảnh nằm trọn khung (hoặc ô "Chưa tải") không cuộn được = ở cả hai mép.
+        atTop: box.scrollTop <= 0,
+        atBottom: box.scrollTop + box.clientHeight >= box.scrollHeight - 1,
+        hasPrev: cur.index > 0,
+        hasNext: cur.index >= 0 && cur.index < cur.total - 1,
+        busy: e.buttons !== 0,
+        frameH: box.clientHeight,
+      });
+      flip.current = r.state;
+      // Quán tính của lần đổi: nuốt, để ảnh mới vào đúng đầu / cuối.
+      if (r.locked) e.preventDefault();
+      if (r.flip) {
+        enterFromBottom.current = r.flip < 0;
+        cur.onStep(r.flip);
+      }
     };
     // Safari: chụm trackpad bắn gesture* (không phải wheel + ctrl) và zoom cả trang nếu không chặn.
     let pinchBase = 1;
     const onGestureStart = (e: Event) => {
+      if (!target(e)) return;
       e.preventDefault();
       pinchBase = wanted.current ?? live.current.scale;
     };
     const onGestureChange = (e: Event) => {
+      if (!target(e)) return;
       e.preventDefault();
       const g = e as Event & { scale: number; clientX: number; clientY: number };
       if (live.current.natural) zoomTo(pinchBase * g.scale, g.clientX, g.clientY);
     };
-    box.addEventListener("wheel", onWheel, { passive: false });
-    box.addEventListener("gesturestart", onGestureStart);
-    box.addEventListener("gesturechange", onGestureChange);
+    root.addEventListener("wheel", onWheel, { passive: false });
+    root.addEventListener("gesturestart", onGestureStart);
+    root.addEventListener("gesturechange", onGestureChange);
     return () => {
-      ro.disconnect();
-      box.removeEventListener("wheel", onWheel);
-      box.removeEventListener("gesturestart", onGestureStart);
-      box.removeEventListener("gesturechange", onGestureChange);
+      root.removeEventListener("wheel", onWheel);
+      root.removeEventListener("gesturestart", onGestureStart);
+      root.removeEventListener("gesturechange", onGestureChange);
     };
-  }, [item?.id]);
+  }, []);
 
   const ready = natural !== null && !missing;
   /** Vừa mở chế độ cắt: thanh trên nhận focus một lần; đổi ảnh khi panel đang mở không giành focus của rail. */
@@ -193,9 +266,9 @@ export function SourceViewer(props: {
   }, [trimming]);
 
   return (
-    <div className="cw-canvas">
+    <div className="cw-canvas" ref={canvas}>
       {/* key: đổi ảnh → khung cuộn mới, về đầu ảnh (ảnh webtoon cao). */}
-      <div className="cw-source-view" key={item?.id} ref={scroller} data-zoomed={zoom !== null || undefined}>
+      <div className="cw-source-view" key={item?.id} ref={scroller} data-zoomed={sized || undefined}>
         {!item ? (
           <p className="muted">Chưa có ảnh.</p>
         ) : missing ? (
@@ -206,7 +279,8 @@ export function SourceViewer(props: {
               <img
                 src={item.url}
                 alt={`Ảnh gốc ${item.n}`}
-                style={zoom !== null && natural ? { width: natural.width * zoom } : undefined}
+                // Đang zoom mà ảnh mới chưa đo: ẩn tới khi biết cỡ, không nháy ở cỡ vừa khung rồi mới nhảy.
+                style={zoom === null ? undefined : natural ? { width: natural.width * zoom } : { visibility: "hidden" }}
                 onLoad={(e) => {
                   const height = e.currentTarget.naturalHeight;
                   const width = e.currentTarget.naturalWidth;

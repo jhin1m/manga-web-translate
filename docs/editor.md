@@ -91,8 +91,14 @@ dưới). Sau khi lưu có toast "Hoàn tác" / "Luôn cắt ở series này". L
 
 **Zoom ảnh gốc** (`source-viewer.tsx`, `source-zoom.ts`): cụm − · % · + cạnh pager (dùng chung `canvas-controls.tsx`; % đổi
 Vừa khung ↔ 100% như editor), Ctrl/⌘ + cuộn và chụm trackpad (wheel kèm `ctrlKey`) zoom quanh con trỏ (0,1×–4×), cuộn thường =
-cuộn ảnh; đổi ảnh → về Vừa khung. Chưa có phím tắt zoom (editor cũng chưa có). Thanh cắt đặt theo % chiều cao ảnh nên vẫn đúng
+cuộn ảnh. Mức zoom (tuyệt đối) giữ khi đổi ảnh như editor giữ khi đổi trang; ảnh mới rộng hơn khung thì cuộn ngang căn
+giữa; nút % về Vừa khung. Chưa có phím tắt zoom (editor cũng chưa có). Thanh cắt đặt theo % chiều cao ảnh nên vẫn đúng
 px ảnh thật ở mọi mức zoom.
+
+**Cuộn đổi ảnh** ở màn nháp: cuộn quá mép dưới / trên của ảnh = sang ảnh sau / trước, dùng chung `wheel-page-flip.ts` với
+editor (ngưỡng 160px, khoá quán tính, Shift+cuộn / Ctrl+cuộn / giữ nút chuột không đổi), đổi qua cùng đường pager (tự
+lưu cắt mép). Cuộn xuống vào đầu ảnh sau, cuộn lên vào cuối ảnh trước (đặt sau khi ảnh tải + đo xong). Không có hiệu ứng
+trượt. Đang mở panel Cắt mép thì cuộn không đổi ảnh (kéo thanh dưới sát đáy không lỡ tay sang ảnh khác).
 
 Đổi thứ tự ảnh (cùng điều kiện `editable`, thứ tự này là thứ tự ghép/cắt trang): kéo-thả thumbnail (vạch xanh báo chỗ
 thả), menu chuột phải "Đưa lên đầu / Lên 1 / Xuống 1 / Đưa xuống cuối", hoặc Alt+↑/↓ trên thumbnail đang focus (focus đi
