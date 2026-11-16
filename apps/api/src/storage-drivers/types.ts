@@ -28,6 +28,8 @@ export interface StorageDriver {
   readPrefix(key: string, n: number): Promise<Uint8Array>;
   /** Đọc cả object vào bộ nhớ (chỉ cho file nhỏ đã kiểm kích thước bằng `head`). */
   readObject(key: string): Promise<Uint8Array>;
+  /** Ghi cả object (file nhỏ do API tự tạo, VD thumbnail); ghi đè key có sẵn. */
+  putObject(key: string, bytes: Uint8Array, contentType: string): Promise<void>;
   copyObject(from: string, to: string): Promise<void>;
   /** Xoá 1 object (không có cũng không lỗi). */
   deleteObject(key: string): Promise<void>;

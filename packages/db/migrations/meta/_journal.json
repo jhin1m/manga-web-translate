@@ -204,6 +204,13 @@
       "when": 1794498083033,
       "tag": "0028_add_series_skip_image_edge",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1794830959794,
+      "tag": "0029_series_cover_key",
+      "breakpoints": true
     }
   ]
 }

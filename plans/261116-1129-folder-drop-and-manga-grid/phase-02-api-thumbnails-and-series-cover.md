@@ -1,7 +1,7 @@
 ---
 phase: 2
 title: "Phase 2: API thumbnail + ảnh bìa series"
-status: todo
+status: done
 priority: P1
 effort: "5h"
 dependencies: []
@@ -50,7 +50,7 @@ list/detail trả sẵn `cover_src` / `thumb_src` để web chỉ việc `<img s
   `302 Location: presignGet(thumbKey, MAX_GET_TTL_S)` với `Cache-Control: private, max-age=600` (< TTL ký 15').
   Hai request cùng lúc cùng file → tạo 2 lần, ghi đè cùng nội dung — chấp nhận.
 - `seriesView` / series routes: cột `cover_key`; list dùng helper `firstPageFiles(sdb, { seriesIds | chapterIds })`
-  trả map → URL. Bìa tuỳ chỉnh ký bằng `presignGet` ngay trong list (1 lần mỗi series có bìa).
+  trả map → URL. Bìa tuỳ chỉnh: `cover_src = /api/series/{id}/cover?v={uuid trong cover_key}` (ổn định, chỉ đổi khi đổi bìa); `GET /api/series/:id/cover` → 302 `presignGet(coverKey)` + `Cache-Control: private, max-age=600`, chưa có bìa → 404. List không ký URL.
 - Migration `packages/db`: `series.cover_key text null` (generate drizzle + down viết tay theo
   `docs/development-setup.md`).
 - Dependency: `sharp` vào `apps/api` (prebuilt `@img/sharp-linux-{x64,arm64}` glibc — app image là
@@ -83,11 +83,11 @@ list/detail trả sẵn `cover_src` / `thumb_src` để web chỉ việc `<img s
 9. `pnpm --filter @mtl/api test`, typecheck, lint.
 
 ## Success Criteria
-- [ ] Thumbnail đúng vùng (trim + 3:4), ≤ ~40 KB, tạo một lần rồi dùng cache.
-- [ ] Không lộ ảnh user khác (test scoped).
-- [ ] `GET /api/series` không thêm query theo số series (1 câu cho bìa).
-- [ ] Upload / xoá bìa đúng, object cũ được dọn.
-- [ ] Migration up/down chạy được; test API xanh.
+- [x] Thumbnail đúng vùng (trim + 3:4), ≤ ~40 KB, tạo một lần rồi dùng cache.
+- [x] Không lộ ảnh user khác (test scoped).
+- [x] `GET /api/series` không thêm query theo số series (1 câu cho bìa).
+- [x] Upload / xoá bìa đúng, object cũ được dọn.
+- [x] Migration up/down chạy được; test API xanh.
 
 ## Risk Assessment
 - RAM khi giải mã strip lớn đồng thời: semaphore 2 + `limitInputPixels`; strip 1000×40000 ≈ 160 MB RGBA mỗi lần —

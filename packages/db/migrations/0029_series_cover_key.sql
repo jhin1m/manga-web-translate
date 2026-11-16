@@ -1,0 +1,1 @@
+ALTER TABLE "series" ADD COLUMN "cover_key" text;

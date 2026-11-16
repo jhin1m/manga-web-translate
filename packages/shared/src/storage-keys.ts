@@ -16,6 +16,11 @@ export const storageKeys = {
   export: (user: string, ch: string, jobId: string, ext: "zip" | "cbz") => `u/${user}/ch/${ch}/export/${jobId}.${ext}`,
   /** Bản sao ảnh credit series đã học (còn khi chương nguồn bị xoá); xoá series dọn cả `u/{user}/series/{id}/`. */
   seriesSkip: (user: string, series: string, id: string, ext: string) => `u/${user}/series/${series}/skip/${id}.${ext}`,
+  /** Thumbnail WebP của ảnh gốc; trim nằm trong key nên đổi trim tạo key mới. Xoá chương dọn cả `u/{user}/ch/{ch}/`. */
+  thumb: (user: string, ch: string, fileId: string, top: number, bottom: number) =>
+    `u/${user}/ch/${ch}/thumb/${fileId}-${top}-${bottom}.webp`,
+  /** Ảnh bìa tuỳ chỉnh của series; xoá series dọn cả `u/{user}/series/{id}/`. */
+  seriesCover: (user: string, series: string, id: string) => `u/${user}/series/${series}/cover/${id}.webp`,
   /** Font tuỳ chỉnh của người dùng (TTF/OTF): presigned POST ghi thẳng vào đây, API kiểm rồi giữ nguyên key. */
   font: (user: string, uploadId: string) => `u/${user}/fonts/${uploadId}`,
   /** Font hệ thống (admin): upload tạm rồi chép sang key theo font_id. Prefix `system/` không thuộc người dùng nào. */

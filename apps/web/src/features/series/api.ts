@@ -24,6 +24,8 @@ export type Series = SeriesSettings & {
   title: string;
   glossary_rev: number;
   settings_rev: number;
+  /** Có ảnh bìa tuỳ chỉnh (xem `cover_src` ở danh sách). */
+  cover_custom: boolean;
   created_at: string;
   updated_at: string;
 };
@@ -49,13 +51,21 @@ export type PageCounts = { total: number; ready: number; failed: number; busy: n
  * Chương kèm thống kê (series detail, recent-chapters, latest_chapter). `exported` = đã xuất và chưa sửa gì sau
  * đó; `reexport` = đã xuất nhưng sau đó có sửa tay / dịch lại → cần "Xuất lại".
  */
-export type ChapterRow = ChapterSummary & { page_counts?: PageCounts; exported?: boolean; reexport?: boolean };
+export type ChapterRow = ChapterSummary & {
+  page_counts?: PageCounts;
+  exported?: boolean;
+  reexport?: boolean;
+  /** Thumbnail trang đầu không bỏ qua (series detail); null = chương chưa có ảnh. */
+  thumb_src?: string | null;
+};
 
 export type SeriesListItem = Series & {
   chapter_count: number;
   exported_count?: number;
   next_number?: string;
   latest_chapter?: ChapterRow | null;
+  /** Ảnh bìa: bìa tuỳ chỉnh (`/api/series/:id/cover?v=…`, đổi chỉ khi đổi bìa) hoặc thumbnail trang đầu; null = chưa có ảnh nào. */
+  cover_src?: string | null;
   last_activity_at: string;
 };
 export type SeriesDetail = Series & { chapters: ChapterRow[] };

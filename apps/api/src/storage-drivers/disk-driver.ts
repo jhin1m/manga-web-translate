@@ -283,6 +283,7 @@ export function createDiskDriver({ root: rootIn, signingKey, now = () => Date.no
     head,
     readPrefix,
     readObject,
+    putObject: (key, bytes, contentType) => writeAtomic(key, bytes, contentType),
     copyObject,
     deleteObject,
     deletePrefix,

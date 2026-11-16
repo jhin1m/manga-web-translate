@@ -53,6 +53,7 @@ export const {
   head,
   readPrefix,
   readObject,
+  putObject,
   copyObject,
   deleteObject,
   deletePrefix,

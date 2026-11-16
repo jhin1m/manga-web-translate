@@ -115,6 +115,10 @@ export function createS3Driver(cfg: S3DriverConfig): StorageDriver {
     return (await r.Body?.transformToByteArray()) ?? new Uint8Array();
   }
 
+  async function putObject(key: string, bytes: Uint8Array, contentType: string): Promise<void> {
+    await internal.send(new PutObjectCommand({ Bucket, Key: key, Body: bytes, ContentType: contentType }));
+  }
+
   /** Chép object trong bucket (server-side, không tải về). */
   async function copyObject(from: string, to: string): Promise<void> {
     const source = `${Bucket}/${from}`.split("/").map(encodeURIComponent).join("/");
@@ -160,6 +164,7 @@ export function createS3Driver(cfg: S3DriverConfig): StorageDriver {
     head,
     readPrefix,
     readObject,
+    putObject,
     copyObject,
     deleteObject,
     deletePrefix,

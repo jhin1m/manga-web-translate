@@ -27,6 +27,7 @@ import { seriesRoutes } from "./routes/series.ts";
 import { seriesIgnoreApplyRoutes } from "./routes/series-ignore-apply.ts";
 import { seriesSkipImageRoutes } from "./routes/series-skip-images.ts";
 import { seriesSuggestionRoutes } from "./routes/series-suggestions.ts";
+import { thumbRoutes } from "./routes/thumbs.ts";
 import { uploadRoutes } from "./routes/uploads.ts";
 import { workerRoutes } from "./routes/worker.ts";
 import { diskDriver } from "./storage.ts";
@@ -110,5 +111,6 @@ export function userApi() {
   app.route("/", exportRoutes);
   app.route("/", findReplaceRoutes);
   app.route("/", fontRoutes);
+  app.route("/", thumbRoutes);
   return app;
 }

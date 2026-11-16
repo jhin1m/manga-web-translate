@@ -90,6 +90,8 @@ export const series = pgTable(
     settingsRev: integer("settings_rev").notNull().default(0),
     /** Chữ bỏ qua (watermark, URL nhóm dịch): vùng OCR chứa mục nào → không dịch, không box (lọc lúc claim dịch). */
     ignoreText: text("ignore_text").array().notNull().default(sql`'{}'::text[]`),
+    /** Key ảnh bìa tuỳ chỉnh (WebP) trong storage; null = dùng trang đầu của chương đầu. */
+    coverKey: text("cover_key"),
     ...timestamps,
   },
   (t) => [

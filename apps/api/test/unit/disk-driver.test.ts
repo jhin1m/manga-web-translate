@@ -55,6 +55,15 @@ describe("disk driver specifics", () => {
     expect(await readdir(join(h.root, ".tmp"))).toEqual([]);
   });
 
+  it("putObject writes atomically, stores the content type and overwrites an existing key", async () => {
+    const k = testKey("webp");
+    await h.driver.putObject(k, new Uint8Array([1, 2, 3]), "image/webp");
+    expect(await h.driver.head(k)).toMatchObject({ bytes: 3, contentType: "image/webp" });
+    await h.driver.putObject(k, new Uint8Array([9, 9, 9, 9, 9]), "image/webp");
+    expect([...(await h.driver.readObject(k))]).toEqual([9, 9, 9, 9, 9]);
+    expect(await readdir(join(h.root, ".tmp"))).toEqual([]);
+  });
+
   it("copyObject keeps the content type; deleteObject is idempotent", async () => {
     const from = await uploaded(testKey("webp"), PNG, "image/webp");
     const to = `u/test/copy/${from.split("/").at(-1)}`;

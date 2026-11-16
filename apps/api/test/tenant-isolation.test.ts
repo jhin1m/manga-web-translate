@@ -22,7 +22,9 @@ import {
 import { emptyPageState, pageId } from "@mtl/shared";
 import { eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
+import { putObject } from "../src/storage.ts";
 import { app, call, db, seedUser } from "./helpers.ts";
+import { PNG_1PX } from "./worker-helpers.ts";
 
 type Seed = Awaited<ReturnType<typeof seedUser>>;
 let A: Seed;
@@ -44,6 +46,8 @@ let sourceFileA = "";
 const skipImageOf: Record<string, string> = {};
 /** Font tuỳ chỉnh mẫu (route DELETE /fonts/:fontId) — id dạng custom-<8 hex>. */
 const fontOf: Record<string, string> = {};
+/** Ảnh gốc có object thật (route GET /thumbs/:fileId). */
+const thumbFileOf: Record<string, string> = {};
 /** Gợi ý hiệu đính mẫu (route PATCH /proofread-suggestions/:id). */
 const suggestionOf: Record<string, string> = {};
 /** Gợi ý series mẫu (route PATCH /series-suggestions/:id). */
@@ -125,6 +129,21 @@ beforeAll(async () => {
         thumbKey: `u/${s.userId}/series/${s.seriesId}/skip/tenant.png`,
       })
     ).id;
+    const thumbKey = `u/${s.userId}/ch/${s.chapterId}/src/tenant-thumb.png`;
+    await putObject(thumbKey, PNG_1PX, "image/png");
+    thumbFileOf[s.userId] = (
+      await scoped(db, s.userId).insert(sourceFiles, {
+        chapterId: s.chapterId,
+        ord: 1,
+        storageKey: thumbKey,
+        bytes: PNG_1PX.length,
+        mime: "image/png",
+      })
+    ).id;
+    // GET /series/:id/cover cần series có bìa tuỳ chỉnh (route 404 khi chưa có).
+    await scoped(db, s.userId).update(series, eq(series.id, s.seriesId), {
+      coverKey: `u/${s.userId}/series/${s.seriesId}/cover/tenant.webp`,
+    });
     const fontId = `custom-${s.userId.slice(-8)}`;
     await scoped(db, s.userId).insert(userFonts, {
       fontId,
@@ -178,6 +197,8 @@ const BODIES: Record<string, unknown> = {
   get "POST /api/series/:seriesId/skip-images"() {
     return { source_file_id: spareSourceOf[A.userId] };
   },
+  // PUT cover: body JSON → own trả 400 (qua được tra series), series của B → 404 trước khi đọc body.
+  "PUT /api/series/:seriesId/cover": {},
   "POST /api/fonts/upload-url": { bytes: 1024 },
   "POST /api/fonts": { key: "u/x/fonts/x" },
   "POST /api/glossary": { source_term: "마법", target_term: "ma pháp" },
@@ -274,6 +295,10 @@ const RESOURCE_CASES: Record<string, (b: Seed) => Record<string, string>> = {
     seriesId: b.seriesId,
     imageId: skipImageOf[b.userId] ?? "",
   }),
+  "GET /api/series/:seriesId/cover": (b) => ({ seriesId: b.seriesId }),
+  "PUT /api/series/:seriesId/cover": (b) => ({ seriesId: b.seriesId }),
+  "DELETE /api/series/:seriesId/cover": (b) => ({ seriesId: b.seriesId }),
+  "GET /api/thumbs/:fileId": (b) => ({ fileId: thumbFileOf[b.userId] ?? "" }),
   "DELETE /api/fonts/:fontId": (b) => ({ fontId: fontOf[b.userId] ?? "" }),
   "POST /api/chapters/:chapterId/proofread": (b) => ({ chapterId: b.chapterId }),
   "GET /api/chapters/:chapterId/proofread": (b) => ({ chapterId: b.chapterId }),
