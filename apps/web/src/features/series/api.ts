@@ -1,7 +1,7 @@
 /** Kiểu + query của series (khớp apps/api/src/routes/series.ts). */
 import type { TermKind } from "@mtl/shared";
 import type { PageFormat, SourceLang, TargetLang } from "@mtl/shared/series-lang";
-import { api } from "../../lib/api.ts";
+import { ApiError, api, tabId } from "../../lib/api.ts";
 
 export type PronounRule = { speaker: string; listener: string; address: string; note: string };
 export type FontSlot = "dialogue" | "narration" | "thought" | "note" | "sfx";
@@ -91,6 +91,27 @@ export const patchSeries = (id: string, body: Partial<SeriesSettings> & { title?
   api<Series>(`/api/series/${id}`, { method: "PATCH", body });
 /** Xoá series cùng mọi chương + glossary riêng. */
 export const deleteSeries = (id: string) => api<void>(`/api/series/${id}`, { method: "DELETE" });
+/** Đặt ảnh bìa tuỳ chỉnh (png/jpg/webp, tối đa 10 MB; server thu về 600×800). Trả series kèm `cover_src` mới. */
+export async function uploadSeriesCover(id: string, file: File): Promise<Series & { cover_src: string }> {
+  const form = new FormData();
+  form.append("file", file);
+  const res = await fetch(`/api/series/${id}/cover`, {
+    method: "PUT",
+    credentials: "same-origin",
+    headers: { "x-tab-id": tabId() },
+    body: form,
+  });
+  const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+  if (!res.ok) {
+    const msg = typeof data.message === "string" ? data.message : typeof data.error === "string" ? data.error : "";
+    throw new ApiError(res.status, msg || res.statusText, data);
+  }
+  return data as Series & { cover_src: string };
+}
+
+/** Bỏ bìa tuỳ chỉnh → quay về ảnh đầu của chương tự động. */
+export const resetSeriesCover = (id: string) => api<void>(`/api/series/${id}/cover`, { method: "DELETE" });
+
 /** Xoá hẳn chương (ảnh, bản dịch, lịch sử). Đang mở sửa ở tab khác → 423. */
 export const deleteChapter = (id: string) => api<void>(`/api/chapters/${id}`, { method: "DELETE" });
 

@@ -35,6 +35,7 @@ import {
   type SeriesSettings,
   seriesKeys,
 } from "./api.ts";
+import { CoverSection } from "./cover-section.tsx";
 import { IgnoreApplySection } from "./ignore-apply-section.tsx";
 import { parseIgnoreText } from "./ignore-text-input.ts";
 import {
@@ -324,6 +325,7 @@ export function SeriesSettingsDialog({
             <label htmlFor="s-title">Tên series</label>
             <input id="s-title" required value={f.title} onChange={(e) => set("title", e.target.value)} />
           </div>
+          <CoverSection series={series} />
           <div className="settings-grid">
             <div>
               <label htmlFor="s-src">Dịch từ</label>

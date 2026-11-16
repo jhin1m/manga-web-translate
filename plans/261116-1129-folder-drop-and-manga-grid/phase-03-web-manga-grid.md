@@ -1,7 +1,7 @@
 ---
 phase: 3
 title: "Phase 3: Lưới series + lưới chương (web)"
-status: todo
+status: done
 priority: P1
 effort: "5h"
 dependencies: [2]
@@ -65,12 +65,12 @@ Thay danh sách một dòng bằng lưới thẻ có ảnh: trang chủ (series:
    tải, đang dịch, đã xuất), sáng/tối, rộng 375px; đổi / bỏ bìa.
 
 ## Success Criteria
-- [ ] Trang chủ, trang series hiện lưới ảnh; series/chương cũ có ảnh (qua `/api/thumbs`).
-- [ ] Xoá series / chương vẫn xác nhận tại chỗ; Sửa vẫn tới tab settings.
-- [ ] Thả lại file vào thẻ chương "tải tiếp" vẫn chạy.
-- [ ] Chương đang tải: placeholder → ảnh khi upload xong, không nháy mỗi lượt polling.
-- [ ] 375px: 2 cột, không cuộn ngang; theme tối đúng màu.
-- [ ] Đổi / bỏ bìa hiện ngay trên trang chủ.
+- [x] Trang chủ, trang series hiện lưới ảnh; series/chương cũ có ảnh (qua `/api/thumbs`).
+- [x] Xoá series / chương vẫn xác nhận tại chỗ; Sửa vẫn tới tab settings.
+- [x] Thả lại file vào thẻ chương "tải tiếp" vẫn chạy.
+- [x] Chương đang tải: placeholder → ảnh khi upload xong, không nháy mỗi lượt polling.
+- [x] 375px: 2 cột, không cuộn ngang; theme tối đúng màu.
+- [x] Đổi / bỏ bìa hiện ngay trên trang chủ.
 
 ## Risk Assessment
 - Mất thông tin so với hàng cũ (nhiều chữ trạng thái trong thẻ nhỏ): giữ chấm màu + nhãn ngắn, `title` tooltip cho

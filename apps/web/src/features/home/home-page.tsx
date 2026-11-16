@@ -1,8 +1,8 @@
 /**
  * Home, từ trên xuống: dải thả (thả bất kỳ đâu trên trang cũng được; chưa có series nào thì là vùng lớn; đoán được
  * series → tạo chương + tải ảnh + mở màn chương, không thì dòng "Vừa thả" inline) → ô tìm + "+ Series" (mở modal
- * tạo series: tên, loại truyện, Dịch từ / Sang) → danh sách series một dòng mỗi hàng (bấm hàng để mở series, icon
- * Sửa → cài đặt series, icon Xoá → xác nhận tại chỗ rồi xoá cả series).
+ * tạo series: tên, loại truyện, Dịch từ / Sang) → lưới thẻ series có bìa (bấm thẻ để mở series, icon
+ * Sửa → cài đặt series, icon Xoá → xác nhận phủ trên thẻ rồi xoá cả series).
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
@@ -13,6 +13,7 @@ import { deleteSeries, fetchSeriesList, type SeriesListItem, seriesKeys } from "
 import { NewSeriesDialog } from "../series/new-series-dialog.tsx";
 import { DropZone, usePageDrop } from "../upload/drop-zone.tsx";
 import { normalizeName } from "../upload/parse-chapter-filename.ts";
+import { CoverImage, initialOf } from "./cover-image.tsx";
 import { useDropToTranslate } from "./drop-to-translate.ts";
 import { NewChapterConfirmRow } from "./new-chapter-confirm-row.tsx";
 import { PencilIcon, TrashIcon } from "./row-icons.tsx";
@@ -58,12 +59,12 @@ export function HomePage() {
           onCreated={() => setPending(null)}
         />
       )}
-      <SeriesRows series={series} error={seriesQ.error} />
+      <SeriesGrid series={series} error={seriesQ.error} />
     </main>
   );
 }
 
-function SeriesRows(props: { series: SeriesListItem[] | undefined; error: unknown }) {
+function SeriesGrid(props: { series: SeriesListItem[] | undefined; error: unknown }) {
   const [search, setSearch] = useState("");
   const [adding, setAdding] = useState(false);
   const needle = normalizeName(search);
@@ -85,23 +86,25 @@ function SeriesRows(props: { series: SeriesListItem[] | undefined; error: unknow
       </div>
       {adding && <NewSeriesDialog onClose={() => setAdding(false)} />}
       {!!props.error && <p className="notice danger">{errorMessage(props.error)}</p>}
-      <div className="rows">
-        {props.series && list.length === 0 && (
-          <div className="rows-empty">
-            {search
-              ? "Không có series nào khớp."
-              : "Chưa có series nào — bấm “+ Series”, hoặc thả ảnh ở trên rồi chọn series."}
-          </div>
-        )}
-        {list.map((s) => (
-          <SeriesRow key={s.id} s={s} />
-        ))}
-      </div>
+      {props.series && list.length === 0 && (
+        <div className="rows-empty">
+          {search
+            ? "Không có series nào khớp."
+            : "Chưa có series nào — bấm “+ Series”, hoặc thả ảnh ở trên rồi chọn series."}
+        </div>
+      )}
+      {list.length > 0 && (
+        <div className="card-grid">
+          {list.map((s) => (
+            <SeriesCard key={s.id} s={s} />
+          ))}
+        </div>
+      )}
     </section>
   );
 }
 
-function SeriesRow({ s }: { s: SeriesListItem }) {
+function SeriesCard({ s }: { s: SeriesListItem }) {
   const [confirming, setConfirming] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const latest = s.latest_chapter;
@@ -110,20 +113,48 @@ function SeriesRow({ s }: { s: SeriesListItem }) {
     !latest || !a ? "Chưa có chương" : needsWork(latest) ? `Ch.${latest.number} · ${a.state}` : "Đã xuất hết";
   const tone = !latest || !a ? "idle" : needsWork(latest) ? a.tone : "ok";
   return (
-    <div className="row-item" data-series={s.id}>
-      <Link className="row-open" to="/s/$seriesId" params={{ seriesId: s.id }}>
-        <span className="row-name" title={s.title}>
-          {s.title}
-        </span>
-        <span className="grow row small">
-          <span className="dot" data-tone={tone} />
-          {state}
-        </span>
-        <span className="row-count small muted" title={`${s.chapter_count} chương`}>
-          {s.chapter_count} ch
+    <div className="card" data-series={s.id}>
+      <Link className="card-open" to="/s/$seriesId" params={{ seriesId: s.id }}>
+        <CoverImage src={s.cover_src} fallback={initialOf(s.title)} />
+        <span className="card-body">
+          <span className="card-name" title={s.title}>
+            {s.title}
+          </span>
+          <span className="card-state small" title={state}>
+            <span className="dot" data-tone={tone} />
+            <span className="card-state-text">{state}</span>
+          </span>
+          <span className="small muted" title={`${s.chapter_count} chương`}>
+            {s.chapter_count} ch
+          </span>
         </span>
       </Link>
-      {confirming ? (
+      <div className="card-actions">
+        <Link
+          className="btn icon-btn"
+          to="/s/$seriesId"
+          params={{ seriesId: s.id }}
+          search={{ tab: "settings" }}
+          aria-label={`Sửa series ${s.title}`}
+          title="Sửa series"
+        >
+          <PencilIcon />
+        </Link>
+        <button
+          type="button"
+          className="icon-btn"
+          data-danger
+          aria-label={`Xoá series ${s.title}`}
+          title="Xoá series"
+          onClick={() => {
+            setMsg(null);
+            setConfirming(true);
+          }}
+        >
+          <TrashIcon />
+        </button>
+      </div>
+      {confirming && (
         <DeleteSeriesConfirm
           s={s}
           onDone={() => setConfirming(false)}
@@ -132,32 +163,6 @@ function SeriesRow({ s }: { s: SeriesListItem }) {
             setMsg(text);
           }}
         />
-      ) : (
-        <>
-          <Link
-            className="btn icon-btn"
-            to="/s/$seriesId"
-            params={{ seriesId: s.id }}
-            search={{ tab: "settings" }}
-            aria-label={`Sửa series ${s.title}`}
-            title="Sửa series"
-          >
-            <PencilIcon />
-          </Link>
-          <button
-            type="button"
-            className="icon-btn"
-            data-danger
-            aria-label={`Xoá series ${s.title}`}
-            title="Xoá series"
-            onClick={() => {
-              setMsg(null);
-              setConfirming(true);
-            }}
-          >
-            <TrashIcon />
-          </button>
-        </>
       )}
       {msg && <div className="row-error">{msg}</div>}
     </div>
@@ -183,7 +188,7 @@ function DeleteSeriesConfirm(props: { s: SeriesListItem; onDone: () => void; onE
       ),
   });
   return (
-    <div className="row delete-confirm" role="alertdialog" aria-label={`Xác nhận xoá series ${s.title}`}>
+    <div className="card-confirm" role="alertdialog" aria-label={`Xác nhận xoá series ${s.title}`}>
       <span className="small">
         Xoá hẳn series <b>{s.title}</b>
         {s.chapter_count > 0 ? ` cùng ${s.chapter_count} chương (ảnh, bản dịch, lịch sử)` : ""} và glossary riêng?

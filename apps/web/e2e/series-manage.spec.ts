@@ -1,5 +1,5 @@
 /**
- * Quản lý series / chương: xoá series từ hàng series ở home và xoá chương từ hàng chương (xác nhận tại chỗ; Huỷ không
+ * Quản lý series / chương: xoá series từ thẻ series ở home và xoá chương từ thẻ chương (xác nhận tại chỗ; Huỷ không
  * xoá), chuyển tab Chương / Glossary / Cài đặt giữ nguyên đầu trang series; chọn ngôn ngữ gốc khi tạo series và
  * sửa ngôn ngữ đích / định dạng truyện trong Cài đặt. Tên series dài cắt "…" (title đủ tên), không đè cột trạng thái
  * ở home, không tràn ở trang series và thanh trên màn chương.
@@ -17,7 +17,7 @@ async function apiSeries(page: import("@playwright/test").Page, title: string) {
   return ((await created.json()) as { id: string }).id;
 }
 
-test("delete a whole series from its home row, after an explicit confirm", async ({ page }) => {
+test("delete a whole series from its home card, after an explicit confirm", async ({ page }) => {
   await login(page);
   const created = await page.request.post(`/api/series`, {
     headers: { origin: WEB_URL },
@@ -36,7 +36,7 @@ test("delete a whole series from its home row, after an explicit confirm", async
   expect(chapter.status()).toBe(201);
 
   await page.goto("/");
-  const row = page.locator(`.row-item[data-series="${s.id}"]`);
+  const row = page.locator(`.card[data-series="${s.id}"]`);
   await expect(row).toBeVisible();
 
   await row.getByRole("button", { name: "Xoá series Series xoá e2e" }).click();
@@ -65,7 +65,7 @@ test("delete a chapter from the series page, after an explicit confirm", async (
   const { chapter } = (await created.json()) as { chapter: { id: string } };
 
   await page.goto(`/s/${state.seriesId}`);
-  const row = page.locator(`.row-item[data-chapter="${chapter.id}"]`);
+  const row = page.locator(`.card[data-chapter="${chapter.id}"]`);
   await expect(row).toBeVisible();
 
   await row.getByRole("button", { name: "Xoá chương 9301" }).click();
@@ -277,17 +277,19 @@ test("a very long series name is truncated with a full-name title and never over
   for (const width of [1568, 390]) {
     await page.setViewportSize({ width, height: 800 });
     await page.goto("/");
-    const row = page.locator(`.row-item[data-series="${s.id}"]`);
-    const name = row.locator(".row-name");
+    const row = page.locator(`.card[data-series="${s.id}"]`);
+    const name = row.locator(".card-name");
     await expect(name).toHaveAttribute("title", title);
-    const status = row.locator(".row-open .grow");
-    await expect(status).toContainText("Ch.1");
-    const n = await name.boundingBox();
-    const st = await status.boundingBox();
-    if (!n || !st) throw new Error("row not laid out");
-    // Cùng hàng → tên kết thúc trước cột trạng thái; xuống hàng (màn hẹp) → không chồng theo chiều dọc.
-    const sameLine = n.y < st.y + st.height && st.y < n.y + n.height;
-    if (sameLine) expect(n.x + n.width).toBeLessThanOrEqual(st.x);
+    await expect(row.locator(".card-state-text")).toContainText("Ch.1");
+    // Tên dài tối đa 2 dòng (cắt "…"), thẻ không tràn khung nhìn.
+    const clamp = await name.evaluate((el) => ({
+      lines: Math.round(el.getBoundingClientRect().height / Number.parseFloat(getComputedStyle(el).lineHeight)),
+      width: el.getBoundingClientRect().width,
+    }));
+    expect(clamp.lines).toBeLessThanOrEqual(2);
+    const box = await row.boundingBox();
+    if (!box) throw new Error("card not laid out");
+    expect(box.x + box.width).toBeLessThanOrEqual(width);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   }
 
@@ -395,7 +397,7 @@ test("settings: the hint opens from the keyboard, Ảnh tự bỏ says it saves 
   expect((await page.request.get(`/api/series/${id}`)).status()).toBe(404);
 });
 
-test("home at 1280: drop strip is 56px, series rows are one line, Hoạt động is hidden while nothing uploads", async ({
+test("home at 1280: drop strip is 56px, series are cards, Hoạt động is hidden while nothing uploads", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
@@ -404,9 +406,8 @@ test("home at 1280: drop strip is 56px, series rows are one line, Hoạt động
   await expect(strip.getByText("Thả ảnh / ZIP")).toBeVisible();
   await expect(page.getByText("tự tạo chương")).toHaveCount(0);
   expect((await strip.boundingBox())?.height).toBeLessThanOrEqual(58);
-  const row = page.locator(`.row-item[data-series="${state.seriesId}"]`);
+  const row = page.locator(`.card[data-series="${state.seriesId}"]`);
   await expect(row).toBeVisible();
-  expect((await row.boundingBox())?.height).toBeLessThanOrEqual(56);
   await expect(page.getByRole("button", { name: /^Hoạt động/ })).toHaveCount(0);
   // Glossary chung, Font, (Cài đặt cho admin) vẫn ở menu tài khoản.
   await page.locator("summary[aria-label='Tài khoản']").click();
@@ -414,7 +415,7 @@ test("home at 1280: drop strip is 56px, series rows are one line, Hoạt động
   await expect(page.getByRole("link", { name: "Font của tôi" })).toBeVisible();
 });
 
-test("dropping the files again onto an unfinished-upload chapter row resumes the upload", async ({ page }) => {
+test("dropping the files again onto an unfinished-upload chapter card resumes the upload", async ({ page }) => {
   await login(page);
   const created = await page.request.post(`/api/chapters`, {
     headers,
@@ -433,9 +434,9 @@ test("dropping the files again onto an unfinished-upload chapter row resumes the
       chapter.id,
     );
     await page.goto(`/s/${state.seriesId}`);
-    const row = page.locator(`.row-item[data-chapter="${chapter.id}"]`);
+    const row = page.locator(`.card[data-chapter="${chapter.id}"]`);
     await expect(row).toContainText("Upload dở");
-    await expect(row).toContainText("thả lại file vào hàng này để tải tiếp");
+    await expect(row).toContainText("Thả lại file để tải tiếp");
 
     const dataTransfer = await page.evaluateHandle(
       (bytes) => {

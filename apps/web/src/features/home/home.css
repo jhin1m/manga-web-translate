@@ -1,4 +1,4 @@
-/* Home + Series: dải thả, dòng "Vừa thả" inline, danh sách hàng một dòng, cài đặt series. */
+/* Home + Series: dải thả, dòng "Vừa thả" inline, lưới thẻ, cài đặt series. */
 .home {
   max-width: 1080px;
   margin: 0 auto;
@@ -190,75 +190,190 @@ label.file-pick input {
 .block-head button {
   height: 32px;
 }
-.rows {
-  border: 1px solid var(--c-line);
-  border-radius: 6px;
-}
 .rows-empty {
   padding: var(--sp-4);
   color: var(--c-fg-muted);
-}
-.row-item {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: var(--sp-2);
-  min-height: 44px;
-  padding: var(--sp-1) var(--sp-2) var(--sp-1) var(--sp-3);
-  flex-wrap: wrap;
-}
-.row-item + .row-item {
-  border-top: 1px solid var(--c-surface-2);
-}
-.row-item[data-drop="true"] {
-  background: var(--c-accent-weak);
-}
-.row-item .grow {
-  flex: 1;
-  min-width: 140px;
+  border: 1px solid var(--c-line);
+  border-radius: 6px;
 }
 .row-error {
-  flex-basis: 100%;
   font-size: var(--fs-sm);
   color: var(--c-danger);
+  padding: 0 var(--sp-2) var(--sp-2);
 }
-/* Hàng series ở home: tên + trạng thái + số chương là link mở series (bấm cả vùng), icon Sửa/Xoá bên phải. Tên dài cắt "…" (title hiện tên đầy đủ), không đè cột trạng thái. */
-.row-open {
-  flex: 1;
-  min-width: 260px;
+
+/* ---- Lưới thẻ (series ở home, chương ở màn series): bìa 3:4 + tên + trạng thái ---- */
+.card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: var(--sp-4);
+}
+.card {
+  position: relative;
   display: flex;
-  align-items: center;
-  gap: var(--sp-3);
-  color: inherit;
-  margin: calc(-1 * var(--sp-1)) 0;
-  padding: var(--sp-2) 0;
-  border-radius: var(--radius);
+  flex-direction: column;
+  min-width: 0;
+  border: 1px solid var(--c-line);
+  border-radius: 6px;
+  background: var(--c-bg);
+  overflow: hidden;
 }
-.row-open:hover {
-  text-decoration: none;
-}
-.row-item:has(> .row-open:hover) {
+.card:has(> .card-open:hover) {
+  border-color: var(--c-line-strong);
   background: var(--c-surface);
 }
-.row-name {
-  flex: 0 1 280px;
+.card[data-drop="true"] {
+  background: var(--c-accent-weak);
+  border-color: var(--c-accent);
+}
+.card-open {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  color: inherit;
+}
+.card-open:hover {
+  text-decoration: none;
+}
+.card-open:focus-visible {
+  outline-offset: -2px;
+}
+.card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
   min-width: 0;
+  padding: var(--sp-2);
+}
+.card-name {
+  font-weight: 600;
+  color: var(--c-fg);
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow-wrap: anywhere;
+}
+.card-open:hover .card-name {
+  color: var(--c-accent-hover);
+}
+.card-state {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.card-state-text {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+/* Khung ảnh 3:4: ảnh cắt theo đỉnh (trang đầu truyện dọc); chưa có ảnh → ô màu + chữ cái đầu. */
+.cover {
+  position: relative;
+  aspect-ratio: 3 / 4;
+  background: var(--c-surface-2);
+  overflow: hidden;
+}
+.cover img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: top;
+}
+.cover-fallback {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--sp-2);
+  text-align: center;
+  font-size: var(--fs-xl);
   font-weight: 600;
+  color: var(--c-fg-muted);
+  overflow: hidden;
+}
+/* Icon Sửa / Xoá luôn hiện ở góc trên phải, nền đặc theo theme để đọc được trên mọi ảnh. */
+.card-actions {
+  position: absolute;
+  top: var(--sp-1);
+  right: var(--sp-1);
+  display: flex;
+  gap: var(--sp-1);
+}
+.card-actions .icon-btn {
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--c-line-strong);
+  border-radius: var(--radius);
+  background: var(--c-bg);
   color: var(--c-fg);
 }
-.row-open:hover .row-name {
-  color: var(--c-accent-hover);
+.card-actions .icon-btn:hover {
+  background: var(--c-surface-2);
 }
-.row-open .grow {
-  flex-wrap: nowrap;
+/* Xác nhận xoá phủ kín thẻ. Căn giữa bằng margin auto (không `justify-content: center`): tên dài tràn thẻ thì vẫn cuộn
+   lên được tới đầu câu hỏi. */
+.card-confirm {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding: var(--sp-2);
+  background: var(--c-bg);
+  overflow-y: auto;
+}
+.card-confirm > :first-child {
+  margin-top: auto;
+}
+.card-confirm > :last-child {
+  margin-bottom: auto;
+}
+.card-confirm button {
+  width: 100%;
+}
+/* Vạch tiến độ dưới ảnh, chỉ có ở chương đang chạy. */
+.card-progress {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 4px;
+  background: var(--c-info);
+}
+
+/* Cài đặt series: mục Ảnh bìa. */
+.cover-section {
+  display: flex;
+  gap: var(--sp-3);
+  align-items: flex-start;
+  border: 0;
+  padding: 0;
+  margin: 0;
+}
+.cover-section-preview {
+  width: 72px;
+  flex: none;
+  border: 1px solid var(--c-line);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.cover-section-preview .cover-fallback {
+  font-size: var(--fs-lg);
+}
+.cover-section-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
   min-width: 0;
 }
-.row-count {
-  flex: none;
-  font-variant-numeric: tabular-nums;
+.cover-section-actions {
+  display: flex;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
 }
 
 /* Chấm trạng thái 10px. */
@@ -333,52 +448,6 @@ label.file-pick input {
 .series-pair {
   flex: none;
 }
-/* Hàng chương một dòng: số, chấm + trạng thái, thời gian là link mở chương (bấm cả vùng); Xoá bên phải. */
-.ch-open {
-  flex: 1;
-  min-width: 260px;
-  display: flex;
-  align-items: center;
-  gap: var(--sp-3);
-  color: inherit;
-  margin: calc(-1 * var(--sp-1)) 0;
-  padding: var(--sp-2) 0;
-  border-radius: var(--radius);
-}
-.ch-open:hover {
-  text-decoration: none;
-}
-.row-item:has(> .ch-open:hover) {
-  background: var(--c-surface);
-}
-.ch-num {
-  width: 64px;
-  flex: none;
-  font-weight: 500;
-  font-variant-numeric: tabular-nums;
-}
-.ch-open:hover .ch-num {
-  color: var(--c-accent-hover);
-}
-.ch-state {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-.ch-time {
-  flex: none;
-}
-/* Vạch tiến độ 2px sát đáy hàng, chỉ có ở chương đang chạy. */
-.row-progress {
-  position: absolute;
-  left: 0;
-  bottom: -1px;
-  height: 2px;
-  background: var(--c-info);
-}
-
 /* Nút chỉ có icon (xoá chương…): vùng bấm 34px. */
 .btn-danger-solid {
   background: var(--c-danger);
@@ -388,9 +457,6 @@ label.file-pick input {
 .btn-danger-solid:hover {
   background: var(--c-danger);
   filter: brightness(0.92);
-}
-.delete-confirm {
-  gap: var(--sp-2);
 }
 
 /* ---- Tab của series (Chương / Glossary / Cài đặt) ---- */
@@ -771,11 +837,9 @@ button.link-danger:hover {
   .new-series-grid {
     grid-template-columns: minmax(0, 1fr);
   }
-  .row-open,
-  .ch-open {
-    min-width: 0;
-  }
-  .row-name {
-    flex-basis: 96px;
+}
+@media (max-width: 480px) {
+  .card-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }

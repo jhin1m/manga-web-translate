@@ -1,6 +1,6 @@
 /**
  * Màn series, một cột: đầu trang (‹ về home, tên, cặp ngôn ngữ, "Glossary · N", icon Cài đặt dịch), dải thả "Thả
- * Ch.{next}", toàn bộ danh sách chương (bấm cả hàng để mở — dịch/xuất/chạy lại làm trong màn chương; icon Xoá).
+ * Ch.{next}", lưới thẻ chương có ảnh đầu (bấm cả thẻ để mở — dịch/xuất/chạy lại làm trong màn chương; icon Xoá).
  * Glossary / Cài đặt dịch mở thành modal trên danh sách; `?tab=` giữ trạng thái modal (link sâu từ home / màn chương).
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -13,6 +13,7 @@ import { nextAction } from "../chapter/next-action.ts";
 import { fetchGlossary, glossaryKey } from "../glossary/api.ts";
 import { GlossaryEditor } from "../glossary/glossary-editor.tsx";
 import { GlossarySuggestions } from "../glossary/glossary-suggestions.tsx";
+import { CoverImage, withStatus } from "../home/cover-image.tsx";
 import { useDropToTranslate } from "../home/drop-to-translate.ts";
 import { NewChapterConfirmRow } from "../home/new-chapter-confirm-row.tsx";
 import { BackIcon, SlidersIcon, TrashIcon } from "../home/row-icons.tsx";
@@ -162,23 +163,25 @@ function ChapterList({ series }: { series: SeriesDetail }) {
         />
       )}
 
-      <div className="rows">
-        {chapters.length === 0 && <div className="rows-empty">Chưa có chương nào — thả ảnh / ZIP ở trên.</div>}
-        {chapters.map((c) => (
-          <ChapterLine key={c.id} ch={c} upload={uploadManager.view(c.id, uploads[c.id])} />
-        ))}
-      </div>
+      {chapters.length === 0 && <div className="rows-empty">Chưa có chương nào — thả ảnh / ZIP ở trên.</div>}
+      {chapters.length > 0 && (
+        <div className="card-grid">
+          {chapters.map((c) => (
+            <ChapterCard key={c.id} ch={c} upload={uploadManager.view(c.id, uploads[c.id])} />
+          ))}
+        </div>
+      )}
     </>
   );
 }
 
-function ChapterLine(props: { ch: ChapterRow; upload: ReturnType<typeof uploadManager.view> }) {
+function ChapterCard(props: { ch: ChapterRow; upload: ReturnType<typeof uploadManager.view> }) {
   const { ch } = props;
   const [msg, setMsg] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
   const a = nextAction(ch, props.upload);
   const params = { seriesId: ch.series_id, chapterId: ch.id };
-  // Chương nháp upload dở: thả lại file thẳng vào hàng.
+  // Chương nháp upload dở: thả lại file thẳng vào thẻ.
   const target = useDropTarget((files) => {
     setMsg(null);
     resumeFromFiles(ch.id, files).catch((e: unknown) => setMsg(errorMessage(e)));
@@ -186,34 +189,42 @@ function ChapterLine(props: { ch: ChapterRow; upload: ReturnType<typeof uploadMa
   const dropProps = a.kind === "resume" ? target.props : {};
 
   const running = a.tone === "busy";
+  // `src` giữ nguyên giữa các lượt polling; chỉ chương đang ingest đổi `?s=` khi trạng thái đổi (ảnh 404 → có ảnh).
+  const thumb = ch.thumb_src ? (ch.status === "ingesting" ? withStatus(ch.thumb_src, ch.status) : ch.thumb_src) : null;
 
   return (
-    <div className="row-item" data-chapter={ch.id} data-drop={a.kind === "resume" && target.over} {...dropProps}>
+    <div className="card" data-chapter={ch.id} data-drop={a.kind === "resume" && target.over} {...dropProps}>
       <Link
-        className="ch-open"
+        className="card-open"
         to="/s/$seriesId/c/$chapterId"
         params={params}
         aria-label={`Mở chương ${ch.number}`}
         title={a.detail}
       >
-        <span className="ch-num">Ch.{ch.number}</span>
-        <span className="ch-state">
-          <span className="dot" data-tone={a.tone} />
-          <span style={{ fontWeight: 500 }}>{a.state}</span>
-          {a.kind === "resume" && <span className="small muted">· thả lại file vào hàng này để tải tiếp</span>}
+        <CoverImage src={thumb} fallback={`Ch.${ch.number}`}>
+          {running && (
+            // Vạch 3px dưới ảnh, chỉ khi chương đang chạy; trạng thái cũng đã có chữ bên dưới nên không truyền chỉ bằng màu.
+            <span
+              className="card-progress"
+              aria-hidden="true"
+              style={{ width: `${Math.max(4, Math.round(a.progress * 100))}%` }}
+            />
+          )}
+        </CoverImage>
+        <span className="card-body">
+          <span className="card-name">
+            <b>Ch.{ch.number}</b>
+            {ch.title ? ` ${ch.title}` : ""}
+          </span>
+          <span className="card-state small" title={a.state}>
+            <span className="dot" data-tone={a.tone} />
+            <span className="card-state-text">{a.state}</span>
+          </span>
+          {a.kind === "resume" && <span className="small muted">Thả lại file để tải tiếp</span>}
+          <span className="small muted">{timeAgo(ch.updated_at)}</span>
         </span>
-        <span className="small muted ch-time">{timeAgo(ch.updated_at)}</span>
       </Link>
-      {confirming ? (
-        <DeleteChapterConfirm
-          ch={ch}
-          onDone={() => setConfirming(false)}
-          onError={(text) => {
-            setConfirming(false);
-            setMsg(text);
-          }}
-        />
-      ) : (
+      <div className="card-actions">
         <button
           type="button"
           className="icon-btn"
@@ -227,16 +238,18 @@ function ChapterLine(props: { ch: ChapterRow; upload: ReturnType<typeof uploadMa
         >
           <TrashIcon />
         </button>
-      )}
-      {msg && <div className="row-error">{msg}</div>}
-      {running && (
-        // Vạch 2px dưới hàng, chỉ khi chương đang chạy; trạng thái cũng đã có chữ ở trên nên không truyền chỉ bằng màu.
-        <span
-          className="row-progress"
-          aria-hidden="true"
-          style={{ width: `${Math.max(4, Math.round(a.progress * 100))}%` }}
+      </div>
+      {confirming && (
+        <DeleteChapterConfirm
+          ch={ch}
+          onDone={() => setConfirming(false)}
+          onError={(text) => {
+            setConfirming(false);
+            setMsg(text);
+          }}
         />
       )}
+      {msg && <div className="row-error">{msg}</div>}
     </div>
   );
 }
@@ -258,7 +271,7 @@ function DeleteChapterConfirm(props: { ch: ChapterRow; onDone: () => void; onErr
       ),
   });
   return (
-    <div className="row delete-confirm" role="alertdialog" aria-label={`Xác nhận xoá chương ${ch.number}`}>
+    <div className="card-confirm" role="alertdialog" aria-label={`Xác nhận xoá chương ${ch.number}`}>
       <span className="small">Xoá hẳn chương {ch.number} (ảnh, bản dịch, lịch sử)?</span>
       <button
         type="button"
