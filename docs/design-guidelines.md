@@ -115,14 +115,14 @@ Khung 1280×800, không chọn gì: canvas rộng 1160px (1280 − rail 48 − c
   không đoán được / file lỗi → dòng "Vừa thả" một dòng (file, series, số chương, Tạo; "+ Series mới…" mở cùng modal
   tạo series, tạo xong chọn sẵn series đó và focus ô số chương; chưa có series nào thì ô chọn là nút "+ Series mới…").
   Dưới đó: ô tìm + "+ Series" (modal "Tạo series mới" 560px: Tên, Loại truyện, Dịch từ — mặc định tiếng Anh, Sang —
-  mặc định tiếng Việt; Enter = Tạo series, tạo xong mở màn series) và hàng series
-  một dòng (tên dài cắt "…" + `title`, chấm + trạng thái, "N ch"; bấm hàng để mở, icon Sửa → modal Cài đặt dịch,
-  icon Xoá xác nhận tại chỗ rồi xoá cả series). Không có tiêu đề "Series · N". Nút Hoạt động của app shell chỉ hiện
+  mặc định tiếng Việt; Enter = Tạo series, tạo xong mở màn series) và lưới thẻ series
+  (ảnh bìa tự động hoặc bìa riêng, chưa có ảnh thì ô chữ cái đầu; tên dài cắt "…" + `title`, chấm + trạng thái, "N ch";
+  bấm thẻ để mở, icon Sửa → modal Cài đặt dịch, icon Xoá hiện sẵn, xác nhận phủ ngay trên thẻ rồi xoá cả series). Không có tiêu đề "Series · N". Nút Hoạt động của app shell chỉ hiện
   khi có chương đang tải ảnh; menu tài khoản giữ Glossary chung / Font / Cài đặt.
 - **Series** (một cột): ‹ về home (không breadcrumb), tên, cặp ngôn ngữ, "Glossary · N" và icon Cài đặt (cả hai mở modal,
-  `?tab=` giữ trạng thái modal); dải thả "Thả Ch.{next}" (series cố định, cũng tự tạo chương nháp); hàng chương một dòng
-  (số chương, chấm + trạng thái, thời gian, icon Xoá xác nhận tại chỗ; bấm cả hàng để mở — **không** có icon Sửa; vạch
-  2px chỉ khi đang chạy). Hàng danh sách không có nút "bước tiếp theo": dịch / xuất / chạy lại làm trong màn chương.
+  `?tab=` giữ trạng thái modal); dải thả "Thả Ch.{next}" (series cố định, cũng tự tạo chương nháp); lưới thẻ chương
+  (ảnh trang đầu, "Ch.N" + tên chương nếu có, chấm + trạng thái, thời gian, icon Xoá xác nhận tại chỗ; bấm cả thẻ để mở
+  — **không** có icon Sửa; vạch tiến độ dưới ảnh chỉ khi đang chạy). Thẻ không có nút "bước tiếp theo": dịch / xuất / chạy lại làm trong màn chương.
   **Cài đặt dịch** (modal): luôn hiện Tên, Dịch từ, Sang, Định dạng (Cuộn dọc / Từng trang — áp cho chương upload sau
   khi lưu), Font thoại; các nhóm thu gọn kèm tóm tắt: Giọng văn, Kính ngữ, Xưng hô, Font khác, Chữ bỏ qua, Ảnh tự bỏ (tự
   lưu). Hint dưới trường nằm trong ⓘ; **Lưu** dính ở footer, tách khỏi "Xoá series" (link đỏ, bấm mới hiện ô gõ tên).
@@ -162,5 +162,8 @@ Khung 1280×800, không chọn gì: canvas rộng 1160px (1280 − rail 48 − c
   Sửa ở hàng chương (thay quyết định 21/10; icon Sửa ở hàng series giữ, mở cài đặt), rail 5 nút chỉ icon + tooltip, panel
   Văn bản 4 tab, Xuất thành menu dưới nút Xuất. Mục "Màn chương" ở trên mô tả bản này; plan
   `plans/261106-1519-ui-simplify-wireframe/`.
+- Cập nhật 16/11/2026: danh sách một dòng ở Home và màn series đổi thành lưới thẻ có ảnh (quy tắc giữ nguyên: icon Xoá /
+  Sửa hiện sẵn, xác nhận xoá tại chỗ, không giấu sau chuột phải). Cài đặt series có mục "Ảnh bìa" (tải bìa riêng hoặc
+  về ảnh tự động); plan `plans/261116-1129-folder-drop-and-manga-grid/`.
 - Ngoài phạm vi đợt này: dark mode / chọn theme; bỏ cột phải "Cài đặt dịch" + "Glossary" ở trang series.
 - Ngoài phạm vi: thumbnail do server sinh; sắp xếp tay thứ tự file khi upload (file tự xếp theo tên, natural sort).

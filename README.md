@@ -29,6 +29,9 @@ Cần Docker Compose ≥ 2.17, RAM cho Docker ≥ 10 GB, nên 12 GB (2 worker m�
 - **Dịch chương một nút**: cắt trang theo detector, xoá chữ (Big LaMa / LaMa manga), OCR local (MangaOCR, PaddleOCR)
   hoặc LLM, dịch theo lô trang giữ ngữ cảnh + tên nhân vật, tự chèn chữ theo màu gốc. Trang đầu sửa được khi các lô sau
   còn chạy.
+- **Thả folder, lưới bìa**: thả hoặc **Chọn folder…** → mỗi folder ảnh thành một chương (tên chương lấy từ tên folder /
+  ZIP, sửa được trong popover chương). Trang chủ và trang series là lưới thẻ có ảnh; bìa series tự lấy từ ảnh đầu, hoặc
+  tải ảnh bìa riêng ở Cài đặt series.
 - **Editor**: sửa box chữ, undo / redo, autosave có version, vẽ mask xoá chữ lại, OCR lại vùng chọn, xem gốc / chia đôi,
   bảng văn bản cả chương.
 - **AI hiệu đính**: gợi ý sửa theo khối, nhận / bỏ từng cái, báo trước chi phí.

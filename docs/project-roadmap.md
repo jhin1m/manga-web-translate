@@ -32,6 +32,10 @@ Mọi test tự động hiện dùng worker giả lập; chưa có số đo vớ
 - [ ] **Đợt tính năng nhỏ (kiểm tay)**: soi ≥ 3 trang thật có chữ màu (màu chữ dịch khớp tông gốc, đọc rõ); parity
       chữ Konva ↔ render.py với font tuỳ chỉnh; đăng ký / đăng nhập thật qua `/login` với `SIGNUP_ENABLED=true` trên môi trường thử; kéo-thả sắp ảnh trên Safari; màn series hiện "Xuất lại" sau khi ẩn trang ở chương đã xuất.
 
+- [ ] **Thả folder + lưới bìa (0.4.0, chưa tag)**: code + test tự động đã xong trên `main`. Còn: build image app amd64 +
+      arm64 và `node -e "require('sharp')"` trong cả hai, tag `v0.4.0-rc.N` → selfhost smoke + update smoke, đo RAM app
+      khi tạo ~20 thumbnail lần đầu, user thử Windows (Chrome / Edge / Firefox: thả folder, **Chọn folder…**, lưới, bìa),
+      rồi tag chính thức + GitHub Release. Ghi chú: [releases/v0.4.0.md](./releases/v0.4.0.md).
 - [ ] **Cập nhật trong app (self-host)**: đã làm phiên bản trong menu, thông báo bản mới, nút **Cập nhật ngay** và
       service `updater`. Còn kiểm trên máy thật: Windows (rc → rc, đường dẫn có dấu cách / tiếng Việt / ổ D:, tắt, mất mạng)
       và Linux; `latest` (bản chính thức) chưa có smoke riêng, kiểm lại khi phát hành bản kế tiếp.
@@ -59,7 +63,7 @@ Mọi test tự động hiện dùng worker giả lập; chưa có số đo vớ
 - [ ] Đích CJK / Thái, chữ dọc khi typeset; dịch SFX + font SFX; phân loại thoại theo nghĩa (suy nghĩ, hét, khung dẫn).
 - [ ] OCR local chưa nhận SFX (mọi vùng coi là chữ thường → bị xoá + dịch). OCR local giờ là mặc định nên SFX bị xoá
       + dịch theo mặc định; cần giữ SFX thì đổi ngôn ngữ đó về AI LLM.
-- [ ] Thumbnail do server sinh (thứ tự ảnh trước khi cắt trang đã sắp tay được: kéo-thả / menu / Alt+↑↓).
+- [x] Thumbnail do server sinh — xong trong 0.4.0 (chưa phát hành): `GET /api/thumbs/:fileId` (sharp, cache storage); thứ tự ảnh trước khi cắt trang đã sắp tay được (kéo-thả / menu / Alt+↑↓).
 - [ ] Glossary: chuyển / sao chép entry giữa các cặp ngôn ngữ, cột cặp ngôn ngữ trong CSV.
 - [ ] Chống phát lại dispatch Modal triệt để (lưu `dispatch_id` đã nhận).
 - [ ] _(Ưu tiên sau cùng)_ AI phân loại ảnh credit / quảng cáo (hiện chỉ học theo dHash + gợi ý theo khổ ảnh; banner dính
@@ -72,6 +76,9 @@ Mọi test tự động hiện dùng worker giả lập; chưa có số đo vớ
   liệu thì nút tự lùi về hướng dẫn cập nhật tay) và chưa kiểm trên Linux thật. Docker rootless phải đặt
   `MTL_DOCKER_SOCK` (hoặc `MTL_UPDATER=0`). Docker Desktop bật Enhanced Container Isolation chặn updater, phải cập nhật
   tay. Người dùng 0.2.0 cập nhật tay một lần để có updater. Chi tiết: [self-host.md](./self-host.md#cập-nhật).
+- **Thả folder / lưới bìa (0.4.0)**: Safari iOS không có hộp chọn folder (vẫn chọn nhiều ảnh / ZIP được); thumbnail tạo
+  lúc xem lần đầu nên lưới mở lần đầu hiện ô chữ cái rồi mới có ảnh; tối đa 400 file / chương; ảnh bìa riêng PNG / JPG /
+  WebP ≤ 10 MB. Chưa đo RAM app khi tạo nhiều thumbnail cùng lúc (sharp xử lý tối đa 2 ảnh một lúc).
 - Watermark: watermark detector không bắt thì còn trên ảnh.
 - Credit cùng mẫu nhưng đổi chữ (đổi tên người dịch) có thể không khớp ảnh đã học.
 - Cắt mép chỉ cho mép trên / dưới ảnh gốc, trước Bước 1; dải credit giữa ảnh không cắt được. Tự cắt chỉ xét 3 ảnh đầu /

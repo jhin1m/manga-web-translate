@@ -1,7 +1,7 @@
 ---
 title: "Thả folder + lưới kiểu manga (series, chương)"
 description: "Thả folder = 1 chương (tên chương từ folder); trang chủ lưới series có ảnh bìa (tự động / tự tải); trang series lưới chương có ảnh đầu; thumbnail tạo phía API bằng sharp"
-status: pending
+status: in-progress
 priority: P1
 effort: "16h"
 tags: [web, api, upload, ui]
@@ -32,10 +32,10 @@ storage; tên chương lấy từ tên folder/ZIP đã bỏ tên series + cụm 
 
 | # | Phase | Status | Depends |
 |---|-------|--------|---------|
-| 1 | [Phase 1: Folder drop + tên chương](./phase-01-start.md) | Pending | — |
-| 2 | [Phase 2: API thumbnail + ảnh bìa series](./phase-02-api-thumbnails-and-series-cover.md) | Pending | — |
-| 3 | [Phase 3: Lưới series + lưới chương (web)](./phase-03-web-manga-grid.md) | Pending | 2 |
-| 4 | [Phase 4: Kiểm tra + phát hành](./phase-04-verify-and-release-check.md) | Pending | 1, 2, 3 |
+| 1 | [Phase 1: Folder drop + tên chương](./phase-01-start.md) | Done | — |
+| 2 | [Phase 2: API thumbnail + ảnh bìa series](./phase-02-api-thumbnails-and-series-cover.md) | Done | — |
+| 3 | [Phase 3: Lưới series + lưới chương (web)](./phase-03-web-manga-grid.md) | Done | 2 |
+| 4 | [Phase 4: Kiểm tra + phát hành](./phase-04-verify-and-release-check.md) | In progress (chờ rc + thử Windows) | 1, 2, 3 |
 
 Phase 1 và 2 độc lập về code (web upload vs API), làm song song được. Mỗi phase một commit, gate xanh mới sang phase sau.
 
