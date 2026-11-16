@@ -67,6 +67,11 @@ describe("thumbs", () => {
     expect(await head(storageKeys.thumb(A.userId, A.chapterId, f.id, 100, 200))).not.toBeNull();
   });
 
+  it("ignores the version query on the url", async () => {
+    const f = await sourceFile(A, A.chapterId, await strip(400, 600));
+    expect((await call(`/api/thumbs/${f.id}?t=5-9`, { cookie: A.cookie })).status).toBe(302);
+  });
+
   it("returns 404 for a file that is not uploaded yet", async () => {
     const f = await sourceFile(A, A.chapterId, null);
     expect((await get(f.id)).status).toBe(404);

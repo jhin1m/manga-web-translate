@@ -13,7 +13,7 @@ import { deleteSeries, fetchSeriesList, type SeriesListItem, seriesKeys } from "
 import { NewSeriesDialog } from "../series/new-series-dialog.tsx";
 import { DropZone, usePageDrop } from "../upload/drop-zone.tsx";
 import { normalizeName } from "../upload/parse-chapter-filename.ts";
-import { CoverImage, initialOf } from "./cover-image.tsx";
+import { CoverImage, initialOf, withStatus } from "./cover-image.tsx";
 import { useDropToTranslate } from "./drop-to-translate.ts";
 import { NewChapterConfirmRow } from "./new-chapter-confirm-row.tsx";
 import { PencilIcon, TrashIcon } from "./row-icons.tsx";
@@ -112,10 +112,16 @@ function SeriesCard({ s }: { s: SeriesListItem }) {
   const state =
     !latest || !a ? "Chưa có chương" : needsWork(latest) ? `Ch.${latest.number} · ${a.state}` : "Đã xuất hết";
   const tone = !latest || !a ? "idle" : needsWork(latest) ? a.tone : "ok";
+  // Bìa tự động 404 khi series vừa tạo bằng thao tác thả (ảnh đang lên): src đổi theo số chương / trạng thái chương
+  // mới nhất để thử tải lại đúng lúc; không đổi giữa các lượt polling. Bìa riêng luôn có sẵn nên giữ nguyên.
+  const cover =
+    s.cover_src && !s.cover_custom
+      ? withStatus(s.cover_src, `${s.chapter_count}-${latest?.status ?? ""}`)
+      : s.cover_src;
   return (
     <div className="card" data-series={s.id}>
-      <Link className="card-open" to="/s/$seriesId" params={{ seriesId: s.id }}>
-        <CoverImage src={s.cover_src} fallback={initialOf(s.title)} />
+      <Link className="card-open" to="/s/$seriesId" params={{ seriesId: s.id }} inert={confirming}>
+        <CoverImage src={cover} fallback={initialOf(s.title)} />
         <span className="card-body">
           <span className="card-name" title={s.title}>
             {s.title}
@@ -129,7 +135,7 @@ function SeriesCard({ s }: { s: SeriesListItem }) {
           </span>
         </span>
       </Link>
-      <div className="card-actions">
+      <div className="card-actions" inert={confirming}>
         <Link
           className="btn icon-btn"
           to="/s/$seriesId"

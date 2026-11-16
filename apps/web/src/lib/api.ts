@@ -56,7 +56,7 @@ function onSessionLost(status: number, data: Record<string, unknown>) {
   }
 }
 
-/** Gọi API JSON cùng origin; lỗi HTTP → ApiError. 204 → undefined. */
+/** Gọi API cùng origin (body JSON, hoặc FormData cho multipart); lỗi HTTP → ApiError. 204 → undefined. */
 export async function api<T>(path: string, init: Omit<RequestInit, "body"> & { body?: unknown } = {}): Promise<T> {
   const { body, ...rest } = init;
   const res = await fetch(path, {
@@ -64,10 +64,11 @@ export async function api<T>(path: string, init: Omit<RequestInit, "body"> & { b
     credentials: "same-origin",
     headers: {
       "x-tab-id": tabId(),
-      ...(body === undefined ? {} : { "content-type": "application/json" }),
+      // FormData: trình duyệt tự đặt content-type kèm boundary.
+      ...(body === undefined || body instanceof FormData ? {} : { "content-type": "application/json" }),
       ...rest.headers,
     },
-    body: body === undefined ? undefined : JSON.stringify(body),
+    body: body === undefined || body instanceof FormData ? (body as FormData | undefined) : JSON.stringify(body),
   });
   if (res.status === 204) return undefined as T;
   const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;

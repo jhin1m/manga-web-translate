@@ -11,9 +11,9 @@ import { fetchSeriesList, resetSeriesCover, type Series, seriesKeys, uploadSerie
 const COVER_ACCEPT = "image/png,image/jpeg,image/webp";
 const MAX_COVER_BYTES = 10 * 1024 * 1024;
 
-/** Lỗi trước khi gửi (định dạng / dung lượng); server vẫn kiểm lại bằng nội dung ảnh. */
+/** Lỗi trước khi gửi (định dạng khi trình duyệt biết kiểu / dung lượng); server vẫn kiểm lại bằng nội dung ảnh. */
 const coverFileError = (file: File) =>
-  !COVER_ACCEPT.split(",").includes(file.type)
+  file.type && !COVER_ACCEPT.split(",").includes(file.type)
     ? "Chỉ nhận ảnh PNG, JPG hoặc WebP."
     : file.size > MAX_COVER_BYTES
       ? "Ảnh bìa tối đa 10 MB."

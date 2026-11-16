@@ -76,15 +76,27 @@ describe("cover_src / thumb_src", () => {
     await newFile(A, ch1.id, 0, "credit"); // chương số nhỏ nhất toàn ảnh bỏ qua → lấy chương kế
 
     const item = (await listOf(A)).get(s.id);
-    expect(item?.cover_src).toBe(`/api/thumbs/${first.id}`);
+    expect(item?.cover_src).toBe(`/api/thumbs/${first.id}?t=0-0`);
     expect(item?.cover_src).not.toContain(skipped.id);
     expect(item?.cover_custom).toBe(false);
 
     const d = await detailOf(A, s.id);
     const thumb = (n: string) => d.chapters.find((c) => c.number === n)?.thumb_src;
-    expect(thumb("2")).toBe(`/api/thumbs/${first.id}`);
+    expect(thumb("2")).toBe(`/api/thumbs/${first.id}?t=0-0`);
     expect(thumb("1")).toBeNull();
     expect(thumb("10")).toMatch(/^\/api\/thumbs\//);
+  });
+
+  it("changes the thumbnail url when the first page trim changes", async () => {
+    const s = await newSeries(A, "cover trim");
+    const ch = await newChapter(A, s.id, "1");
+    const f = await newFile(A, ch.id, 0);
+    await scoped(db, A.userId).update(sourceFiles, eq(sourceFiles.id, f.id), {
+      trim: { top: 40, bottom: 75, by: "user" },
+    });
+    const url = `/api/thumbs/${f.id}?t=40-75`;
+    expect((await listOf(A)).get(s.id)?.cover_src).toBe(url);
+    expect((await detailOf(A, s.id)).chapters[0]?.thumb_src).toBe(url);
   });
 
   it("is null for a series without chapters or without usable pages", async () => {

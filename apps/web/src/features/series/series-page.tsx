@@ -200,6 +200,7 @@ function ChapterCard(props: { ch: ChapterRow; upload: ReturnType<typeof uploadMa
         params={params}
         aria-label={`Mở chương ${ch.number}`}
         title={a.detail}
+        inert={confirming}
       >
         <CoverImage src={thumb} fallback={`Ch.${ch.number}`}>
           {running && (
@@ -224,7 +225,7 @@ function ChapterCard(props: { ch: ChapterRow; upload: ReturnType<typeof uploadMa
           <span className="small muted">{timeAgo(ch.updated_at)}</span>
         </span>
       </Link>
-      <div className="card-actions">
+      <div className="card-actions" inert={confirming}>
         <button
           type="button"
           className="icon-btn"
