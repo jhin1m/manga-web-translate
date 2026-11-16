@@ -5,12 +5,13 @@
 import { fmtBytes } from "../../lib/format.ts";
 import { fetchChapter } from "../chapter/api.ts";
 import { FilePickButton } from "./drop-zone.tsx";
+import { usableFiles } from "./dropped-paths.ts";
 import { collectPages } from "./files.ts";
 import { uploadManager, useChapterUpload } from "./upload-manager.ts";
 
 /** Thả lại file của chương nháp → khớp với source_files → upload phần thiếu (ném lỗi nếu bộ file không khớp). */
 export async function resumeFromFiles(chapterId: string, files: File[]) {
-  const [pages, chapter] = await Promise.all([collectPages(files), fetchChapter(chapterId)]);
+  const [pages, chapter] = await Promise.all([collectPages(usableFiles(files)), fetchChapter(chapterId)]);
   if (chapter.status !== "draft") throw new Error("Chương đã dịch — không tải thêm ảnh được.");
   return uploadManager.resumeChapter({ chapter, pages });
 }

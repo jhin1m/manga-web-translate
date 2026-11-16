@@ -42,7 +42,7 @@ test("drop a 10-page ZIP on home, open the chapter while uploading, prepare it, 
   await loginWithForm(page);
   await page
     .getByRole("region", { name: "Tạo chương mới" })
-    .locator('input[type="file"]')
+    .locator('input[type="file"]:not([webkitdirectory])')
     .setInputFiles({ name: "chuong-501.zip", mimeType: "application/zip", buffer: Buffer.from(zip) });
 
   // Không có dòng xác nhận: tài khoản chỉ có 1 series, số chương lấy từ tên ZIP.
@@ -178,7 +178,7 @@ test("series page: 3 loose images = 1 draft chapter waiting for Dịch chương;
   const next = Number((await zone.getByText(/^Thả Ch\.\d+/).textContent())?.match(/\d+/)?.[0]);
   expect(next).toBeGreaterThan(0);
   await zone
-    .locator('input[type="file"]')
+    .locator('input[type="file"]:not([webkitdirectory])')
     .setInputFiles(["p1.png", "p2.png", "p3.png"].map((name) => ({ name, mimeType: "image/png", buffer: PNG_1PX })));
   // Ảnh lẻ 1 chương, số kế tiếp (tên ảnh là số trang) → mở thẳng màn chương; tải xong vẫn nháp, chờ "Dịch chương".
   await expect(page).toHaveURL(new RegExp(`/s/${s}/c/[0-9a-f-]{36}$`), { timeout: 30_000 });
@@ -234,7 +234,7 @@ test("a credit deleted with “Luôn bỏ ở series này” is skipped in the n
     await page.goto(`/s/${sid}`);
     await page
       .getByRole("region", { name: "Thêm chương tiếp theo" })
-      .locator('input[type="file"]')
+      .locator('input[type="file"]:not([webkitdirectory])')
       .setInputFiles(files);
     await expect(page).toHaveURL(new RegExp(`/s/${sid}/c/[0-9a-f-]{36}$`), { timeout: 30_000 });
     await expect(page.getByRole("button", { name: "Dịch chương", exact: true })).toBeEnabled({ timeout: 30_000 });
@@ -273,7 +273,7 @@ test("files the app cannot take as-is fall back to the confirm row with the prob
   await login(page);
   await page
     .getByRole("region", { name: "Tạo chương mới" })
-    .locator('input[type="file"]')
+    .locator('input[type="file"]:not([webkitdirectory])')
     .setInputFiles({ name: "bia.gif", mimeType: "image/gif", buffer: PNG_1PX });
   const confirm = page.getByRole("form", { name: "Sau khi thả file" });
   await expect(confirm.getByText("1 file không hợp lệ — bỏ chúng trước khi upload.")).toBeVisible();
@@ -323,7 +323,7 @@ test("shell activity button shows only while an upload has failed, and its drawe
 
   await page
     .getByRole("region", { name: "Thêm chương tiếp theo" })
-    .locator('input[type="file"]')
+    .locator('input[type="file"]:not([webkitdirectory])')
     .setInputFiles(["p1.png", "p2.png"].map((name) => ({ name, mimeType: "image/png", buffer: PNG_1PX })));
   await expect(page).toHaveURL(new RegExp(`/s/${s}/c/[0-9a-f-]{36}$`), { timeout: 30_000 });
   const chapterId = new URL(page.url()).pathname.split("/").at(-1) ?? "";

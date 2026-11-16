@@ -54,7 +54,7 @@ test("drop 5 images on home → chapter screen; one click on Dịch chương sta
   // Thả ảnh: không có dòng xác nhận.
   await page
     .getByRole("region", { name: "Tạo chương mới" })
-    .locator('input[type="file"]')
+    .locator('input[type="file"]:not([webkitdirectory])')
     .setInputFiles(
       ["001.png", "002.png", "003.png", "004.png", "005.png"].map((name) => ({
         name,

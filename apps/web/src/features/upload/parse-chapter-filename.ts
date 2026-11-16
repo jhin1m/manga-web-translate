@@ -6,12 +6,16 @@
  *   nhiều series khớp → series có tên dài nhất. Không khớp → null (caller tự chọn series dùng gần nhất).
  */
 
-const PREFIXED = /(?:chapter|chap|chương|chuong|ch|c|ep|화)\s*[._-]?\s*(\d+(?:\.\d+)?)/giu;
+// Không đứng ngay sau một chữ cái: "Arc 2" không phải "c 2" (nhưng "manga_c12", "s2_ch10" vẫn khớp).
+const PREFIXED = /(?<!\p{L})(?:chapter|chap|chương|chuong|ch|c|ep|화)\s*[._-]?\s*(\d+(?:\.\d+)?)/giu;
 const SUFFIXED = /(\d+(?:\.\d+)?)\s*화/gu;
 const ANY_NUMBER = /\d+(?:\.\d+)?/g;
 
-/** Tên không đường dẫn, không đuôi. */
-const stem = (name: string) => (name.split("/").pop() ?? name).replace(/\.[a-z0-9]+$/i, "");
+/** Đuôi file thật (ảnh / lưu trữ): tên folder như "Ch 12.5" hay "St.Louis" không bị cắt nhầm. */
+const FILE_EXT = /\.(?:zip|cbz|rar|7z|png|jpe?g|webp|gif|bmp|avif|tiff?)$/i;
+
+/** Tên không đường dẫn, không đuôi file. */
+const stem = (name: string) => (name.split("/").pop() ?? name).replace(FILE_EXT, "");
 
 /** "013" → "13", "12.50" → "12.5". */
 const normNumber = (s: string) => String(Number(s));
@@ -56,4 +60,45 @@ export function parseChapterFilename<T extends { title: string }>(
   series: readonly T[],
 ): { series: T | null; number: string | null } {
   return { series: matchSeries(name, series), number: parseChapterNumber(name) };
+}
+
+const MAX_TITLE = 200;
+const JOINERS = "_.:|·–—\\-";
+const JOINER_RUN = new RegExp(`(?:\\s*[${JOINERS}]+\\s*){2,}`, "gu");
+const JOINER_EDGE = new RegExp(`^[\\s${JOINERS}]+|[\\s${JOINERS}]+$`, "gu");
+const ONLY_NUMBER = /^\d+(?:\.\d+)?$/;
+
+/** Bỏ tên series ở đầu: ăn dần từng từ tới khi phần đã ăn chuẩn hoá bằng tên series; không khớp → giữ nguyên. */
+function stripSeriesPrefix(s: string, seriesTitle: string): string {
+  const want = normalizeName(seriesTitle);
+  if (!want) return s;
+  const parts = s.split(/(\s+)/);
+  let eaten = "";
+  for (let i = 0; i < parts.length; i++) {
+    eaten += parts[i];
+    const got = normalizeName(eaten);
+    if (got === want) return parts.slice(i + 1).join("");
+    if (got.length > want.length) break;
+  }
+  return s;
+}
+
+/**
+ * Tên chương từ tên folder / ZIP: bỏ đuôi, cụm số chương (`ch 105`, `105화`), tên series ở đầu và ký tự nối thừa.
+ * Thận trọng: không khớp tên series ở đầu thì giữ nguyên; chỉ còn số → "" (UI hiện "Ch.N").
+ */
+export function chapterTitleFrom(name: string, seriesTitle: string): string {
+  let s = stem(name);
+  // Bỏ cụm số chương cuối cùng (có tiền tố / hậu tố); số trần giữ nguyên để không xoá số trong tiêu đề.
+  for (const re of [PREFIXED, SUFFIXED]) {
+    const last = [...s.matchAll(re)].pop();
+    if (last?.index !== undefined) {
+      s = s.slice(0, last.index) + s.slice(last.index + last[0].length);
+      break;
+    }
+  }
+  s = stripSeriesPrefix(s.trim(), seriesTitle);
+  s = s.replace(JOINER_RUN, " - ").replace(JOINER_EDGE, "").replace(/\s+/g, " ");
+  if (!s || ONLY_NUMBER.test(s)) return "";
+  return s.slice(0, MAX_TITLE);
 }

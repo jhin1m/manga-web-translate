@@ -39,7 +39,7 @@ test("scrolling past an image edge in the draft viewer moves to the next or prev
   await page.goto(`/s/${sid}`);
   await page
     .getByRole("region", { name: "Thêm chương tiếp theo" })
-    .locator('input[type="file"]')
+    .locator('input[type="file"]:not([webkitdirectory])')
     .setInputFiles([
       { name: "p1.png", mimeType: "image/png", buffer: grayPng(120, H, (x, y) => (x + y) % 256) },
       { name: "p2.png", mimeType: "image/png", buffer: grayPng(120, H, (x, y) => (x * 2 + y / 3) % 256) },

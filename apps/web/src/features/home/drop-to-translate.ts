@@ -1,5 +1,5 @@
 /**
- * Thả file (home + series): xác định được series → tạo chương ngay (số đoán từ tên file nếu chưa trùng, không thì
+ * Thả file / folder (home + series): xác định được series → tạo chương ngay (số đoán từ tên file nếu chưa trùng, không thì
  * số kế tiếp), upload nền, mở thẳng màn chương đầu; chương dừng ở nháp tới khi bấm "Dịch chương". Không xác định được series (chưa có
  * series nào, hoặc nhiều series mà chưa từng có chương) hoặc file có vấn đề → trả về null để hiện dòng xác nhận.
  *
@@ -9,22 +9,48 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { fetchSeries, fetchSeriesList, type RecentChapter, type SeriesListItem, seriesKeys } from "../series/api.ts";
+import { dirOf, relPath, usableFiles } from "../upload/dropped-paths.ts";
 import { collectPages, isZip, listProblems, type PageFile } from "../upload/files.ts";
 import { naturalSortBy } from "../upload/natural-sort.ts";
-import { matchSeries, parseChapterNumber } from "../upload/parse-chapter-filename.ts";
+import { chapterTitleFrom, matchSeries, parseChapterNumber } from "../upload/parse-chapter-filename.ts";
 import { uploadManager } from "../upload/upload-manager.ts";
 
-export type Dropped = { zips: { name: string; pages: PageFile[] }[]; loose: PageFile[] };
+export type Dropped = {
+  /** `path`: đường dẫn tương đối của ZIP (ZIP nằm trong folder) — dùng để sort chương. */
+  zips: { name: string; path: string; pages: PageFile[] }[];
+  /** Mỗi folder chứa ảnh trực tiếp = 1 chương; `name` = tên folder, `path` = đường dẫn đầy đủ. */
+  folders: { name: string; path: string; pages: PageFile[] }[];
+  loose: PageFile[];
+};
 
-/** ZIP giải nén riêng từng cái (mỗi ZIP = 1 chương); ảnh lẻ gom chung. */
+/** ZIP giải nén riêng từng cái (mỗi ZIP = 1 chương); ảnh trong cùng folder = 1 chương; ảnh lẻ ở gốc gom chung. */
 export async function readDropped(files: File[]): Promise<Dropped> {
-  // Thứ tự ZIP = tên tự nhiên (ch9 trước ch10) → đánh số chương liên tiếp đúng thứ tự.
-  const zips = naturalSortBy(files.filter(isZip), (f) => f.name);
-  const [loose, ...zipPages] = await Promise.all([
-    collectPages(files.filter((f) => !isZip(f))),
+  const kept = usableFiles(files);
+  // Thứ tự ZIP = đường dẫn tự nhiên (ch9 trước ch10) → đánh số chương liên tiếp đúng thứ tự.
+  const zips = naturalSortBy(kept.filter(isZip), relPath);
+  const byDir = new Map<string, File[]>();
+  const looseFiles: File[] = [];
+  for (const f of kept) {
+    if (isZip(f)) continue;
+    const dir = dirOf(f);
+    if (!dir) looseFiles.push(f);
+    else byDir.set(dir, [...(byDir.get(dir) ?? []), f]);
+  }
+  const dirs = naturalSortBy([...byDir.keys()], (d) => d);
+  const [loose, ...rest] = await Promise.all([
+    collectPages(looseFiles),
     ...zips.map((z) => collectPages([z])),
+    ...dirs.map((d) => collectPages(byDir.get(d) ?? [])),
   ]);
-  return { loose: loose ?? [], zips: zips.map((z, i) => ({ name: z.name, pages: zipPages[i] ?? [] })) };
+  return {
+    loose: loose ?? [],
+    zips: zips.map((z, i) => ({ name: z.name, path: relPath(z), pages: rest[i] ?? [] })),
+    folders: dirs.map((path, i) => ({
+      name: path.split("/").pop() ?? path,
+      path,
+      pages: rest[zips.length + i] ?? [],
+    })),
+  };
 }
 
 /** Series đích của lần thả; null = không đoán được (hỏi người dùng). */
@@ -54,16 +80,27 @@ export function latestChapterSeries(series: readonly Pick<SeriesListItem, "id" |
   return best?.id ?? null;
 }
 
+/** Chương có tên (ZIP + folder), sort tự nhiên theo đường dẫn; bỏ nhóm rỗng. */
+export function namedGroups(d: Dropped): { name: string; pages: PageFile[] }[] {
+  return naturalSortBy([...d.zips, ...d.folders], (g) => g.path).filter((g) => g.pages.length > 0);
+}
+
 /**
- * Nhóm chương của lần thả: mỗi ZIP 1 chương (số đoán từ tên ZIP), ảnh lẻ gom 1 chương (số đoán từ tên chỉ khi có
- * đúng 1 ảnh — nhiều ảnh 001…054 là số trang).
+ * Nhóm chương của lần thả: mỗi ZIP / folder 1 chương (số đoán từ tên, `name` để làm tên chương), ảnh lẻ gom 1 chương
+ * (số đoán từ tên chỉ khi có đúng 1 ảnh — nhiều ảnh 001…054 là số trang; không có tên chương).
  */
-export function dropGroups(d: Dropped): { pages: PageFile[]; guess: string | null }[] {
-  const zips = d.zips.map((z) => ({ pages: z.pages, guess: parseChapterNumber(z.name) }));
+export function dropGroups(d: Dropped): { pages: PageFile[]; guess: string | null; name: string | null }[] {
+  const named = namedGroups(d).map((g) => ({ pages: g.pages, guess: parseChapterNumber(g.name), name: g.name }));
   const loose = d.loose.length
-    ? [{ pages: d.loose, guess: d.loose.length === 1 ? parseChapterNumber(d.loose[0]?.name ?? "") : null }]
+    ? [
+        {
+          pages: d.loose,
+          guess: d.loose.length === 1 ? parseChapterNumber(d.loose[0]?.name ?? "") : null,
+          name: null,
+        },
+      ]
     : [];
-  return [...zips, ...loose].filter((g) => g.pages.length > 0);
+  return [...named, ...loose];
 }
 
 /** Số cho từng chương: số đoán nếu chưa có trong series (và chưa dùng ở lần thả này), không thì số kế tiếp còn trống. */
@@ -97,7 +134,8 @@ export function useDropToTranslate(onFallback: (files: File[], seriesId?: string
       const recent = qc.getQueryData<{ chapters: RecentChapter[] }>(seriesKeys.recent());
       const seriesId = resolveDropSeries({
         fixedSeriesId: fixed,
-        fileNames: files.map((f) => f.name),
+        // Tên file + mọi tên folder trên đường dẫn (folder chương, folder series cha).
+        fileNames: [...new Set(files.flatMap((f) => relPath(f).split("/")))],
         series,
         recentSeriesId: recent?.chapters[0]?.series_id ?? latestChapterSeries(series),
       });
@@ -112,6 +150,7 @@ export function useDropToTranslate(onFallback: (files: File[], seriesId?: string
         queryFn: () => fetchSeries(seriesId),
         staleTime: 0,
       });
+      const seriesTitle = series.find((s) => s.id === seriesId)?.title ?? "";
       const numbers = chapterNumbers(
         groups.map((g) => g.guess),
         detail.chapters.map((c) => c.number),
@@ -121,6 +160,7 @@ export function useDropToTranslate(onFallback: (files: File[], seriesId?: string
         const { chapterId } = await uploadManager.startNewChapter({
           seriesId,
           number: numbers[i] ?? "1",
+          title: g.name ? chapterTitleFrom(g.name, seriesTitle) : "",
           pages: g.pages,
         });
         first ??= chapterId;

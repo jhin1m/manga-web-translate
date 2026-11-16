@@ -38,7 +38,7 @@ test("learn the trimmed bottom band, see it in the series settings, learning twi
   await page.goto(`/s/${sid}`);
   await page
     .getByRole("region", { name: "Thêm chương tiếp theo" })
-    .locator('input[type="file"]')
+    .locator('input[type="file"]:not([webkitdirectory])')
     .setInputFiles([
       { name: "p1.png", mimeType: "image/png", buffer: grayPng(120, H, banner) },
       { name: "p2.png", mimeType: "image/png", buffer: grayPng(120, H, banner) },

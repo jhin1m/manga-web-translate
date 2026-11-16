@@ -53,7 +53,7 @@ test("a chapter dropped with the learned bottom banner is trimmed on creation; o
     await page.goto(`/s/${seriesId}`);
     await page
       .getByRole("region", { name: "Thêm chương tiếp theo" })
-      .locator('input[type="file"]')
+      .locator('input[type="file"]:not([webkitdirectory])')
       .setInputFiles(files);
     await expect(page).toHaveURL(new RegExp(`/s/${seriesId}/c/[0-9a-f-]{36}$`), { timeout: 30_000 });
     await expect(page.getByRole("button", { name: "Dịch chương", exact: true })).toBeEnabled({ timeout: 30_000 });

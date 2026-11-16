@@ -89,10 +89,16 @@ const ChapterCreate = z.object({
   files: z.array(UploadFile).min(1).max(MAX_FILES_PER_CHAPTER),
 });
 
-/** Sửa số chương / chuyển series (sửa sau khi thả file tự tạo chương). */
+/** Sửa số chương / tên chương / chuyển series (sửa sau khi thả file tự tạo chương). */
 const ChapterPatch = z
-  .object({ number: ChapterNumber.optional(), series_id: z.string().uuid().optional() })
-  .refine((b) => b.number !== undefined || b.series_id !== undefined, { message: "number hoặc series_id" });
+  .object({
+    number: ChapterNumber.optional(),
+    series_id: z.string().uuid().optional(),
+    title: z.string().trim().max(200).optional(),
+  })
+  .refine((b) => b.number !== undefined || b.series_id !== undefined || b.title !== undefined, {
+    message: "number, series_id hoặc title",
+  });
 
 /** Chỉ "user" từ API: "credit" do server gán khi khớp ảnh credit đã học của series. */
 const SourcePatchBody = z
@@ -259,12 +265,13 @@ chapterRoutes.patch("/chapters/:chapterId", async (c) => {
     const ch = await tx.byId(chapters, c.req.param("chapterId"), "chapter");
     const seriesId = body.series_id ? (await tx.byId(series, body.series_id, "series")).id : ch.seriesId;
     const number = body.number ?? ch.number;
-    if (seriesId === ch.seriesId && Number(number) === Number(ch.number)) return ch;
+    const title = body.title ?? ch.title;
+    if (seriesId === ch.seriesId && Number(number) === Number(ch.number) && title === ch.title) return ch;
     const siblings = await tx.select(chapters, eq(chapters.seriesId, seriesId));
     if (siblings.some((x) => x.id !== ch.id && Number(x.number) === Number(number))) {
       throw conflict("chapter_number_taken", `series đã có chương ${number}`);
     }
-    const [row] = await tx.update(chapters, eq(chapters.id, ch.id), { seriesId, number });
+    const [row] = await tx.update(chapters, eq(chapters.id, ch.id), { seriesId, number, title });
     if (!row) throw new HTTPException(404, { message: "chapter not found" });
     return row;
   });

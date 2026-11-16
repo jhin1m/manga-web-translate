@@ -50,7 +50,7 @@ export function ChapterMetaPopover(props: {
           aria-expanded={open === "meta"}
           aria-haspopup="dialog"
           aria-label={`Chương ${name}`}
-          title={`Chương ${name} — đổi series / số chương`}
+          title={`Chương ${name} — đổi series / số / tên chương`}
           disabled={!detail}
           onClick={() => toggle("meta")}
         >
@@ -123,14 +123,23 @@ function MetaForm(props: { detail: ChapterDetail; onClose(): void; onMoved(serie
   const listQ = useQuery({ queryKey: seriesKeys.list(), queryFn: () => fetchSeriesList() });
   const [seriesId, setSeriesId] = useState(detail.series.id);
   const [number, setNumber] = useState(detail.number);
+  const [title, setTitle] = useState(detail.title);
   const moving = seriesId !== detail.series.id;
-  const changed = moving || number !== detail.number;
+  const retitled = title.trim() !== detail.title;
+  const changed = moving || number !== detail.number || retitled;
   const save = useMutation({
-    mutationFn: () => patchChapter(detail.id, { number, ...(moving ? { series_id: seriesId } : {}) }),
+    mutationFn: () =>
+      patchChapter(detail.id, {
+        number,
+        ...(moving ? { series_id: seriesId } : {}),
+        ...(retitled ? { title: title.trim() } : {}),
+      }),
     onSuccess: (ch) => {
       const title = listQ.data?.series.find((s) => s.id === ch.series_id)?.title ?? detail.series.title;
       qc.setQueryData<ChapterDetail>(chapterKeys.detail(detail.id), (d) =>
-        d ? { ...d, number: ch.number, series_id: ch.series_id, series: { id: ch.series_id, title } } : d,
+        d
+          ? { ...d, number: ch.number, title: ch.title, series_id: ch.series_id, series: { id: ch.series_id, title } }
+          : d,
       );
       // Danh sách series, chi tiết series (cũ + mới) và "Việc cần làm" đều dưới khoá ["series"].
       void qc.invalidateQueries({ queryKey: seriesKeys.list() });
@@ -142,7 +151,7 @@ function MetaForm(props: { detail: ChapterDetail; onClose(): void; onMoved(serie
 
   return (
     <PopForm
-      label="Đổi series / số chương"
+      label="Đổi series / số chương / tên chương"
       canSave={valid && changed && !save.isPending}
       error={save.error}
       onSubmit={() => save.mutate()}
@@ -170,6 +179,10 @@ function MetaForm(props: { detail: ChapterDetail; onClose(): void; onMoved(serie
         />
       </label>
       {!valid && <span className="small error">Số chương phải là số, VD 13 hoặc 13.5.</span>}
+      <label>
+        Tên chương
+        <input maxLength={200} placeholder="Không bắt buộc" value={title} onChange={(e) => setTitle(e.target.value)} />
+      </label>
     </PopForm>
   );
 }

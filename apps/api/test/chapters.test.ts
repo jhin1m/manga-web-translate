@@ -1018,6 +1018,12 @@ describe("edit chapter number / series", () => {
     expect((await patch({ number: "abc" })).status).toBe(400);
     const [row] = await sdb.select(chapters, eq(chapters.id, R.chapterId));
     expect(row).toMatchObject({ seriesId: other.id, number: "8" });
+
+    // Chỉ đổi tên chương (có trim); số giữ nguyên, tên rỗng = xoá tên.
+    const titled = await json<{ title: string; number: string }>(await patch({ title: "  Hồi kết  " }), 200);
+    expect(titled).toMatchObject({ title: "Hồi kết", number: "8" });
+    expect((await json<{ title: string }>(await patch({ title: "" }), 200)).title).toBe("");
+    expect((await patch({ title: "x".repeat(201) })).status).toBe(400);
   });
 });
 

@@ -32,7 +32,7 @@ test("drop a strip on home → translate → edit → export", async ({ page }) 
   await login(page);
   await page
     .getByRole("region", { name: "Tạo chương mới" })
-    .locator('input[type="file"]')
+    .locator('input[type="file"]:not([webkitdirectory])')
     .setInputFiles({ name: "Series e2e chapter 7001.png", mimeType: "image/png", buffer: PNG_1PX });
 
   // Series + số chương đoán từ tên file → tạo chương ngay, không hỏi.

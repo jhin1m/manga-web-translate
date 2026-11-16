@@ -1,25 +1,29 @@
 /**
- * Thả file (kéo-thả hoặc chọn): dải thả (hoặc vùng lớn khi chưa có series), nút chọn file, và thả bất kỳ đâu trên trang. Chỉ trả về danh sách
+ * Thả file / folder (kéo-thả hoặc chọn): dải thả (hoặc vùng lớn khi chưa có series), nút chọn file, và thả bất kỳ đâu trên trang. Chỉ trả về danh sách
  * File; đọc ZIP/kiểm file do dòng xác nhận / upload-manager làm.
  */
 import { type DragEvent, type ReactNode, useEffect, useRef, useState } from "react";
 import "../home/home.css";
+import { filesFromDataTransfer } from "./dropped-paths.ts";
 
 export const ACCEPT_UPLOAD = "image/png,image/jpeg,image/webp,.zip,application/zip";
 
-const filesOf = (dt: DataTransfer | null) => (dt?.files.length ? [...dt.files] : []);
+/** Đọc cả folder thả vào (async); lỗi đọc → coi như không có file. */
+const readDrop = (dt: DataTransfer | null) => filesFromDataTransfer(dt).catch((): File[] => []);
 
-/** `<label class="btn">` bọc input file ẩn — bấm được bằng bàn phím qua nhãn. */
+/** `<label class="btn">` bọc input file ẩn — bấm được bằng bàn phím qua nhãn. `directory`: chọn cả folder. */
 export function FilePickButton({
   children,
   onFiles,
   className = "",
   multiple = true,
+  directory = false,
 }: {
   children: ReactNode;
   onFiles: (files: File[]) => void;
   className?: string;
   multiple?: boolean;
+  directory?: boolean;
 }) {
   return (
     <label className={`btn file-pick ${className}`}>
@@ -27,11 +31,13 @@ export function FilePickButton({
       <input
         type="file"
         multiple={multiple}
-        accept={ACCEPT_UPLOAD}
+        // webkitdirectory không có trong type React; hộp chọn folder bỏ qua `accept`.
+        {...(directory ? { webkitdirectory: "" } : { accept: ACCEPT_UPLOAD })}
         onChange={(e) => {
           const list = e.target.files ? [...e.target.files] : [];
           e.target.value = "";
-          if (list.length) onFiles(list);
+          // Folder rỗng → báo lên để hiện "không có ảnh"; chọn file thường không bao giờ rỗng.
+          if (list.length || directory) onFiles(list);
         }}
       />
     </label>
@@ -59,8 +65,10 @@ export function useDropTarget(onFiles: (files: File[]) => void) {
         e.preventDefault();
         depth.current = 0;
         setOver(false);
-        const list = filesOf(e.dataTransfer);
-        if (list.length) onFiles(list);
+        // Item của DataTransfer hết hạn sau handler: lấy cờ + entry đồng bộ trước khi await.
+        // Thả toàn folder rỗng / rác → `onFiles([])` để người gọi báo "không có ảnh".
+        if (!e.dataTransfer?.types.includes("Files")) return;
+        void readDrop(e.dataTransfer).then(onFiles);
       },
     },
   };
@@ -76,10 +84,9 @@ export function usePageDrop(onFiles: (files: File[]) => void) {
     };
     const drop = (e: globalThis.DragEvent) => {
       if (e.defaultPrevented) return;
-      const list = filesOf(e.dataTransfer);
-      if (!list.length) return;
+      if (!e.dataTransfer?.types.includes("Files")) return;
       e.preventDefault();
-      cb.current(list);
+      void readDrop(e.dataTransfer).then((list) => cb.current(list));
     };
     window.addEventListener("dragover", over);
     window.addEventListener("drop", drop);
@@ -126,13 +133,23 @@ export function DropZone(props: {
         {size !== "strip" && props.hint && <div className="dropzone-hint">{props.hint}</div>}
       </div>
       {size === "strip" ? (
-        <FilePickButton className="link" onFiles={props.onFiles}>
-          chọn file
-        </FilePickButton>
+        <>
+          <FilePickButton className="link" onFiles={props.onFiles}>
+            chọn file
+          </FilePickButton>
+          <FilePickButton className="link" directory onFiles={props.onFiles}>
+            chọn folder
+          </FilePickButton>
+        </>
       ) : (
-        <FilePickButton className={`btn-primary ${size === "lg" ? "lg" : ""}`} onFiles={props.onFiles}>
-          Chọn file…
-        </FilePickButton>
+        <>
+          <FilePickButton className={`btn-primary ${size === "lg" ? "lg" : ""}`} onFiles={props.onFiles}>
+            Chọn file…
+          </FilePickButton>
+          <FilePickButton className={size === "lg" ? "lg" : ""} directory onFiles={props.onFiles}>
+            Chọn folder…
+          </FilePickButton>
+        </>
       )}
     </section>
   );

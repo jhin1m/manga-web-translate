@@ -3,7 +3,7 @@
  * (drop-to-translate.ts: chưa đoán được series, hoặc file có vấn đề). Một dòng: tên file + kích thước, series (có
  * "+ Series mới…" → modal tạo series như nút "+ Series", tạo xong chọn sẵn series đó), số chương (đoán từ tên file /
  * số tiếp theo), [Tạo] [✕]. Enter = tạo, Esc = bỏ. Tạo xong mở màn
- * chương, chương dừng ở nháp tới khi bấm "Dịch chương" như đường tự động. Nhiều file: mỗi ZIP = 1 chương; nhiều ảnh
+ * chương, chương dừng ở nháp tới khi bấm "Dịch chương" như đường tự động. Nhiều file: mỗi ZIP / folder = 1 chương; nhiều ảnh
  * lẻ → hỏi "1 chương gồm N ảnh" (mặc định) hay "N chương".
  */
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -13,11 +13,12 @@ import { errorMessage } from "../../lib/api.ts";
 import { fmtBytes } from "../../lib/format.ts";
 import type { Series, SeriesListItem } from "../series/api.ts";
 import { NewSeriesDialog } from "../series/new-series-dialog.tsx";
+import { relPath } from "../upload/dropped-paths.ts";
 import { isZip, listProblems, type PageFile } from "../upload/files.ts";
 import { naturalSortBy } from "../upload/natural-sort.ts";
-import { parseChapterFilename } from "../upload/parse-chapter-filename.ts";
+import { chapterTitleFrom, matchSeries, parseChapterNumber } from "../upload/parse-chapter-filename.ts";
 import { uploadManager } from "../upload/upload-manager.ts";
-import { type Dropped, readDropped } from "./drop-to-translate.ts";
+import { type Dropped, namedGroups, readDropped } from "./drop-to-translate.ts";
 import { CloseIcon } from "./row-icons.tsx";
 
 const NEW_SERIES = "__new";
@@ -73,11 +74,17 @@ export function NewChapterConfirmRow(props: {
     };
   }, [files]);
   const guess = useMemo(() => {
-    const sorted = naturalSortBy(files, (f) => f.name);
-    const g = parseChapterFilename(sorted[0]?.name ?? "", props.series);
+    // Tên file + mọi tên folder trên đường dẫn; số chương đoán từ tên file đầu tiên (hoặc từ folder, xem `autoNumber`).
+    const names = naturalSortBy([...new Set(files.flatMap((f) => relPath(f).split("/")))], (n) => n);
+    let series: SeriesListItem | null = null;
+    for (const n of names) {
+      series = matchSeries(n, props.series);
+      if (series) break;
+    }
+    const first = naturalSortBy(files, (f) => f.name)[0]?.name ?? "";
     // Nhiều ảnh lẻ (001.jpg…054.jpg) là số trang, không phải số chương → dùng số chương tiếp theo của series.
     const looseOnly = files.length > 1 && !files.some(isZip);
-    return looseOnly ? { ...g, number: null } : g;
+    return { series, number: looseOnly ? null : parseChapterNumber(first) };
   }, [files, props.series]);
   // "" = chưa có series nào để chọn (tài khoản mới) → phải tạo series trước.
   const [seriesId, setSeriesId] = useState(() => props.fixedSeriesId ?? guess.series?.id ?? props.series[0]?.id ?? "");
@@ -90,19 +97,22 @@ export function NewChapterConfirmRow(props: {
   const [each, setEach] = useState(false);
 
   const picked = props.series.find((s) => s.id === seriesId);
-  const autoNumber = props.defaultNumber ?? guess.number ?? picked?.next_number ?? "1";
-  const chapterNumber = number ?? autoNumber;
-
   const d = read.data;
-  const groups = useMemo<PageFile[][]>(() => {
+  // Chương có tên (ZIP / folder) trước, ảnh lẻ sau; ảnh lẻ không có tên chương.
+  const groups = useMemo<{ pages: PageFile[]; name: string | null }[]>(() => {
     if (!d) return [];
     const loose = d.loose.length === 0 ? [] : each ? d.loose.map((p) => [p]) : [d.loose];
-    return [...d.zips.map((z) => z.pages), ...loose].filter((g) => g.length > 0);
+    return [...namedGroups(d), ...loose.map((pages) => ({ pages, name: null }))].filter((g) => g.pages.length > 0);
   }, [d, each]);
-  const pages = groups.flat();
-  const problems = groups.flatMap((g) => listProblems(g));
+  // Folder chương: số đoán từ tên folder (tên file trong folder là số trang).
+  const folderNumber = d?.folders.length ? parseChapterNumber(groups[0]?.name ?? "") : null;
+  const autoNumber = props.defaultNumber ?? folderNumber ?? guess.number ?? picked?.next_number ?? "1";
+  const chapterNumber = number ?? autoNumber;
+  const seriesTitle = options.find((s) => s.id === seriesId)?.title ?? "";
+  const pages = groups.flatMap((g) => g.pages);
+  const problems = groups.flatMap((g) => listProblems(g.pages));
   const imageSize = useImageSize(pages.length === 1 ? pages[0] : undefined);
-  const askMode = !!d && d.zips.length === 0 && d.loose.length > 1;
+  const askMode = !!d && d.zips.length === 0 && d.folders.length === 0 && d.loose.length > 1;
 
   useEffect(() => {
     if (!d) return;
@@ -127,7 +137,8 @@ export function NewChapterConfirmRow(props: {
         const { chapterId } = await uploadManager.startNewChapter({
           seriesId: sid,
           number: num,
-          pages: g,
+          title: g.name ? chapterTitleFrom(g.name, seriesTitle) : "",
+          pages: g.pages,
         });
         made.current.set(i, chapterId);
       }
@@ -154,7 +165,8 @@ export function NewChapterConfirmRow(props: {
     if (canCreate) create.mutate();
   };
 
-  const fileLabel = files.length === 1 ? files[0]?.name : `${files.length} file`;
+  const fileLabel = files.length === 1 ? files[0]?.name : files.length === 0 ? "folder rỗng" : `${files.length} file`;
+  const noImages = !!d && groups.length === 0;
   const sizeLabel = !d
     ? "đang đọc file…"
     : pages.length === 1 && imageSize
@@ -239,10 +251,15 @@ export function NewChapterConfirmRow(props: {
         {groups.length > 1 && NUMBER_RE.test(chapterNumber) && (
           <span className="small muted">
             Tạo chương {chapterNumber}–{lastNumber}, đánh số liên tiếp
-            {d && d.zips.length > 1 ? " (mỗi ZIP 1 chương)" : ""}.
+            {d && d.zips.length + d.folders.length > 1 ? " (mỗi ZIP / folder 1 chương)" : ""}.
           </span>
         )}
         {!NUMBER_RE.test(chapterNumber) && <span className="small error">Số chương phải là số, VD 13 hoặc 13.5.</span>}
+        {noImages && (
+          <span className="small error" role="alert">
+            Không có ảnh nào trong folder.
+          </span>
+        )}
         {problems.map((p) => (
           <span key={p} className="small error">
             {p}

@@ -158,8 +158,8 @@ export const setSourceOrder = (ch: string, ids: string[]) =>
 export const fetchChapterStates = (ch: string) => api<{ pages: PageStateRow[] }>(base(ch, "/states"));
 
 export type Rejected = { id: string; ord: number; reason: "missing" | "too_large" | "type_mismatch" };
-/** Đổi số chương / chuyển series (409 `chapter_number_taken` khi series đích đã có số đó). */
-export const patchChapter = (ch: string, body: { number?: string; series_id?: string }) =>
+/** Đổi số / tên chương / chuyển series (409 `chapter_number_taken` khi series đích đã có số đó). */
+export const patchChapter = (ch: string, body: { number?: string; series_id?: string; title?: string }) =>
   api<ChapterSummary>(base(ch), { method: "PATCH", body });
 /**
  * Cắt trang → xoá chữ + OCR, rồi `target: "translated"` dịch tiếp theo chuỗi lô; `"prepared"` dừng ở "Chờ dịch" để
