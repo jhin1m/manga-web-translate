@@ -8,6 +8,8 @@
  * glossary thêm từ trong modal; ảnh credit "Luôn bỏ ở series này" tự bỏ ở chương sau; file lỗi → dòng xác nhận cũ báo lỗi. Test đầu đăng nhập bằng form `/login` (các spec khác
  * dùng dev auto-login).
  */
+import { mkdirSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { expect, type Route, test } from "@playwright/test";
 import { zipSync } from "fflate";
 import { WEB_URL } from "./env.ts";
@@ -352,4 +354,46 @@ test("shell activity button shows only while an upload has failed, and its drawe
   await activity.getByRole("button", { name: "Đóng", exact: true }).click();
   await expect(activity).toBeHidden();
   await expect(shellActivity).toHaveCount(0);
+});
+
+test("series page: several ZIPs picked at once, or a parent folder of chapter folders, make one draft chapter each", async ({
+  page,
+}, testInfo) => {
+  await login(page);
+  await page.goto(`/s/${s}`);
+  const zone = page.getByRole("region", { name: "Thêm chương tiếp theo" });
+  const chapterZip = (pages: number) =>
+    Buffer.from(zipSync(Object.fromEntries(Array.from({ length: pages }, (_, i) => [`${i + 1}.png`, PNG_1PX]))));
+
+  // Đặt tên chap-802 trước chap-801: thứ tự chương theo tên tự nhiên, không theo thứ tự chọn.
+  await zone.locator('input[type="file"]:not([webkitdirectory])').setInputFiles([
+    { name: "chap-802.zip", mimeType: "application/zip", buffer: chapterZip(1) },
+    { name: "chap-801.zip", mimeType: "application/zip", buffer: chapterZip(2) },
+  ]);
+  // Mở chương đầu (801); chuyển trang trong app (không reload) để upload nền của 802 không bị cắt.
+  await expect(page.getByRole("heading", { name: /^Chương 801$/ })).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByRole("button", { name: "Dịch chương", exact: true })).toBeEnabled({ timeout: 30_000 });
+  await page.locator(".cw-back").click();
+  await expect(page.getByRole("link", { name: "Mở chương 801", exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Mở chương 802", exact: true })).toBeVisible();
+
+  // Folder cha chứa 2 folder chương (hộp chọn folder chỉ chọn được 1 folder) → 2 chương, số từ tên folder.
+  const root = testInfo.outputPath("bo-chuong");
+  for (const [dir, pages] of [
+    ["chap-803", 2],
+    ["chap-804", 1],
+  ] as const) {
+    mkdirSync(join(root, dir), { recursive: true });
+    for (let i = 1; i <= pages; i++) writeFileSync(join(root, dir, `${i}.png`), PNG_1PX);
+  }
+  writeFileSync(join(root, "chap-804", "ghi-chu.txt"), "bỏ qua");
+  await zone.locator("input[webkitdirectory]").setInputFiles(root);
+  await expect(page.getByRole("heading", { name: /^Chương 803$/ })).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByRole("button", { name: "Dịch chương", exact: true })).toBeEnabled({ timeout: 30_000 });
+  await page.locator(".cw-back").click();
+  await expect(page.getByRole("link", { name: "Mở chương 803", exact: true })).toBeVisible();
+  await page.getByRole("link", { name: "Mở chương 804", exact: true }).click();
+  await expect(page.getByRole("heading", { name: /^Chương 804$/ })).toBeVisible();
+  await expect(page.getByRole("complementary", { name: "Danh sách ảnh gốc" }).locator("img")).toHaveCount(1);
+  await expect(page.getByRole("button", { name: "Dịch chương", exact: true })).toBeEnabled({ timeout: 30_000 });
 });

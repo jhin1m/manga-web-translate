@@ -41,8 +41,12 @@ export function HomePage() {
       <DropZone
         label="Tạo chương mới"
         size={series?.length === 0 ? "lg" : "strip"}
-        title={series?.length === 0 ? "Thả strip hoặc ZIP của chương mới vào đây" : "Thả ảnh / ZIP"}
-        hint="Series và số chương đoán từ tên file (sửa được trên màn chương). Tải ảnh xong, bấm “Dịch chương” để bắt đầu dịch."
+        title={
+          series?.length === 0
+            ? "Thả strip, ZIP hoặc folder của chương mới vào đây"
+            : "Thả ảnh / ZIP / folder — nhiều cái = nhiều chương"
+        }
+        hint="Thả nhiều ZIP / folder cùng lúc: mỗi cái thành 1 chương. Series và số chương đoán từ tên file (sửa được trên màn chương). Tải ảnh xong, bấm “Dịch chương” để bắt đầu dịch."
         onFiles={(f) => drop(f)}
       />
       {auto.isPending && (

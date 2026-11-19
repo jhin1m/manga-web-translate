@@ -149,7 +149,11 @@ function ChapterList({ series }: { series: SeriesDetail }) {
 
   return (
     <>
-      <DropZone label="Thêm chương tiếp theo" title={`Thả Ch.${next}`} onFiles={drop} />
+      <DropZone
+        label="Thêm chương tiếp theo"
+        title={`Thả Ch.${next} — hoặc nhiều ZIP / folder cùng lúc`}
+        onFiles={drop}
+      />
       {auto.isPending && (
         <p className="small muted" role="status">
           Đang tạo chương…
