@@ -3,13 +3,26 @@
  * Mỗi người một tài khoản — dữ liệu luôn của người đang đăng nhập (`GET /api/me`). Editor toàn màn hình nằm ngoài
  * shell.
  */
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, Outlet } from "@tanstack/react-router";
 import { createContext, type ReactNode, useContext, useEffect, useRef, useState } from "react";
 import { ShellActivity } from "../features/chapter/activity-drawer.tsx";
-import { readSeenVersion, UPDATE_STATUS_KEY, updateStatusQuery, writeSeenVersion } from "../features/update/api.ts";
+import {
+  checkUpdateNow,
+  readSeenVersion,
+  UPDATE_STATUS_KEY,
+  updateStatusQuery,
+  writeSeenVersion,
+} from "../features/update/api.ts";
 import { UpdateDialog, type UpdateDialogMode } from "../features/update/update-dialog.tsx";
-import { canUpdateInApp, failedRun, offeredVersion, showDot } from "../features/update/update-model.ts";
+import {
+  canCheckNow,
+  canUpdateInApp,
+  checkNowText,
+  failedRun,
+  offeredVersion,
+  showDot,
+} from "../features/update/update-model.ts";
 import { api, authClient, errorMessage, type Me, usd, useAppConfig } from "../lib/api.ts";
 import { markDevSignedOut } from "../lib/dev-login.ts";
 import "./app-shell.css";
@@ -107,7 +120,19 @@ function AccountMenu() {
     }
   }, [running]);
 
+  // "Kiểm tra bản mới": hỏi GitHub ngay thay vì chờ cache 24h của server; kết quả ghi đè status trong cache query.
+  const [checkNote, setCheckNote] = useState<string | null>(null);
+  const checkNow = useMutation({
+    mutationFn: checkUpdateNow,
+    onSuccess: (s) => {
+      qc.setQueryData(UPDATE_STATUS_KEY, s);
+      setCheckNote(checkNowText(s));
+    },
+    onError: () => setCheckNote("Không hỏi được GitHub. Kiểm tra mạng rồi thử lại sau."),
+  });
+
   const onToggle = (open: boolean) => {
+    if (!open) setCheckNote(null);
     if (!open || !offered) return;
     writeSeenVersion(offered);
     setSeen(offered);
@@ -159,6 +184,24 @@ function AccountMenu() {
                 {canUpdateInApp(status) ? "Cập nhật ngay" : "Cách cập nhật"}
               </button>
             </>
+          )}
+          {canCheckNow(status) && (
+            <button
+              type="button"
+              disabled={checkNow.isPending}
+              onClick={(e) => {
+                // Giữ menu mở để thấy kết quả (click lan lên danh sách sẽ đóng menu).
+                e.stopPropagation();
+                checkNow.mutate();
+              }}
+            >
+              {checkNow.isPending ? "Đang kiểm tra…" : "Kiểm tra bản mới"}
+            </button>
+          )}
+          {checkNote && (
+            <span className="shell-menu-check muted small" role="status">
+              {checkNote}
+            </span>
           )}
           {/* Chỉ bản local: bản nhiều người dùng không hiện phiên bản. API cũ không có `version` → ẩn. */}
           {local && config?.version && (

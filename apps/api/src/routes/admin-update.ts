@@ -18,8 +18,16 @@ const COOLDOWN_MS = 60_000;
 let lastTriggerAt = 0;
 
 /** Test đặt lại cooldown giữa các ca. */
+/**
+ * "Kiểm tra bản mới" trong menu: hỏi GitHub ngay thay vì chờ cache 24h. GitHub cho 60 request/giờ mỗi IP khi không
+ * xác thực → bấm liên tục trong cửa sổ này chỉ trả kết quả đã cache.
+ */
+const FRESH_CHECK_MS = 30_000;
+let lastFreshAt = 0;
+
 export function resetUpdateCooldownForTest(): void {
   lastTriggerAt = 0;
+  lastFreshAt = 0;
 }
 
 /** Đang ghim phiên bản khi compose truyền MTL_TAG khác `latest`. */
@@ -30,7 +38,10 @@ const err = (code: string, status: ContentfulStatusCode) => Response.json({ erro
 adminUpdateRoutes.get("/update", async (c) => {
   if (!env.MTL_LOCAL_MODE) return c.json({ error: "not_found" }, 404);
   const check = getUpdateCheck();
-  const [result, updater] = await Promise.all([check.get(), updaterStatus()]);
+  const now = Date.now();
+  const fresh = c.req.query("fresh") === "1" && now - lastFreshAt >= FRESH_CHECK_MS;
+  if (fresh) lastFreshAt = now;
+  const [result, updater] = await Promise.all([check.get({ fresh }), updaterStatus()]);
   const body: UpdateStatus = {
     current: check.current,
     check: result.check,

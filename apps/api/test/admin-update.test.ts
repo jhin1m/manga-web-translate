@@ -137,6 +137,19 @@ describe("GET /api/admin/update", () => {
     expect(seen[0]?.auth).toMatch(/^Bearer [\w-]{43}$/);
   });
 
+  it("?fresh=1 asks GitHub again right away, at most once per 30s; plain GET keeps the cache", async () => {
+    await get();
+    await get();
+    expect(github).toHaveBeenCalledTimes(1);
+    const fresh = () => app.request("/api/admin/update?fresh=1");
+    const res = await fresh();
+    expect(res.status).toBe(200);
+    expect(((await res.json()) as UpdateStatus).update_available).toBe(true);
+    expect(github).toHaveBeenCalledTimes(2);
+    await fresh();
+    expect(github).toHaveBeenCalledTimes(2);
+  });
+
   it("MTL_TAG=latest is not a pin", async () => {
     env.MTL_TAG = "latest";
     expect(((await (await get()).json()) as UpdateStatus).pinned_tag).toBeNull();

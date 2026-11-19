@@ -68,7 +68,9 @@ Bấm avatar (góc phải trên): dòng cuối menu là `MTL v0.3.0`. Bản tự
 
 App hỏi GitHub xem có bản mới không, tối đa 1 lần/ngày, chỉ khi bạn mở web. Việc hỏi do máy chủ app làm chứ không phải
 trình duyệt. Request chỉ gồm IP máy bạn và User-Agent `mtl-selfhost`. Có bản mới thì avatar có chấm nhỏ (mở menu một lần
-là tắt) và menu có mục **Có bản mới vX.Y.Z · Xem thay đổi**. Không hỏi GitHub nữa: ghi `MTL_UPDATE_CHECK=0` (cách ghi
+là tắt) và menu có mục **Có bản mới vX.Y.Z · Xem thay đổi**. Kết quả được nhớ 24 giờ; muốn hỏi ngay thì bấm
+**Kiểm tra bản mới** trong menu (từ 0.5.0; bấm dồn trong 30 giây chỉ trả kết quả vừa hỏi). Bản cũ hơn: khởi động lại
+container `app` (Docker Desktop → Containers → `app` → Restart) rồi mở lại web. Không hỏi GitHub nữa: ghi `MTL_UPDATE_CHECK=0` (cách ghi
 như mục [Tắt nút cập nhật](#tắt-nút-cập-nhật)).
 
 ### Cập nhật ngay (từ 0.3.0)

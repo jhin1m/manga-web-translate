@@ -25,6 +25,9 @@ export const pollVersion = () =>
     (c) => c.version ?? null,
   );
 
+/** "Kiểm tra bản mới": server hỏi GitHub ngay (bỏ cache 24h; bấm dồn trong 30s thì trả kết quả đã cache). */
+export const checkUpdateNow = () => api<UpdateStatus>("/api/admin/update?fresh=1", { cache: "no-store" });
+
 export const startUpdate = (version: string) =>
   api<{ run: UpdateRun }>("/api/admin/update", { method: "POST", body: { version } });
 

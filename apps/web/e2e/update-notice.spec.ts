@@ -404,3 +404,20 @@ test("the update route answering 404 hides everything; a dev build shows 'MTL de
   await expect(page.getByTestId("update-dot")).toHaveCount(0);
   await expect(page.getByText("Có bản mới")).toHaveCount(0);
 });
+
+test("'Kiểm tra bản mới' asks right away: up to date says so, a new release shows the offer", async ({ page }) => {
+  const upToDate = status({ latest: { ...latest, version: "0.3.0" }, update_available: false });
+  let fresh = upToDate;
+  await open(page, (route) => json(route, upToDate));
+  await page.route("**/api/admin/update?fresh=1", (route) => json(route, fresh));
+
+  await page.getByLabel("Tài khoản", { exact: true }).click();
+  await page.getByRole("button", { name: "Kiểm tra bản mới" }).click();
+  await expect(page.getByRole("status").filter({ hasText: "Đang dùng bản mới nhất (v0.3.0)." })).toBeVisible();
+
+  fresh = status();
+  await page.getByRole("button", { name: "Kiểm tra bản mới" }).click();
+  await expect(page.getByText("Có bản mới", { exact: false })).toContainText("v0.4.0");
+  await expect(page.getByRole("button", { name: "Cập nhật ngay" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Kiểm tra bản mới" })).toHaveCount(0);
+});

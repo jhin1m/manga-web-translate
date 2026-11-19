@@ -190,6 +190,17 @@ export const offeredVersion = (s: UpdateStatus | undefined): string | null =>
   s?.update_available && s.latest ? s.latest.version : null;
 
 /** Chấm trên avatar: có bản mới, chưa xem, và không phải ghim-bản-chính-thức. */
+/** Có mục "Kiểm tra bản mới" không: chỉ khi app hỏi GitHub được (không phải bản dev / đã tắt) và chưa có bản mới để mời. */
+export const canCheckNow = (s: UpdateStatus | undefined): boolean =>
+  !!s && (s.check === "ok" || s.check === "error") && !offeredVersion(s) && s.updater.run?.state !== "running";
+
+/** Kết quả sau khi bấm "Kiểm tra bản mới"; null khi có bản mới (menu đã hiện "Có bản mới …"). */
+export function checkNowText(s: UpdateStatus): string | null {
+  if (s.check === "error") return "Không hỏi được GitHub. Kiểm tra mạng rồi thử lại sau.";
+  if (offeredVersion(s)) return null;
+  return s.current === "dev" ? "Đang dùng bản mới nhất." : `Đang dùng bản mới nhất (v${s.current}).`;
+}
+
 export const showDot = (s: UpdateStatus | undefined, seen: string | null): boolean => {
   const v = offeredVersion(s);
   return v !== null && s !== undefined && v !== seen && !blockedByPin(s);

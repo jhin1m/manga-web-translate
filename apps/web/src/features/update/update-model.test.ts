@@ -1,6 +1,8 @@
 import { composeUrl, UPDATE_REASONS, type UpdateRun, type UpdateStatus } from "@mtl/shared/update";
 import { describe, expect, it } from "vitest";
 import {
+  canCheckNow,
+  checkNowText,
   curlLine,
   failedRun,
   formatElapsed,
@@ -229,5 +231,29 @@ describe("dot and failed run", () => {
     expect(failedRun(status({}, failed))).toBe(failed);
     expect(failedRun(status({ current: "0.4.0" }, failed))).toBeNull();
     expect(failedRun(status({}, run()))).toBeNull();
+  });
+});
+
+describe("check for updates now", () => {
+  const upToDate = status({
+    latest: { version: "0.3.0", name: "v0.3.0", url: "https://example.test/r", source: "github" },
+    update_available: false,
+  });
+
+  it("is offered only when the app can ask GitHub and nothing newer is already offered", () => {
+    expect(canCheckNow(upToDate)).toBe(true);
+    expect(canCheckNow(status({ check: "error", latest: null, update_available: false }))).toBe(true);
+    expect(canCheckNow(status())).toBe(false);
+    expect(canCheckNow(status({ check: "dev", update_available: false }))).toBe(false);
+    expect(canCheckNow(status({ check: "disabled", update_available: false }))).toBe(false);
+    expect(canCheckNow(undefined)).toBe(false);
+  });
+
+  it("says the result in words; a newer version shows the existing offer instead", () => {
+    expect(checkNowText(upToDate)).toBe("Đang dùng bản mới nhất (v0.3.0).");
+    expect(checkNowText(status({ check: "error", latest: null, update_available: false }))).toMatch(
+      /Không hỏi được GitHub/,
+    );
+    expect(checkNowText(status())).toBeNull();
   });
 });
