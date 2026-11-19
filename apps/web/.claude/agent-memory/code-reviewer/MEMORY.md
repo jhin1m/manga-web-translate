@@ -1,1 +1,0 @@
-- [Shared test DB](project-test-db-shared.md) — don't run api `pnpm test` concurrently; use test:unit/typecheck/lint in reviews

@@ -29,4 +29,4 @@ apps/web/test-results/
 apps/web/playwright-report/
 
 # Bộ nhớ cục bộ của agent Claude Code
-.claude/agent-memory/
+**/.claude/agent-memory/

@@ -1,2 +1,0 @@
-- [Plan dir + language](feedback_plan_dir_and_language.md) — repo-root plans/, Vietnamese with diacritics, self-decide minor items with reasons
-- [Series memory design](project_series_memory_design.md) — 2026-11-11: reuse payload carry, optional result keys, never bump API PIPELINE_VERSION
