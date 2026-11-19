@@ -251,6 +251,9 @@ Postgres được ghim major 17; nâng lên major mới (18…) là thủ tục 
     luồng, nên các worker giành nhân của nhau: chỉ chậm hơn, không hỏng.
   - Hai chương dịch cùng lúc → số request tới API AI tăng gấp đôi, dễ gặp giới hạn tốc độ (429). Server tự tạm dừng
     provider 2 phút khi lỗi dồn dập rồi chạy tiếp, không cần làm gì.
+- **Chương đang chờ lượt**: chương chưa có worker nào nhận hiện "Đang chờ lượt" (kèm số chương đang chạy), tự bắt đầu
+  khi có worker rảnh, không cần bấm gì. "Đang chờ worker" = không thấy worker nào chạy trong 3 phút gần đây (lần đầu
+  worker còn tải model, hoặc worker đã dừng): xem `docker compose logs -f worker`.
 - **Thu hồi token worker** trong Cài đặt: token mới chỉ được sinh khi `app` khởi động lại, worker cũ sẽ 401 và restart
   lặp tới lúc đó → chạy `docker compose restart app worker`.
 - **Worker chạy ngoài compose**: API chặn Host lạ. Worker chạy thẳng trên máy gọi `http://localhost:8080` thì không
@@ -271,6 +274,10 @@ sudo rm -rf data               # xoá hẳn dữ liệu (không lấy lại đư
 ## Xử lý sự cố
 
 - **Xem log**: `docker compose logs -f app` (hoặc `jobs`, `worker`, `postgres`); trạng thái: `docker compose ps`.
+- **Dịch lỗi giữa chừng** (vd 25/50 trang): các lô sau vẫn chạy tiếp, cuối lượt chương hiện "Lỗi N trang". Bấm
+  "Chạy lại N trang" ở góc trên phải: chỉ chạy lại trang lỗi, trang đã xong giữ nguyên. Rê chuột lên chip đỏ để xem
+  nguyên nhân; lỗi khoá API thì sửa khoá ở Cài đặt trước rồi mới bấm. Lỗi quá tải / 429 của nhà cung cấp AI tự thử
+  lại (trang hiện "Chờ AI"), không cần bấm gì.
 - **Cổng 8080 bận** (`port is already allocated`, hoặc trang mở ra không phải app): `MTL_PORT=9090 docker compose up -d`.
 - **Lỗi quyền `./data`** (Linux, `permission denied`): container tự `chown` thư mục của nó về uid 1000 khi khởi động;
   nếu đã tạo tay bằng user khác: `sudo chown -R 1000:1000 data/files data/secrets data/backups data/worker data/models`

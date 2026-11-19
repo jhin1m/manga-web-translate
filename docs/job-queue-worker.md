@@ -123,6 +123,17 @@ dịch active → không làm gì; gọi lặp / đồng thời vẫn ra đúng 
     chính các chương đó: 2 chương bận, mỗi chương còn ~1.000 trang chờ thì 1,5–3,4 ms (FIFO 0,6–1,5 ms), tức chậm hơn
     FIFO 1,2–1,9 ms; 8 chương bận × 1.000 trang chờ thì ~8 ms. Bảng `jobs` chưa từng được analyze (phút đầu sau cài mới
     hoặc restore) thì cả câu này lẫn câu FIFO đều đọc cả hàng đợi.
+- **Chương đang chờ worker** (`apps/api/src/jobs/queue-state.ts`, chỉ đọc, không ảnh hưởng claim): chương `ingesting` /
+  `processing` có job `queued` worker nhận được ngay (`run_after <= now`, không bị breaker provider chặn — bám bộ lọc
+  của claim), không job nào `running` còn lease, và không job nào vừa kết thúc trong 5 s (khoảng worker claim job kế)
+  → `waiting`. Job đang backoff chờ AI thử lại hoặc provider đang tạm dừng không tính (đó không phải "chờ worker
+  rảnh"); job `running` hết lease không tính là đang chạy. Một truy vấn `bool_or … group by chapter_id`, lọc thêm
+  `user_id` của chính chương.
+  Self-host (`MTL_LOCAL_MODE`) mà không token worker nào có `last_seen_at` trong 180 s → `no_worker` (bản nhiều người
+  dùng không trả trạng thái này: worker Modal bật theo nhu cầu). `GET /chapters/:id/progress` trả
+  `chapter.queue = { state, running_chapters } | null` (`running_chapters` = số chương khác có job chạy, mọi người dùng,
+  chỉ con số); danh sách chương (series detail, recent, latest) trả `queue_state`. Web hiện "Đang chờ lượt" /
+  "Đang chờ worker" thay vì "Đang xử lý", không vẽ thanh tiến độ.
 - Bản nhiều người dùng chưa chia lượt theo người: ai tạo hàng loạt export khác tuỳ chọn thì chen trước job của người
   khác, và trong cùng một chương job tạo trước vẫn chạy trước. Chấp nhận ở bản hiện tại, self-host chỉ 1 người dùng.
 - `payload.context`: `rolling` khi lô mở đầu chương và mọi trang hiện xen giữa/ngay sau lô còn trong lượt; còn lại
@@ -138,6 +149,8 @@ dịch active → không làm gì; gọi lặp / đồng thời vẫn ra đúng 
 - Dịch (`translate-prepared`), dịch lại (`translate`, cả chương hoặc `page_ids`), "Chạy lại trang lỗi" (`retry-failed`;
   trang lỗi xoá chữ + OCR chỉ vào lượt khi chương đã có trang `ready`, không thì dừng `prepared`) khi chương còn job dịch
   đang chạy/chờ → 409 `translate_running` (riêng `translate-prepared` khi chương đang `processing` → 409 `chapter_not_prepared`); trang ẩn → 409 `page_skipped`; trang chưa có OCR → 409 `page_not_prepared`.
+- "Chạy lại trang lỗi" chỉ xếp lại trang `failed`; trang `ready` không bị dịch lại. Web nói rõ điều này ở tooltip nút
+  ("Chạy lại N trang"), thông báo sau khi bấm (đếm theo trang) và tooltip chip "Lỗi N trang" (nguyên nhân gom nhóm).
 - **Quét lại trang** (`POST /chapters/:id/rescan {page_ids}`, menu trang "Quét lại trang n"): dịch lại chỉ dịch trên
   `ocr_result` cũ nên không cứu được trang OCR đọc sai / gắn nhầm SFX. Rescan enqueue `page.prepare` (xoá chữ + OCR lại
   từ ảnh gốc) cho các trang đã có OCR rồi mở lượt `translated` cho chúng — lô dịch chờ OCR mới. Bản dịch theo luật AI ghi
