@@ -56,6 +56,16 @@ describe("nextAction", () => {
 
   it("describes progress in words", () => {
     expect(nextAction(ch("processing", pc(52, 24))).detail).toBe("24/52 trang xong");
+    const waiting = nextAction({ ...ch("processing", pc(52, 24)), queue_state: "waiting" });
+    expect(waiting).toMatchObject({ state: "Đang chờ lượt", tone: "idle", action: "Xem tiến độ" });
+    expect(waiting.detail).toBe("24/52 trang xong · tự chạy tiếp khi worker rảnh");
+    expect(nextAction({ ...ch("ingesting"), queue_state: "waiting" }).detail).toBe("Tự bắt đầu khi worker rảnh");
+    expect(nextAction({ ...ch("processing", pc(5)), queue_state: "no_worker" })).toMatchObject({
+      state: "Đang chờ worker",
+      tone: "warn",
+    });
+    // Chương yên không bao giờ hiện "chờ lượt" dù dữ liệu cũ còn sót.
+    expect(nextAction({ ...ch("review", pc(5, 5)), queue_state: "waiting" }).state).not.toMatch(/chờ lượt/);
     expect(nextAction(ch("partial_failed", pc(48, 47, 1))).state).toBe("Lỗi 1 trang");
     expect(nextAction(ch("draft"), { phase: "uploading", done: 5, total: 10 }).progress).toBe(0.5);
   });

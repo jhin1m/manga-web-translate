@@ -74,8 +74,18 @@ export type ChapterRun = {
   batches: number;
 };
 
+/** Chương bận nhưng chưa job nào chạy (đang xếp hàng); `running_chapters` = số chương khác đang chạy. */
+export type ChapterQueue = { state: "waiting" | "no_worker"; running_chapters: number };
+
 export type Progress = {
-  chapter: { id: string; status: ChapterStatus; ingest_rev: number; run: ChapterRun | null };
+  chapter: {
+    id: string;
+    status: ChapterStatus;
+    ingest_rev: number;
+    run: ChapterRun | null;
+    /** Thiếu khi server cũ chưa gửi. */
+    queue?: ChapterQueue | null;
+  };
   counts: Partial<Record<PageStatus, number>>;
   pages: ProgressPage[];
   jobs: JobView[];

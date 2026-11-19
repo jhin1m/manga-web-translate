@@ -1,9 +1,11 @@
 /** Nhãn + tông màu trạng thái chương/page (CSS .status[data-tone]). */
 import type { ChapterStatus } from "../series/api.ts";
-import type { ChapterRun } from "./api.ts";
+import type { ChapterQueue, ChapterRun } from "./api.ts";
 import type { UploadView } from "./next-action.ts";
 
 export type Tone = "ok" | "busy" | "warn" | "danger" | "idle";
+/** Chip trạng thái chương; `title` = giải thích thêm khi rê chuột (nguyên nhân lỗi, vì sao đang chờ). */
+export type Chip = { label: string; tone: Tone; title?: string };
 
 export const CHAPTER_STATUS: Record<ChapterStatus, { label: string; tone: Tone }> = {
   draft: { label: "Nháp (chưa commit)", tone: "idle" },
@@ -33,7 +35,25 @@ type ChipInput = {
   upload: UploadView | null;
   /** Lượt dịch đang mở (progress `chapter.run`). */
   run?: ChapterRun | null;
+  /** Chương bận đang xếp hàng chờ worker (progress `chapter.queue`). */
+  queue?: ChapterQueue | null;
 };
+
+const WAITING_TITLE = "Mỗi worker làm một chương một lúc. Chương này tự bắt đầu khi có worker rảnh — không cần bấm gì.";
+const NO_WORKER_TITLE =
+  "Chưa thấy worker nào chạy. Lần đầu worker tải model mất vài phút; xem: docker compose logs -f worker";
+
+/** Chip của chương đang chờ worker; giữ số trang đã xong khi chương bị chờ giữa chừng. */
+function queueChip(input: ChipInput, queue: ChapterQueue): Chip {
+  if (queue.state === "no_worker") return { label: "Đang chờ worker", tone: "warn", title: NO_WORKER_TITLE };
+  const parts = ["Đang chờ lượt"];
+  if (queue.running_chapters > 0) parts.push(`${queue.running_chapters} chương đang chạy`);
+  if (input.status === "processing") {
+    const view = processingView(input);
+    if (view.fraction) parts.push(view.label);
+  }
+  return { label: parts.join(" · "), tone: "idle", title: WAITING_TITLE };
+}
 
 /** Nhãn + tiến độ (0..1) của chương đang xử lý; xem chapterChip. */
 function processingView(input: ChipInput): { label: string; fraction: number | null } {
@@ -64,6 +84,8 @@ function processingView(input: ChipInput): { label: string; fraction: number | n
  */
 export function chapterProgress(input: ChipInput): number | null | undefined {
   const { status, upload } = input;
+  // Đang chờ worker: không vẽ thanh (thanh chạy qua lại trông như đang làm).
+  if ((status === "ingesting" || status === "processing") && input.queue) return undefined;
   if (status === "ingesting") return null;
   if (status === "processing") return processingView(input).fraction;
   if (status === "draft" && upload?.phase === "uploading") return upload.total > 0 ? upload.done / upload.total : null;
@@ -74,13 +96,11 @@ export function chapterProgress(input: ChipInput): number | null | undefined {
  * Chip phản ánh cả việc ngoài chương: lượt xuất của chương này và upload của chương khác trong tab (chương này
  * đang tải ảnh thì chip đã nói rồi). Chương yên thì chip chuyển sang "đang chạy".
  */
-export function chipWithActivity(
-  chip: { label: string; tone: Tone },
-  extra: { exports: number; uploads: number },
-): { label: string; tone: Tone } {
+export function chipWithActivity(chip: Chip, extra: { exports: number; uploads: number }): Chip {
   const parts = [extra.exports > 0 && "đang xuất", extra.uploads > 0 && "chương khác đang tải ảnh"].filter(Boolean);
   if (!parts.length) return chip;
   return {
+    ...chip,
     label: [chip.label, ...parts].join(" · "),
     tone: chip.tone === "idle" || chip.tone === "ok" ? "busy" : chip.tone,
   };
@@ -108,7 +128,7 @@ export function nextReviewPage(
  * Chip trạng thái ở thanh trên màn chương — chỗ duy nhất nói chương đang ở đâu ("Đang dịch · 4/33 trang · lô 2/9",
  * "Chờ duyệt · 2 cần xem", "Xong"); rail chỉ giữ trạng thái theo trang. Thuần.
  */
-export function chapterChip(input: ChipInput): { label: string; tone: Tone } {
+export function chapterChip(input: ChipInput): Chip {
   const { status, pages, upload } = input;
   const review = input.review ? ` · ${input.review} cần xem` : "";
   switch (status) {
@@ -118,8 +138,10 @@ export function chapterChip(input: ChipInput): { label: string; tone: Tone } {
         return { label: `Tải dở ${upload.done}/${upload.total} ảnh`, tone: "warn" };
       return { label: "Nháp", tone: "idle" };
     case "ingesting":
+      if (input.queue) return queueChip(input, input.queue);
       return { label: "Đang cắt trang", tone: "busy" };
     case "processing":
+      if (input.queue) return queueChip(input, input.queue);
       return { label: processingView(input).label, tone: "busy" };
     case "prepared":
       return {

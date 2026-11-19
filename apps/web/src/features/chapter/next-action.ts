@@ -30,7 +30,7 @@ export type NextAction = {
 const ratio = (a: number, b: number) => (b > 0 ? Math.min(1, a / b) : 0);
 
 export function nextAction(
-  ch: Pick<ChapterRow, "status" | "page_counts" | "exported" | "reexport">,
+  ch: Pick<ChapterRow, "status" | "page_counts" | "exported" | "reexport" | "queue_state">,
   upload?: UploadView | null,
 ) {
   const pc = ch.page_counts ?? { total: 0, ready: 0, failed: 0, busy: 0 };
@@ -74,6 +74,22 @@ export function nextAction(
   }
   if (ch.exported && (ch.status === "review" || ch.status === "done")) {
     return a({ kind: "open", action: "Mở", state: "Đã xuất", detail: `${pc.total} trang`, tone: "ok", progress: 1 });
+  }
+  // Chương bận chưa có job nào chạy: nói rõ đang xếp hàng, không để giống "Đang xử lý" (người dùng tưởng treo).
+  if ((ch.status === "ingesting" || ch.status === "processing") && ch.queue_state) {
+    const noWorker = ch.queue_state === "no_worker";
+    return a({
+      kind: "progress",
+      action: "Xem tiến độ",
+      state: noWorker ? "Đang chờ worker" : "Đang chờ lượt",
+      detail: noWorker
+        ? "Chưa thấy worker nào chạy"
+        : pc.ready
+          ? `${pc.ready}/${pc.total} trang xong · tự chạy tiếp khi worker rảnh`
+          : "Tự bắt đầu khi worker rảnh",
+      tone: noWorker ? "warn" : "idle",
+      progress: ratio(pc.ready, pc.total),
+    });
   }
   switch (ch.status) {
     case "draft":

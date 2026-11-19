@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   clock,
   describeJobError,
+  failedCauseTitle,
   failedPageGroups,
   nextQuotaReset,
   pageRanges,
@@ -92,6 +93,17 @@ describe("provider wait band", () => {
 });
 
 describe("failed pages summary", () => {
+  it("chip tooltip names each cause; failures too old to have a job are not called a system error", () => {
+    const f = (ord: number, error_class: string) => ({ ord, job: { error_class, error: null } });
+    expect(failedCauseTitle([])).toBeNull();
+    expect(failedCauseTitle([f(0, "auth"), f(1, "auth"), f(2, "schema")])).toBe(
+      "2 trang: AI từ chối khoá API; 1 trang: AI trả sai định dạng",
+    );
+    expect(failedCauseTitle([f(0, "schema"), { ord: 1, job: null }])).toBe(
+      "1 trang: AI trả sai định dạng; 1 trang: lỗi từ lượt trước",
+    );
+  });
+
   it("collapses consecutive pages into ranges", () => {
     expect(pageRanges([2, 3, 4, 6, 9, 13, 14, 15, 17, 18])).toBe("2–4, 6, 9, 13–15, 17, 18");
     expect(pageRanges([5, 1, 1])).toBe("1, 5");

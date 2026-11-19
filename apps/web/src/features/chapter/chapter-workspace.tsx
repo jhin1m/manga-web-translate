@@ -76,7 +76,7 @@ import { ExportMenu } from "./export-menu.tsx";
 import { isExportActive } from "./export-options.ts";
 import { triggerDownload, useExports } from "./export-panel.tsx";
 import { type BatchHooks, FindReplacePanel } from "./FindReplace.tsx";
-import { providerWait, providerWaitShort, providerWaitText } from "./job-error.ts";
+import { failedCauseTitle, providerWait, providerWaitShort, providerWaitText } from "./job-error.ts";
 import { clearLegacyLayout } from "./layout-prefs.ts";
 import { PageRail } from "./page-rail.tsx";
 import { clickSelect, EMPTY_SELECTION, pruneSelection, type Selection, selectionIds } from "./page-selection.ts";
@@ -445,8 +445,15 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
     preparing: (counts.pending ?? 0) + (counts.preparing ?? 0),
     upload,
     run: data.progress?.chapter.run,
+    queue: data.progress?.chapter.queue,
   };
-  const chip = chipInput ? chapterChip(chipInput) : null;
+  const failedTitle =
+    status === "partial_failed" || status === "prepared"
+      ? failedCauseTitle(pages.filter((p) => p.status === "failed" && !p.skipped))
+      : null;
+  const baseChip = chipInput ? chapterChip(chipInput) : null;
+  // Chip đỏ "Lỗi N trang" / "Chờ dịch · lỗi N trang": rê chuột thấy nguyên nhân mà không phải mở Hoạt động.
+  const chip = baseChip && failedTitle && !baseChip.title ? { ...baseChip, title: failedTitle } : baseChip;
   const access: EditAccess = {
     lock: session.lock.state,
     lockEnabled: session.lockEnabled,
@@ -524,8 +531,14 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
       }
       if (kind === "cancel") return info(`Đã huỷ ${(await cancelChapter(chapterId)).cancelled} job.`);
       if (kind === "retry") {
+        // Đếm trang lỗi lúc bấm (không đếm job: một lô dịch gồm nhiều trang) — nói rõ trang đã xong không bị làm lại.
+        const failedNow = pages.filter((p) => p.status === "failed" && !p.skipped).length;
         const r = await runAi(() => retryFailed(chapterId));
-        return info(r.jobs.length ? `Đã xếp lại ${r.jobs.length} job cho trang lỗi.` : "Không có trang lỗi.");
+        return info(
+          r.jobs.length
+            ? `Đang chạy lại ${failedNow || "các"} trang lỗi — các trang đã xong giữ nguyên.`
+            : "Không có trang lỗi.",
+        );
       }
       if (kind === "translate-pages") {
         if (!selectedIds.length) return info("Chưa chọn trang.");
@@ -1354,8 +1367,11 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
     });
   // Chương đang chạy thì chip dẫn tới Hoạt động; yên mà còn trang cần xem thì nhảy tới trang đó (qua đổi trang
   // thường: lưu trang đang sửa trước).
+  // Chương đang chờ worker cũng là đang chạy (chip tông idle chỉ để không trông như đang làm) → dẫn tới Hoạt động.
   const reviewTarget =
-    chip && chip.tone !== "busy" ? nextReviewPage(pageIds, activeId, (id) => reviewIds.has(id)) : null;
+    chip && chip.tone !== "busy" && !chipInput?.queue
+      ? nextReviewPage(pageIds, activeId, (id) => reviewIds.has(id))
+      : null;
   const onChip = () => {
     if (reviewTarget) pickPage(reviewTarget);
     else setDrawer("activity");
@@ -1566,7 +1582,9 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
               ) : (
                 <p className="muted">
                   {status === "ingesting"
-                    ? "Đang ghép và cắt trang theo bóng thoại…"
+                    ? data.progress?.chapter.queue
+                      ? "Đang chờ lượt — tự cắt trang khi có worker rảnh."
+                      : "Đang ghép và cắt trang theo bóng thoại…"
                     : status === "partial_failed"
                       ? `Cắt trang lỗi${ingestError ? `: ${ingestError}` : ""} — bấm "Cắt lại trang" để cắt lại từ ảnh đã tải.`
                       : "Chưa có trang."}

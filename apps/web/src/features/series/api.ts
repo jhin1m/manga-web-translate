@@ -57,6 +57,8 @@ export type ChapterRow = ChapterSummary & {
   reexport?: boolean;
   /** Thumbnail trang đầu không bỏ qua (series detail); null = chương chưa có ảnh. */
   thumb_src?: string | null;
+  /** Chương bận đang chờ worker: "waiting" = chờ lượt, "no_worker" = self-host không thấy worker nào chạy. */
+  queue_state?: "waiting" | "no_worker" | null;
 };
 
 export type SeriesListItem = Series & {

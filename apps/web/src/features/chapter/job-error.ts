@@ -14,7 +14,9 @@ export const ERROR_CLASS: Record<string, string> = {
   internal: "lỗi hệ thống",
 };
 
-const RETRY_HINT = 'Chuột phải trang → "Dịch lại trang", hoặc bấm "Chạy lại trang lỗi" để thử lại.';
+/** Chạy lại chỉ đụng trang lỗi — nói rõ để người dùng không sợ mất trang đã dịch. */
+const RETRY_HINT =
+  'Thử lại: nút "Chạy lại" góc trên phải hoặc "Chạy lại trang lỗi" trong menu ⋯ — chỉ chạy trang lỗi, trang đã xong giữ nguyên. Riêng một trang: menu ⋯ của trang → "Dịch lại trang".';
 /** Khoá API sai thì bấm chạy lại cũng hỏng tiếp — nói rõ phải sửa cấu hình trước. */
 const AUTH_HINT =
   'Khoá API AI sai, hết hạn mức hoặc chưa cấu hình — admin sửa ở Cài đặt › AI › Nhà cung cấp (hoặc key env của worker) rồi bấm "Chạy lại trang lỗi".';
@@ -147,4 +149,15 @@ export function failedPageGroups(failed: FailedPage[]) {
       raw: ps.find((p) => p.job?.error)?.job?.error ?? null,
       details: rawErrors(ps),
     }));
+}
+
+/** Tooltip chip "Lỗi N trang": mỗi nguyên nhân một cụm, VD "2 trang: AI từ chối khoá API". null = không có trang lỗi. */
+export function failedCauseTitle(failed: FailedPage[]): string | null {
+  if (!failed.length) return null;
+  // Trang lỗi từ lâu (job quá 24h không còn trong progress) không biết nguyên nhân — không gán nhầm "lỗi hệ thống".
+  const known = failed.filter((f) => f.job);
+  const unknown = failed.length - known.length;
+  const parts = failedPageGroups(known).map((g) => `${g.count} trang: ${g.label}`);
+  if (unknown) parts.push(`${unknown} trang: lỗi từ lượt trước`);
+  return parts.join("; ");
 }

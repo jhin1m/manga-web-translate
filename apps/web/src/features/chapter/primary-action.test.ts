@@ -65,7 +65,11 @@ describe("primary action", () => {
       menu: [],
     });
     expect(primaryAction({ ...base, status: "prepared", ready: 0, failed: 2 }).menu).toEqual([
-      { command: "retry", label: "Chạy lại trang lỗi" },
+      {
+        command: "retry",
+        label: "Chạy lại trang lỗi",
+        title: "Chỉ chạy lại 2 trang lỗi — trang đã xong giữ nguyên (dùng AI)",
+      },
     ]);
   });
 

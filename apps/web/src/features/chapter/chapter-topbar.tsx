@@ -18,7 +18,7 @@ import type { ChapterDetail } from "./api.ts";
 import { ChapterMetaPopover } from "./chapter-meta-popover.tsx";
 import { MoreMenu, OriginalToggle } from "./more-menu.tsx";
 import type { ChapterCommand, PrimaryAction } from "./primary-action.ts";
-import type { Tone } from "./status.ts";
+import type { Chip, Tone } from "./status.ts";
 import { RedoIcon, UndoIcon } from "./tool-icons.tsx";
 
 const SAVE_LABEL: Record<SaveStatus, string> = {
@@ -38,7 +38,7 @@ export function ChapterTopbar(props: {
   series: Series | undefined;
   detail: ChapterDetail | undefined;
   /** Chip trạng thái chương (status.ts chapterChip + chipWithActivity). */
-  chip: { label: string; tone: Tone } | null;
+  chip: Chip | null;
   /** Bấm chip: true = nhảy tới trang cần xem kế tiếp, false = mở Hoạt động (do `onChip` làm). */
   chipJumps: boolean;
   onChip(): void;
@@ -99,7 +99,9 @@ export function ChapterTopbar(props: {
               type="button"
               className="cw-chip-btn"
               aria-label={`${chip.label} — ${props.chipJumps ? "nhảy tới trang cần xem" : "mở Hoạt động"}`}
-              title={props.chipJumps ? "Nhảy tới trang cần xem tiếp theo" : "Mở Hoạt động"}
+              title={[chip.title, props.chipJumps ? "Bấm: nhảy tới trang cần xem tiếp theo" : "Bấm: mở Hoạt động"]
+                .filter(Boolean)
+                .join("\n")}
               onClick={props.onChip}
             >
               <span className="status" data-tone={chip.tone}>

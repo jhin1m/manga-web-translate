@@ -25,6 +25,39 @@ describe("chapter status chip", () => {
     expect(chapterChip({ ...base, status: "processing", pages: 0 }).label).toBe("Đang dịch");
   });
 
+  it("chapter queued behind other chapters says it is waiting, not running", () => {
+    const waiting = { state: "waiting" as const, running_chapters: 2 };
+    const chip = chapterChip({ ...base, status: "processing", ready: 0, preparing: 5, queue: waiting });
+    expect(chip.label).toBe("Đang chờ lượt · 2 chương đang chạy");
+    expect(chip.tone).toBe("idle");
+    expect(chip.title).toMatch(/tự bắt đầu khi có worker rảnh/);
+    expect(
+      chapterChip({ ...base, status: "ingesting", pages: 0, queue: { ...waiting, running_chapters: 0 } }).label,
+    ).toBe("Đang chờ lượt");
+    // Chờ giữa chừng (worker rảnh chuyển sang chương khác): giữ số trang đã xong.
+    expect(chapterChip({ ...base, status: "processing", ready: 0, preparing: 2, queue: waiting }).label).toBe(
+      "Đang chờ lượt · 2 chương đang chạy · Xoá chữ + OCR 3/5",
+    );
+    expect(chapterProgress({ ...base, status: "processing", preparing: 5, queue: waiting })).toBeUndefined();
+    expect(chapterProgress({ ...base, status: "ingesting", pages: 0, queue: waiting })).toBeUndefined();
+  });
+
+  it("self-host with no worker running says so", () => {
+    const chip = chapterChip({
+      ...base,
+      status: "processing",
+      preparing: 5,
+      queue: { state: "no_worker", running_chapters: 0 },
+    });
+    expect(chip).toMatchObject({ label: "Đang chờ worker", tone: "warn" });
+    expect(chip.title).toMatch(/docker compose logs -f worker/);
+  });
+
+  it("chip title survives the activity suffix", () => {
+    const chip = { label: "Lỗi 2 trang", tone: "danger" as const, title: "2 trang: lỗi hệ thống" };
+    expect(chipWithActivity(chip, { exports: 1, uploads: 0 }).title).toBe("2 trang: lỗi hệ thống");
+  });
+
   it("running translate shows pages done and batch", () => {
     const run = { target: "translated" as const, total: 33, remaining: 29, batch: 2, batches: 9 };
     expect(chapterChip({ ...base, status: "processing", pages: 33, run })).toEqual({

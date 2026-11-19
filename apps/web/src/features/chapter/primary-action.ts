@@ -27,6 +27,9 @@ export type PrimaryAction = {
 };
 
 const TRANSLATE_LABEL = "Dịch chương";
+/** Chạy lại chỉ gửi trang lỗi (`retry-failed`), trang đã xong không đụng tới. */
+const retryTitle = (failed: number) =>
+  `Chỉ chạy lại ${failed > 0 ? `${failed} ` : "các "}trang lỗi — trang đã xong giữ nguyên (dùng AI)`;
 
 /** Chương nháp: `commit` gửi đích "đã dịch"; `prepare_only` gửi đích "chờ dịch". */
 const TRANSLATE_DRAFT: PrimaryAction = {
@@ -90,7 +93,8 @@ export function primaryAction(input: {
       label: TRANSLATE_LABEL,
       disabled: false,
       title: "Dịch + chèn chữ các trang đã OCR (dùng AI)",
-      menu: input.failed > 0 ? [{ command: "retry", label: "Chạy lại trang lỗi" }] : [],
+      menu:
+        input.failed > 0 ? [{ command: "retry", label: "Chạy lại trang lỗi", title: retryTitle(input.failed) }] : [],
     };
   }
   if (status === "ingesting" || status === "processing") {
@@ -123,7 +127,7 @@ export function primaryAction(input: {
       command: "retry",
       label: input.failed > 0 ? `Chạy lại ${input.failed} trang` : "Chạy lại trang lỗi",
       disabled: false,
-      title: "Chạy lại các trang lỗi (dùng AI)",
+      title: retryTitle(input.failed),
       menu: [{ command: "export", label: "Xuất" }, retranslate],
     };
   }
