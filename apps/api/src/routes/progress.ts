@@ -1,11 +1,13 @@
 /**
  * Tiến độ chương cho UI polling 2–3s (không SSE, red team #13): trạng thái chapter + từng page + job đang/vừa chạy.
- * Một lượt gồm 4 truy vấn cố định (chapter, pages, jobs, page_states), không N+1.
+ * Một lượt gồm 4 truy vấn cố định (chapter, pages, jobs, page_states), không N+1; chương bận thêm truy vấn trạng thái
+ * chờ worker (jobs/queue-state.ts).
  */
 import { chapters, jobs, pageStates, pages } from "@mtl/db";
 import { ACTIVE_JOB_STATUSES } from "@mtl/shared";
 import { and, eq, gt, inArray, or } from "drizzle-orm";
 import { Hono } from "hono";
+import { chapterQueueView } from "../jobs/queue-state.ts";
 import { planBatches, regionCount } from "../jobs/translate-chain.ts";
 import type { AppEnv } from "../middleware/user.ts";
 import { jobView } from "./jobs.ts";
@@ -84,8 +86,10 @@ progressRoutes.get("/chapters/:chapterId/progress", async (c) => {
     });
     run = { target: ch.runTarget, total: ch.runTotal, remaining: queued.length, batch, batches: batch + rest.length };
   }
+  // Chương bận mà không job nào chạy → đang xếp hàng chờ worker (UI hiện "Đang chờ lượt" thay vì "Đang xử lý").
+  const queue = await chapterQueueView(ch);
   return c.json({
-    chapter: { id: ch.id, status: ch.status, ingest_rev: ch.ingestRev, run },
+    chapter: { id: ch.id, status: ch.status, ingest_rev: ch.ingestRev, run, queue },
     counts,
     pages: pageRows
       .sort((a, b) => a.ord - b.ord)

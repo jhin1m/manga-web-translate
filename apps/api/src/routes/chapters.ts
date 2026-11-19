@@ -199,6 +199,7 @@ chapterRoutes.get("/recent-chapters", async (c) => {
       page_counts: pickedStats.pageCounts(ch.id),
       exported: pickedStats.exported(ch.id),
       reexport: pickedStats.reexport(ch.id),
+      queue_state: pickedStats.queueState(ch.id),
     })),
   });
 });

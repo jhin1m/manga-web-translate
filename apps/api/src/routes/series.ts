@@ -19,6 +19,7 @@ import { bodyLimit } from "hono/body-limit";
 import { HTTPException } from "hono/http-exception";
 import { v7 as uuidv7 } from "uuid";
 import { z } from "zod";
+import { chapterQueueStates } from "../jobs/queue-state.ts";
 import { activeLockHolder } from "../lib/chapter-lock.ts";
 import { chaptersOf, removeChapters } from "../lib/chapter-removal.ts";
 import { chapterThumbs, seriesCoverThumbs } from "../lib/first-pages.ts";
@@ -178,7 +179,7 @@ export async function exportStatus(sdb: Scoped, chs: ChapterRow[]) {
 export async function chapterStats(sdb: Scoped, chs: ChapterRow[]) {
   const ids = chs.map((c) => c.id);
   const counts = new Map<string, PageCounts>(ids.map((id) => [id, { total: 0, ready: 0, failed: 0, busy: 0 }]));
-  const [groups, exported] = await Promise.all([
+  const [groups, exported, queue] = await Promise.all([
     ids.length
       ? sdb.countBy(
           pages,
@@ -187,6 +188,7 @@ export async function chapterStats(sdb: Scoped, chs: ChapterRow[]) {
         )
       : Promise.resolve([]),
     exportStatus(sdb, chs),
+    chapterQueueStates(chs),
   ]);
   for (const g of groups) {
     const c = counts.get(g.chapterId);
@@ -200,6 +202,8 @@ export async function chapterStats(sdb: Scoped, chs: ChapterRow[]) {
     pageCounts: (id: string) => counts.get(id) as PageCounts,
     exported: (id: string) => exported.exported.has(id),
     reexport: (id: string) => exported.reexport.has(id),
+    /** "waiting" | "no_worker" khi chương bận đang chờ worker (jobs/queue-state.ts), không thì null. */
+    queueState: (id: string) => queue.get(id) ?? null,
   };
 }
 
@@ -322,6 +326,7 @@ seriesRoutes.get("/series", async (c) => {
               page_counts: stats.pageCounts(top.id),
               exported: stats.exported(top.id),
               reexport: stats.reexport(top.id),
+              queue_state: stats.queueState(top.id),
             }
           : null,
         last_activity_at: last.get(s.id) ?? s.updatedAt,
@@ -360,6 +365,7 @@ seriesRoutes.get("/series/:seriesId", async (c) => {
       page_counts: stats.pageCounts(ch.id),
       exported: stats.exported(ch.id),
       reexport: stats.reexport(ch.id),
+      queue_state: stats.queueState(ch.id),
     })),
   });
 });
