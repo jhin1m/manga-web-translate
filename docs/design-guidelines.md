@@ -115,7 +115,7 @@ Khung 1280×800, không chọn gì: canvas rộng 1160px (1280 − rail 48 − c
   không đoán được / file lỗi → dòng "Vừa thả" một dòng (file, series, số chương, Tạo; "+ Series mới…" mở cùng modal
   tạo series, tạo xong chọn sẵn series đó và focus ô số chương; chưa có series nào thì ô chọn là nút "+ Series mới…").
   Dưới đó: ô tìm + "+ Series" (modal "Tạo series mới" 560px: Tên, Loại truyện, Dịch từ — mặc định tiếng Anh, Sang —
-  mặc định tiếng Việt; Enter = Tạo series, tạo xong mở màn series) và lưới thẻ series
+  mặc định tiếng Việt; Enter = Tạo series, tạo xong mở màn series), thanh xem danh sách (xem dưới) và lưới thẻ series
   (ảnh bìa tự động hoặc bìa riêng, chưa có ảnh thì ô chữ cái đầu; tên dài cắt "…" + `title`, chấm + trạng thái, "N ch";
   bấm thẻ để mở, icon Sửa → modal Cài đặt dịch, icon Xoá hiện sẵn, xác nhận phủ ngay trên thẻ rồi xoá cả series). Không có tiêu đề "Series · N". Nút Hoạt động của app shell chỉ hiện
   khi có chương đang tải ảnh; menu tài khoản giữ Glossary chung / Font / Cài đặt.
@@ -123,6 +123,12 @@ Khung 1280×800, không chọn gì: canvas rộng 1160px (1280 − rail 48 − c
   `?tab=` giữ trạng thái modal); dải thả "Thả Ch.{next}" (series cố định, cũng tự tạo chương nháp); lưới thẻ chương
   (ảnh trang đầu, "Ch.N" + tên chương nếu có, chấm + trạng thái, thời gian, icon Xoá xác nhận tại chỗ; bấm cả thẻ để mở
   — **không** có icon Sửa; vạch tiến độ dưới ảnh chỉ khi đang chạy). Thẻ không có nút "bước tiếp theo": dịch / xuất / chạy lại làm trong màn chương.
+- **Thanh xem danh sách** (home cạnh ô tìm; màn series canh phải trên danh sách chương): "Sắp xếp theo" (home: Hoạt
+  động gần nhất · Tên · Ngày tạo · Số chương; series: Số chương · Cập nhật · Ngày tạo), nút đảo chiều có nhãn theo nghĩa
+  ("A→Z", "Mới trước", "Tăng dần"…; đổi tiêu chí thì về chiều mặc định của tiêu chí), cặp icon Lưới / Danh sách.
+  Danh sách = cùng thẻ bỏ ảnh, một hàng (tên cắt "…", chấm + trạng thái, số chương / thời gian, icon), xác nhận xoá mở
+  thành dòng dưới hàng, vạch tiến độ 3px dưới hàng chương đang chạy; ≤ 480px tên lên dòng riêng. Mỗi màn nhớ lựa chọn
+  riêng trong localStorage; mặc định lưới + thứ tự cũ (series: hoạt động mới trước; chương: số tăng dần).
   **Cài đặt dịch** (modal): luôn hiện Tên, Dịch từ, Sang, Định dạng (Cuộn dọc / Từng trang — áp cho chương upload sau
   khi lưu), Font thoại; các nhóm thu gọn kèm tóm tắt: Giọng văn, Kính ngữ, Xưng hô, Font khác, Chữ bỏ qua, Ảnh tự bỏ (tự
   lưu). Hint dưới trường nằm trong ⓘ; **Lưu** dính ở footer, tách khỏi "Xoá series" (link đỏ, bấm mới hiện ô gõ tên).
@@ -165,5 +171,7 @@ Khung 1280×800, không chọn gì: canvas rộng 1160px (1280 − rail 48 − c
 - Cập nhật 16/11/2026: danh sách một dòng ở Home và màn series đổi thành lưới thẻ có ảnh (quy tắc giữ nguyên: icon Xoá /
   Sửa hiện sẵn, xác nhận xoá tại chỗ, không giấu sau chuột phải). Cài đặt series có mục "Ảnh bìa" (tải bìa riêng hoặc
   về ảnh tự động); plan `plans/261116-1129-folder-drop-and-manga-grid/`.
+- Cập nhật 19/11/2026: thêm thanh xem danh sách (sắp xếp + Lưới / Danh sách) ở Home và màn series; plan
+  `plans/261119-0804-list-sort-view-toggle/`.
 - Ngoài phạm vi đợt này: dark mode / chọn theme; bỏ cột phải "Cài đặt dịch" + "Glossary" ở trang series.
 - Ngoài phạm vi: thumbnail do server sinh; sắp xếp tay thứ tự file khi upload (file tự xếp theo tên, natural sort).

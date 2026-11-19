@@ -1,8 +1,8 @@
 /**
  * Home, từ trên xuống: dải thả (thả bất kỳ đâu trên trang cũng được; chưa có series nào thì là vùng lớn; đoán được
  * series → tạo chương + tải ảnh + mở màn chương, không thì dòng "Vừa thả" inline) → ô tìm + "+ Series" (mở modal
- * tạo series: tên, loại truyện, Dịch từ / Sang) → lưới thẻ series có bìa (bấm thẻ để mở series, icon
- * Sửa → cài đặt series, icon Xoá → xác nhận phủ trên thẻ rồi xoá cả series).
+ * tạo series: tên, loại truyện, Dịch từ / Sang) + thanh sắp xếp / Lưới–Danh sách → lưới thẻ series có bìa hoặc danh
+ * sách hàng không ảnh (bấm thẻ để mở series, icon Sửa → cài đặt series, icon Xoá → xác nhận rồi xoá cả series).
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
@@ -15,6 +15,8 @@ import { DropZone, usePageDrop } from "../upload/drop-zone.tsx";
 import { normalizeName } from "../upload/parse-chapter-filename.ts";
 import { CoverImage, initialOf, withStatus } from "./cover-image.tsx";
 import { useDropToTranslate } from "./drop-to-translate.ts";
+import { type ListView, SERIES_PREFS_KEY, SERIES_SORTS, sortSeries, useListPrefs } from "./list-prefs.ts";
+import { ListToolbar } from "./list-toolbar.tsx";
 import { NewChapterConfirmRow } from "./new-chapter-confirm-row.tsx";
 import { PencilIcon, TrashIcon } from "./row-icons.tsx";
 import "./home.css";
@@ -67,8 +69,14 @@ export function HomePage() {
 function SeriesGrid(props: { series: SeriesListItem[] | undefined; error: unknown }) {
   const [search, setSearch] = useState("");
   const [adding, setAdding] = useState(false);
+  const prefs = useListPrefs(SERIES_PREFS_KEY, SERIES_SORTS);
+  const { view, sort, dir } = prefs.prefs;
   const needle = normalizeName(search);
-  const list = (props.series ?? []).filter((s) => !needle || normalizeName(s.title).includes(needle));
+  const list = sortSeries(
+    (props.series ?? []).filter((s) => !needle || normalizeName(s.title).includes(needle)),
+    sort,
+    dir,
+  );
 
   return (
     <section aria-label="Series" className="block">
@@ -83,6 +91,7 @@ function SeriesGrid(props: { series: SeriesListItem[] | undefined; error: unknow
         <button type="button" onClick={() => setAdding(true)}>
           + Series
         </button>
+        <ListToolbar options={SERIES_SORTS} control={prefs} />
       </div>
       {adding && <NewSeriesDialog onClose={() => setAdding(false)} />}
       {!!props.error && <p className="notice danger">{errorMessage(props.error)}</p>}
@@ -94,9 +103,9 @@ function SeriesGrid(props: { series: SeriesListItem[] | undefined; error: unknow
         </div>
       )}
       {list.length > 0 && (
-        <div className="card-grid">
+        <div className={view === "list" ? "card-list" : "card-grid"}>
           {list.map((s) => (
-            <SeriesCard key={s.id} s={s} />
+            <SeriesCard key={s.id} s={s} layout={view} />
           ))}
         </div>
       )}
@@ -104,7 +113,7 @@ function SeriesGrid(props: { series: SeriesListItem[] | undefined; error: unknow
   );
 }
 
-function SeriesCard({ s }: { s: SeriesListItem }) {
+function SeriesCard({ s, layout }: { s: SeriesListItem; layout: ListView }) {
   const [confirming, setConfirming] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const latest = s.latest_chapter;
@@ -121,7 +130,7 @@ function SeriesCard({ s }: { s: SeriesListItem }) {
   return (
     <div className="card" data-series={s.id}>
       <Link className="card-open" to="/s/$seriesId" params={{ seriesId: s.id }} inert={confirming}>
-        <CoverImage src={cover} fallback={initialOf(s.title)} />
+        {layout === "grid" && <CoverImage src={cover} fallback={initialOf(s.title)} />}
         <span className="card-body">
           <span className="card-name" title={s.title}>
             {s.title}

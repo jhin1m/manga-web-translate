@@ -1,6 +1,7 @@
 /**
  * Màn series, một cột: đầu trang (‹ về home, tên, cặp ngôn ngữ, "Glossary · N", icon Cài đặt dịch), dải thả "Thả
- * Ch.{next}", lưới thẻ chương có ảnh đầu (bấm cả thẻ để mở — dịch/xuất/chạy lại làm trong màn chương; icon Xoá).
+ * Ch.{next}", thanh sắp xếp / Lưới–Danh sách, lưới thẻ chương có ảnh đầu hoặc danh sách hàng không ảnh (bấm cả thẻ để
+ * mở — dịch/xuất/chạy lại làm trong màn chương; icon Xoá).
  * Glossary / Cài đặt dịch mở thành modal trên danh sách; `?tab=` giữ trạng thái modal (link sâu từ home / màn chương).
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -15,6 +16,8 @@ import { GlossaryEditor } from "../glossary/glossary-editor.tsx";
 import { GlossarySuggestions } from "../glossary/glossary-suggestions.tsx";
 import { CoverImage, withStatus } from "../home/cover-image.tsx";
 import { useDropToTranslate } from "../home/drop-to-translate.ts";
+import { CHAPTER_PREFS_KEY, CHAPTER_SORTS, type ListView, sortChapters, useListPrefs } from "../home/list-prefs.ts";
+import { ListToolbar } from "../home/list-toolbar.tsx";
 import { NewChapterConfirmRow } from "../home/new-chapter-confirm-row.tsx";
 import { BackIcon, SlidersIcon, TrashIcon } from "../home/row-icons.tsx";
 import { resumeFromFiles } from "../upload/chapter-upload-status.tsx";
@@ -138,6 +141,8 @@ function ChapterList({ series }: { series: SeriesDetail }) {
     auto.mutate({ files, seriesId: series.id });
   };
   usePageDrop(drop);
+  const prefs = useListPrefs(CHAPTER_PREFS_KEY, CHAPTER_SORTS);
+  const { view, sort, dir } = prefs.prefs;
 
   const chapters = series.chapters;
   const next = nextChapterNumber(chapters);
@@ -165,17 +170,22 @@ function ChapterList({ series }: { series: SeriesDetail }) {
 
       {chapters.length === 0 && <div className="rows-empty">Chưa có chương nào — thả ảnh / ZIP ở trên.</div>}
       {chapters.length > 0 && (
-        <div className="card-grid">
-          {chapters.map((c) => (
-            <ChapterCard key={c.id} ch={c} upload={uploadManager.view(c.id, uploads[c.id])} />
-          ))}
-        </div>
+        <section aria-label="Chương" className="block">
+          <div className="block-head" data-align="end">
+            <ListToolbar options={CHAPTER_SORTS} control={prefs} />
+          </div>
+          <div className={view === "list" ? "card-list" : "card-grid"}>
+            {sortChapters(chapters, sort, dir).map((c) => (
+              <ChapterCard key={c.id} ch={c} upload={uploadManager.view(c.id, uploads[c.id])} layout={view} />
+            ))}
+          </div>
+        </section>
       )}
     </>
   );
 }
 
-function ChapterCard(props: { ch: ChapterRow; upload: ReturnType<typeof uploadManager.view> }) {
+function ChapterCard(props: { ch: ChapterRow; upload: ReturnType<typeof uploadManager.view>; layout: ListView }) {
   const { ch } = props;
   const [msg, setMsg] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
@@ -189,6 +199,15 @@ function ChapterCard(props: { ch: ChapterRow; upload: ReturnType<typeof uploadMa
   const dropProps = a.kind === "resume" ? target.props : {};
 
   const running = a.tone === "busy";
+  // Vạch mỏng dưới ảnh (lưới) / dưới hàng (danh sách), chỉ khi chương đang chạy; trạng thái cũng đã có chữ nên không
+  // truyền chỉ bằng màu.
+  const progress = running && (
+    <span
+      className="card-progress"
+      aria-hidden="true"
+      style={{ width: `${Math.max(4, Math.round(a.progress * 100))}%` }}
+    />
+  );
   // `src` giữ nguyên giữa các lượt polling; chỉ chương đang ingest đổi `?s=` khi trạng thái đổi (ảnh 404 → có ảnh).
   const thumb = ch.thumb_src ? (ch.status === "ingesting" ? withStatus(ch.thumb_src, ch.status) : ch.thumb_src) : null;
 
@@ -202,16 +221,13 @@ function ChapterCard(props: { ch: ChapterRow; upload: ReturnType<typeof uploadMa
         title={a.detail}
         inert={confirming}
       >
-        <CoverImage src={thumb} fallback={`Ch.${ch.number}`}>
-          {running && (
-            // Vạch 3px dưới ảnh, chỉ khi chương đang chạy; trạng thái cũng đã có chữ bên dưới nên không truyền chỉ bằng màu.
-            <span
-              className="card-progress"
-              aria-hidden="true"
-              style={{ width: `${Math.max(4, Math.round(a.progress * 100))}%` }}
-            />
-          )}
-        </CoverImage>
+        {props.layout === "grid" ? (
+          <CoverImage src={thumb} fallback={`Ch.${ch.number}`}>
+            {progress}
+          </CoverImage>
+        ) : (
+          progress
+        )}
         <span className="card-body">
           <span className="card-name">
             <b>Ch.{ch.number}</b>

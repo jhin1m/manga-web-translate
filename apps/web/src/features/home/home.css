@@ -187,8 +187,57 @@ label.file-pick input {
   flex: 1;
   height: 32px;
 }
+.block-head {
+  flex-wrap: wrap;
+}
+.block-head[data-align="end"] {
+  justify-content: flex-end;
+}
+.block-head input[type="search"] {
+  min-width: 160px;
+}
 .block-head button {
   height: 32px;
+}
+/* Thanh xem danh sách: Sắp xếp theo · chiều · Lưới / Danh sách. */
+.list-toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-width: 0;
+}
+.list-toolbar select {
+  width: auto;
+  height: 32px;
+  padding: 0 var(--sp-2);
+  font-size: var(--fs-sm);
+}
+.list-view {
+  display: flex;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+  border: 1px solid var(--c-line-strong);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.list-view .view-btn {
+  width: 32px;
+  height: 30px;
+  padding: 0;
+  justify-content: center;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  color: var(--c-fg-subtle);
+}
+.list-view .view-btn:hover {
+  color: var(--c-accent);
+  background: var(--c-surface-2);
+}
+.list-view .view-btn[aria-pressed="true"] {
+  color: var(--c-accent);
+  background: var(--c-accent-weak);
 }
 .rows-empty {
   padding: var(--sp-4);
@@ -343,6 +392,100 @@ label.file-pick input {
   bottom: 0;
   height: 4px;
   background: var(--c-info);
+}
+
+/* ---- Danh sách hàng (cùng thẻ series / chương, bỏ ảnh): tên · trạng thái · số chương / thời gian · icon. Tên dài
+   cắt "…" (title đủ tên). Xác nhận xoá mở thành dòng dưới hàng thay vì phủ kín. ---- */
+.card-list {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--c-line);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.card-list .card {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  min-height: 44px;
+  border: 0;
+  border-radius: 0;
+}
+.card-list .card + .card {
+  border-top: 1px solid var(--c-surface-2);
+}
+.card-list .card-open {
+  flex-direction: row;
+  align-items: center;
+  min-width: 0;
+  padding: var(--sp-2) var(--sp-3);
+}
+.card-list .card-body {
+  flex: 1;
+  flex-direction: row;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: 0;
+}
+.card-list .card-open .card-name {
+  flex: 0 1 280px;
+  min-width: 0;
+  display: block;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.card-list .card-state {
+  flex: 1 1 auto;
+}
+.card-list .card-body > .muted {
+  flex: none;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.card-list .card-actions {
+  position: static;
+  padding-right: var(--sp-2);
+}
+:where(.card-list) .card-actions .icon-btn {
+  border-color: transparent;
+  background: none;
+  color: var(--c-fg-subtle);
+}
+.card-list .card-confirm {
+  position: static;
+  flex-basis: 100%;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  padding: var(--sp-2) var(--sp-3);
+  border-top: 1px solid var(--c-surface-2);
+  background: var(--c-surface);
+}
+.card-list .card-confirm > :first-child {
+  flex: 1 1 240px;
+  margin: 0;
+}
+.card-list .card-confirm > :last-child {
+  margin: 0;
+}
+:where(.card-list) .card-confirm button {
+  width: auto;
+}
+.card-list .card-progress {
+  height: 3px;
+}
+.card-list .row-error {
+  flex-basis: 100%;
+  padding: 0 var(--sp-3) var(--sp-2);
+}
+@media (max-width: 480px) {
+  .card-list .card-body {
+    flex-wrap: wrap;
+    row-gap: 2px;
+  }
+  .card-list .card-name {
+    flex-basis: 100%;
+  }
 }
 
 /* Cài đặt series: mục Ảnh bìa. */
