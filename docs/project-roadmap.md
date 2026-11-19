@@ -36,6 +36,9 @@ Mọi test tự động hiện dùng worker giả lập; chưa có số đo vớ
       arm64 và `node -e "require('sharp')"` trong cả hai, tag `v0.4.0-rc.N` → selfhost smoke + update smoke, đo RAM app
       khi tạo ~20 thumbnail lần đầu, user thử Windows (Chrome / Edge / Firefox: thả folder, **Chọn folder…**, lưới, bìa),
       rồi tag chính thức + GitHub Release. Ghi chú: [releases/v0.4.0.md](./releases/v0.4.0.md).
+- [ ] **Sắp xếp + Lưới / Danh sách, Kiểm tra bản mới (0.5.0)**: chỉ web + một tham số API, không migration, không đổi
+      worker. Tag `v0.5.0-rc.N` → selfhost smoke, rồi tag chính thức + GitHub Release. Ghi chú:
+      [releases/v0.5.0.md](./releases/v0.5.0.md).
 - [ ] **Cập nhật trong app (self-host)**: đã làm phiên bản trong menu, thông báo bản mới, nút **Cập nhật ngay** và
       service `updater`. Còn kiểm trên máy thật: Windows (rc → rc, đường dẫn có dấu cách / tiếng Việt / ổ D:, tắt, mất mạng)
       và Linux; `latest` (bản chính thức) chưa có smoke riêng, kiểm lại khi phát hành bản kế tiếp.
