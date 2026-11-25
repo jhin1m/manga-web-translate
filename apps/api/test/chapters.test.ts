@@ -656,7 +656,9 @@ describe("series settings", () => {
       200,
     );
     expect(t2.settings_rev).toBe(s.settings_rev + 1);
-    expect(t2.pronoun_rules).toEqual([{ speaker: "Minh", listener: "Lan", address: "anh/em", note: "" }]);
+    expect(t2.pronoun_rules).toEqual([
+      { speaker: "Minh", listener: "Lan", address: "anh/em", note: "", origin: "user" },
+    ]);
     // Lưu lại y nguyên → không tăng.
     const t3 = await json<{ settings_rev: number }>(
       await api(`/series/${s.id}`, { method: "PATCH", body: { honorific_policy: "keep" } }),

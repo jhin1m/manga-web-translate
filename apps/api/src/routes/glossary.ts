@@ -3,7 +3,9 @@
  * `target_lang`) và cấp series (không gắn cặp; ghi đè entry chung cùng cặp khi trùng source_term, xem
  * lib/glossary-scope.ts). API là nơi duy nhất đảm bảo "entry chung có cặp, entry series không" (DB không CHECK).
  * Mọi thay đổi tăng `glossary_rev` trong CÙNG transaction (red team #3): entry series → series đó; entry chung →
- * mọi series của người dùng (không lọc theo cặp: tránh race với PATCH đổi ngôn ngữ series).
+ * mọi series của người dùng (không lọc theo cặp: tránh race với PATCH đổi ngôn ngữ series). Tăng rev ĐẦU transaction
+ * (khoá dòng series trước khi ghi entry): AI ghi entry dưới khoá series (lib/series-memory.ts), ghi entry trước rồi mới
+ * khoá series thì hai bên có thể chờ nhau. Entry người dùng tạo / sửa có `origin='user'`; entry AI ghi có `'ai'`.
  */
 import { glossaryEntries, type Scoped, series } from "@mtl/db";
 import { SOURCE_LANGS, TARGET_LANGS } from "@mtl/shared";
@@ -49,6 +51,8 @@ const entryView = (e: EntryRow) => ({
   target_term: e.targetTerm,
   note: e.note,
   case_sensitive: e.caseSensitive,
+  /** "user" hoặc "ai" (AI ghi từ kết quả dịch; sửa thì thành "user"). */
+  origin: e.origin,
   updated_at: e.updatedAt,
 });
 
@@ -219,16 +223,16 @@ async function list(sdb: Scoped, scope: Scope, inherited: Scope | null) {
 async function create(sdb: Scoped, scope: Scope, body: EntryIn) {
   return writeOrConflict(() =>
     sdb.transaction(async (tx) => {
+      await bumpGlossaryRev(tx, scope.seriesId);
       await assertUniqueTerm(tx, scope, body.source_term);
-      const row = await tx.insert(glossaryEntries, {
+      return tx.insert(glossaryEntries, {
         ...scopeValues(scope),
         sourceTerm: body.source_term,
         targetTerm: body.target_term,
         note: body.note,
         caseSensitive: body.case_sensitive,
+        origin: "user",
       });
-      await bumpGlossaryRev(tx, scope.seriesId);
-      return row;
     }),
   );
 }
@@ -252,12 +256,18 @@ async function importCsv(sdb: Scoped, scope: Scope, body: z.infer<typeof ImportB
   if (entries.length > MAX_IMPORT_ROWS) throw new HTTPException(400, { message: `tối đa ${MAX_IMPORT_ROWS} dòng` });
   return writeOrConflict(() =>
     sdb.transaction(async (tx) => {
+      await bumpGlossaryRev(tx, scope.seriesId);
       if (body.mode === "replace") await tx.delete(glossaryEntries, scopeWhere(scope));
       const existing = new Map((await tx.select(glossaryEntries, scopeWhere(scope))).map((e) => [e.sourceTerm, e]));
       let created = 0;
       let updated = 0;
       for (const e of entries) {
-        const set = { targetTerm: e.target_term, note: e.note, caseSensitive: e.case_sensitive };
+        const set = {
+          targetTerm: e.target_term,
+          note: e.note,
+          caseSensitive: e.case_sensitive,
+          origin: "user" as const,
+        };
         const cur = existing.get(e.source_term);
         if (cur) {
           await tx.update(glossaryEntries, eq(glossaryEntries.id, cur.id), set);
@@ -267,7 +277,6 @@ async function importCsv(sdb: Scoped, scope: Scope, body: z.infer<typeof ImportB
           created++;
         }
       }
-      await bumpGlossaryRev(tx, scope.seriesId);
       return { created, updated, mode: body.mode };
     }),
   );
@@ -327,14 +336,15 @@ glossaryRoutes.patch("/glossary/:entryId", async (c) => {
   const row = await writeOrConflict(() =>
     c.get("sdb").transaction(async (tx) => {
       const cur = await tx.byId(glossaryEntries, c.req.param("entryId"), "glossary entry");
+      await bumpGlossaryRev(tx, cur.seriesId);
       if (body.source_term !== undefined) await assertUniqueTerm(tx, scopeOfEntry(cur), body.source_term, cur.id);
       const [row] = await tx.update(glossaryEntries, eq(glossaryEntries.id, cur.id), {
         sourceTerm: body.source_term,
         targetTerm: body.target_term,
         note: body.note,
         caseSensitive: body.case_sensitive,
+        origin: "user",
       });
-      await bumpGlossaryRev(tx, cur.seriesId);
       return row ?? cur;
     }),
   );
@@ -344,8 +354,8 @@ glossaryRoutes.patch("/glossary/:entryId", async (c) => {
 glossaryRoutes.delete("/glossary/:entryId", async (c) => {
   await c.get("sdb").transaction(async (tx) => {
     const cur = await tx.byId(glossaryEntries, c.req.param("entryId"), "glossary entry");
-    await tx.delete(glossaryEntries, eq(glossaryEntries.id, cur.id));
     await bumpGlossaryRev(tx, cur.seriesId);
+    await tx.delete(glossaryEntries, eq(glossaryEntries.id, cur.id));
   });
   return c.body(null, 204);
 });

@@ -1,8 +1,9 @@
 /**
  * Series + cài đặt dịch. Đổi trường ảnh hưởng dịch/typeset → `settings_rev + 1` (red team #3) — job enqueue
  * sau đó có input_rev mới, job cũ không bị dùng lại nhầm. Đổi chữ bỏ qua → `glossary_rev + 1` (xem PATCH).
+ * Nhãn nguồn (`pronoun_rules[].origin`, `style_origin`) do server tự tính; AI ghi ở lib/series-memory.ts.
  */
-import { chapters, jobs, pageStates, pages, type Scoped, series } from "@mtl/db";
+import { chapters, isUuid, jobs, NotFoundError, pageStates, pages, type Scoped, scoped, series } from "@mtl/db";
 import {
   cleanIgnoreList,
   defaultPageFormat,
@@ -19,12 +20,21 @@ import { bodyLimit } from "hono/body-limit";
 import { HTTPException } from "hono/http-exception";
 import { v7 as uuidv7 } from "uuid";
 import { z } from "zod";
+import { inJobTx } from "../jobs/enqueue.ts";
 import { chapterQueueStates } from "../jobs/queue-state.ts";
 import { activeLockHolder } from "../lib/chapter-lock.ts";
 import { chaptersOf, removeChapters } from "../lib/chapter-removal.ts";
 import { chapterThumbs, seriesCoverThumbs } from "../lib/first-pages.ts";
 import { unknownFonts } from "../lib/fonts.ts";
 import { ignoreEntryErrorRe2 } from "../lib/ignore-text.ts";
+import {
+  MAX_PRONOUN_RULES,
+  normalizeRuleKey,
+  readRules,
+  ruleContents,
+  ruleKey,
+  withOrigins,
+} from "../lib/pronoun-rules.ts";
 import { ImageError, renderCover } from "../lib/thumbnails.ts";
 import { parseJson } from "../lib/validate.ts";
 import type { AppEnv } from "../middleware/user.ts";
@@ -46,7 +56,7 @@ const Settings = z.object({
   target_lang: z.enum(TARGET_LANGS),
   page_format: z.enum(PAGE_FORMATS),
   honorific_policy: z.enum(HONORIFIC_POLICIES),
-  pronoun_rules: z.array(PronounRule).max(200),
+  pronoun_rules: z.array(PronounRule).max(MAX_PRONOUN_RULES),
   style_prompt: z.string().max(1000),
   /** Id font gói sẵn hoặc font của người dùng — kiểm tồn tại ở `assertKnownFonts` (cần DB). */
   default_fonts: z
@@ -69,7 +79,14 @@ const Settings = z.object({
 
 const SeriesCreate = Settings.partial().extend({ title: z.string().trim().min(1).max(200) });
 const SeriesPatch = Settings.partial()
-  .extend({ title: z.string().trim().min(1).max(200) })
+  .extend({
+    title: z.string().trim().min(1).max(200),
+    /**
+     * Khoá (pronounKey) các cặp xưng hô form đã hiện cho người dùng. Web mới luôn gửi: cặp đang có mà form chưa thấy
+     * (AI vừa thêm) được giữ khi lưu. Không gửi = tab web cũ → chế độ bảo vệ mục AI (xem memoryColumns).
+     */
+    pronoun_keys_seen: z.array(z.string().max(250)).max(MAX_PRONOUN_RULES),
+  })
   .partial()
   .refine((v) => Object.keys(v).length > 0, "không có trường nào để sửa");
 
@@ -83,8 +100,10 @@ export const seriesView = (s: SeriesRow) => ({
   target_lang: s.targetLang,
   page_format: s.pageFormat,
   honorific_policy: s.honorificPolicy,
-  pronoun_rules: s.pronounRules,
+  pronoun_rules: readRules(s.pronounRules),
   style_prompt: s.stylePrompt,
+  /** Ai đặt Giọng văn: null (chưa ai), "user" hoặc "ai". */
+  style_origin: s.styleOrigin,
   default_fonts: s.defaultFonts,
   glossary_rev: s.glossaryRev,
   settings_rev: s.settingsRev,
@@ -224,7 +243,7 @@ async function assertKnownFonts(sdb: Scoped, fonts: Record<string, string | unde
   }
 }
 
-/** Body API → cột DB; trả thêm cờ có trường ảnh hưởng dịch hay không. */
+/** Body API → cột DB, trừ `pronoun_rules` / `style_prompt` (cần nhãn nguồn — POST và memoryColumns tự xử lý). */
 function toColumns(body: z.infer<typeof SeriesPatch>) {
   const set: Partial<typeof series.$inferInsert> = {};
   if (body.title !== undefined) set.title = body.title;
@@ -232,10 +251,34 @@ function toColumns(body: z.infer<typeof SeriesPatch>) {
   if (body.target_lang !== undefined) set.targetLang = body.target_lang;
   if (body.page_format !== undefined) set.pageFormat = body.page_format;
   if (body.honorific_policy !== undefined) set.honorificPolicy = body.honorific_policy;
-  if (body.pronoun_rules !== undefined) set.pronounRules = body.pronoun_rules;
-  if (body.style_prompt !== undefined) set.stylePrompt = body.style_prompt;
   if (body.default_fonts !== undefined) set.defaultFonts = body.default_fonts;
   if (body.ignore_text !== undefined) set.ignoreText = body.ignore_text;
+  return set;
+}
+
+/**
+ * `pronoun_rules` + Giọng văn của PATCH, không đè mất mục AI ghi sau lúc form mở:
+ * - Có `pronoun_keys_seen` (web mới): kết quả = cặp trong body + cặp đang có mà form chưa thấy (khoá không thuộc
+ *   `pronoun_keys_seen`, không có trong body); quá trần thì bỏ bớt cặp chưa thấy. Giọng văn đổi → `style_origin='user'`.
+ * - Không có (tab web cũ gửi cả form): giữ cặp AI đang có mà body không có; bỏ qua `style_prompt` rỗng khi Giọng văn
+ *   hiện là của AI.
+ */
+function memoryColumns(body: z.infer<typeof SeriesPatch>, cur: SeriesRow): Partial<typeof series.$inferInsert> {
+  const set: Partial<typeof series.$inferInsert> = {};
+  const seen = body.pronoun_keys_seen ? new Set(body.pronoun_keys_seen.map(normalizeRuleKey)) : null;
+  if (body.pronoun_rules !== undefined) {
+    const curRules = readRules(cur.pronounRules);
+    const next = withOrigins(body.pronoun_rules, curRules);
+    const sent = new Set(next.map(ruleKey));
+    const keep = curRules.filter((r) => !sent.has(ruleKey(r)) && (seen ? !seen.has(ruleKey(r)) : r.origin === "ai"));
+    set.pronounRules = [...next, ...keep].slice(0, MAX_PRONOUN_RULES);
+  }
+  const style = body.style_prompt;
+  const legacyClearsAi = !seen && style === "" && cur.styleOrigin === "ai";
+  if (style !== undefined && !legacyClearsAi && style !== cur.stylePrompt) {
+    set.stylePrompt = style;
+    set.styleOrigin = "user";
+  }
   return set;
 }
 
@@ -246,7 +289,8 @@ function translationChanged(cur: SeriesRow, set: Partial<typeof series.$inferIns
     [set.sourceLang, cur.sourceLang],
     [set.targetLang, cur.targetLang],
     [set.honorificPolicy, cur.honorificPolicy],
-    [set.pronounRules, cur.pronounRules],
+    // Nhãn nguồn không phải cài đặt dịch.
+    [set.pronounRules && ruleContents(set.pronounRules), ruleContents(cur.pronounRules)],
     [set.stylePrompt, cur.stylePrompt],
     [set.defaultFonts, cur.defaultFonts],
   ];
@@ -340,7 +384,13 @@ seriesRoutes.post("/series", async (c) => {
   await assertKnownFonts(c.get("sdb"), body.default_fonts);
   // Không gửi page_format → theo ngôn ngữ nguồn (ja → từng trang, còn lại → strip).
   const pageFormat = body.page_format ?? defaultPageFormat(body.source_lang ?? "ko");
-  const s = await c.get("sdb").insert(series, { ...toColumns(body), pageFormat, title: body.title });
+  const s = await c.get("sdb").insert(series, {
+    ...toColumns(body),
+    ...(body.pronoun_rules ? { pronounRules: withOrigins(body.pronoun_rules, []) } : {}),
+    ...(body.style_prompt !== undefined ? { stylePrompt: body.style_prompt } : {}),
+    pageFormat,
+    title: body.title,
+  });
   return c.json(seriesView(s), 201);
 });
 
@@ -372,11 +422,20 @@ seriesRoutes.get("/series/:seriesId", async (c) => {
 
 seriesRoutes.patch("/series/:seriesId", async (c) => {
   const body = await parseJson(c, SeriesPatch);
-  const sdb = c.get("sdb");
-  await assertKnownFonts(sdb, body.default_fonts);
-  const updated = await sdb.transaction(async (tx) => {
-    const cur = await tx.byId(series, c.req.param("seriesId"), "series");
-    const set = toColumns(body);
+  const userId = c.get("userId");
+  const seriesId = c.req.param("seriesId");
+  await assertKnownFonts(c.get("sdb"), body.default_fonts);
+  if (!isUuid(seriesId)) throw new NotFoundError("series");
+  const updated = await inJobTx(async (raw) => {
+    // Khoá dòng series: AI ghi xưng hô / Giọng văn dưới cùng khoá này, nên phần gộp bên dưới đọc đúng giá trị mới nhất.
+    const [cur] = await raw
+      .select()
+      .from(series)
+      .where(and(eq(series.userId, userId), eq(series.id, seriesId)))
+      .for("update");
+    if (!cur) throw new NotFoundError("series");
+    const tx = scoped(raw, userId);
+    const set = { ...toColumns(body), ...memoryColumns(body, cur) };
     // Tăng trong SQL (không từ giá trị đã đọc) → 2 lần lưu đồng thời không cùng ra một rev.
     if (translationChanged(cur, set)) set.settingsRev = sql`${series.settingsRev} + 1` as unknown as number;
     // Chữ bỏ qua chỉ tác động giai đoạn dịch (lọc lúc claim chapter.translate) → glossary_rev (khoá job dịch), không
@@ -384,6 +443,8 @@ seriesRoutes.patch("/series/:seriesId", async (c) => {
     if (set.ignoreText && JSON.stringify(set.ignoreText) !== JSON.stringify(cur.ignoreText)) {
       set.glossaryRev = sql`${series.glossaryRev} + 1` as unknown as number;
     }
+    // Giọng văn không đổi / chỉ gửi `pronoun_keys_seen` → không có gì để ghi.
+    if (Object.keys(set).length === 0) return cur;
     const [row] = await tx.update(series, eq(series.id, cur.id), set);
     if (!row) throw new HTTPException(404, { message: "series not found" });
     return row;
@@ -460,8 +521,19 @@ seriesRoutes.delete("/series/:seriesId/cover", async (c) => {
 seriesRoutes.delete("/series/:seriesId", async (c) => {
   const sdb = c.get("sdb");
   const s = await sdb.byId(series, c.req.param("seriesId"), "series");
+  const userId = c.get("userId");
   await removeChapters(sdb, c.get("lockHolder"), await chaptersOf(sdb, s.id), async () => {
-    await sdb.delete(series, eq(series.id, s.id));
+    await inJobTx(async (raw) => {
+      // Khoá các chương (theo id) trước khi xoá series: đường complete dịch khoá chương → series; xoá series rồi
+      // cascade xuống chương sẽ khoá ngược thứ tự và deadlock.
+      await raw
+        .select({ id: chapters.id })
+        .from(chapters)
+        .where(and(eq(chapters.userId, userId), eq(chapters.seriesId, s.id)))
+        .orderBy(chapters.id)
+        .for("update");
+      await scoped(raw, userId).delete(series, eq(series.id, s.id));
+    });
   });
   // Hàng series_skip_images đã cascade theo series; dọn bản sao ảnh (lỗi chỉ để lại file mồ côi).
   try {

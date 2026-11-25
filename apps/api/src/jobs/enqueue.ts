@@ -42,6 +42,7 @@ import { HTTPException } from "hono/http-exception";
 import { llmFor, slotRefs } from "../ai/llm-refs.ts";
 import { db } from "../db.ts";
 import { mergeBySourceTerm, seriesGlossaryWhere } from "../lib/glossary-scope.ts";
+import { withoutOrigin } from "../lib/pronoun-rules.ts";
 import { readSystemSettings, systemPipeline } from "../lib/system-settings.ts";
 import { exportKey, ingestKey, type JobKey, pageOpKey, prepareKey, proofreadKey, translateKey } from "./idempotency.ts";
 
@@ -272,7 +273,8 @@ export async function translateSettings(tx: DbLike, s: Series): Promise<Translat
     glossary,
     source_lang: s.sourceLang,
     target_lang: s.targetLang,
-    pronoun_rules: s.pronounRules.length ? JSON.stringify(s.pronounRules) : "",
+    // `origin` (nhãn AI) không vào prompt.
+    pronoun_rules: s.pronounRules.length ? JSON.stringify(withoutOrigin(s.pronounRules)) : "",
     honorific_policy: honorificText(s.honorificPolicy, s.sourceLang, s.targetLang),
     style_prompt: s.stylePrompt,
     font,

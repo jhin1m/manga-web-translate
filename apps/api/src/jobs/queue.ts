@@ -42,13 +42,13 @@ import {
 } from "../billing/user-quota.ts";
 import { db } from "../db.ts";
 import { env } from "../env.ts";
-import { rememberSuggestions } from "../lib/series-memory.ts";
+import { applyLearned } from "../lib/series-memory.ts";
 import type { WorkerIdentity } from "../lib/worker-token.ts";
 import { head } from "../storage.ts";
 import { breakerBlockedSql, breakerKeysOf, pausedBreakerKeys, recordProviderError } from "./breaker.ts";
 import { buildInputs, claimOutputNames, outputKey, type PresignedOutput, presignOutputs } from "./claim-inputs.ts";
 import { markDispatchClaimed } from "./dispatcher.ts";
-import { chapterHasUserEdits, createIngestedPages, lockChapter, refreshChapter, seriesOf } from "./enqueue.ts";
+import { chapterHasUserEdits, createIngestedPages, lockChapter, refreshChapter } from "./enqueue.ts";
 import { decideFailure, JobHttpError, leaseLost } from "./errors.ts";
 import { llmJobSql } from "./llm-job-filter.ts";
 import { writeAiState } from "./page-state-writer.ts";
@@ -514,7 +514,7 @@ async function applyResult(t: DbLike, job: Job, attempt: number, result: JobResu
           .where(eq(jobs.id, job.id));
       }
       await t.update(pages).set({ translateQueued: false }).where(inArray(pages.id, p.page_ids));
-      await rememberSuggestions(t, { job, s: await seriesOf(t, lockedChapter), result });
+      await applyLearned(t, { job, chapter: lockedChapter, result });
       await refreshChapter(t, owner, p.chapter_id);
       await advanceTranslateChain(t, owner, p.chapter_id);
       return undefined;
