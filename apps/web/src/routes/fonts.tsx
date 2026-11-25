@@ -1,15 +1,14 @@
-import { FontSettings } from "../features/fonts/font-settings.tsx";
+import { FontLibrary } from "../features/fonts/font-settings.tsx";
+import "../features/admin/admin.css";
 
-/** Font của tôi: font tuỳ chỉnh của riêng người dùng (menu tài khoản). */
+/** Font (`/fonts`, menu tài khoản): chỗ duy nhất thêm / xem / xoá font — font trong máy, file, font có sẵn. */
 export function FontsPage() {
   return (
     <div className="page page-narrow">
       <div className="page-head">
-        <h1>Font của tôi</h1>
+        <h1>Font</h1>
       </div>
-      <div className="tab-panel">
-        <FontSettings />
-      </div>
+      <FontLibrary />
     </div>
   );
 }

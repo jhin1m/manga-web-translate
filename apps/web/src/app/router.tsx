@@ -144,7 +144,7 @@ export const settingsRoute = createRoute({
   },
 });
 
-/** Font của tôi (font tuỳ chỉnh cá nhân). */
+/** Font: thêm (từ máy / file), xem, xoá font riêng + font dùng chung; xem font có sẵn. */
 const fontsRoute = createRoute({ getParentRoute: () => shellRoute, path: "fonts", component: FontsPage });
 
 export const routeTree = rootRoute.addChildren([

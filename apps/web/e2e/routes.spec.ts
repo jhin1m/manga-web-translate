@@ -42,7 +42,7 @@ test("series, chapter, glossary and settings open at their own URLs; old /w/ pat
   await page.goto("/settings");
   await expect(page.getByRole("heading", { name: "Cài đặt", exact: true })).toBeVisible();
   await page.goto("/fonts");
-  await expect(page.getByRole("heading", { name: "Font của tôi" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Font", exact: true })).toBeVisible();
 
   await page.goto(`/w/${s}/s/${s}`);
   await expect(page.getByRole("heading", { name: "Không tìm thấy trang" })).toBeVisible();
