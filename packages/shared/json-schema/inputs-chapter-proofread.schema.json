@@ -29,8 +29,16 @@
             "maximum": 9007199254740991
           },
           "image": {
-            "type": "string",
-            "format": "uri"
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uri"
+              },
+              {
+                "type": "string",
+                "pattern": "^\\/files\\/"
+              }
+            ]
           },
           "regions": {
             "type": "array",

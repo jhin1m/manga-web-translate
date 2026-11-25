@@ -7,7 +7,7 @@ import { emptyPageState, pageId } from "@mtl/shared";
 import { eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { deletePrefix, head } from "../src/storage.ts";
-import { call, db, seedUser, uniq } from "./helpers.ts";
+import { call, db, fetchFile, seedUser, uniq } from "./helpers.ts";
 import {
   aiState,
   type Claimed,
@@ -53,7 +53,7 @@ async function postFile(u: Upload, body: Uint8Array) {
   const form = new FormData();
   for (const [k, v] of Object.entries(u.fields)) form.append(k, v);
   form.append("file", new Blob([body]));
-  const res = await fetch(u.url, { method: "POST", body: form });
+  const res = await fetchFile(u.url, { method: "POST", body: form });
   expect(res.status).toBe(204);
 }
 
@@ -127,7 +127,7 @@ describe("chapter flow", () => {
     expect(pages.every((x) => x.image.kind === "clean")).toBe(true);
     // Cả ảnh gốc lẫn ảnh sạch cho canvas màn chương; `image` (thumbnail) = ảnh sạch.
     expect(pages.every((x) => x.images.clean === x.image.url && x.images.original.includes("/ingest/"))).toBe(true);
-    const img = await fetch(pages[0]?.image.url ?? "");
+    const img = await fetchFile(pages[0]?.image.url ?? "");
     expect(img.status).toBe(200);
     expect(img.headers.get("x-content-type-options")).toBe("nosniff");
   });
@@ -139,7 +139,7 @@ describe("chapter flow", () => {
       200,
     );
     expect(files.map((f) => f.ord)).toEqual([0, 1]);
-    expect((await fetch(files[0]?.url ?? "")).status).toBe(200);
+    expect((await fetchFile(files[0]?.url ?? "")).status).toBe(200);
     // Không để job ingest treo cho các test claim sau.
     await json(await api(`/chapters/${ch}/cancel`, { method: "POST", body: {} }), 200);
   });

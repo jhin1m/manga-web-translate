@@ -71,9 +71,8 @@ export function createApp({ devAutoLogin = envDevLogin() }: { devAutoLogin?: Dev
   // Worker (Bearer token worker, không cookie) — giao thức có fencing, xem jobs/queue.ts.
   app.route("/worker/v1", workerRoutes);
 
-  // Disk driver (self-host): link file ký HMAC do chính API phục vụ; S3 thì trình duyệt/worker gọi thẳng MinIO.
-  const disk = diskDriver();
-  if (disk) app.route("/files", createFilesRoutes(disk));
+  // Link file ký HMAC do chính API phục vụ (trình duyệt + worker).
+  app.route("/files", createFilesRoutes(diskDriver()));
 
   // SPA đã build (self-host): sau mọi route server, trước notFound.
   if (env.SPA_DIR) mountSpa(app, env.SPA_DIR);

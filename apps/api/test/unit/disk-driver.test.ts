@@ -1,4 +1,4 @@
-/** Disk driver: bộ contract chung (như MinIO) + case riêng của đĩa (traversal, ghi atomic, sidecar, xoá/chép). */
+/** Disk driver: bộ contract chung (ngữ nghĩa presigned kiểu S3) + case riêng của đĩa (traversal, ghi atomic, sidecar, xoá/chép). */
 import { mkdir, readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -85,8 +85,7 @@ describe("disk driver specifics", () => {
     await expect(h.driver.deletePrefix("u/x")).rejects.toThrow(RangeError);
   });
 
-  it("objectTags is empty; bucketReachable true for a writable root", async () => {
-    expect(await h.driver.objectTags(testKey())).toEqual({});
+  it("bucketReachable true for a writable root", async () => {
     expect(await h.driver.bucketReachable()).toBe(true);
   });
 });

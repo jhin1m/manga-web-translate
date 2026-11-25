@@ -12,9 +12,6 @@
     "jobs": "tsx src/jobs/runner.ts"
   },
   "dependencies": {
-    "@aws-sdk/client-s3": "^3.1153.0",
-    "@aws-sdk/s3-presigned-post": "^3.1153.0",
-    "@aws-sdk/s3-request-presigner": "^3.1153.0",
     "@hono/node-server": "^2.1.5",
     "@mtl/db": "workspace:*",
     "@mtl/shared": "workspace:*",

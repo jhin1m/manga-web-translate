@@ -1,7 +1,7 @@
 /**
  * Font hệ thống (admin): upload / commit kiểm như font riêng, id `custom-<8 hex>`, trùng sha256, trần 20 font / 100MB,
  * xoá bị chặn khi series của người khác dùng làm mặc định (không lộ tên), user thường 403.
- * Cần MinIO dev (pnpm infra:up).
+ * Cần Postgres dev (pnpm infra:up); file lưu ở thư mục tạm (FILES_DIR của test).
  */
 import { readFileSync } from "node:fs";
 import { series, systemFonts } from "@mtl/db";
@@ -9,7 +9,7 @@ import { eq } from "drizzle-orm";
 import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { env } from "../src/env.ts";
 import { head } from "../src/storage.ts";
-import { call, db, seedAdmin, seedUser } from "./helpers.ts";
+import { call, db, fetchFile, seedAdmin, seedUser } from "./helpers.ts";
 
 type UploadUrl = { key: string; url: string; fields: Record<string, string> };
 type FontView = { id: string; name: string; system: boolean; vi_complete: boolean; url: string };
@@ -40,7 +40,7 @@ async function putFile(bytes: Uint8Array): Promise<string> {
   const form = new FormData();
   for (const [k, v] of Object.entries(u.fields)) form.append(k, v);
   form.append("file", new Blob([bytes]));
-  expect((await fetch(u.url, { method: "POST", body: form })).status).toBe(204);
+  expect((await fetchFile(u.url, { method: "POST", body: form })).status).toBe(204);
   return u.key;
 }
 
@@ -80,7 +80,7 @@ describe("system font upload", () => {
     expect(row?.createdBy).toBe(admin.userId);
 
     const listed = (await list()).find((f) => f.id === font.id);
-    const file = await fetch(listed?.url ?? "");
+    const file = await fetchFile(listed?.url ?? "");
     expect(Buffer.from(await file.arrayBuffer()).equals(ITIM)).toBe(true);
   });
 

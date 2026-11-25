@@ -1,7 +1,7 @@
 /**
  * Font tuỳ chỉnh của người dùng: upload (presigned POST → commit kiểm magic bytes / kích thước / parse), trùng sha256,
  * giới hạn 20 font, xoá font đang là mặc định series, `default_fonts` kiểm động.
- * Cần MinIO dev (pnpm infra:up).
+ * Cần Postgres dev (pnpm infra:up); file lưu ở thư mục tạm (FILES_DIR của test).
  */
 import { readFileSync } from "node:fs";
 import { scoped, systemFonts, userFonts } from "@mtl/db";
@@ -9,7 +9,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { MAX_FONT_BYTES } from "../src/lib/font-metrics.ts";
 import { MAX_USER_FONTS } from "../src/routes/fonts.ts";
 import { head, presignPut } from "../src/storage.ts";
-import { call, db, seedUser } from "./helpers.ts";
+import { call, db, fetchFile, seedUser } from "./helpers.ts";
 
 type Seed = Awaited<ReturnType<typeof seedUser>>;
 type UploadUrl = { key: string; url: string; fields: Record<string, string> };
@@ -51,7 +51,7 @@ async function putFile(bytes: Uint8Array, cookie = A.cookie): Promise<string> {
   const form = new FormData();
   for (const [k, v] of Object.entries(u.fields)) form.append(k, v);
   form.append("file", new Blob([bytes]));
-  expect((await fetch(u.url, { method: "POST", body: form })).status).toBe(204);
+  expect((await fetchFile(u.url, { method: "POST", body: form })).status).toBe(204);
   return u.key;
 }
 
@@ -76,8 +76,8 @@ describe("font upload", () => {
 
     const { fonts } = await json<{ fonts: FontView[] }>(await api("/fonts"), 200);
     const listed = fonts.find((f) => f.id === font.id);
-    expect(listed?.url).toContain("X-Amz-Signature");
-    const file = await fetch(listed?.url ?? "");
+    expect(listed?.url).toMatch(/^\/files\/.*[?&]sig=/);
+    const file = await fetchFile(listed?.url ?? "");
     expect(Buffer.from(await file.arrayBuffer()).equals(ITIM)).toBe(true);
   });
 
@@ -90,7 +90,7 @@ describe("font upload", () => {
     // Commit lặp cùng key của font đã lưu không xoá file của chính nó.
     const { fonts } = await json<{ fonts: FontView[] }>(await api("/fonts"), 200);
     expect(fonts.filter((f) => f.id === first.id)).toHaveLength(1);
-    const stored = await fetch(fonts.find((f) => f.id === first.id)?.url ?? "");
+    const stored = await fetchFile(fonts.find((f) => f.id === first.id)?.url ?? "");
     expect(stored.status).toBe(200);
   });
 
@@ -104,7 +104,7 @@ describe("font upload", () => {
       const form = new FormData();
       for (const [k, v] of Object.entries(u.fields)) form.append(k, v);
       form.append("file", new Blob([data]));
-      return (await fetch(u.url, { method: "POST", body: form })).status;
+      return (await fetchFile(u.url, { method: "POST", body: form })).status;
     };
     expect(await post(bytes)).toBe(204);
     const font = await json<FontView>(await commit(u.key), 201);
@@ -112,13 +112,13 @@ describe("font upload", () => {
 
     // Form POST còn hạn chỉ ghi lại key upload; file của font đã lưu không đổi.
     expect(await post(variant(8))).toBe(204);
-    const stored = await fetch(font.url);
+    const stored = await fetchFile(font.url);
     expect(Buffer.from(await stored.arrayBuffer()).equals(bytes)).toBe(true);
 
     // Commit lại key upload cho ra font khác (sha mới), không dùng chung object với font cũ.
     const second = await json<FontView>(await commit(u.key), 201);
     expect(second.id).not.toBe(font.id);
-    const again = await fetch(font.url);
+    const again = await fetchFile(font.url);
     expect(Buffer.from(await again.arrayBuffer()).equals(bytes)).toBe(true);
   });
 
@@ -143,7 +143,11 @@ describe("font upload", () => {
     const { key } = await json<UploadUrl>(await api("/fonts/upload-url", { method: "POST", body: { bytes: 10 } }), 201);
     const big = Buffer.alloc(MAX_FONT_BYTES + 1);
     ITIM.copy(big);
-    const put = await fetch(await presignPut(key, "application/octet-stream", 60), { method: "PUT", body: big });
+    const put = await fetchFile(await presignPut(key, "application/octet-stream", 60), {
+      method: "PUT",
+      body: big,
+      headers: { "content-type": "application/octet-stream" },
+    });
     expect(put.status).toBe(200);
     const body = await json<{ error: string }>(await commit(key), 400);
     expect(body.error).toBe("too_large");
@@ -247,7 +251,7 @@ describe("font limit", () => {
     const form = new FormData();
     for (const [k, v] of Object.entries(u.fields)) form.append(k, v);
     form.append("file", new Blob([ITIM]));
-    expect((await fetch(u.url, { method: "POST", body: form })).status).toBe(204);
+    expect((await fetchFile(u.url, { method: "POST", body: form })).status).toBe(204);
     const res = await call(`/api/fonts`, { method: "POST", cookie: C.cookie, body: { key: u.key } });
     expect(await json<{ error: string }>(res, 409)).toMatchObject({ error: "limit" });
     expect(await head(u.key)).toBeNull();

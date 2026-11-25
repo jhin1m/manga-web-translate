@@ -10,7 +10,7 @@
  */
 import { type DbLike, jobs, usageLedger } from "@mtl/db";
 import { QUOTA_EXCEEDED } from "@mtl/shared";
-import { and, eq, gte, inArray, not, type SQL, sql } from "drizzle-orm";
+import { and, eq, gte, not, type SQL, sql } from "drizzle-orm";
 import type { AnyPgColumn } from "drizzle-orm/pg-core";
 import { HTTPException } from "hono/http-exception";
 import { llmJobSql } from "../jobs/llm-job-filter.ts";
@@ -32,7 +32,7 @@ export function overQuotaUsersSql(): SQL {
 }
 
 /**
- * SQL "user của cột này đã vượt hạn mức hôm nay". Hạn mức hiệu lực = DB ?? env; ngưỡng ≤ 0 = chặn hết (kể cả user
+ * SQL "user của cột này đã vượt hạn mức hôm nay". Hạn mức từ env USER_DAILY_USD; ngưỡng ≤ 0 = chặn hết (kể cả user
  * chưa có ledger hôm nay); không đặt = không giới hạn. `userIdCol` phải là cột NOT NULL (hiện chỉ dùng `jobs.user_id`).
  *
  * `overUsers` = subquery một cột chứa user đã vượt; mặc định là `overQuotaUsersSql()` đặt tại chỗ. Câu lệnh dùng bộ lọc
@@ -64,7 +64,7 @@ export const claimableSql = (kind: "mac" | "modal", overUsers?: SQL): SQL => {
 };
 
 export async function userQuotaStatus(t: DbLike, userId: string, limit?: number | null): Promise<QuotaStatus> {
-  const effective = limit === undefined ? (await effectiveLimits(t)).userDailyUsd : limit;
+  const effective = limit === undefined ? effectiveLimits().userDailyUsd : limit;
   const [row] = await t
     .select({
       spent: sql<string>`coalesce(sum(${usageLedger.costUsd}), 0)`,
@@ -95,62 +95,17 @@ export async function assertQuota(t: DbLike, userId: string): Promise<void> {
 }
 
 /** Lời nhắn lưu ở `jobs.error` khi job bị dừng vì hạn mức (web nhận ra qua tiền tố). */
-export async function quotaFailMessage(t: DbLike): Promise<string> {
-  return `${QUOTA_EXCEEDED}: vượt hạn mức $${(await effectiveLimits(t)).userDailyUsd ?? 0}/ngày`;
+export function quotaFailMessage(): string {
+  return `${QUOTA_EXCEEDED}: vượt hạn mức $${effectiveLimits().userDailyUsd ?? 0}/ngày`;
 }
 
 /** Job LLM đang chờ của user vượt hạn mức (khoá dòng, bỏ dòng worker khác đang giữ). */
 export async function lockQueuedOverQuotaLlmJobs(t: DbLike) {
-  // Không có hạn mức hiệu lực (DB lẫn env đều null) → không job nào vượt: khỏi quét bảng jobs.
-  if ((await effectiveLimits(t)).userDailyUsd === null) return [];
+  // Không đặt hạn mức → không job nào vượt: khỏi quét bảng jobs.
+  if (effectiveLimits().userDailyUsd === null) return [];
   return t
     .select()
     .from(jobs)
     .where(and(eq(jobs.status, "queued"), llmJobSql, overQuotaSql(jobs.userId)))
     .for("update", { skipLocked: true });
-}
-
-export type TodaySpend = { global_spent_usd: number; max_user_spent_usd: number };
-
-/** Chi tiêu hôm nay (ngày UTC): toàn hệ thống (gồm chi phí nền tảng không gắn user) + người chi nhiều nhất. */
-export async function todaySpend(t: DbLike): Promise<TodaySpend> {
-  const rows = await t
-    .select({ userId: usageLedger.userId, spent: sql<string>`sum(${usageLedger.costUsd})` })
-    .from(usageLedger)
-    .where(gte(usageLedger.createdAt, dayStart))
-    .groupBy(usageLedger.userId);
-  let global = 0;
-  let maxUser = 0;
-  for (const r of rows) {
-    const v = Number(r.spent);
-    global += v;
-    if (r.userId !== null) maxUser = Math.max(maxUser, v);
-  }
-  const round = (n: number) => Math.round(n * 1e4) / 1e4;
-  return { global_spent_usd: round(global), max_user_spent_usd: round(maxUser) };
-}
-
-/**
- * Số job LLM đang chờ / chạy bị ảnh hưởng nếu hạn mức user là `limit`: của người đã chi tới mức đó hôm nay.
- * Dùng cho câu xác nhận khi hạ hạn mức.
- */
-export async function llmJobsOverUserLimit(t: DbLike, limit: number): Promise<number> {
-  const over =
-    limit === 0
-      ? sql`true`
-      : sql`coalesce((select sum(${usageLedger.costUsd}) from ${usageLedger} where ${usageLedger.userId} = ${jobs.userId} and ${usageLedger.createdAt} >= ${dayStart}), 0) >= ${limit}`;
-  const [row] = await t
-    .select({ n: sql<number>`count(*)::int` })
-    .from(jobs)
-    .where(and(inArray(jobs.status, ["queued", "running"]), llmJobSql, over));
-  return row?.n ?? 0;
-}
-
-/** Số job LLM đang chờ / chạy (bị `paused_budget` khi vượt ngân sách ngày toàn cục). */
-export async function activeLlmJobs(t: DbLike): Promise<number> {
-  const [row] = await t
-    .select({ n: sql<number>`count(*)::int` })
-    .from(jobs)
-    .where(and(inArray(jobs.status, ["queued", "running"]), llmJobSql));
-  return row?.n ?? 0;
 }

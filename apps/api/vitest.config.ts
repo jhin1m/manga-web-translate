@@ -1,5 +1,6 @@
 import { testDatabaseUrl } from "@mtl/db/testing";
 import { defineConfig } from "vitest/config";
+import { TEST_FILES_DIR } from "./test/files-dir.ts";
 
 export default defineConfig({
   test: {
@@ -7,6 +8,7 @@ export default defineConfig({
     env: {
       NODE_ENV: "test",
       DATABASE_URL: testDatabaseUrl("api"),
+      FILES_DIR: TEST_FILES_DIR,
       SIGNUP_ENABLED: "false",
       USER_DAILY_USD: "",
       // Ngân sách toàn hệ thống cũng cố định rỗng: usage dồn qua các file test trong cùng DB sẽ vượt ngưỡng

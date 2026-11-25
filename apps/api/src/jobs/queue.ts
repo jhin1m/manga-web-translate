@@ -78,7 +78,7 @@ export function compareVersion(a: string, b: string): number {
 export async function failOverQuotaQueued(t: DbLike): Promise<number> {
   const rows = await lockQueuedOverQuotaLlmJobs(t);
   if (rows.length === 0) return 0;
-  const message = await quotaFailMessage(t);
+  const message = quotaFailMessage();
   for (const job of rows) await terminal(t, job, "failed", "internal", message);
   return rows.length;
 }
@@ -377,7 +377,7 @@ export async function heartbeat(w: WorkerIdentity, jobId: string, req: z.infer<t
     // Hạn mức người dùng (sau khi ghi usage của nhịp này): vượt → dừng job LLM + failed. Vượt tối đa ≈ chi phí tới
     // nhịp heartbeat kế của các job đang chạy của người đó.
     if (isLlmPayload(job.payload) && (await userQuotaStatus(t, job.userId)).exceeded) {
-      await terminal(t, job, "failed", "internal", await quotaFailMessage(t));
+      await terminal(t, job, "failed", "internal", quotaFailMessage());
       return { lease_expires_at: new Date().toISOString(), stop: "cancel" as const };
     }
     const [u] = await t

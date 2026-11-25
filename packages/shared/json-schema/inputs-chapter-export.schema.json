@@ -55,8 +55,16 @@
             "type": "boolean"
           },
           "background": {
-            "type": "string",
-            "format": "uri"
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uri"
+              },
+              {
+                "type": "string",
+                "pattern": "^\\/files\\/"
+              }
+            ]
           },
           "state": {
             "anyOf": [
@@ -493,8 +501,16 @@
             "pattern": "^custom-[0-9a-f]{8}$"
           },
           "url": {
-            "type": "string",
-            "format": "uri"
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uri"
+              },
+              {
+                "type": "string",
+                "pattern": "^\\/files\\/"
+              }
+            ]
           },
           "sha256": {
             "type": "string",

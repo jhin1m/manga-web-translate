@@ -64,7 +64,7 @@ describe("chapter.proofread", () => {
     expect(inputs.pages[0]?.regions).toEqual([
       { id: "t0", kind: "text_bubble", source: "안녕하세요", translation: "Xin chao" },
     ]);
-    expect(inputs.pages[0]?.image).toMatch(/^https?:\/\//);
+    expect(inputs.pages[0]?.image).toMatch(/^\/files\//);
 
     const result: JobResult = {
       type: "chapter.proofread",

@@ -125,7 +125,7 @@ describe("translate inputs fonts", () => {
     expect(inputs.fonts).toHaveLength(1);
     expect(inputs.fonts?.[0]).toMatchObject({ id: FONT_A, sha256: sha("a") });
     expect(inputs.fonts?.[0]?.url).toContain(`u/${A.userId}/fonts/${FONT_A}`);
-    expect(inputs.fonts?.[0]?.url).toContain("X-Amz-Signature");
+    expect(inputs.fonts?.[0]?.url).toMatch(/^\/files\/.*[?&]sig=/);
   });
 
   it("covers dialogue and narration fonts, and omits other users' and deleted fonts", async () => {
@@ -213,7 +213,7 @@ describe("system fonts in inputs", () => {
     ]);
     const url = inputs.fonts?.find((f) => f.id === SYS)?.url ?? "";
     expect(url).toContain(`system/fonts/${SYS}`);
-    expect(url).toContain("X-Amz-Signature");
+    expect(url).toMatch(/^\/files\/.*[?&]sig=/);
   });
 
   it("export lists a system font used by a page box or the series default", async () => {

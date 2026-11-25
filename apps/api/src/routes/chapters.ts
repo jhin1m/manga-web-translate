@@ -1,7 +1,7 @@
 /**
  * Vòng đời chương phía người dùng: tạo + presigned POST từng file → commit (HEAD + magic bytes) → ingest,
- * chạy lại trang lỗi / dịch lại / huỷ, khoá chương. Không có endpoint nhận file: trình duyệt upload thẳng
- * MinIO theo policy giới hạn (red team #12), server kiểm lại khi commit.
+ * chạy lại trang lỗi / dịch lại / huỷ, khoá chương. Không có endpoint nhận file: trình duyệt upload qua
+ * link `/files` ký theo policy giới hạn (red team #12), server kiểm lại khi commit.
  */
 
 import { chapters, isUuid, NotFoundError, pages, type Scoped, scoped, series, sourceFiles } from "@mtl/db";
@@ -35,7 +35,7 @@ import { jobView } from "./jobs.ts";
 import { chapterStats, chapterSummary, exportStatus } from "./series.ts";
 import { creditMatcher } from "./series-skip-images.ts";
 
-/** Ảnh nhận upload → đuôi key. Content-Type nằm trong policy POST nên MinIO giữ đúng giá trị này. */
+/** Ảnh nhận upload → đuôi key. Content-Type nằm trong policy POST nên file lưu đúng giá trị này. */
 export const CHAPTER_UPLOAD_TYPES = { "image/png": "png", "image/jpeg": "jpg", "image/webp": "webp" } as const;
 type UploadMime = keyof typeof CHAPTER_UPLOAD_TYPES;
 export const MAX_FILE_BYTES = 30 * 1024 * 1024;

@@ -109,9 +109,9 @@ describe("renderThumb loader", () => {
 
     await expect(
       renderThumb(async () => {
-        throw new Error("s3 down");
+        throw new Error("storage down");
       }, null),
-    ).rejects.toThrow("s3 down"); // not mapped to ImageError
+    ).rejects.toThrow("storage down"); // not mapped to ImageError
     expect((await meta(await renderThumb(img, null))).width).toBe(300);
   });
 });

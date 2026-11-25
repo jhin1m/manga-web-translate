@@ -27,8 +27,16 @@
             ]
           },
           "put": {
-            "type": "string",
-            "format": "uri"
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uri"
+              },
+              {
+                "type": "string",
+                "pattern": "^\\/files\\/"
+              }
+            ]
           },
           "expires_at": {
             "type": "string"

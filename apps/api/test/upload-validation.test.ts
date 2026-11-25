@@ -1,13 +1,13 @@
 /**
  * Upload chương (red team #12): presigned POST giới hạn dung lượng/Content-Type, commit kiểm HEAD + magic bytes.
- * Cần MinIO dev (pnpm infra:up).
+ * Cần Postgres dev (pnpm infra:up); file lưu ở thư mục tạm (FILES_DIR của test).
  */
 import { jobs, sourceFiles } from "@mtl/db";
 import { eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { MAX_FILE_BYTES, sniffImageMime, validateUploaded } from "../src/routes/chapters.ts";
 import { head } from "../src/storage.ts";
-import { call, db, seedUser } from "./helpers.ts";
+import { call, db, fetchFile, seedUser } from "./helpers.ts";
 import { PNG_1PX } from "./worker-helpers.ts";
 
 type Seed = Awaited<ReturnType<typeof seedUser>>;
@@ -26,7 +26,7 @@ async function postFile(u: Pick<Upload, "url" | "fields">, body: Uint8Array, con
   const form = new FormData();
   for (const [k, v] of Object.entries(u.fields)) form.append(k, k === "Content-Type" && contentType ? contentType : v);
   form.append("file", new Blob([body]));
-  return fetch(u.url, { method: "POST", body: form });
+  return fetchFile(u.url, { method: "POST", body: form });
 }
 
 async function createChapter(files: { name: string; content_type: string; bytes: number }[], number = "1") {
@@ -73,7 +73,7 @@ describe("chapter create + presigned POST", () => {
     expect(await bad(many)).toBe(400);
   });
 
-  it("MinIO rejects a direct 50MB upload and a wrong Content-Type (policy, not the UI)", async () => {
+  it("storage rejects a direct 50MB upload and a wrong Content-Type (policy, not the UI)", async () => {
     const { files } = await createChapter([{ name: "001.png", content_type: "image/png", bytes: MAX_FILE_BYTES }]);
     const u = files[0] as Upload;
     const big = new Uint8Array(50 * 1024 * 1024);
@@ -107,7 +107,7 @@ describe("commit", () => {
     ]);
     const [f1, f2, f3, f4] = files as [Upload, Upload, Upload, Upload];
     expect((await postFile(f1, PNG_1PX)).status).toBe(204);
-    // Policy chỉ ép Content-Type header, không đọc nội dung → HTML lọt vào MinIO; commit phải loại.
+    // Policy chỉ ép Content-Type header, không đọc nội dung → HTML lọt vào storage; commit phải loại.
     expect((await postFile(f2, HTML)).status).toBe(204);
     expect((await postFile(f3, JPEG)).status).toBe(204);
     // f4 không upload.

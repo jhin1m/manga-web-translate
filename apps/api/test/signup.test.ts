@@ -3,7 +3,7 @@
  * bật → tạo được, email trùng không lộ (không 422 riêng), rate limit 5 lần/giờ/IP; `createUser` (script) luôn tạo
  * được; SIGNUP_ENABLED=true thiếu hạn mức → env không parse.
  */
-import { systemSettings, user } from "@mtl/db";
+import { user } from "@mtl/db";
 import { eq } from "drizzle-orm";
 import { afterEach, describe, expect, it } from "vitest";
 import { createAuth } from "../src/auth.ts";
@@ -108,27 +108,26 @@ describe("sign-up enabled", () => {
 });
 
 describe("sign-up toggled at runtime", () => {
-  afterEach(async () => {
-    await db.delete(systemSettings);
+  const prev = { signup: env.SIGNUP_ENABLED, user: env.USER_DAILY_USD, global: env.GLOBAL_DAILY_USD };
+  afterEach(() => {
+    env.SIGNUP_ENABLED = prev.signup;
+    env.USER_DAILY_USD = prev.user;
+    env.GLOBAL_DAILY_USD = prev.global;
   });
 
-  const setSettings = (v: {
-    userDailyUsd?: string | null;
-    globalDailyUsd?: string | null;
-    signupEnabled?: boolean | null;
-  }) =>
-    db
-      .insert(systemSettings)
-      .values({ id: 1, ...v })
-      .onConflictDoUpdate({ target: systemSettings.id, set: v });
+  const setLimits = (v: { user?: number; global?: number; signup: boolean }) => {
+    env.USER_DAILY_USD = v.user;
+    env.GLOBAL_DAILY_USD = v.global;
+    env.SIGNUP_ENABLED = v.signup;
+  };
 
-  it("the default instance reads system_settings per request: open with both limits, closed the moment it is switched off", async () => {
+  it("the default instance reads env per request: open with both limits, closed the moment it is switched off", async () => {
     const auth = createAuth();
-    await setSettings({ userDailyUsd: "1", globalDailyUsd: "10", signupEnabled: true });
+    setLimits({ user: 1, global: 10, signup: true });
     const open = await signUp(auth, `${uniq("rt")}@example.com`, "203.0.113.30");
     expect(open.status).toBe(200);
 
-    await setSettings({ signupEnabled: false });
+    setLimits({ user: 1, global: 10, signup: false });
     const existing = `${uniq("rt-dup")}@example.com`;
     await createUser({ email: existing, name: "Có sẵn", password: PASSWORD });
     const fresh = await outcome(await signUp(auth, `${uniq("rt")}@example.com`, "203.0.113.31"));
@@ -137,31 +136,19 @@ describe("sign-up toggled at runtime", () => {
     expect(dup).toEqual(fresh);
   });
 
-  it("treats a missing effective limit as closed even when switched on; env is the fallback for null", async () => {
+  it("treats a missing limit as closed even when switched on", async () => {
     const auth = createAuth();
-    const prev = { signup: env.SIGNUP_ENABLED, user: env.USER_DAILY_USD, global: env.GLOBAL_DAILY_USD };
-    try {
-      await setSettings({ userDailyUsd: "1", globalDailyUsd: null, signupEnabled: true });
-      expect((await signUp(auth, `${uniq("rt")}@example.com`, "203.0.113.33")).status).toBe(400);
-      env.GLOBAL_DAILY_USD = 10;
-      expect((await signUp(auth, `${uniq("rt")}@example.com`, "203.0.113.34")).status).toBe(200);
-      // DB null → theo env.
-      await setSettings({ userDailyUsd: null, globalDailyUsd: null, signupEnabled: null });
-      env.SIGNUP_ENABLED = false;
-      env.USER_DAILY_USD = 1;
-      expect((await signUp(auth, `${uniq("rt")}@example.com`, "203.0.113.35")).status).toBe(400);
-      env.SIGNUP_ENABLED = true;
-      expect((await signUp(auth, `${uniq("rt")}@example.com`, "203.0.113.36")).status).toBe(200);
-    } finally {
-      env.SIGNUP_ENABLED = prev.signup;
-      env.USER_DAILY_USD = prev.user;
-      env.GLOBAL_DAILY_USD = prev.global;
-    }
+    setLimits({ user: 1, signup: true });
+    expect((await signUp(auth, `${uniq("rt")}@example.com`, "203.0.113.33")).status).toBe(400);
+    setLimits({ global: 10, signup: true });
+    expect((await signUp(auth, `${uniq("rt")}@example.com`, "203.0.113.35")).status).toBe(400);
+    setLimits({ user: 1, global: 10, signup: true });
+    expect((await signUp(auth, `${uniq("rt")}@example.com`, "203.0.113.36")).status).toBe(200);
   });
 
   it("an admin email is rejected even while sign-up is open at runtime", async () => {
     const auth = createAuth();
-    await setSettings({ userDailyUsd: "1", globalDailyUsd: "10", signupEnabled: true });
+    setLimits({ user: 1, global: 10, signup: true });
     const email = `${uniq("boss")}@example.com`;
     env.ADMIN_EMAILS.push(email);
     expect((await signUp(auth, email, "203.0.113.37")).status).toBe(400);

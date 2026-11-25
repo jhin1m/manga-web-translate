@@ -1,6 +1,9 @@
-/** Chọn driver lưu file trong env: bản VPS không đặt gì vẫn là s3 và vẫn bắt buộc đủ biến S3. */
+/** Thư mục file trong env: mặc định `${MTL_DATA_DIR}/files`; production (bản VPS) phải đặt rõ thư mục bền. */
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { parseEnv } from "../../src/env.ts";
+import { DEFAULT_DATA_DIR } from "../../src/local/local-secrets.ts";
 
 const base = {
   DATABASE_URL: "postgres://u:p@127.0.0.1:5432/db",
@@ -8,36 +11,26 @@ const base = {
   BETTER_AUTH_URL: "http://localhost:8787",
   WEB_ORIGIN: "http://localhost:5173",
 };
-const s3 = {
-  S3_ENDPOINT: "http://127.0.0.1:9000",
-  S3_BUCKET: "mtl",
-  S3_ACCESS_KEY: "ak",
-  S3_SECRET_KEY: "sk",
-  FILES_DOMAIN: "localhost:9100",
-};
+const budgets = { GLOBAL_DAILY_USD: "10", GLOBAL_MONTHLY_USD: "100" };
 
-describe("env storage driver", () => {
-  it("defaults to s3 when nothing is set (VPS unchanged)", () => {
-    const e = parseEnv({ ...base, ...s3 });
-    expect(e.STORAGE_DRIVER).toBe("s3");
-    expect(e.S3_BUCKET).toBe("mtl");
+describe("env files dir", () => {
+  it("defaults to <repo>/.data/files; MTL_DATA_DIR and FILES_DIR override", () => {
+    // Test nằm cùng độ sâu với src/local/ → cùng gốc repo.
+    expect(DEFAULT_DATA_DIR).toBe(fileURLToPath(new URL("../../../../.data", import.meta.url)));
+    expect(parseEnv(base).FILES_DIR).toBe(join(DEFAULT_DATA_DIR, "files"));
+    expect(parseEnv({ ...base, MTL_DATA_DIR: "/srv/mtl" }).FILES_DIR).toBe("/srv/mtl/files");
+    expect(parseEnv({ ...base, FILES_DIR: "/tmp/f" }).FILES_DIR).toBe("/tmp/f");
+    expect(parseEnv({ ...base, FILES_DIR: "" }).FILES_DIR).toBe(join(DEFAULT_DATA_DIR, "files"));
   });
 
-  it("s3 driver (explicit or default) missing a variable → error naming it", () => {
-    const { S3_BUCKET: _drop, ...noBucket } = s3;
-    expect(() => parseEnv({ ...base, ...noBucket })).toThrow(/S3_BUCKET/);
-    expect(() => parseEnv({ ...base, ...s3, STORAGE_DRIVER: "s3", FILES_DOMAIN: "" })).toThrow(/FILES_DOMAIN/);
-  });
-
-  it("disk driver needs no S3 variables; FILES_DIR defaults to /data/files", () => {
-    const e = parseEnv({ ...base, STORAGE_DRIVER: "disk" });
-    expect(e.STORAGE_DRIVER).toBe("disk");
-    expect(e.FILES_DIR).toBe("/data/files");
-    expect(parseEnv({ ...base, STORAGE_DRIVER: "disk", FILES_DIR: "/tmp/f" }).FILES_DIR).toBe("/tmp/f");
-  });
-
-  it("blank STORAGE_DRIVER = unset; unknown value rejected", () => {
-    expect(parseEnv({ ...base, ...s3, STORAGE_DRIVER: "" }).STORAGE_DRIVER).toBe("s3");
-    expect(() => parseEnv({ ...base, ...s3, STORAGE_DRIVER: "gcs" })).toThrow();
+  it("production without local mode requires FILES_DIR or MTL_DATA_DIR", () => {
+    expect(() => parseEnv({ ...base, ...budgets, NODE_ENV: "production" })).toThrow(/FILES_DIR/);
+    expect(parseEnv({ ...base, ...budgets, NODE_ENV: "production", FILES_DIR: "/srv/f" }).FILES_DIR).toBe("/srv/f");
+    expect(parseEnv({ ...base, ...budgets, NODE_ENV: "production", MTL_DATA_DIR: "/srv" }).FILES_DIR).toBe(
+      "/srv/files",
+    );
+    expect(parseEnv({ ...base, NODE_ENV: "production", MTL_LOCAL_MODE: "1" }).FILES_DIR).toBe(
+      join(DEFAULT_DATA_DIR, "files"),
+    );
   });
 });

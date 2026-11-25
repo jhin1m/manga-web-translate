@@ -24,6 +24,19 @@ export function call(
   });
 }
 
+/**
+ * Gọi link file `/files/…` (presign của storage) qua app như trình duyệt/worker. Body tuần tự hoá trước để có
+ * Content-Length như client HTTP thật (route upload kiểm header này; Request với FormData không tự đặt).
+ */
+export async function fetchFile(url: string, init: RequestInit = {}): Promise<Response> {
+  const req = new Request(new URL(url, "http://local"), init);
+  if (req.body === null) return app.request(req);
+  const body = new Uint8Array(await req.arrayBuffer());
+  const headers = new Headers(req.headers);
+  headers.set("content-length", String(body.byteLength));
+  return app.request(new Request(req.url, { method: req.method, headers, body }));
+}
+
 /** Cookie phiên từ header set-cookie. */
 export function cookieFrom(res: Response): string {
   return res.headers

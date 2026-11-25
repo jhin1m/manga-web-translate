@@ -1,5 +1,5 @@
 /**
- * Driver lưu file trên đĩa (`<root>/<key>`) cho bản self-host 1 người dùng (không MinIO). Link presign là
+ * Driver lưu file trên đĩa (`<root>/<key>`) — nơi lưu file duy nhất của app. Link presign là
  * `/files/<key>?…` (tương đối, cùng origin với web) ký HMAC — route `routes/files.ts` phục vụ GET/HEAD/PUT/POST.
  *
  * - Content-Type lưu ở sidecar `<file>.meta.json` (xattr không portable trên bind mount macOS/Windows).
@@ -276,10 +276,6 @@ export function createDiskDriver({ root: rootIn, signingKey, now = () => Date.no
     presignPost,
     presignGet,
     presignPut,
-    objectTags: async (key) => {
-      resolveKey(key);
-      return {};
-    },
     head,
     readPrefix,
     readObject,

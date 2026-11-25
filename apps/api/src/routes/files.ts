@@ -1,9 +1,9 @@
 /**
- * `/files/<key>?…` — phục vụ link ký HMAC của disk driver (thay MinIO ở bản self-host). Ngoài `/api`, không cookie:
+ * `/files/<key>?…` — phục vụ link ký HMAC của disk driver. Ngoài `/api`, không cookie:
  * quyền nằm hết trong chữ ký (xem storage-drivers/file-signing.ts).
  * - GET/HEAD: có Range; nosniff + CSP sandbox (file người dùng không bao giờ chạy như trang cùng origin).
  * - PUT: output worker; header `content-type` (+ `x-amz-tagging`) phải khớp tham số đã ký.
- * - POST multipart: upload người dùng theo policy đã ký (Content-Type cố định, dung lượng [1, max]); 204 như MinIO.
+ * - POST multipart: upload người dùng theo policy đã ký (Content-Type cố định, dung lượng [1, max]); 204 như presigned POST của S3.
  */
 import { type Context, Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";

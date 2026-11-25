@@ -11,7 +11,7 @@ import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { env } from "../src/env.ts";
 import { enqueueIngest, inJobTx } from "../src/jobs/enqueue.ts";
 import { advanceTranslateChain, planBatches, type RunTarget, regionCount } from "../src/jobs/translate-chain.ts";
-import { call, db, seedAdmin, seedUser } from "./helpers.ts";
+import { call, db, fetchFile, seedAdmin, seedUser } from "./helpers.ts";
 import { cancelActiveJobs } from "./isolate-queue.ts";
 import {
   addSources,
@@ -138,7 +138,7 @@ async function uploadedMangaChapter(label: string) {
     const form = new FormData();
     for (const [k, v] of Object.entries(f.fields)) form.append(k, v);
     form.append("file", new Blob([PNG_1PX]));
-    expect((await fetch(f.url, { method: "POST", body: form })).status).toBe(204);
+    expect((await fetchFile(f.url, { method: "POST", body: form })).status).toBe(204);
   }
   return { ...S, chapterId: created.chapter.id };
 }

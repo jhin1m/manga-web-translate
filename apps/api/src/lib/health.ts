@@ -1,5 +1,5 @@
 /**
- * Trạng thái cho `/healthz` (và `/readyz` = phần không gồm runner): DB, storage (bucket S3 hoặc thư mục disk driver), runner (`mtl-jobs` ghi runtime_flags.runner_heartbeat mỗi 30s).
+ * Trạng thái cho `/healthz` (và `/readyz` = phần không gồm runner): DB, storage (thư mục file ghi được), runner (`mtl-jobs` ghi runtime_flags.runner_heartbeat mỗi 30s).
  * `oldest_queued_age_s` để infra/alert.sh cảnh báo hàng đợi cũ > 15' (không ảnh hưởng ok/fail); job của tài khoản bị khoá không tính (không ai claim, sẽ chờ mãi).
  */
 import { runtimeFlags } from "@mtl/db";
@@ -19,8 +19,8 @@ export type Health = {
   storage: boolean;
   runner: boolean;
   oldest_queued_age_s: number | null;
-  /** Đăng ký công khai đang mở thật sự (bật + đủ hạn mức); null = không đọc được DB. smoke.sh kiểm theo giá trị này. */
-  signup: "open" | "closed" | null;
+  /** Đăng ký công khai đang mở thật sự (bật + đủ hạn mức, theo env). smoke.sh kiểm theo giá trị này. */
+  signup: "open" | "closed";
 };
 
 async function check<T>(fn: () => Promise<T>): Promise<T | null> {
@@ -43,15 +43,19 @@ export async function checkHealth(): Promise<Health> {
   const { db: dbOk, storage } = await checkReady();
   let runner = false;
   let age: number | null = null;
-  let signup: Health["signup"] = null;
   if (dbOk) {
     const beat = await check(() => db.select().from(runtimeFlags).where(eq(runtimeFlags.key, "runner_heartbeat")));
     const at = beat?.[0]?.updatedAt;
     runner = !!at && Date.now() - at.getTime() < RUNNER_STALE_S * 1000;
     age = await check(() => oldestQueuedAgeS(db, { where: notDisabledOwnerSql }));
-    const open = await check(() => isSignupOpen(db));
-    signup = open === null ? null : open ? "open" : "closed";
   }
   const ok = dbOk && storage && runner;
-  return { ok, db: dbOk, storage, runner, oldest_queued_age_s: age === null ? null : Math.round(age), signup };
+  return {
+    ok,
+    db: dbOk,
+    storage,
+    runner,
+    oldest_queued_age_s: age === null ? null : Math.round(age),
+    signup: isSignupOpen() ? "open" : "closed",
+  };
 }

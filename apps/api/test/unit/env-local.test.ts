@@ -1,4 +1,4 @@
-/** Chế độ local trong env: mặc định disk, bỏ yêu cầu GLOBAL_* ở production, ép tắt cờ nhiều người dùng; tắt = như cũ. */
+/** Chế độ local trong env: bỏ yêu cầu GLOBAL_* ở production, ép tắt cờ nhiều người dùng; tắt = như cũ. */
 import { describe, expect, it, vi } from "vitest";
 import { parseEnv } from "../../src/env.ts";
 
@@ -11,25 +11,20 @@ const base = {
 
 describe("env local mode", () => {
   it("accepts 1|true|0|false, off by default", () => {
-    expect(parseEnv({ ...base, STORAGE_DRIVER: "disk" }).MTL_LOCAL_MODE).toBe(false);
+    expect(parseEnv(base).MTL_LOCAL_MODE).toBe(false);
     for (const v of ["1", "true"]) expect(parseEnv({ ...base, MTL_LOCAL_MODE: v }).MTL_LOCAL_MODE).toBe(true);
-    for (const v of ["0", "false", ""])
-      expect(parseEnv({ ...base, STORAGE_DRIVER: "disk", MTL_LOCAL_MODE: v }).MTL_LOCAL_MODE).toBe(false);
+    for (const v of ["0", "false", ""]) expect(parseEnv({ ...base, MTL_LOCAL_MODE: v }).MTL_LOCAL_MODE).toBe(false);
     expect(() => parseEnv({ ...base, MTL_LOCAL_MODE: "yes" })).toThrow();
   });
 
-  it("local defaults: disk driver under MTL_DATA_DIR, no S3 needed", () => {
-    const e = parseEnv({ ...base, MTL_LOCAL_MODE: "1" });
-    expect(e.STORAGE_DRIVER).toBe("disk");
-    expect(e.MTL_DATA_DIR).toBe("/data");
-    expect(e.FILES_DIR).toBe("/data/files");
+  it("local defaults: files under MTL_DATA_DIR", () => {
     expect(parseEnv({ ...base, MTL_LOCAL_MODE: "1", MTL_DATA_DIR: "/srv/mtl" }).FILES_DIR).toBe("/srv/mtl/files");
     expect(parseEnv({ ...base, MTL_LOCAL_MODE: "1", FILES_DIR: "/x" }).FILES_DIR).toBe("/x");
   });
 
   it("production + local does not require GLOBAL_* budgets; production alone still does", () => {
     expect(parseEnv({ ...base, NODE_ENV: "production", MTL_LOCAL_MODE: "1" }).NODE_ENV).toBe("production");
-    expect(() => parseEnv({ ...base, NODE_ENV: "production", STORAGE_DRIVER: "disk" })).toThrow(/GLOBAL_DAILY_USD/);
+    expect(() => parseEnv({ ...base, NODE_ENV: "production", FILES_DIR: "/srv/f" })).toThrow(/GLOBAL_DAILY_USD/);
   });
 
   it("forces multi-user features off (and does not fail their cross-checks)", () => {
@@ -53,8 +48,8 @@ describe("env local mode", () => {
   });
 
   it("without local mode the old cross-checks still apply", () => {
-    expect(() => parseEnv({ ...base, STORAGE_DRIVER: "disk", DISPATCHER_ENABLED: "true" })).toThrow(/MODAL_DRAIN/);
-    expect(parseEnv({ ...base, STORAGE_DRIVER: "disk", ADMIN_EMAILS: "A@b.c" }).ADMIN_EMAILS).toEqual(["a@b.c"]);
+    expect(() => parseEnv({ ...base, DISPATCHER_ENABLED: "true" })).toThrow(/MODAL_DRAIN/);
+    expect(parseEnv({ ...base, ADMIN_EMAILS: "A@b.c" }).ADMIN_EMAILS).toEqual(["a@b.c"]);
   });
 
   it("MTL_ALLOWED_HOSTS is a lowercase csv list", () => {

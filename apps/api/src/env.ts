@@ -23,19 +23,20 @@ const Env = z
     WEB_ORIGIN: z.string().url(),
     API_PORT: z.coerce.number().int().default(8787),
     /**
-     * Nơi lưu file: `s3` (MinIO/S3, mặc định — bản VPS) hoặc `disk` (thư mục FILES_DIR, link `/files/…` ký HMAC do
-     * chính API phục vụ — bản self-host). Không đặt = `s3`.
+     * Thư mục lưu file (ảnh, font, export) trên đĩa; link `/files/…` ký HMAC do chính API phục vụ.
+     * Không đặt = `${MTL_DATA_DIR}/files`. Production (bản VPS) bắt buộc đặt FILES_DIR hoặc MTL_DATA_DIR.
      */
-    STORAGE_DRIVER: blank(z.enum(["s3", "disk"]).optional()),
-    /** Thư mục gốc của disk driver. Không đặt = `${MTL_DATA_DIR}/files` (mặc định /data/files). */
     FILES_DIR: blank(z.string().min(1).optional()),
     /**
      * Self-host 1 người dùng: không đăng nhập (user local cố định là admin), secret tự sinh ở `${MTL_DATA_DIR}/secrets`,
-     * storage mặc định `disk`, app tự backup + migrate DB lúc khởi động. Tắt đăng ký / dispatcher / ntfy / dev login.
+     * app tự backup + migrate DB lúc khởi động. Tắt đăng ký / dispatcher / ntfy / dev login.
      * KHÔNG mở ra mạng: mọi request đi qua local-guard (Host + Origin).
      */
     MTL_LOCAL_MODE: flag01,
-    /** Thư mục dữ liệu của chế độ local (secrets, files, backups, worker token). */
+    /**
+     * Thư mục dữ liệu (files; chế độ local thêm secrets, backups, worker token). Không đặt = `<gốc repo>/.data`
+     * (dev chạy `pnpm dev`); image Docker đặt sẵn `/data`.
+     */
     MTL_DATA_DIR: blank(z.string().min(1).default(DEFAULT_DATA_DIR)),
     /** Thoát hiểm: bỏ bước pg_dump trước migrate lúc khởi động (khi pg_dump hỏng mà vẫn cần chạy app). */
     MTL_SKIP_BOOT_BACKUP: flag01,
@@ -58,15 +59,6 @@ const Env = z
     MTL_UPDATER: flag01On,
     /** Thư mục build SPA (apps/web/dist) — đặt thì API phục vụ luôn web (cùng origin). */
     SPA_DIR: blank(z.string().min(1).optional()),
-    /** `S3_*` + FILES_DOMAIN bắt buộc khi STORAGE_DRIVER=s3 (kiểm ở parseEnv). */
-    S3_ENDPOINT: blank(z.string().url().optional()),
-    S3_REGION: z.string().default("us-east-1"),
-    S3_BUCKET: blank(z.string().min(1).optional()),
-    S3_ACCESS_KEY: blank(z.string().min(1).optional()),
-    S3_SECRET_KEY: blank(z.string().min(1).optional()),
-    /** Domain file riêng trình duyệt thấy (dev: localhost:9100, prod: files.<domain>). */
-    FILES_DOMAIN: blank(z.string().min(1).optional()),
-    FILES_SCHEME: z.enum(["http", "https"]).default("https"),
     /**
      * Muối input_rev lúc enqueue: chỉ tăng khi cùng input mà worker cho kết quả khác (tăng = chạy lại mọi job, tốn AI).
      * Có thể thấp hơn worker PIPELINE_VERSION khi worker chỉ tăng để chặn bản cũ qua MIN_PIPELINE_VERSION.
@@ -145,7 +137,6 @@ const Env = z
   .transform((e) => {
     const base = {
       ...e,
-      STORAGE_DRIVER: e.STORAGE_DRIVER ?? (e.MTL_LOCAL_MODE ? ("disk" as const) : ("s3" as const)),
       FILES_DIR: e.FILES_DIR ?? join(e.MTL_DATA_DIR, "files"),
     };
     return e.MTL_LOCAL_MODE ? forceLocalOff(base) : base;
@@ -187,14 +178,12 @@ function forceLocalOff<
   };
 }
 
-const S3_REQUIRED = ["S3_ENDPOINT", "S3_BUCKET", "S3_ACCESS_KEY", "S3_SECRET_KEY", "FILES_DOMAIN"] as const;
-
 /** Parse + kiểm chéo biến môi trường (thuần, test gọi trực tiếp). */
 export function parseEnv(raw: Record<string, string | undefined>): Env {
   return Env.superRefine((e, ctx) => {
-    const missingS3 = e.STORAGE_DRIVER === "s3" ? S3_REQUIRED.filter((k) => !e[k]) : [];
-    if (missingS3.length > 0) {
-      ctx.addIssue({ code: "custom", message: `STORAGE_DRIVER=s3 cần ${missingS3.join(", ")}` });
+    // Mặc định `<gốc repo>/.data` nằm trong thư mục release của bản VPS (bị xoá khi dọn release) → bắt đặt rõ.
+    if (e.NODE_ENV === "production" && !e.MTL_LOCAL_MODE && !raw.FILES_DIR && !raw.MTL_DATA_DIR) {
+      ctx.addIssue({ code: "custom", message: "production cần FILES_DIR (thư mục file bền, ngoài thư mục release)" });
     }
     // Local: 1 người dùng tự trả tiền AI bằng key của mình → không bắt kill-switch ngân sách toàn cục.
     if (
