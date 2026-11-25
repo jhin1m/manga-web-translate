@@ -44,9 +44,8 @@ test("upload a font, make it the series default, use it in the editor, then dele
   await page.goto(`/s/${state.seriesId}?tab=settings`);
   const slot = page.getByLabel("Font thoại", { exact: true });
   await expect(slot.locator("optgroup[label='Font của bạn'] option")).toHaveText([font.name]);
+  // Cài đặt series tự lưu khi đổi ô chọn; kiểm kết quả ở server.
   await slot.selectOption(font.id);
-  await page.getByRole("button", { name: "Lưu", exact: true }).click();
-  // Lưu đổi settings_rev → form dựng lại; kiểm kết quả ở server.
   await expect
     .poll(async () => {
       const s = (await (await page.request.get(`/api/series/${state.seriesId}`)).json()) as {
@@ -169,7 +168,6 @@ test("admin uploads a system font: another user picks it for a series and the ed
   await expect(slot.locator("optgroup[label='Font dùng chung'] option")).toHaveText([font.name]);
   await expect(slot.locator("optgroup[label='Font của bạn']")).toHaveCount(0);
   await slot.selectOption(font.id);
-  await user.getByRole("button", { name: "Lưu", exact: true }).click();
   await expect
     .poll(async () => {
       const s = (await (await user.request.get(`/api/series/${userSeries}`)).json()) as {

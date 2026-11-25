@@ -1,10 +1,9 @@
 /**
  * Cài đặt series — "Ảnh tự bỏ": ảnh credit đã học từ "Luôn bỏ ở series này". Chương tạo sau có ảnh giống được bỏ qua
- * sẵn (khôi phục được ở rail). Xoá ảnh khỏi danh sách không đổi chương đã tạo. Mỗi lần xoá gọi API ngay, không đi
- * qua nút Lưu của form. Dải mép đã cắt ("Luôn cắt ở series này") hiện chỉ đúng dải đó.
+ * sẵn (khôi phục được ở rail). Xoá ảnh khỏi danh sách không đổi chương đã tạo. Mỗi lần xoá gọi API ngay. Dải mép đã
+ * cắt ("Luôn cắt ở series này") hiện chỉ đúng dải đó. Nhãn + ⓘ do hàng chứa nó (modal Cài đặt dịch) vẽ.
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { InfoTip } from "../../app/info-tip.tsx";
 import { errorMessage } from "../../lib/api.ts";
 import { TrashIcon } from "../home/row-icons.tsx";
 import { deleteSkipImage, fetchSkipImages, seriesKeys } from "./api.ts";
@@ -22,12 +21,6 @@ export function SkipImagesSection({ seriesId }: { seriesId: string }) {
   const images = q.data?.images ?? [];
   return (
     <fieldset aria-label="Ảnh tự bỏ" className="skip-images">
-      <div className="field-head">
-        <span className="small muted">Xoá ảnh ở đây có hiệu lực ngay, không cần bấm Lưu.</span>
-        <InfoTip label="Giải thích Ảnh tự bỏ">
-          Ảnh credit đã chọn "Luôn bỏ ở series này". Chương upload sau có ảnh giống sẽ được bỏ qua sẵn.
-        </InfoTip>
-      </div>
       {q.error && <p className="small error">{errorMessage(q.error)}</p>}
       {q.data && images.length === 0 && <p className="small muted">Chưa có ảnh nào.</p>}
       {images.length > 0 && (

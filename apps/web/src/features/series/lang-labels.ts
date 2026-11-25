@@ -21,15 +21,12 @@ type Pair = { source_lang: string; target_lang: string };
 export const pairLabel = (p: Pair) => `${langShort(p.source_lang)} → ${langShort(p.target_lang)}`;
 
 /**
- * Cảnh báo ở form Cài đặt khi đổi ngôn ngữ mà series có glossary riêng (entry riêng không gắn cặp nên vẫn áp
- * sau khi đổi). Không đổi cặp, hoặc chưa biết / 0 từ → null.
+ * Cảnh báo ở Cài đặt khi đổi ngôn ngữ mà series có glossary (entry không gắn cặp nên vẫn áp sau khi đổi). Không đổi
+ * cặp, hoặc chưa biết / 0 từ → null.
  */
-export function langChangeWarning(saved: Pair, form: Pair, ownTerms: number | undefined): string | null {
-  if (!ownTerms || (saved.source_lang === form.source_lang && saved.target_lang === form.target_lang)) return null;
-  return (
-    `Glossary riêng của series có ${ownTerms} từ viết cho ${pairLabel(saved)} — kiểm lại sau khi đổi ngôn ngữ. ` +
-    `Glossary chung sẽ chuyển sang cặp ${pairLabel(form)}.`
-  );
+export function langChangeWarning(before: Pair, now: Pair, terms: number | undefined): string | null {
+  if (!terms || (before.source_lang === now.source_lang && before.target_lang === now.target_lang)) return null;
+  return `Glossary của series có ${terms} từ viết cho ${pairLabel(before)} — kiểm lại sau khi đổi ngôn ngữ.`;
 }
 
 /** Nhãn loại truyện ở ô chọn khi tạo series. */

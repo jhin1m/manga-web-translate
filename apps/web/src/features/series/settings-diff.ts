@@ -1,7 +1,7 @@
 /**
- * Thuần: body PATCH của form Cài đặt dịch = các trường khác mốc lúc mở form (so sâu), kèm khoá các cặp xưng hô form
- * đã thấy. Chỉ gửi trường đã đổi để không đè mất Giọng văn / cặp xưng hô AI ghi sau lúc form mở; server giữ cặp đang
- * có mà form chưa thấy (khoá không thuộc `pronoun_keys_seen`).
+ * Thuần: body PATCH của Cài đặt dịch = các trường khác mốc (so sâu), kèm khoá các cặp xưng hô form đã thấy (cặp của
+ * mốc). Chỉ gửi trường đã đổi để không đè mất Giọng văn / cặp xưng hô AI ghi sau khi form nhận mốc; server giữ cặp
+ * đang có mà form chưa thấy (khoá không thuộc `pronoun_keys_seen`).
  */
 import { pronounKey } from "@mtl/shared";
 import type { PronounRuleInput, SeriesPatch, SeriesSettingsInput } from "./api.ts";
@@ -12,7 +12,7 @@ export type SettingsValues = Omit<SeriesSettingsInput, "pronoun_rules"> & {
   pronoun_rules: readonly PronounRuleInput[];
 };
 
-const FIELDS = [
+export const SETTINGS_FIELDS = [
   "title",
   "source_lang",
   "target_lang",
@@ -23,6 +23,7 @@ const FIELDS = [
   "default_fonts",
   "ignore_text",
 ] as const satisfies readonly (keyof SettingsValues)[];
+export type SettingsField = (typeof SETTINGS_FIELDS)[number];
 
 /** Chỉ nội dung cặp, thứ tự trường cố định. */
 const ruleContent = ({ speaker, listener, address, note }: PronounRuleInput): PronounRuleInput => ({
@@ -45,16 +46,26 @@ function deepEqual(a: unknown, b: unknown): boolean {
   return ka.length === Object.keys(b).length && ka.every((k) => k in rb && deepEqual(ra[k], rb[k]));
 }
 
-const comparable = (v: SettingsValues, k: (typeof FIELDS)[number]): unknown =>
+const comparable = (v: SettingsValues, k: SettingsField): unknown =>
   k === "pronoun_rules" ? v.pronoun_rules.map(ruleContent) : v[k];
 
-/** Trường đổi so với `base` + `pronoun_keys_seen`; không đổi gì → `null` (không gọi API). */
-export function buildPatch(base: SettingsValues, form: SettingsValues): SeriesPatch | null {
+/** Trường `k` của hai bản có cùng nội dung (bỏ qua `origin` của cặp xưng hô, thứ tự khoá object). */
+export const sameField = (a: SettingsValues, b: SettingsValues, k: SettingsField) =>
+  deepEqual(comparable(a, k), comparable(b, k));
+
+/**
+ * Trường đổi so với `base` (chỉ xét `only` nếu có) + `pronoun_keys_seen`; không đổi gì → `null` (không gọi API).
+ */
+export function buildPatch(
+  base: SettingsValues,
+  form: SettingsValues,
+  only: readonly SettingsField[] = SETTINGS_FIELDS,
+): SeriesPatch | null {
   const patch: SeriesPatch = {};
   let changed = false;
-  for (const k of FIELDS) {
+  for (const k of only) {
+    if (sameField(base, form, k)) continue;
     const next = comparable(form, k);
-    if (deepEqual(comparable(base, k), next)) continue;
     // `next` lấy từ đúng trường `k` của form (cặp xưng hô đã bỏ `origin`).
     Object.assign(patch, { [k]: next });
     changed = true;
