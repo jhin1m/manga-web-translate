@@ -196,7 +196,7 @@ function LangForm(props: { series: Series; onClose(): void }) {
   const save = useMutation({
     mutationFn: () => patchSeries(series.id, { source_lang: src, target_lang: tgt }),
     onSuccess: () => {
-      // Chi tiết series (editor + màn series) nằm dưới ["series"]; glossary chung theo cặp → làm mới luôn.
+      // Chi tiết series (editor + màn series) nằm dưới ["series"]; glossary của series không theo cặp, làm mới để khớp server.
       void qc.invalidateQueries({ queryKey: ["series"] });
       void qc.invalidateQueries({ queryKey: ["glossary"] });
       props.onClose();
