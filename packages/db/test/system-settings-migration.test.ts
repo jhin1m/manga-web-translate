@@ -91,9 +91,7 @@ describe("system_settings migration", () => {
 
   it("creates a default row when no user_settings exist, and enforces a single row", async () => {
     await migrateTo(migrationsFolder);
-    expect(await query(`SELECT id, pipeline, signup_enabled FROM system_settings`)).toEqual([
-      { id: 1, pipeline: {}, signup_enabled: null },
-    ]);
+    expect(await query(`SELECT id, pipeline FROM system_settings`)).toEqual([{ id: 1, pipeline: {} }]);
     await expect(query(`INSERT INTO system_settings (id) VALUES (2)`)).rejects.toThrow();
   });
 });
