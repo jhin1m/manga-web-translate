@@ -199,10 +199,10 @@ Box có font không biết (font tuỳ chỉnh đã xoá, state cũ): metric the
 (`"<font_id>", "<mặc định>"`) nên đo và vẽ nhất quán, không lỗi; select hiện `<id> (thiếu)`. Font thoại mặc định của series dùng
 được khi là font gói sẵn hoặc font tuỳ chỉnh đã nạp (`kit.knows`).
 
-Cài đặt series (`?tab=settings`, `series-settings-form.tsx`) cũng gọi `loadFonts` để dropdown Font mặc định vẽ mỗi option bằng
-chính font đó (`.font-select` bật `appearance: base-select` khi trình duyệt hỗ trợ). Dropdown có option "+ Tải font lên…"
-cuối dropdown: chọn file → `uploadCheckedFont` (cùng kiểm tra đuôi / 10MB / giới hạn số font với trang Font) → font mới được chọn
-cho đúng ô, chỉ thành mặc định khi bấm Lưu.
+Cài đặt series (`?tab=settings`, nhóm Font chữ ở `series-font-fields.tsx`) cũng gọi `loadFonts` để dropdown Font mặc định vẽ
+mỗi option bằng chính font đó (`.font-select` bật `appearance: base-select` khi trình duyệt hỗ trợ). Dropdown có option "+ Tải
+font lên…" cuối dropdown: chọn file → `uploadCheckedFont` (cùng kiểm tra đuôi / 10MB / giới hạn số font với trang Font) → font
+mới được chọn cho đúng ô và tự lưu làm mặc định như mọi ô chọn của Cài đặt series.
 
 Cờ "tràn khung" (bảng văn bản, cột thumbnail, panel khối, cảnh báo xuất) dùng chung `boxOverflow` trong `measure.ts`, có dung
 sai `max(2px, 4% cạnh box theo trục tràn)`: box auto_fit do render.py chọn cỡ, đo lại ở trình duyệt lệch vài phần

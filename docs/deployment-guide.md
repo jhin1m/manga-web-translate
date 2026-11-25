@@ -81,11 +81,14 @@ sudo systemctl enable --now mtl-api mtl-jobs mtl-backup.timer mtl-alert.timer
 - `infra/deploy.sh <ref>`: `git archive` commit → `releases/<utc>-<sha12>` → `pnpm install --frozen-lockfile`, build
   SPA, `pnpm db:migrate` → `minio-setup.sh` (bucket private + lifecycle export 7 ngày) → đổi symlink `current`
   (nguyên tử) → restart → `smoke.sh` (healthz 200 + đăng ký công khai khớp `/healthz.signup`: đóng → 400 `EMAIL_PASSWORD_SIGN_UP_DISABLED`; mở → cảnh báo, 400 `PASSWORD_TOO_SHORT`, không tạo user). Smoke hỏng →
-  tự quay về bản đang chạy, xoá release hỏng, cảnh báo.
+  tự quay về bản đang chạy, xoá release hỏng, cảnh báo. **Trừ khi** release mới có migration bản đang chạy chưa có:
+  khi đó không tự quay về (bản cũ có thể hỏng trên schema mới mà smoke vẫn qua), giữ bản mới, cảnh báo và in lệnh
+  `psql … -f …down.sql` của từng migration mới (mới nhất trước). Đọc ghi chú migration bên dưới, chạy down, rồi mới
+  `infra/deploy.sh rollback`.
 - `infra/deploy.sh rollback`: đổi `current` ↔ `previous` + restart + smoke, không build/migrate.
 - Migration chỉ thêm (additive) nên rollback app không cần down DB; down tay ở `packages/db/migrations-down/`.
-  Rollback app qua 0006 (glossary theo cặp): không nhập CSV "thay toàn bộ" ở glossary chung — bản cũ xoá entry mọi
-  cặp (xem [export-and-batch-edit.md](./export-and-batch-edit.md#glossary)).
+  Ngoại lệ: 0031 (bỏ glossary chung) gỡ cột — rollback app qua 0031 phải chạy file down trước (xem
+  [ghi chú 0031](#ghi-chú-bỏ-glossary-chung-migration-0031)).
 - **Thứ tự khi nâng lên pipeline 0.5.1 (font tuỳ chỉnh)**: (1) cập nhật worker Mac + image Modal lên 0.5.1 trước —
   worker mới vẫn nhận job cũ vì `inputs.fonts` là optional; (2) rồi deploy API với `MIN_PIPELINE_VERSION=0.5.1`
   (mặc định trong `env.ts`; nếu `.env` có ghi đè thì sửa). Đảo thứ tự (hoặc để worker cũ chạy) → worker < 0.5.1 nhận
@@ -266,6 +269,40 @@ chúng thành khoá đã gặp. Worker 0.13.0 là tuỳ chọn, `MIN_PIPELINE_VE
 không điền Giọng văn. Rollback app không cần down DB, nhưng API cũ hiện lại mục AI đã xoá thành gợi ý chờ duyệt và có
 thể gợi ý lại mục đã gặp (khoá có tiền tố không khớp). Gỡ hẳn thì chạy
 `packages/db/migrations-down/0030_auto_apply_series_memory.down.sql`.
+
+### Ghi chú: bỏ glossary chung (migration 0031)
+
+`0031_remove_global_glossary` **không chỉ thêm**: chép mỗi entry glossary chung vào mọi series cùng người dùng + cùng
+cặp nguồn→đích mà series chưa có term đó (giữ ghi chú, hoa/thường, `origin`), xoá entry chung, gỡ cột
+`glossary_entries.source_lang` / `target_lang`, `series_id` thành NOT NULL, unique thành `(user_id, series_id,
+source_term)`. Glossary hiệu lực của mỗi series không đổi nên `glossary_rev` không tăng. Worker không đổi.
+
+Entry chung **không chép được vào series nào** (người dùng chưa có series cùng cặp, hoặc cặp null do bản API trước 0.4.0
+ghi trong cửa sổ rollback 0006) không mất: chuyển nguyên (giữ id, cặp, ghi chú, hoa/thường, `origin`, thời gian) vào
+bảng `glossary_global_archive`. App không đọc bảng này. Lấy lại:
+
+- Xem: `SELECT source_lang, target_lang, source_term, target_term, note FROM glossary_global_archive WHERE user_id = '…'
+  ORDER BY source_lang, target_lang, source_term;`
+- Chép một cặp vào một series (vd series ja→vi mới tạo; term series đã có thì giữ bản series):
+  `INSERT INTO glossary_entries (id, user_id, series_id, source_term, target_term, note, case_sensitive, origin)
+  SELECT gen_random_uuid(), a.user_id, '<series_id>', a.source_term, a.target_term, a.note, a.case_sensitive, a.origin
+  FROM glossary_global_archive a WHERE a.user_id = '<user_id>' AND a.source_lang = 'ja' AND a.target_lang = 'vi'
+  ON CONFLICT (user_id, series_id, source_term) DO NOTHING;` rồi
+  `UPDATE series SET glossary_rev = glossary_rev + 1 WHERE id = '<series_id>';` (lô dịch sau nhận glossary mới).
+- Hoặc chạy file down (bước 4): entry lưu trữ trở lại glossary chung của bản cũ.
+
+Entry chung có series cùng cặp nhưng series nào cũng đã có term đó (bản series luôn thắng, entry chung chưa từng có
+hiệu lực) thì bị xoá.
+
+1. **Backup trước** (`infra/backup.sh` hoặc `pg_dump`): entry chung đã chép vào series không quay lại glossary chung
+   bằng file down.
+2. `infra/deploy.sh <ref>` như thường (migrate chạy trong một transaction; lỗi giữa chừng không để lại nửa vời).
+3. Tab web mở từ trước deploy còn link "Glossary chung" → route API cũ trả 404 tới khi tải lại trang.
+4. **Rollback app về bản trước 0031**: chạy down **trước** khi lùi app — bản cũ đọc / ghi hai cột đã gỡ nên lỗi:
+   `psql "$DATABASE_URL" -f packages/db/migrations-down/0031_remove_global_glossary.down.sql`, rồi
+   `infra/deploy.sh rollback`. Down thêm lại cột (nullable), `series_id` nullable, unique và index cũ; trả entry trong
+   `glossary_global_archive` về glossary chung (đúng cặp) rồi xoá bảng này. Entry đã chép giữ nguyên là entry series,
+   không quay lại trang Glossary chung. Muốn có lại đúng glossary chung cũ: khôi phục từ backup bước 1.
 
 ### Checklist cắt mép credit (pipeline 0.12.0, migration 0027 + 0028)
 
