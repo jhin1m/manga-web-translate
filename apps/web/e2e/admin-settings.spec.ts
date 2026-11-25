@@ -1,4 +1,4 @@
-/** Quyền admin ở web: owner (ADMIN_EMAILS) thấy Cài đặt + mục Pipeline + AI (nhà cung cấp, model tác vụ); người dùng thường không thấy link và bị đưa về `/`. */
+/** Quyền admin ở web: owner (ADMIN_EMAILS) thấy Cài đặt + mục Pipeline (kèm model AI từng bước) + Nhà cung cấp; người dùng thường không thấy link và bị đưa về `/`. */
 import { expect, test } from "@playwright/test";
 import { E2E_VICTIM } from "./env.ts";
 import { login, state } from "./helpers.ts";
@@ -24,7 +24,7 @@ test("a regular user has no Settings link, is redirected from /settings and can 
   await expect(page.getByRole("region", { name: "Series", exact: true })).toBeVisible();
 
   await page.getByLabel("Tài khoản", { exact: true }).click();
-  await expect(page.getByRole("link", { name: "Font của tôi" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Font", exact: true })).toBeVisible();
   await expect(page.getByRole("link", { name: "Cài đặt", exact: true })).toHaveCount(0);
 
   const denied = await page.request.get("/api/admin/settings");
@@ -33,7 +33,7 @@ test("a regular user has no Settings link, is redirected from /settings and can 
   await page.goto("/settings");
   await expect(page).toHaveURL(/\/$/);
   await page.goto("/fonts");
-  await expect(page.getByRole("heading", { name: "Font của tôi" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Font", exact: true })).toBeVisible();
 });
 
 test("admin adds a provider (key shown only as last4), assigns the translate slot and it survives a reload", async ({
@@ -44,41 +44,44 @@ test("admin adds a provider (key shown only as last4), assigns the translate slo
   await page.goto("/settings?section=providers");
   await page.getByRole("button", { name: "Thêm nhà cung cấp" }).click();
   const form = page.getByRole("form", { name: "Thêm nhà cung cấp" });
-  await form.getByLabel("Tên hiển thị").fill("OpenAI e2e");
+  // Chỉ cần chọn nhà cung cấp + dán key: model gợi ý (kèm giá) điền sẵn. Đổi tên ở mục Tuỳ chỉnh cho khỏi trùng spec khác.
+  await form.getByRole("radio", { name: "OpenAI", exact: true }).check();
   await form.getByLabel("API key").fill(key);
-  await form.getByRole("button", { name: "+ gpt-4.1-mini" }).click();
+  await form.getByText("Tuỳ chỉnh tên, model và giá").click();
+  await expect(form.getByLabel("Model 1: id")).toHaveValue("gpt-4.1-mini");
+  await form.getByLabel("Tên hiển thị").fill("OpenAI e2e");
   await form.getByRole("button", { name: "Thêm nhà cung cấp" }).click();
 
-  const table = page.getByRole("table", { name: "Danh sách nhà cung cấp" });
-  const row = table.getByRole("row", { name: /OpenAI e2e/ });
-  await expect(row).toContainText("••••WXYZ");
+  const list = page.getByRole("list", { name: "Danh sách nhà cung cấp" });
+  const item = list.getByRole("listitem", { name: "OpenAI e2e" });
+  await expect(item).toContainText("••••WXYZ");
   await expect(page.locator("body")).not.toContainText(key);
-  await expect(row.getByRole("cell").nth(3)).toHaveText("1");
+  await expect(item.getByRole("list", { name: "Model của OpenAI e2e" }).getByRole("listitem")).toHaveText([
+    /gpt-4\.1-mini/,
+  ]);
 
-  await page.getByRole("link", { name: "Model tác vụ" }).click();
-  await page.getByLabel("Dịch", { exact: true }).selectOption({ label: "OpenAI e2e · gpt-4.1-mini" });
-  await page.getByRole("button", { name: "Lưu" }).click();
-  await expect(page.getByRole("status")).toHaveText("Đã lưu.");
+  // Model AI của bước Dịch nằm trong Pipeline; đổi là tự lưu.
+  await page.getByRole("link", { name: "Pipeline" }).click();
+  const translate = page.getByRole("region", { name: "Dịch" }).getByLabel("Model AI");
+  await translate.selectOption({ label: "gpt-4.1-mini" });
+  await expect(page.getByRole("status").filter({ hasText: "Đã lưu" })).toBeVisible();
 
   await page.reload();
-  await expect(page.getByLabel("Dịch", { exact: true })).toHaveValue(/.+/);
-  await expect(page.getByLabel("Dịch", { exact: true }).locator("option:checked")).toHaveText(
-    "OpenAI e2e · gpt-4.1-mini",
-  );
+  await expect(translate).toHaveValue(/.+/);
+  await expect(translate.locator("option:checked")).toHaveText("gpt-4.1-mini");
 
-  // Xoá bị chặn khi còn gán slot; bỏ gán rồi xoá được.
+  // Xoá bị chặn khi model còn dùng cho một bước; đổi về worker rồi xoá được.
   await page.getByRole("link", { name: "Nhà cung cấp" }).click();
   await page.getByRole("button", { name: "Xoá OpenAI e2e" }).click();
   await page.getByRole("button", { name: "Xác nhận xoá OpenAI e2e" }).click();
-  await expect(page.getByRole("alert")).toContainText("đang được gán");
-  await page.getByRole("link", { name: "Model tác vụ" }).click();
-  await page.getByLabel("Dịch", { exact: true }).selectOption({ label: "Mặc định (env worker)" });
-  await page.getByRole("button", { name: "Lưu" }).click();
-  await expect(page.getByRole("status")).toHaveText("Đã lưu.");
+  await expect(page.getByRole("alert")).toContainText("đang được dùng cho bước Dịch");
+  await page.getByRole("link", { name: "Pipeline" }).click();
+  await translate.selectOption({ label: "Theo worker (.env)" });
+  await expect(page.getByRole("status").filter({ hasText: "Đã lưu" })).toBeVisible();
   await page.getByRole("link", { name: "Nhà cung cấp" }).click();
   await page.getByRole("button", { name: "Xoá OpenAI e2e" }).click();
   await page.getByRole("button", { name: "Xác nhận xoá OpenAI e2e" }).click();
-  await expect(table.getByRole("row", { name: /OpenAI e2e/ })).toHaveCount(0);
+  await expect(list.getByRole("listitem", { name: "OpenAI e2e" })).toHaveCount(0);
 });
 
 test("admin picks the DeepSeek preset: base URL, json_object and price suggestions are filled in", async ({ page }) => {
@@ -86,13 +89,24 @@ test("admin picks the DeepSeek preset: base URL, json_object and price suggestio
   await page.goto("/settings?section=providers");
   await page.getByRole("button", { name: "Thêm nhà cung cấp" }).click();
   const form = page.getByRole("form", { name: "Thêm nhà cung cấp" });
-  await form.getByLabel("Loại").selectOption("deepseek");
+  await form.getByRole("radio", { name: "DeepSeek" }).check();
+  // Thu gọn: chỉ ô key; mục Tuỳ chỉnh tóm tắt sẵn tên + model.
+  await expect(form.getByLabel("Base URL")).toBeHidden();
+  await expect(form.getByText("DeepSeek · deepseek-flash")).toBeVisible();
+  await form.getByText("Tuỳ chỉnh tên, model và giá").click();
   await expect(form.getByLabel("Tên hiển thị")).toHaveValue("DeepSeek");
   await expect(form.getByLabel("Base URL")).toHaveValue("https://api.deepseek.com");
   await expect(form.getByLabel("Kiểu JSON")).toHaveValue("json_object");
-  await form.getByRole("button", { name: "+ deepseek-flash" }).click();
+  await expect(form.getByLabel("Model 1: id")).toHaveValue("deepseek-flash");
   await expect(form.getByLabel("Model 1: giá vào")).toHaveValue("0.3");
   await expect(form.getByLabel("Model 1: giá ra")).toHaveValue("1.2");
+  await form.getByRole("button", { name: "+ deepseek-v4-pro" }).click();
+  await expect(form.getByLabel("Model 2: giá vào")).toHaveValue("1.32");
+  // Endpoint tuỳ chỉnh: không có gợi ý → base URL hiện ngay, mục Tuỳ chỉnh mở sẵn, tên / model để trống.
+  await form.getByRole("radio", { name: "Khác (tương thích OpenAI)" }).check();
+  await expect(form.getByLabel("Base URL")).toHaveValue("");
+  await expect(form.getByLabel("Tên hiển thị")).toHaveValue("");
+  await expect(form.getByLabel("Model 1: id")).toHaveCount(0);
   await form.getByRole("button", { name: "Huỷ" }).click();
 });
 
@@ -160,7 +174,7 @@ test("admin disables a user: their open tab falls back to login at the next acti
 
   // Thao tác kế (điều hướng trong app, không reload) → 401 → màn đăng nhập ngay.
   await victim.getByLabel("Tài khoản", { exact: true }).click();
-  await victim.getByRole("link", { name: "Font của tôi" }).click();
+  await victim.getByRole("link", { name: "Font", exact: true }).click();
   await expect(victim.getByRole("heading", { name: "Đăng nhập" })).toBeVisible();
   await victim.getByLabel("Email").fill(E2E_VICTIM.email);
   await victim.getByLabel("Mật khẩu").fill(E2E_VICTIM.password);
@@ -171,7 +185,7 @@ test("admin disables a user: their open tab falls back to login at the next acti
   await expect(page.getByRole("button", { name: `Khoá ${E2E_VICTIM.email}` })).toBeVisible();
   await victim.getByRole("button", { name: "Đăng nhập" }).click();
   // Đăng nhập xong về đúng trang đang mở dở.
-  await expect(victim.getByRole("heading", { name: "Font của tôi" })).toBeVisible();
+  await expect(victim.getByRole("heading", { name: "Font", exact: true })).toBeVisible();
   await ctx.close();
 });
 

@@ -8,7 +8,9 @@ import {
   draftOf,
   emptyDraft,
   emptyModel,
+  newDraft,
   type ProviderDraft,
+  pickChoice,
   providerTypeLabel,
   type SavedProvider,
   toCreateBody,
@@ -258,5 +260,40 @@ describe("Anthropic models", () => {
     const filled = applySuggestion("anthropic", { ...emptyModel(), model_id: "claude-haiku-5-5" });
     expect(filled).toMatchObject({ price_in: "0.1", price_out: "0.5", vision: true, reasoning: false });
     expect(suggestionsFor("anthropic").map((s) => s.model_id)).toEqual(["claude-haiku-5-5"]);
+  });
+});
+
+describe("quick add: key is the only thing to fill", () => {
+  it("starts on Anthropic with the recommended model and a name; adding the key makes it valid", () => {
+    const d = newDraft();
+    expect(d).toMatchObject({ type: "anthropic", name: "Anthropic" });
+    expect(d.models.map((m) => m.model_id)).toEqual([suggestionsFor("anthropic")[0]?.model_id]);
+    expect(validateDraft(d)?.api_key).toBeTruthy();
+    expect(validateDraft({ ...d, api_key: KEY })).toBeNull();
+  });
+
+  it("every known provider gets a priced default model and is valid with just a key", () => {
+    for (const c of ["anthropic", "openai", "gemini", "deepseek"] as const) {
+      const d = { ...pickChoice(newDraft(), c), api_key: KEY };
+      expect(d.models).toHaveLength(1);
+      expect(validateDraft(d), c).toBeNull();
+    }
+    expect(pickChoice(newDraft(), "gemini").models[0]).toMatchObject({ model_id: "gemini-2.5-flash", vision: true });
+    expect(pickChoice(newDraft(), "deepseek")).toMatchObject({ name: "DeepSeek", structured_output: "json_object" });
+  });
+
+  it("switching provider swaps the auto name and model, keeps a name the admin typed and the key", () => {
+    const typed = { ...newDraft(), name: "Công ty", api_key: KEY };
+    const openai = pickChoice(typed, "openai");
+    expect(openai).toMatchObject({ name: "Công ty", api_key: KEY });
+    expect(openai.models.map((m) => m.model_id)).toEqual(["gpt-4.1-mini"]);
+    expect(pickChoice(newDraft(), "openai").name).toBe("OpenAI");
+  });
+
+  it("a custom endpoint has no suggestion: name, base URL and a model must be filled", () => {
+    const d = { ...pickChoice(newDraft(), "openai_compatible"), api_key: KEY };
+    expect(d).toMatchObject({ type: "openai_compatible", name: "", base_url: "", models: [] });
+    const e = validateDraft(d);
+    expect(e?.name && e.base_url && e.no_models).toBeTruthy();
   });
 });

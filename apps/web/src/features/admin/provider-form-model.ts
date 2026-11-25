@@ -14,7 +14,13 @@ import {
   normalizeBaseUrl,
   type StructuredOutput,
 } from "@mtl/shared";
-import { DEEPSEEK_BASE_URL, isDeepSeek, type PriceSuggestion, suggestionFor } from "./price-suggestions.ts";
+import {
+  DEEPSEEK_BASE_URL,
+  isDeepSeek,
+  type PriceSuggestion,
+  suggestionFor,
+  suggestionsFor,
+} from "./price-suggestions.ts";
 
 export const TYPE_LABEL: Record<AiProviderType, string> = {
   anthropic: "Anthropic",
@@ -58,6 +64,29 @@ export function applyChoice(d: ProviderDraft, choice: TypeChoice): ProviderDraft
     structured_output: wasDeepSeek ? "json_schema" : d.structured_output,
   };
 }
+
+/** Ô chọn nhà cung cấp của form Thêm: loại quen thuộc trước, endpoint tuỳ chỉnh cuối. */
+export const PICKER_CHOICES: readonly TypeChoice[] = ["anthropic", "openai", "gemini", "deepseek", "openai_compatible"];
+export const PICKER_LABEL: Record<TypeChoice, string> = {
+  ...CHOICE_LABEL,
+  openai_compatible: "Khác (tương thích OpenAI)",
+};
+export const DEFAULT_CHOICE: TypeChoice = "anthropic";
+
+/**
+ * Form Thêm chỉ cần key: đổi nhà cung cấp thì tên (nếu chưa tự sửa) theo tên nhà cung cấp và model = gợi ý đầu tiên
+ * (đã có giá, cờ vision). Endpoint tuỳ chỉnh không có gợi ý → để trống tên / model cho admin tự điền.
+ */
+export function pickChoice(d: ProviderDraft, choice: TypeChoice): ProviderDraft {
+  const next = applyChoice(d, choice);
+  const autoName = !d.name.trim() || d.name === CHOICE_LABEL[choiceOf(d)];
+  const name = autoName ? (choice === "openai_compatible" ? "" : CHOICE_LABEL[choice]) : d.name;
+  const first = suggestionsFor(next.type, next.base_url)[0];
+  return { ...next, name, models: first ? [modelFromSuggestion(first)] : [] };
+}
+
+/** Bản nháp ban đầu của form Thêm. */
+export const newDraft = (): ProviderDraft => pickChoice(emptyDraft(), DEFAULT_CHOICE);
 
 export type ModelDraft = {
   /** Có = model đã lưu (model_id bất biến). */
