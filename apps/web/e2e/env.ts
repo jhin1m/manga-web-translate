@@ -1,13 +1,16 @@
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 /**
- * Cổng riêng cho e2e, không đụng `pnpm dev` (5180/8787) → chạy song song được. SPA e2e phải là origin MinIO dev cho
- * phép CORS (infra/docker-compose.dev.yml: 5180 + 5181). Đổi qua E2E_WEB_PORT / E2E_API_PORT.
+ * Cổng riêng cho e2e, không đụng `pnpm dev` (5180/8787) → chạy song song được. Đổi qua E2E_WEB_PORT / E2E_API_PORT.
  */
 export const API_PORT = Number(process.env.E2E_API_PORT ?? 8797);
 export const WEB_PORT = Number(process.env.E2E_WEB_PORT ?? 5181);
 export const WEB_URL = `http://localhost:${WEB_PORT}`;
 export const API_URL = `http://localhost:${API_PORT}`;
+/** Link file ký `/files/…` là tương đối API: code Node (fetch) cần ghép với địa chỉ API. */
+export const fileUrl = (u: string) => new URL(u, API_URL);
 
 /** DB riêng cho e2e (tên phải chứa "test" — resetTestDatabase từ chối DB khác). */
 export const E2E_DATABASE_URL = process.env.E2E_DATABASE_URL ?? "postgres://mtl:mtl@localhost:5442/mtl_test_e2e";
@@ -23,6 +26,8 @@ export const E2E_VICTIM = { email: "victim-e2e@example.com", password: "e2e-pass
 
 export const E2E_ENV = {
   DATABASE_URL: E2E_DATABASE_URL,
+  // Thư mục file riêng (không lẫn `.data/files` của `pnpm dev`).
+  FILES_DIR: join(tmpdir(), "mtl-e2e-files"),
   API_PORT: String(API_PORT),
   BETTER_AUTH_URL: WEB_URL,
   WEB_ORIGIN: WEB_URL,

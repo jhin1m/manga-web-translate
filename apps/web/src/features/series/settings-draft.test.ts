@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { Series } from "./api.ts";
 import {
   adoptServer,
+  aiGuideSummary,
   type Draft,
   type DraftState,
   draftValues,
@@ -165,5 +166,18 @@ describe("adoptServer", () => {
     const st = state(toDraft(series()));
     const next = adoptServer(st, toDraft(series({ title: "A", style_prompt: "B" })), never, ["title"]);
     expect([next.draft.title, next.draft.style_prompt]).toEqual(["A", ""]);
+  });
+});
+
+describe("aiGuideSummary", () => {
+  const rule = { speaker: "A", listener: "B", address: "anh/em", note: "" };
+  it("lists style, pronoun rows and glossary terms that exist", () => {
+    expect(aiGuideSummary({ style_prompt: "giọng trẻ", pronoun_rules: [rule, rule, rule] }, 12)).toBe(
+      "Có giọng văn · 3 xưng hô · 12 thuật ngữ",
+    );
+    expect(aiGuideSummary({ style_prompt: "  ", pronoun_rules: [rule] }, 0)).toBe("1 xưng hô");
+  });
+  it("skips terms while the glossary is loading and says when nothing is set", () => {
+    expect(aiGuideSummary({ style_prompt: "", pronoun_rules: [] }, undefined)).toBe("Chưa có");
   });
 });

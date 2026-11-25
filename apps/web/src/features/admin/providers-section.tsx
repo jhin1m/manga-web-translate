@@ -1,6 +1,7 @@
 /** AI › Nhà cung cấp: danh sách thẻ (key chỉ hiện ••••last4, các model) + Kiểm tra + sửa / xoá; form sửa mở ngay trong thẻ, form thêm ở đầu danh sách. */
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { type ReactNode, useState } from "react";
+import { PlugIcon } from "../../app/settings-icons.tsx";
 import { api } from "../../lib/api.ts";
 import { PencilIcon, TrashIcon } from "../home/row-icons.tsx";
 import { adminSettingsKey, type ProbeResult, probeText, providerError, providersKey, useProviders } from "./api.ts";
@@ -129,7 +130,9 @@ export function ProvidersSection() {
     <div className="set-section">
       <SectionHead
         title="Nhà cung cấp AI"
-        desc="Kết nối các nhà cung cấp model AI. Key được mã hoá trong DB và không bao giờ hiện lại. Chọn model cho từng bước ở mục Pipeline; bước nào chưa chọn thì worker dùng key trong .env của nó."
+        icon={<PlugIcon />}
+        desc="Kết nối model AI, rồi chọn model cho từng bước ở mục Pipeline."
+        tip="Key được mã hoá trong DB và không bao giờ hiện lại. Bước nào chưa chọn model thì worker dùng key trong .env của nó."
         aside={
           editing !== "new" && (
             <button type="button" className="btn-primary" onClick={() => setEditing("new")}>

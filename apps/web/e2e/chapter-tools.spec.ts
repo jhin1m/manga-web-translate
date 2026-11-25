@@ -2,11 +2,11 @@
  * Công cụ màn chương: Tìm & thay (xem trước → áp dụng → hoàn tác), áp glossary (chọn entry → xem trước → áp dụng →
  * hoàn tác) — cả hai ở panel "Tìm" của rail công cụ (segmented), không hộp thoại; sau áp dụng panel Bản dịch hiện
  * chữ mới không cần tải lại, không PUT nào bị 423. Xuất chương qua drawer "Xuất chương" (job chapter.export qua
- * worker giả → nút tải → 302 tới presigned GET; Esc đóng, focus về nút Xuất). Ẩn / khôi phục trang qua menu chuột
+ * worker giả → nút tải → 302 tới link file ký; Esc đóng, focus về nút Xuất). Ẩn / khôi phục trang qua menu chuột
  * phải ở cột thumbnail. Mỗi test dựng một chương đã dịch riêng (worker giả) để không phụ thuộc thứ tự test.
  */
 import { type APIRequestContext, expect, type Page, test } from "@playwright/test";
-import { WEB_URL } from "./env.ts";
+import { fileUrl, WEB_URL } from "./env.ts";
 import { PNG_1PX, runFakeWorker } from "./fake-worker.ts";
 import {
   expectVisiblePages,
@@ -54,7 +54,7 @@ async function readyChapter(page: Page, n = 1) {
     const form = new FormData();
     for (const [k, v] of Object.entries(f.fields)) form.append(k, v);
     form.append("file", new Blob([new Uint8Array(PNG_1PX)], { type: "image/png" }));
-    expect((await fetch(f.url, { method: "POST", body: form })).status).toBe(204);
+    expect((await fetch(fileUrl(f.url), { method: "POST", body: form })).status).toBe(204);
   }
   expect((await page.request.post(`/api/chapters/${chapter.id}/commit`, { headers, data: {} })).status()).toBe(202);
 
@@ -247,7 +247,7 @@ test.describe("công cụ chương", () => {
     expect(locked).toEqual([]);
   });
 
-  test("xuất chương: job qua worker giả → nút tải → 302 tới presigned GET có tên file", async ({ page }) => {
+  test("xuất chương: job qua worker giả → nút tải → 302 tới link file ký có tên file", async ({ page }) => {
     await login(page);
     const { chapterId, number } = await readyChapter(page);
     await openChapter(page, chapterId);
@@ -280,16 +280,16 @@ test.describe("công cụ chương", () => {
     expect(href).toMatch(/^\/api\/exports\/[0-9a-f-]{36}\/download$/);
     const exportId = href?.split("/")[3] ?? "";
 
-    // Không follow redirect: phải 302 tới presigned GET 5' kèm Content-Disposition attachment.
+    // Không follow redirect: phải 302 tới link `/files/…` ký 5' kèm Content-Disposition attachment.
     const r = await page.request.get(href as string, { maxRedirects: 0 });
     expect(r.status()).toBe(302);
     const location = r.headers().location ?? "";
-    expect(location).toContain("X-Amz-Signature=");
-    const disposition = new URL(location).searchParams.get("response-content-disposition") ?? "";
+    expect(location).toMatch(/^\/files\/.*[?&]sig=/);
+    const disposition = new URL(location, WEB_URL).searchParams.get("cd") ?? "";
     expect(disposition).toContain("attachment");
     expect(disposition).toContain(`filename*=UTF-8''Series%20e2e-ch${number}.zip`);
 
-    // Presigned URL tải được và đúng kích thước server đã đo; file là zip (PK).
+    // Link ký tải được và đúng kích thước server đã đo; file là zip (PK).
     const file = await page.request.get(location);
     expect(file.status()).toBe(200);
     const body = await file.body();

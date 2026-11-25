@@ -211,9 +211,11 @@ button.link {
   color: var(--c-danger);
 }
 /* ---- Bố cục ---- */
+/* Khung trang chung: canh giữa, cùng độ rộng với trang chủ (`.home`). */
 .page {
-  padding: var(--sp-4) var(--sp-5) var(--sp-6);
-  max-width: 1400px;
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 28px var(--sp-5) 40px;
 }
 .page-narrow {
   max-width: 880px;

@@ -1,42 +1,44 @@
-/** Các mục của trang Cài đặt admin (`/settings?section=`). Thuần — test được; mục mới chỉ cần thêm vào đây. */
-export const ADMIN_SECTIONS = [
-  { id: "pipeline", label: "Pipeline", group: "AI" },
-  { id: "providers", label: "Nhà cung cấp", group: "AI" },
-  { id: "limits", label: "Hạn mức & đăng ký", group: "Hệ thống" },
-  { id: "users", label: "Người dùng", group: "Hệ thống" },
+/**
+ * Các mục của trang Cài đặt (`/settings?section=`). Thuần — test được; mục mới chỉ cần thêm vào đây. Nhóm "Chung" (Font
+ * riêng của từng người) cho mọi người dùng; nhóm AI / Hệ thống chỉ admin (`admin: true`).
+ */
+export const SETTINGS_SECTIONS = [
+  { id: "fonts", label: "Font", group: "Chung", admin: false },
+  { id: "pipeline", label: "Pipeline", group: "AI", admin: true },
+  { id: "providers", label: "Nhà cung cấp", group: "AI", admin: true },
+  { id: "users", label: "Người dùng", group: "Hệ thống", admin: true },
 ] as const;
 
-export type AdminSectionDef = (typeof ADMIN_SECTIONS)[number];
-export type AdminSection = AdminSectionDef["id"];
+export type SettingsSectionDef = (typeof SETTINGS_SECTIONS)[number];
+export type SettingsSection = SettingsSectionDef["id"];
 
-/**
- * Mục chỉ có nghĩa khi nhiều người dùng (đăng ký, hạn mức, quản lý tài khoản) — ẩn ở chế độ local. Font (cả font dùng
- * chung) quản lý ở trang `/fonts`, không nằm trong Cài đặt.
- */
-const MULTI_USER_SECTIONS: readonly AdminSection[] = ["limits", "users"];
+/** Mục chỉ có nghĩa khi nhiều người dùng (quản lý tài khoản) — ẩn ở chế độ local. */
+const MULTI_USER_SECTIONS: readonly SettingsSection[] = ["users"];
 
-/** Danh sách mục hiển thị theo chế độ chạy. */
-export const visibleSections = (localMode: boolean): readonly AdminSectionDef[] =>
-  localMode ? ADMIN_SECTIONS.filter((s) => !MULTI_USER_SECTIONS.includes(s.id)) : ADMIN_SECTIONS;
+/** Danh sách mục người dùng này thấy: người thường chỉ mục không cần admin; chế độ local bỏ mục nhiều người dùng. */
+export const visibleSections = (opts: { admin: boolean; localMode: boolean }): readonly SettingsSectionDef[] =>
+  SETTINGS_SECTIONS.filter((s) => (opts.admin || !s.admin) && !(opts.localMode && MULTI_USER_SECTIONS.includes(s.id)));
 
-const isSection = (v: unknown, sections: readonly AdminSectionDef[]): v is AdminSection =>
+const isSection = (v: unknown, sections: readonly SettingsSectionDef[]): v is SettingsSection =>
   sections.some((s) => s.id === v);
 
-/** Giá trị lạ / thiếu / không có trong `sections` → mục đầu tiên. */
-export const parseSection = (v: unknown, sections: readonly AdminSectionDef[] = ADMIN_SECTIONS): AdminSection =>
-  isSection(v, sections) ? v : (sections[0]?.id ?? "pipeline");
+/** Giá trị lạ / thiếu / không có trong `sections` (vd người thường mở mục admin) → mục đầu tiên. */
+export const parseSection = (
+  v: unknown,
+  sections: readonly SettingsSectionDef[] = SETTINGS_SECTIONS,
+): SettingsSection => (isSection(v, sections) ? v : (sections[0]?.id ?? "fonts"));
 
 /** Chỉ giữ giá trị hợp lệ (cho `validateSearch`: URL gọn khi dùng mục mặc định). */
 export const validSection = (
   v: unknown,
-  sections: readonly AdminSectionDef[] = ADMIN_SECTIONS,
-): AdminSection | undefined => (isSection(v, sections) ? v : undefined);
+  sections: readonly SettingsSectionDef[] = SETTINGS_SECTIONS,
+): SettingsSection | undefined => (isSection(v, sections) ? v : undefined);
 
 /** Mục gom theo nhóm, giữ thứ tự khai báo; nhóm không có mục thì không xuất hiện. */
 export function groupedSections(
-  sections: readonly AdminSectionDef[] = ADMIN_SECTIONS,
-): { group: string; sections: AdminSectionDef[] }[] {
-  const out: { group: string; sections: AdminSectionDef[] }[] = [];
+  sections: readonly SettingsSectionDef[] = SETTINGS_SECTIONS,
+): { group: string; sections: SettingsSectionDef[] }[] {
+  const out: { group: string; sections: SettingsSectionDef[] }[] = [];
   for (const s of sections) {
     const g = out.find((x) => x.group === s.group);
     if (g) g.sections.push(s);

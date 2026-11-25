@@ -24,5 +24,8 @@ export const statusLabel = (u: Pick<AdminUser, "is_admin" | "disabled_at">): str
 export const disableConfirmText = (u: Pick<AdminUser, "email">): string =>
   `Khoá ${u.email}? Họ bị đăng xuất ngay, không đăng nhập lại được và job đang chờ của họ không chạy cho tới khi mở khoá.`;
 
+/** Số USD chi phí trên bảng: tối đa 4 chữ số thập phân, bỏ nhiễu số thực (0.1 + 0.2 → "$0.3"). */
+export const fmtUsd = (n: number) => `$${Number(n.toFixed(4))}`;
+
 /** Ngày tạo theo giờ máy (d/m/yyyy, định dạng vi-VN). */
 export const dateText = (iso: string): string => new Date(iso).toLocaleDateString("vi-VN");

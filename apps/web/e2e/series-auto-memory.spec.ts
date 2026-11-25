@@ -39,10 +39,19 @@ async function apiSeries(page: Page, data: Record<string, unknown>) {
 const getSeries = async (page: Page, id: string) =>
   (await (await page.request.get(`/api/series/${id}`)).json()) as SeriesView;
 
-/** Nhóm "Hướng dẫn cho AI" của Cài đặt dịch: ô Giọng văn (+ chip ở nhãn), bảng xưng hô. */
+/**
+ * Nhóm "Hướng dẫn cho AI" của Cài đặt dịch (gập sẵn mỗi lần mở modal — `open()` bấm tiêu đề để mở): ô Giọng văn (+ chip
+ * ở nhãn), bảng xưng hô.
+ */
 const aiGroup = (page: Page) => {
   const group = page.getByRole("dialog", { name: "Cài đặt dịch" }).getByRole("region", { name: "Hướng dẫn cho AI" });
+  const toggle = group.getByRole("button", { name: "Hướng dẫn cho AI" });
   return {
+    open: async () => {
+      await expect(toggle).toHaveAttribute("aria-expanded", "false");
+      await toggle.click();
+      await expect(toggle).toHaveAttribute("aria-expanded", "true");
+    },
     style: group.getByLabel("Giọng văn", { exact: true }),
     styleTag: group
       .locator(".set-row", { has: page.locator("#s-style") })
@@ -95,6 +104,7 @@ test("terms, pronoun pairs and style written by AI show an AI tag; edited tags d
     await main.getByRole("link", { name: "Cài đặt dịch" }).click();
     const settings = page.getByRole("dialog", { name: "Cài đặt dịch" });
     const ai = aiGroup(page);
+    await ai.open();
     await expect(ai.style).toHaveValue(STYLE);
     await expect(ai.styleTag).toBeVisible();
     await expect(ai.rows).toHaveCount(1);
@@ -133,6 +143,7 @@ test("settings left open while AI writes: untouched fields show what AI wrote, t
     await page.goto(`/s/${seriesId}?tab=settings`);
     const settings = page.getByRole("dialog", { name: "Cài đặt dịch" });
     const ai = aiGroup(page);
+    await ai.open();
     await expect(ai.style).toHaveValue("");
     await expect(ai.rows).toHaveCount(1);
     // Người dùng đang sửa hàng xưng hô (con trỏ còn trong hàng) thì AI ghi.

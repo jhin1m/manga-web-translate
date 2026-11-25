@@ -1,16 +1,18 @@
 /**
- * Trang Font (`/fonts`, menu tài khoản) — chỗ duy nhất quản lý font:
- * - Thêm font: chọn từ font cài trong máy (Chrome / Edge) hoặc tải file TTF/OTF. Admin bản nhiều người tích "Cho mọi
- *   người dùng" để thêm thành font dùng chung.
+ * Mục Font của trang Cài đặt (`/settings?section=fonts`, mọi người dùng) — chỗ duy nhất quản lý font:
+ * - Thêm font: một hàng nút — chọn từ font cài trong máy (Chrome / Edge) hoặc tải file TTF/OTF. Admin bản nhiều người
+ *   bật "Cho mọi người dùng" để thêm thành font dùng chung.
  * - Font đã thêm: font riêng + font dùng chung (nhãn "Dùng chung"), cảnh báo thiếu dấu tiếng Việt (vẫn dùng được), xoá
  *   (bị chặn khi series còn dùng làm font mặc định; font dùng chung chỉ admin xoá).
  * - Font có sẵn: font gói sẵn của app, xem trước bằng chính font đó.
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useMe } from "../../app/app-shell.tsx";
+import { InfoTip } from "../../app/info-tip.tsx";
+import { PackageIcon, TypeIcon, UploadIcon } from "../../app/settings-icons.tsx";
 import { ApiError, api, errorMessage, useLocalMode } from "../../lib/api.ts";
-import { SectionHead, SetGroup, SetRow } from "../admin/settings-ui.tsx";
+import { SectionHead, SetGroup } from "../admin/settings-ui.tsx";
 import { fontPreview, loadFonts } from "../editor/fonts.ts";
 import { TrashIcon } from "../home/row-icons.tsx";
 import {
@@ -64,6 +66,7 @@ export function FontLibrary() {
   const [toShared, setToShared] = useState(false);
   const [picker, setPicker] = useState<LocalFont[] | null>(null);
   const [pickError, setPickError] = useState<string | null>(null);
+  const fileInput = useRef<HTMLInputElement>(null);
   const refresh = () => qc.invalidateQueries({ queryKey: fontKeys.list() });
 
   const sharedTarget = canShare && toShared;
@@ -119,30 +122,36 @@ export function FontLibrary() {
 
   return (
     <div className="set-section">
-      <SectionHead
+      <SectionHead title="Font" icon={<TypeIcon />} desc="Font dùng trong editor và làm font mặc định của series." />
+      <SetGroup
         title="Thêm font"
-        desc="Font TTF / OTF dùng được trong editor và làm font mặc định của series. Bạn tự chịu trách nhiệm về bản quyền font."
-      />
-      <div className="set-card">
-        <SetRow
-          label="Font trong máy"
-          desc="Chọn từ các font đã cài trên máy này. Lần đầu trình duyệt sẽ hỏi quyền đọc font."
-        >
+        icon={<UploadIcon />}
+        desc="File .ttf hoặc .otf, mỗi file tối đa 10MB."
+        tip="Bạn tự chịu trách nhiệm về bản quyền font."
+      >
+        <div className="font-add-row">
           {localFontsSupported() ? (
-            <button type="button" onClick={() => void openPicker()} disabled={add.isPending}>
+            <button
+              type="button"
+              title="Chọn từ các font đã cài trên máy này. Lần đầu trình duyệt sẽ hỏi quyền đọc font."
+              onClick={() => void openPicker()}
+              disabled={add.isPending}
+            >
               Chọn font trong máy
             </button>
-          ) : (
-            <span className="muted small">
-              Trình duyệt này không đọc được font trong máy (cần Chrome hoặc Edge trên máy tính). Dùng ô tải file bên
-              dưới.
-            </span>
-          )}
-        </SetRow>
-        <SetRow label="Tải file" htmlFor="font-file" desc="File .ttf hoặc .otf, mỗi file tối đa 10MB.">
+          ) : null}
+          <button
+            type="button"
+            className="btn-primary"
+            disabled={add.isPending}
+            onClick={() => fileInput.current?.click()}
+          >
+            Tải file .ttf/.otf…
+          </button>
           <input
-            id="font-file"
+            ref={fileInput}
             type="file"
+            hidden
             multiple
             accept={FONT_ACCEPT}
             aria-label="Chọn file font"
@@ -153,23 +162,32 @@ export function FontLibrary() {
               if (files.length) add.mutate(files.map((f) => ({ name: f.name, file: async () => f })));
             }}
           />
-        </SetRow>
-        {canShare && (
-          <SetRow
-            label="Cho mọi người dùng"
-            htmlFor="font-shared"
-            desc="Bật: font thêm vào thành font dùng chung, mọi tài khoản đều thấy (chỉ admin)."
-          >
-            <input
-              id="font-shared"
-              type="checkbox"
-              className="set-switch"
-              checked={toShared}
-              onChange={(e) => setToShared(e.target.checked)}
-            />
-          </SetRow>
+          {add.isPending && <span className="muted small">Đang thêm font…</span>}
+          {canShare && (
+            <span className="font-share">
+              <label className="set-switch-label">
+                <input
+                  type="checkbox"
+                  role="switch"
+                  className="set-switch"
+                  aria-checked={toShared}
+                  checked={toShared}
+                  onChange={(e) => setToShared(e.target.checked)}
+                />
+                Cho mọi người dùng
+              </label>
+              <InfoTip label="Giải thích font dùng chung">
+                Bật: font thêm vào thành font dùng chung, mọi tài khoản đều thấy (chỉ admin).
+              </InfoTip>
+            </span>
+          )}
+        </div>
+        {!localFontsSupported() && (
+          <p className="muted small set-card-note">
+            Trình duyệt này không đọc được font trong máy (cần Chrome hoặc Edge trên máy tính) — dùng nút tải file.
+          </p>
         )}
-      </div>
+      </SetGroup>
 
       {pickError && (
         <p className="error" role="alert">
@@ -186,7 +204,6 @@ export function FontLibrary() {
           onClose={() => setPicker(null)}
         />
       )}
-      {add.isPending && <p className="muted small">Đang thêm font…</p>}
       {add.data && !add.isPending && <AddReport result={add.data} />}
       {add.error && (
         <p className="error" role="alert">
@@ -196,6 +213,7 @@ export function FontLibrary() {
 
       <SetGroup
         title="Font đã thêm"
+        icon={<TypeIcon />}
         desc={`${own.length} / ${limit} font riêng${shared.length ? ` · ${shared.length} font dùng chung` : ""}.`}
       >
         {q.error && <p className="error">{errorMessage(q.error)}</p>}
@@ -276,6 +294,7 @@ function BundledFonts() {
     <SetGroup
       title={`Font có sẵn${ids.length ? ` (${ids.length})` : ""}`}
       label="Font có sẵn"
+      icon={<PackageIcon />}
       desc="Đi kèm ứng dụng, chọn được ngay trong editor."
     >
       {kit.error && <p className="error set-empty">{errorMessage(kit.error)}</p>}

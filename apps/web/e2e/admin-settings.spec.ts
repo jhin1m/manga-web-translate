@@ -1,22 +1,28 @@
-/** Quyền admin ở web: owner (ADMIN_EMAILS) thấy Cài đặt + mục Pipeline (kèm model AI từng bước) + Nhà cung cấp; người dùng thường không thấy link và bị đưa về `/`. */
+/**
+ * Quyền ở trang Cài đặt: owner (ADMIN_EMAILS) thấy mục Font + Pipeline (kèm model AI từng bước) + Nhà cung cấp + Người
+ * dùng; người dùng thường vẫn có link Cài đặt nhưng chỉ thấy mục Font (mục admin trên URL rơi về Font).
+ */
 import { expect, test } from "@playwright/test";
 import { E2E_VICTIM } from "./env.ts";
 import { login, state } from "./helpers.ts";
 
-test("admin sees the Settings link and the Pipeline section", async ({ page }) => {
+test("admin sees the Settings link, Font first, then the Pipeline section", async ({ page }) => {
   await login(page);
   await page.getByLabel("Tài khoản", { exact: true }).click();
   await page.getByRole("link", { name: "Cài đặt", exact: true }).click();
   await expect(page).toHaveURL(/\/settings$/);
   await expect(page.getByRole("heading", { name: "Cài đặt", exact: true })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Pipeline" })).toHaveAttribute("aria-current", "page");
+  const nav = page.getByRole("navigation", { name: "Mục cài đặt" });
+  await expect(nav.getByRole("link", { name: "Font", exact: true })).toHaveAttribute("aria-current", "page");
+  await expect(nav.getByRole("link", { name: "Hạn mức & đăng ký" })).toHaveCount(0);
+  await nav.getByRole("link", { name: "Pipeline" }).click();
   await expect(page.getByRole("form", { name: "Cài đặt pipeline" })).toBeVisible();
-  // Mục lạ → về mục đầu.
-  await page.goto("/settings?section=khong-co");
-  await expect(page.getByRole("form", { name: "Cài đặt pipeline" })).toBeVisible();
+  // Mục lạ / mục đã bỏ → về mục đầu (Font).
+  await page.goto("/settings?section=limits");
+  await expect(page.getByRole("heading", { name: "Thêm font" })).toBeVisible();
 });
 
-test("a regular user has no Settings link, is redirected from /settings and can use /fonts", async ({ page }) => {
+test("a regular user only sees the Font section of Settings; /fonts redirects there", async ({ page }) => {
   await page.goto("/login");
   await page.getByLabel("Email").fill(state.plain.email);
   await page.getByLabel("Mật khẩu").fill(state.plain.password);
@@ -24,16 +30,23 @@ test("a regular user has no Settings link, is redirected from /settings and can 
   await expect(page.getByRole("region", { name: "Series", exact: true })).toBeVisible();
 
   await page.getByLabel("Tài khoản", { exact: true }).click();
-  await expect(page.getByRole("link", { name: "Font", exact: true })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Cài đặt", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Font", exact: true })).toHaveCount(0);
+  await page.getByRole("link", { name: "Cài đặt", exact: true }).click();
 
   const denied = await page.request.get("/api/admin/settings");
   expect(denied.status()).toBe(403);
 
-  await page.goto("/settings");
-  await expect(page).toHaveURL(/\/$/);
+  const nav = page.getByRole("navigation", { name: "Mục cài đặt" });
+  await expect(nav.getByRole("link")).toHaveText(["Font"]);
+  await expect(page.getByRole("heading", { name: "Thêm font" })).toBeVisible();
+  // Mục admin trên URL → vẫn là mục Font.
+  await page.goto("/settings?section=pipeline");
+  await expect(page.getByRole("heading", { name: "Thêm font" })).toBeVisible();
+  await expect(page.getByRole("form", { name: "Cài đặt pipeline" })).toHaveCount(0);
+  // Link cũ.
   await page.goto("/fonts");
-  await expect(page.getByRole("heading", { name: "Font", exact: true })).toBeVisible();
+  await expect(page).toHaveURL(/\/settings\?section=fonts$/);
+  await expect(nav.getByRole("link", { name: "Font", exact: true })).toHaveAttribute("aria-current", "page");
 });
 
 test("admin adds a provider (key shown only as last4), assigns the translate slot and it survives a reload", async ({
@@ -110,47 +123,6 @@ test("admin picks the DeepSeek preset: base URL, json_object and price suggestio
   await form.getByRole("button", { name: "Huỷ" }).click();
 });
 
-test("admin edits the limits: needs both to allow sign-up, confirms before lowering under today's spend", async ({
-  page,
-}) => {
-  await login(page);
-  await page.goto("/settings?section=limits");
-  const form = page.getByRole("form", { name: "Hạn mức và đăng ký" });
-  const user = form.getByLabel("Hạn mức mỗi người (USD / ngày UTC)");
-  const global = form.getByLabel("Ngân sách ngày toàn hệ thống (USD)");
-  await expect(user).toHaveAttribute("placeholder", /env: \$1000/);
-
-  // Gõ số lạ → báo lỗi, không lưu được; số hợp lệ → lưu rồi tải lại vẫn còn.
-  await user.fill("abc");
-  await expect(form.getByRole("alert")).toContainText("số USD");
-  await expect(form.getByRole("button", { name: "Lưu" })).toBeDisabled();
-  await user.fill("500");
-  await global.fill("2000");
-  await form.getByRole("button", { name: "Lưu" }).click();
-  await expect(page.getByRole("status")).toHaveText("Đã lưu.");
-  await page.reload();
-  await expect(user).toHaveValue("500");
-  await expect(global).toHaveValue("2000");
-
-  // Ngân sách 0 → hạ dưới số đã chi (≥ 0): hỏi xác nhận; Huỷ thì không đổi.
-  await global.fill("0");
-  await form.getByRole("button", { name: "Lưu" }).click();
-  const dialog = page.getByRole("alertdialog", { name: "Xác nhận hạ hạn mức" });
-  await expect(dialog).toContainText("paused_budget");
-  await dialog.getByRole("button", { name: "Huỷ" }).click();
-  await page.reload();
-  await expect(global).toHaveValue("2000");
-
-  // Trả về theo env (ô trống).
-  await user.fill("");
-  await global.fill("");
-  await form.getByRole("button", { name: "Lưu" }).click();
-  await expect(page.getByRole("status")).toHaveText("Đã lưu.");
-  await page.reload();
-  await expect(user).toHaveValue("");
-  await expect(global).toHaveValue("");
-});
-
 test("admin disables a user: their open tab falls back to login at the next action, sign-in says locked, enabling lets them back", async ({
   page,
   browser,
@@ -174,7 +146,7 @@ test("admin disables a user: their open tab falls back to login at the next acti
 
   // Thao tác kế (điều hướng trong app, không reload) → 401 → màn đăng nhập ngay.
   await victim.getByLabel("Tài khoản", { exact: true }).click();
-  await victim.getByRole("link", { name: "Font", exact: true }).click();
+  await victim.getByRole("link", { name: "Cài đặt", exact: true }).click();
   await expect(victim.getByRole("heading", { name: "Đăng nhập" })).toBeVisible();
   await victim.getByLabel("Email").fill(E2E_VICTIM.email);
   await victim.getByLabel("Mật khẩu").fill(E2E_VICTIM.password);
@@ -185,7 +157,7 @@ test("admin disables a user: their open tab falls back to login at the next acti
   await expect(page.getByRole("button", { name: `Khoá ${E2E_VICTIM.email}` })).toBeVisible();
   await victim.getByRole("button", { name: "Đăng nhập" }).click();
   // Đăng nhập xong về đúng trang đang mở dở.
-  await expect(victim.getByRole("heading", { name: "Font", exact: true })).toBeVisible();
+  await expect(victim.getByRole("heading", { name: "Cài đặt", exact: true })).toBeVisible();
   await ctx.close();
 });
 

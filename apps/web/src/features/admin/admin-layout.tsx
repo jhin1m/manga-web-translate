@@ -1,58 +1,71 @@
 /**
- * Trang Cài đặt admin: thanh mục trái (nhóm AI / Hệ thống) + 1 panel phải theo `?section=`.
- * Chỉ admin (`me.is_admin`); người khác về `/`.
+ * Trang Cài đặt: cột trái (tiêu đề trang + thanh mục theo nhóm Chung / AI / Hệ thống, mỗi mục có icon; dính khi cuộn)
+ * + 1 panel phải theo `?section=`. Cả khung canh giữa theo `.page` như các trang khác.
+ * Mọi người dùng đăng nhập vào được; người không phải admin chỉ thấy mục Font (`visibleSections`).
  */
-import { Link, Navigate } from "@tanstack/react-router";
-import { useMe } from "../../app/app-shell.tsx";
-import { useLocalMode } from "../../lib/api.ts";
+import { Link } from "@tanstack/react-router";
+import { PlugIcon, TypeIcon, UsersIcon, WorkflowIcon } from "../../app/settings-icons.tsx";
+import { FontLibrary } from "../fonts/font-settings.tsx";
 import { PipelineSection } from "../pipeline/pipeline-settings.tsx";
-import { type AdminSection, groupedSections, visibleSections } from "./admin-sections.ts";
-import { LimitsSection } from "./limits-section.tsx";
+import { groupedSections, type SettingsSection, type SettingsSectionDef } from "./admin-sections.ts";
 import { ProvidersSection } from "./providers-section.tsx";
 import { UsersSection } from "./users-section.tsx";
 import "./admin.css";
 
-const PANELS: Record<AdminSection, () => React.JSX.Element> = {
+const PANELS: Record<SettingsSection, () => React.JSX.Element> = {
+  fonts: FontLibrary,
   pipeline: PipelineSection,
   providers: ProvidersSection,
-  limits: LimitsSection,
   users: UsersSection,
 };
 
-export function AdminLayout({ section }: { section: AdminSection }) {
-  const me = useMe();
-  const groups = groupedSections(visibleSections(useLocalMode()));
-  if (!me.is_admin) return <Navigate to="/" replace />;
+const ICONS: Record<SettingsSection, () => React.JSX.Element> = {
+  fonts: TypeIcon,
+  pipeline: WorkflowIcon,
+  providers: PlugIcon,
+  users: UsersIcon,
+};
+
+/** `sections`: mục người dùng này thấy; `section` đã nằm trong đó (route lo phần rơi về mục đầu). */
+export function SettingsLayout({
+  section,
+  sections,
+}: {
+  section: SettingsSection;
+  sections: readonly SettingsSectionDef[];
+}) {
   const Panel = PANELS[section];
   return (
     <div className="page admin-page">
-      <div className="page-head">
+      <aside className="admin-side">
         <h1>Cài đặt</h1>
-      </div>
-      <div className="admin-body">
         <nav className="admin-nav" aria-label="Mục cài đặt">
-          {groups.map((g) => (
+          {groupedSections(sections).map((g) => (
             <div key={g.group} className="admin-nav-group">
               <span className="admin-nav-title">{g.group}</span>
-              {g.sections.map((s) => (
-                <Link
-                  key={s.id}
-                  to="/settings"
-                  search={{ section: s.id }}
-                  activeOptions={{ exact: true, includeSearch: true }}
-                  // Link không có `?section=` (mặc định) cũng phải sáng mục đang chọn.
-                  aria-current={s.id === section ? "page" : undefined}
-                >
-                  {s.label}
-                </Link>
-              ))}
+              {g.sections.map((s) => {
+                const Icon = ICONS[s.id];
+                return (
+                  <Link
+                    key={s.id}
+                    to="/settings"
+                    search={{ section: s.id }}
+                    activeOptions={{ exact: true, includeSearch: true }}
+                    // Link không có `?section=` (mặc định) cũng phải sáng mục đang chọn.
+                    aria-current={s.id === section ? "page" : undefined}
+                  >
+                    <Icon />
+                    {s.label}
+                  </Link>
+                );
+              })}
             </div>
           ))}
         </nav>
-        <section className="admin-panel">
-          <Panel />
-        </section>
-      </div>
+      </aside>
+      <section className="admin-panel">
+        <Panel />
+      </section>
     </div>
   );
 }
