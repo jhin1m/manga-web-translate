@@ -160,7 +160,7 @@ describe("missing task model", () => {
   it("names the task, points at the task settings and never blames the API key", () => {
     const text = describeJobError({ ...failed, type: "chapter.translate" })?.text ?? "";
     expect(text).toContain("Chưa chọn model AI cho tác vụ Dịch");
-    expect(text).toContain("Model tác vụ");
+    expect(text).toContain("Cài đặt › Pipeline");
     expect(text).not.toContain("Khoá API");
   });
 

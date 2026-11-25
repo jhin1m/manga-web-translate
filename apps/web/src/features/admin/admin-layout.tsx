@@ -4,32 +4,19 @@
  */
 import { Link, Navigate } from "@tanstack/react-router";
 import { useMe } from "../../app/app-shell.tsx";
-import { errorMessage, useLocalMode } from "../../lib/api.ts";
-import { PipelineSettingsForm } from "../pipeline/pipeline-settings.tsx";
+import { useLocalMode } from "../../lib/api.ts";
+import { PipelineSection } from "../pipeline/pipeline-settings.tsx";
 import { type AdminSection, groupedSections, visibleSections } from "./admin-sections.ts";
-import { useAdminSettings } from "./api.ts";
 import { LimitsSection } from "./limits-section.tsx";
 import { ProvidersSection } from "./providers-section.tsx";
-import { SystemFontsSection } from "./system-fonts-section.tsx";
-import { TasksSection } from "./tasks-section.tsx";
 import { UsersSection } from "./users-section.tsx";
-import "../pipeline/pipeline.css";
 import "./admin.css";
-
-function PipelineSection() {
-  const q = useAdminSettings();
-  if (q.error) return <p className="error">{errorMessage(q.error)}</p>;
-  if (!q.data) return <p className="muted">Đang tải…</p>;
-  return <PipelineSettingsForm value={q.data.pipeline} />;
-}
 
 const PANELS: Record<AdminSection, () => React.JSX.Element> = {
   pipeline: PipelineSection,
   providers: ProvidersSection,
-  tasks: TasksSection,
   limits: LimitsSection,
   users: UsersSection,
-  fonts: SystemFontsSection,
 };
 
 export function AdminLayout({ section }: { section: AdminSection }) {

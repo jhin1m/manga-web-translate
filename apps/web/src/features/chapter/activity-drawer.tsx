@@ -169,14 +169,14 @@ function UploadItem({ u }: { u: ChapterUpload }) {
   );
 }
 
-/** Lối tới Model tác vụ khi job thiếu model; chỉ admin mở được trang đó. */
+/** Lối tới Cài đặt › Pipeline (chọn model AI từng bước) khi job thiếu model; chỉ admin mở được trang đó. */
 function TaskSetupLink() {
   const me = useMe();
   if (!me.is_admin) return null;
   return (
     <div>
-      <Link to="/settings" search={{ section: "tasks" }}>
-        Mở Model tác vụ
+      <Link to="/settings" search={{ section: "pipeline" }}>
+        Mở cài đặt Pipeline
       </Link>
     </div>
   );

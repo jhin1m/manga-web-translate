@@ -2,16 +2,17 @@
 export const ADMIN_SECTIONS = [
   { id: "pipeline", label: "Pipeline", group: "AI" },
   { id: "providers", label: "Nhà cung cấp", group: "AI" },
-  { id: "tasks", label: "Model tác vụ", group: "AI" },
   { id: "limits", label: "Hạn mức & đăng ký", group: "Hệ thống" },
   { id: "users", label: "Người dùng", group: "Hệ thống" },
-  { id: "fonts", label: "Font hệ thống", group: "Hệ thống" },
 ] as const;
 
 export type AdminSectionDef = (typeof ADMIN_SECTIONS)[number];
 export type AdminSection = AdminSectionDef["id"];
 
-/** Mục chỉ có nghĩa khi nhiều người dùng (đăng ký, hạn mức, quản lý tài khoản) — ẩn ở chế độ local. */
+/**
+ * Mục chỉ có nghĩa khi nhiều người dùng (đăng ký, hạn mức, quản lý tài khoản) — ẩn ở chế độ local. Font (cả font dùng
+ * chung) quản lý ở trang `/fonts`, không nằm trong Cài đặt.
+ */
 const MULTI_USER_SECTIONS: readonly AdminSection[] = ["limits", "users"];
 
 /** Danh sách mục hiển thị theo chế độ chạy. */
