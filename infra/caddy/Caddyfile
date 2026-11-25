@@ -1,5 +1,5 @@
-# Caddy production sau Cloudflare (SSL "Full (strict)"): cert Cloudflare Origin CA cho cả 2 domain.
-# Biến (systemd caddy: Environment / EnvironmentFile): APP_DOMAIN, FILES_DOMAIN, MTL_ROOT, ORIGIN_CERT, ORIGIN_KEY.
+# Caddy production sau Cloudflare (SSL "Full (strict)"): cert Cloudflare Origin CA cho APP_DOMAIN.
+# Biến (systemd caddy: Environment / EnvironmentFile): APP_DOMAIN, MTL_ROOT, ORIGIN_CERT, ORIGIN_KEY.
 # Cài: sudo ln -sf /srv/mtl/current/infra/caddy/Caddyfile /etc/caddy/Caddyfile
 {
 	admin localhost:2019
@@ -25,7 +25,8 @@
 
 {$APP_DOMAIN} {
 	import common
-	@api path /api/* /worker/* /healthz
+	# /files/*: link file ký HMAC do API phục vụ (nosniff + CSP sandbox đặt ở API, xem apps/api/src/routes/files.ts).
+	@api path /api/* /worker/* /healthz /files/*
 	handle @api {
 		reverse_proxy 127.0.0.1:8787 {
 			# IP client đã giải qua trusted_proxies (Cloudflare) → better-auth rate limit theo IP thật.
@@ -40,15 +41,4 @@
 	}
 	header /assets/* Cache-Control "public, max-age=31536000, immutable"
 	header /index.html Cache-Control "no-cache"
-}
-
-# Domain riêng cho file người dùng (red team #12): presigned URL ký theo host này, MinIO private.
-# CORS chỉ cho APP_DOMAIN đặt ở MinIO (MINIO_API_CORS_ALLOW_ORIGIN, docker-compose.prod.yml).
-{$FILES_DOMAIN} {
-	import common
-	# ">" = đặt sau response upstream (thay, không nhân đôi header MinIO).
-	header >X-Content-Type-Options nosniff
-	header >Content-Security-Policy "default-src 'none'; sandbox"
-	# Giữ nguyên Host (mặc định của reverse_proxy) để chữ ký SigV4 khớp.
-	reverse_proxy 127.0.0.1:9000
 }

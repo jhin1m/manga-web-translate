@@ -90,7 +90,7 @@ class WorkerClient:
             timeout=timeout,
         )
         # Tải/đẩy file qua presigned URL: không gửi Bearer token sang domain file. base_url = API để resolve link
-        # tương đối `/files/…` của disk driver (self-host); URL tuyệt đối (S3/MinIO) httpx giữ nguyên.
+        # tương đối `/files/…` (link file do API phục vụ); URL tuyệt đối httpx giữ nguyên.
         self.files = httpx.Client(
             base_url=api.rstrip("/"),
             timeout=httpx.Timeout(300.0, connect=30.0),

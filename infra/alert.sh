@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Kiểm mỗi phút (mtl-alert.timer), 1 kênh ntfy (ALERT_NTFY_URL):
-#   - /healthz lỗi 2 lần liên tiếp (DB, MinIO hoặc runner mtl-jobs ngừng) → báo; hồi phục → báo hồi phục;
+#   - /healthz lỗi 2 lần liên tiếp (DB, thư mục file hoặc runner mtl-jobs ngừng) → báo; hồi phục → báo hồi phục;
 #   - oldest_queued_age_s > 15' → báo (lặp lại tối đa 1 lần/giờ khi còn).
 # Ngân sách ≥ 50/80/100% do mtl-jobs báo (cùng kênh). Trạng thái giữa các lần chạy ở ALERT_STATE_DIR.
 set -euo pipefail

@@ -24,6 +24,8 @@ PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
 ReadOnlyPaths=/srv/mtl
+# Thư mục file (FILES_DIR trong shared/.env) — đổi đường dẫn thì sửa cả dòng này.
+ReadWritePaths=/srv/mtl/shared/files
 
 [Install]
 WantedBy=multi-user.target

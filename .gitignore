@@ -4,6 +4,8 @@ node_modules/
 golden/
 # Dữ liệu self-host (docker-compose.yml ở gốc repo bind ./data): secrets, DB, dump — không bao giờ commit.
 /data/
+# Dữ liệu dev khi chạy `pnpm dev` (MTL_DATA_DIR mặc định: file người dùng ở .data/files).
+/.data/
 *.dump
 worker/models/*.onnx
 worker/models/*.txt
