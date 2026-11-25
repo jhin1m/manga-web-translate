@@ -340,11 +340,8 @@ export const glossaryEntries = pgTable(
   {
     id: idPk(),
     userId: userId(),
-    /** null = entry chung, áp cho mọi series của người dùng (theo cặp ngôn ngữ). */
-    seriesId: uuid("series_id"),
-    /** Chỉ entry chung (series_id null) mang cặp nguồn→đích; entry series theo cặp của series (API đảm bảo). */
-    sourceLang: text("source_lang"),
-    targetLang: text("target_lang"),
+    /** Glossary luôn thuộc một series; áp theo cặp ngôn ngữ hiện tại của series. */
+    seriesId: uuid("series_id").notNull(),
     sourceTerm: text("source_term").notNull(),
     targetTerm: text("target_term").notNull(),
     note: text("note").notNull().default(""),
@@ -355,15 +352,31 @@ export const glossaryEntries = pgTable(
   },
   (t) => [
     foreignKey({ columns: [t.userId, t.seriesId], foreignColumns: [series.userId, series.id] }).onDelete("cascade"),
-    index("glossary_user_series_idx").on(t.userId, t.seriesId),
     check("glossary_entries_origin_chk", inList(sql`${t.origin}`, ORIGINS)),
-    // Một term mỗi phạm vi (series, hoặc cặp ngôn ngữ của người dùng khi series_id null) — chặn tạo trùng khi
-    // request đua nhau.
-    unique("glossary_entries_scope_term_uq")
-      .on(t.userId, t.seriesId, t.sourceLang, t.targetLang, t.sourceTerm)
-      .nullsNotDistinct(),
+    // Một term mỗi series — chặn tạo trùng khi request đua nhau. Tiền tố (user_id, series_id) của unique cũng là index
+    // cho truy vấn lọc glossary theo series.
+    unique("glossary_entries_scope_term_uq").on(t.userId, t.seriesId, t.sourceTerm),
   ],
 );
+
+/**
+ * Entry glossary chung cũ (trước khi bỏ glossary chung) không chép được vào series nào: người dùng không có series cùng
+ * cặp nguồn→đích, hoặc entry không có cặp. Chỉ để lấy lại bằng SQL / file down; app không đọc bảng này.
+ */
+export const glossaryGlobalArchive = pgTable("glossary_global_archive", {
+  /** Giữ id entry gốc để file down trả về đúng entry. */
+  id: uuid("id").primaryKey(),
+  userId: userId(),
+  sourceLang: text("source_lang"),
+  targetLang: text("target_lang"),
+  sourceTerm: text("source_term").notNull(),
+  targetTerm: text("target_term").notNull(),
+  note: text("note").notNull().default(""),
+  caseSensitive: boolean("case_sensitive").notNull().default(false),
+  origin: text("origin").$type<Origin>().notNull().default("user"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
+});
 
 export const workerTokens = pgTable(
   "worker_tokens",
