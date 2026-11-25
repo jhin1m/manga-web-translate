@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import unicodedata
 from typing import Any
 
 import cv2
@@ -163,14 +164,16 @@ def handle_prepare(ctx: JobContext, deps: Deps) -> dict[str, Any]:
 def _settings(payload: dict[str, Any]) -> SeriesSettings:
     s = payload["settings"]
     rules = s["pronoun_rules"]
-    if s["style_prompt"].strip():
-        rules = f"{rules}\nPhong cách: {s['style_prompt'].strip()}".strip()
+    style = s["style_prompt"].strip()
+    if style:
+        rules = f"{rules}\nPhong cách: {style}".strip()
     return SeriesSettings(
         source_lang=s.get("source_lang", "ko"),
         target_lang=s.get("target_lang", "vi"),
         glossary=dict(s["glossary"]),
         pronoun_rules=rules,
         honorific_policy=s["honorific_policy"],
+        want_style=not style,
     )
 
 
@@ -261,6 +264,8 @@ LEARNED_PRONOUNS_MAX = 30
 TERM_TEXT_MAX = 200
 PERSON_MAX = 80
 ADDRESS_MAX = 120
+# `MAX_STYLE_NOTE` (packages/shared).
+STYLE_NOTE_MAX = 150
 
 
 def handle_translate(ctx: JobContext, deps: Deps) -> dict[str, Any]:
@@ -346,11 +351,18 @@ def handle_translate(ctx: JobContext, deps: Deps) -> dict[str, Any]:
                 boxes.append(typeset_region(clean, r, bubble, it.translation, f, bubble_siblings(r, texted)))
         state = build_page_state(pg["width"], pg["height"], regions, items, translations, boxes, meta, styles)
         out.append({"page_id": pg["page_id"], "ai_state": state})
-    return {"type": "chapter.translate", "pages": out, "carry": _carry(tr.context), **_learned(tr)}
+    return {
+        "type": "chapter.translate",
+        "pages": out,
+        "carry": _carry(tr.context),
+        **_learned(tr),
+        **_style_note(tr.style_note),
+    }
 
 
 def _cut_utf16(s: str, n: int) -> str:
-    """Cắt theo đơn vị UTF-16 như zod `.max()` phía API (emoji = 2); không cắt đôi cặp surrogate. Surrogate lẻ (JSON
+    """Cắt theo đơn vị UTF-16 (emoji = 2), chặt hơn zod `.max()` phía API vốn đếm code point, nên kết quả luôn qua
+    kiểm tra độ dài; không cắt đôi cặp surrogate. Surrogate lẻ (JSON
     của LLM bị cắt giữa emoji) bị bỏ thay vì ném lỗi làm hỏng cả lô đã dịch xong."""
     return s.encode("utf-16-le", errors="surrogatepass")[: 2 * n].decode("utf-16-le", errors="ignore")
 
@@ -397,6 +409,14 @@ def _learned(tr: ChapterTranslation) -> dict[str, Any]:
     if pairs:
         out["pronoun_pairs"] = list(pairs.values())[:LEARNED_PRONOUNS_MAX]
     return out
+
+
+def _style_note(raw: str) -> dict[str, str]:
+    """Giọng văn AI đề xuất thành một dòng sạch: khoảng trắng/xuống dòng → một dấu cách, bỏ ký tự điều khiển, cắt
+    theo UTF-16 (chặt hơn trần code point của hợp đồng). Rỗng → không có key, result giữ hình dạng cũ."""
+    chars = (" " if c.isspace() else "" if unicodedata.category(c) == "Cc" else c for c in raw)
+    note = _clean(" ".join("".join(chars).split()), STYLE_NOTE_MAX)
+    return {"style_note": note} if note else {}
 
 
 # ---- page.reinpaint ----

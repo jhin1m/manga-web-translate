@@ -174,6 +174,8 @@ class TranslateRequest(BaseModel):
     pronoun_rules: str = ""
     honorific_policy: str = DEFAULT_HONORIFIC_POLICY
     context: RollingContext | None = None
+    #: Series chưa có Giọng văn → nhờ LLM mô tả giọng văn đã dùng (`style_note`). Nội bộ worker, không thuộc payload job.
+    want_style: bool = False
 
 
 class TranslateItem(BaseModel):
@@ -220,6 +222,8 @@ class TranslateResult(BaseModel):
     context_notes: str = ""
     new_terms: list[NewTerm] = Field(default_factory=list)
     pronoun_pairs: list[PronounPair] = Field(default_factory=list)
+    #: Một dòng mô tả giọng văn LLM đã dùng; "" khi không được hỏi hoặc LLM trả rác.
+    style_note: str = ""
     usage: list[TokenUsage] = Field(default_factory=list)
 
 

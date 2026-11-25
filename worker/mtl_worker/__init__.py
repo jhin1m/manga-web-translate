@@ -22,7 +22,9 @@
 #        optional, pipeline MIN không đổi.
 # 0.12.0: chapter.ingest inputs sources[].trim (cắt mép trên/dưới ảnh gốc trước khi ghép/cắt trang). Worker < 0.12.0 fail
 #        schema input ingest (strict) khi chương có ảnh bị cắt.
-PIPELINE_VERSION = "0.12.0"
+# 0.13.0: output chapter.translate thêm style_note (giọng văn AI mô tả khi series chưa có Giọng văn); key optional,
+#        pipeline MIN không đổi.
+PIPELINE_VERSION = "0.13.0"
 
 # Tiền tố lỗi job khi tác vụ chưa có model AI: web nhận diện để báo đúng nguyên nhân (không phải key sai).
 # Phải trùng LLM_NOT_CONFIGURED ở packages/shared/src/job.ts (test_provider_config khoá điều này).

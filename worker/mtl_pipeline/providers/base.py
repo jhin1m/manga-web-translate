@@ -112,8 +112,10 @@ TRANSLATE_SCHEMA: dict[str, Any] = {
                 "additionalProperties": False,
             },
         },
+        # Luôn có (mọi provider dùng chung một hằng; OpenAI strict bắt buộc mọi key) — LLM trả "" khi không được hỏi.
+        "style_note": {"type": "string"},
     },
-    "required": ["items", "context_notes", "new_terms", "pronoun_pairs"],
+    "required": ["items", "context_notes", "new_terms", "pronoun_pairs", "style_note"],
     "additionalProperties": False,
 }
 
@@ -230,6 +232,7 @@ def translate_user_text(req: TranslateRequest) -> str:
         "pronoun_rules": req.pronoun_rules,
         "honorific_policy": req.honorific_policy,
         "context": req.context.model_dump() if req.context else None,
+        "want_style": req.want_style,
     }
     return json.dumps(payload, ensure_ascii=False, sort_keys=True)
 
@@ -287,6 +290,8 @@ def parse_translate(text: str, usage: TokenUsage) -> TranslateResult:
         )
         res.new_terms = _lenient(NewTerm, data.get("new_terms"))
         res.pronoun_pairs = _lenient(PronounPair, data.get("pronoun_pairs"))
+        style_note = data.get("style_note")
+        res.style_note = style_note if isinstance(style_note, str) else ""
         return res
     except (json.JSONDecodeError, KeyError, TypeError, ValidationError) as e:
         raise ProviderError("schema", f"dịch trả JSON sai hợp đồng: {e}", usage=[usage]) from e

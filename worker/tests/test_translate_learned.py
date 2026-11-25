@@ -252,9 +252,11 @@ def test_handler_drops_trailing_space_left_by_cut_and_lone_surrogates():
 # ---------- schema / prompt ----------
 
 
-def test_strict_schema_has_four_required_top_level_properties():
+def test_strict_schema_requires_every_top_level_property():
     out = strict_schema(TRANSLATE_SCHEMA)
-    assert out["required"] == ["items", "context_notes", "new_terms", "pronoun_pairs"]
+    assert out["required"] == ["items", "context_notes", "new_terms", "pronoun_pairs", "style_note"]
+    assert out["required"] == list(out["properties"]) and out["additionalProperties"] is False
+    assert out["properties"]["style_note"] == {"type": "string"}
     for key in ("new_terms", "pronoun_pairs"):
         node = out["properties"][key]["items"]
         assert node["required"] == list(node["properties"]) and node["additionalProperties"] is False
@@ -263,3 +265,4 @@ def test_strict_schema_has_four_required_top_level_properties():
 def test_prompt_mentions_learned_fields():
     prompt = load_prompt("translate_batch")
     assert "new_terms" in prompt and "pronoun_pairs" in prompt
+    assert "style_note" in prompt and "want_style" in prompt
