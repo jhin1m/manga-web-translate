@@ -145,10 +145,19 @@ Khung 1280×800, không chọn gì: canvas rộng 1160px (1280 − rail 48 − c
 
 ## Cài đặt admin (`/settings`)
 
-- Chỉ admin (`ADMIN_EMAILS`). Bố cục: thanh mục trái (nhóm "AI", "Hệ thống"; mục = link `?section=`) + 1 panel phải, tối đa 880px. Mục đang chọn = chữ `--c-accent-hover` + nền `--c-accent-weak`; không gradient, bo ≤ 4px, 1 màu nhấn.
-- Mục AI: **Pipeline**, **Nhà cung cấp** (bảng: tên · loại · `••••last4` · số model · Kiểm tra · icon Sửa / Xoá có xác nhận tại chỗ; form thêm / sửa nằm trên bảng, model + giá USD/1M token, model reasoning có cảnh báo màu `--c-warn`), **Model tác vụ** (3 select OCR / Dịch / Hiệu đính, OCR + Hiệu đính chỉ model có vision).
-- Mục Hệ thống: **Hạn mức & đăng ký**, **Người dùng**, **Font hệ thống** (bảng tên · dung lượng · đủ/thiếu dấu · icon Xoá, nút chọn file ở trên; trần 20 font / 100MB). Font hệ thống hiện thành nhóm "Font hệ thống" (trước "Font của bạn") ở picker font series và ô Font của editor; `/fonts` chỉ liệt kê font riêng và giới hạn 20 font không đếm font hệ thống.
-- Thêm mục: khai báo trong `features/admin/admin-sections.ts` + panel trong `admin-layout.tsx`. Font cá nhân không nằm ở đây (`/fonts`, menu tài khoản).
+- Chỉ admin (`ADMIN_EMAILS`). Bố cục: thanh mục trái (nhóm "AI", "Hệ thống"; mục = link `?section=`) + 1 panel phải, tối đa 820px. Mục đang chọn = chữ `--c-accent-hover` + nền `--c-accent-weak`; không gradient, 1 màu nhấn.
+- Khung chung (`features/admin/settings-ui.tsx`): `SectionHead` (tiêu đề + mô tả + vùng phải cho trạng thái / nút), `SetGroup` (tiêu đề nhỏ + mô tả + thẻ `.set-card` nền trắng, viền `--c-line`, bo 6px), `SetRow` (nhãn + giải thích bên trái, ô điều khiển bên phải; màn < 720px xếp dọc). Giải thích nằm dưới nhãn, gắn vào ô qua `aria-describedby`.
+- Mục AI: **Pipeline** chia theo bước xử lý trang (Phát hiện chữ → Đọc chữ (OCR engine theo ngôn ngữ + model AI đọc chữ) → Xoá chữ → Dịch → Hiệu đính); model AI của từng bước nằm ngay trong bước đó (`<optgroup>` theo nhà cung cấp, bước cần ảnh chỉ hiện model vision, "Theo worker (.env)" = để trống). Tự lưu: select lưu khi đổi, ô số lưu khi rời ô / Enter nếu hợp lệ; trạng thái "Đang lưu… / Đã lưu / lỗi" ở đầu mục; "Về mặc định" hỏi lại tại chỗ và giữ model AI. `?section=tasks` cũ rơi về Pipeline. **Nhà cung cấp**: danh sách thẻ (tên · chip loại · `••••last4` · chip model kèm "vision" · Kiểm tra · icon Sửa / Xoá có xác nhận tại chỗ); form sửa mở ngay trong thẻ, form thêm ở đầu danh sách. Form thêm chỉ cần chọn nhà cung cấp (nút Anthropic · OpenAI · Google Gemini · DeepSeek · Khác) + dán key: tên và model gợi ý đầu tiên (kèm giá, cờ vision) điền sẵn, chỉnh ở mục thu gọn "Tuỳ chỉnh tên, model và giá"; "Khác" (endpoint tương thích OpenAI) không có gợi ý nên hiện base URL và mở sẵn mục tuỳ chỉnh; model + giá USD/1M token có dòng tiêu đề cột, model reasoning có cảnh báo màu `--c-warn`.
+- Mục Hệ thống (ẩn ở chế độ local): **Hạn mức & đăng ký**, **Người dùng**. Font không nằm trong Cài đặt.
+- Thêm mục: khai báo trong `features/admin/admin-sections.ts` + panel trong `admin-layout.tsx`.
+
+## Trang Font (`/fonts`, menu tài khoản › Font)
+
+- Chỗ duy nhất quản lý font, dùng chung khung `SectionHead` / `SetGroup` / `SetRow` với Cài đặt.
+- **Thêm font**: "Chọn font trong máy" (Local Font Access API `queryLocalFonts`, chỉ Chrome / Edge máy tính, trang https hoặc localhost; trình duyệt hỏi quyền lần đầu) mở danh sách có ô tìm, ô tích và dòng xem trước bằng chính font đó; font đã thêm bị khoá, số font tích được ≤ chỗ còn trống. Font chọn được upload như font riêng vì worker vẽ ảnh xuất bằng đúng file font. Chỉ TTF / OTF ≤ 10MB; font trong bộ TTC báo không hỗ trợ. Trình duyệt khác chỉ có ô "Tải file" (nhiều file một lần). Admin bản nhiều người có thêm "Cho mọi người dùng" → upload thành font dùng chung.
+- **Font đã thêm**: một bảng chung cho font dùng chung (nhãn "Dùng chung", chỉ admin xoá, hỏi lại tại chỗ) và font riêng; mô tả đếm `n / giới hạn` font riêng (bản nhiều người 20, local 200 — `userFontLimit` ở `@mtl/shared`).
+- **Font có sẵn**: lưới font gói sẵn (manifest), tên + dòng xem trước; font thiếu dấu có nhãn cảnh báo.
+- Trong ô chọn font (editor, cài đặt series) font tải lên nằm ở 2 nhóm "Font dùng chung" rồi "Font của bạn".
 
 ## Ngôn ngữ
 
