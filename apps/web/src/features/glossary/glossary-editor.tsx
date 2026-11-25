@@ -1,10 +1,11 @@
 /**
  * Bảng glossary sửa tại chỗ + import/export CSV. Dùng cho cả glossary chung (theo cặp nguồn→đích, chọn ở trang
  * Glossary chung) và cấp series (series ghi đè entry chung cùng cặp trùng từ gốc). Mọi thay đổi làm server tăng
- * glossary_rev — lần dịch sau dùng term mới.
+ * glossary_rev — lần dịch sau dùng term mới. Entry AI tự thêm khi dịch có chip "AI" (mất khi sửa).
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type FormEvent, useState } from "react";
+import { AiTag } from "../../app/ai-tag.tsx";
 import { ApiError, errorMessage } from "../../lib/api.ts";
 import { LANG_NAMES, pairLabel, TARGET_LANGS, type TargetLang } from "../series/lang-labels.ts";
 import { SourceLangSelect } from "../series/source-lang-select.tsx";
@@ -272,7 +273,10 @@ export function GlossaryEditor({
                 </tr>
               ) : (
                 <tr key={e.id}>
-                  <td>{e.source_term}</td>
+                  <td>
+                    {e.source_term}
+                    {e.origin === "ai" && <AiTag />}
+                  </td>
                   <td>{e.target_term}</td>
                   <td className="muted">{e.note}</td>
                   <td>{e.case_sensitive ? "Có" : ""}</td>

@@ -3,17 +3,17 @@
  * Ch.{next}", thanh sắp xếp / Lưới–Danh sách, lưới thẻ chương có ảnh đầu hoặc danh sách hàng không ảnh (bấm cả thẻ để
  * mở — dịch/xuất/chạy lại làm trong màn chương; icon Xoá).
  * Glossary / Cài đặt dịch mở thành modal trên danh sách; `?tab=` giữ trạng thái modal (link sâu từ home / màn chương).
+ * AI ghi glossary khi dịch (tăng `glossary_rev` của series) → làm mới glossary khi rev của detail đang poll đổi.
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Drawer } from "../../app/drawer.tsx";
 import { ApiError, errorMessage } from "../../lib/api.ts";
 import { timeAgo } from "../../lib/format.ts";
 import { nextAction } from "../chapter/next-action.ts";
 import { fetchGlossary, glossaryKey } from "../glossary/api.ts";
 import { GlossaryEditor } from "../glossary/glossary-editor.tsx";
-import { GlossarySuggestions } from "../glossary/glossary-suggestions.tsx";
 import { CoverImage, withStatus } from "../home/cover-image.tsx";
 import { useDropToTranslate } from "../home/drop-to-translate.ts";
 import { CHAPTER_PREFS_KEY, CHAPTER_SORTS, type ListView, sortChapters, useListPrefs } from "../home/list-prefs.ts";
@@ -28,7 +28,6 @@ import {
   deleteChapter,
   fetchSeries,
   fetchSeriesList,
-  fetchSuggestions,
   nextChapterNumber,
   type SeriesDetail,
   seriesKeys,
@@ -64,7 +63,6 @@ export function SeriesPage(props: { seriesId: string; tab?: SeriesTab }) {
           {tab === "settings" && <SeriesSettingsDialog series={s} onClose={closeModal} />}
           {tab === "glossary" && (
             <Drawer variant="modal" title="Glossary của series" onClose={closeModal}>
-              <GlossarySuggestions seriesId={seriesId} />
               <GlossaryEditor scope={{ seriesId }} inheritedLabel={`từ glossary chung (${pairLabel(s)})`} />
             </Drawer>
           )}
@@ -75,15 +73,17 @@ export function SeriesPage(props: { seriesId: string; tab?: SeriesTab }) {
 }
 
 function SeriesHead({ series }: { series: SeriesDetail }) {
+  const qc = useQueryClient();
   const scope = { seriesId: series.id };
   const glossary = useQuery({ queryKey: glossaryKey(scope), queryFn: () => fetchGlossary(scope) });
   const terms = glossary.data?.entries.length;
-  const suggestions = useQuery({
-    queryKey: seriesKeys.suggestions(series.id),
-    queryFn: () => fetchSuggestions(series.id),
-  });
-  const termHints = suggestions.data?.terms.length ?? 0;
-  const pronounHints = suggestions.data?.pronouns.length ?? 0;
+  // Glossary không poll: rev đổi (AI vừa ghi thuật ngữ khi dịch xong một lô) thì làm mới cả glossary series.
+  const seenRev = useRef(series.glossary_rev);
+  useEffect(() => {
+    if (seenRev.current === series.glossary_rev) return;
+    seenRev.current = series.glossary_rev;
+    void qc.invalidateQueries({ queryKey: glossaryKey({ seriesId: series.id }) });
+  }, [qc, series.id, series.glossary_rev]);
   return (
     <div className="series-head">
       <Link to="/" className="btn icon-btn" aria-label="Về trang chủ" title="Về trang chủ">
@@ -93,39 +93,16 @@ function SeriesHead({ series }: { series: SeriesDetail }) {
       <span className="muted series-pair">{pairLabel(series)}</span>
       <Link className="btn" to="/s/$seriesId" params={{ seriesId: series.id }} search={{ tab: "glossary" }}>
         {terms === undefined ? "Glossary" : `Glossary · ${terms}`}
-        {termHints > 0 && (
-          <>
-            <span className="sr-only"> · {termHints} gợi ý từ AI</span>
-            <span
-              className="count-badge"
-              aria-hidden="true"
-              title={`${termHints} gợi ý từ AI`}
-              data-testid="glossary-hint-badge"
-            >
-              {termHints}
-            </span>
-          </>
-        )}
       </Link>
       <Link
         className="btn icon-btn"
         to="/s/$seriesId"
         params={{ seriesId: series.id }}
         search={{ tab: "settings" }}
-        aria-label={pronounHints > 0 ? `Cài đặt dịch · ${pronounHints} gợi ý xưng hô` : "Cài đặt dịch"}
+        aria-label="Cài đặt dịch"
         title="Cài đặt dịch"
       >
         <SlidersIcon />
-        {pronounHints > 0 && (
-          <span
-            className="count-badge"
-            aria-hidden="true"
-            title={`${pronounHints} gợi ý xưng hô từ AI`}
-            data-testid="settings-hint-badge"
-          >
-            {pronounHints}
-          </span>
-        )}
       </Link>
     </div>
   );

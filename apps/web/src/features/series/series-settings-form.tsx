@@ -4,10 +4,13 @@
  * thao tác (không thuộc form, không cần bấm Lưu). Lỗi nhập nằm trong nhóm đang thu gọn thì nhóm đó tự mở và trường
  * lỗi được focus. "Xoá series" là link đỏ dưới đáy; bấm mới hiện ô gõ tên xác nhận. Server tăng settings_rev khi
  * trường ảnh hưởng dịch đổi. Dùng ở `?tab=settings` của màn series.
+ * Lưu chỉ gửi trường khác mốc lúc mở form (không đổi gì → đóng, không gọi API): Giọng văn / cặp xưng hô AI ghi trong
+ * lúc form mở không bị đè. Mục AI ghi có chip "AI"; sửa hàng xưng hô thì chip của hàng đó mất ngay.
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { type FormEvent, type ReactNode, useEffect, useId, useRef, useState } from "react";
+import { AiTag } from "../../app/ai-tag.tsx";
 import { Drawer } from "../../app/drawer.tsx";
 import { InfoTip } from "../../app/info-tip.tsx";
 import { errorMessage } from "../../lib/api.ts";
@@ -28,10 +31,11 @@ import {
   deleteSeries,
   type FontSlot,
   fetchSkipImages,
-  fetchSuggestions,
   type PronounRule,
+  type PronounRuleInput,
   patchSeries,
   type Series,
+  type SeriesPatch,
   type SeriesSettings,
   seriesKeys,
 } from "./api.ts";
@@ -49,10 +53,9 @@ import {
   SOURCE_LANGS,
   TARGET_LANGS,
 } from "./lang-labels.ts";
-import { PronounSuggestions } from "./pronoun-suggestions.tsx";
+import { buildPatch } from "./settings-diff.ts";
 import { countSummary, firstMissingRuleField, rulesSummary, styleSummary } from "./settings-summary.ts";
 import { SkipImagesSection } from "./skip-images-section.tsx";
-import { pendingPronouns, ruleFromSuggestion } from "./suggestions.ts";
 
 // Không có ô SFX: SFX giữ nguyên chữ gốc (không dịch / đặt chữ). Khoá `sfx` đã lưu vẫn được giữ khi lưu form.
 const OTHER_FONT_SLOTS: { slot: FontSlot; label: string; empty: string }[] = [
@@ -74,8 +77,12 @@ const ALL_CLOSED: Record<GroupId, boolean> = {
   skip: false,
 };
 
-/** Chữ bỏ qua sửa ở ô riêng (chuỗi nhiều dòng), ghép vào lúc lưu. */
-type Form = Omit<SeriesSettings, "ignore_text"> & { title: string };
+/**
+ * Chữ bỏ qua sửa ở ô riêng (chuỗi nhiều dòng), ghép vào lúc lưu. Hàng xưng hô thêm / sửa trên form mang `origin: "user"`
+ * (chỉ để ẩn chip AI; không gửi lên).
+ */
+type FormRule = PronounRuleInput & { origin?: PronounRule["origin"] };
+type Form = Omit<SeriesSettings, "ignore_text" | "pronoun_rules"> & { title: string; pronoun_rules: FormRule[] };
 
 const toForm = (s: Series): Form => ({
   title: s.title,
@@ -88,9 +95,10 @@ const toForm = (s: Series): Form => ({
   default_fonts: s.default_fonts,
 });
 
-/** Nhóm thu gọn: tên + tóm tắt (đỏ khi `invalid`); `open` do cha điều khiển để mở tự động khi có lỗi. */
+/** Nhóm thu gọn: tên (+ `tag`) + tóm tắt (đỏ khi `invalid`); `open` do cha điều khiển để mở tự động khi có lỗi. */
 function Fold(props: {
   title: string;
+  tag?: ReactNode;
   summary: string;
   open: boolean;
   onOpen: (open: boolean) => void;
@@ -100,7 +108,10 @@ function Fold(props: {
   return (
     <details className="settings-fold" open={props.open} onToggle={(e) => props.onOpen(e.currentTarget.open)}>
       <summary>
-        <span className="fold-title">{props.title}</span>
+        <span className="fold-title">
+          {props.title}
+          {props.tag}
+        </span>
         <span className="fold-sum" data-invalid={props.invalid || undefined}>
           {props.summary}
         </span>
@@ -143,6 +154,8 @@ export function SeriesSettingsDialog({
   const formId = useId();
   const formRef = useRef<HTMLFormElement>(null);
   const [f, setF] = useState<Form>(() => toForm(series));
+  // Mốc so khi Lưu: chụp lúc mở, không làm mới khi detail series được poll lại.
+  const base = useRef({ ...toForm(series), ignore_text: series.ignore_text });
   const bundled = useBundledFonts();
   const custom = useUserFonts();
   // Nạp font gói sẵn + font của bạn vào trình duyệt để dropdown xem trước được (lỗi → chỉ mất preview).
@@ -162,12 +175,6 @@ export function SeriesSettingsDialog({
     queryFn: () => fetchSkipImages(series.id),
     staleTime: 10 * 60_000,
   });
-  const suggestions = useQuery({
-    queryKey: seriesKeys.suggestions(series.id),
-    queryFn: () => fetchSuggestions(series.id),
-  });
-  // Gợi ý xưng hô chưa có trong bảng đang sửa (kể cả hàng chưa Lưu).
-  const pendingHints = pendingPronouns(suggestions.data?.pronouns ?? [], f.pronoun_rules);
   const langWarning = langChangeWarning(series, f, glossary.data?.entries.length);
 
   // Nhóm nào đang mở; lỗi nhập → mở nhóm chứa lỗi rồi focus đúng trường (effect chạy sau khi <details> đã mở).
@@ -186,7 +193,7 @@ export function SeriesSettingsDialog({
   }, [ignore.error]);
 
   const save = useMutation({
-    mutationFn: () => patchSeries(series.id, { ...f, ignore_text: ignore.list }),
+    mutationFn: (body: SeriesPatch) => patchSeries(series.id, body),
     onSuccess: (s) => {
       // Ghi ngay bản server trả về: mở lại modal trước khi refetch xong vẫn thấy giá trị mới.
       qc.setQueryData<Series>(seriesKeys.detail(series.id), (cur) => (cur ? { ...cur, ...s } : cur));
@@ -216,10 +223,11 @@ export function SeriesSettingsDialog({
       setFont(slot, font.id);
     },
   });
-  const setRule = (i: number, patch: Partial<PronounRule>) =>
+  // Sửa hàng = người dùng xác nhận → bỏ chip AI ngay (server tính lại `origin` khi lưu).
+  const setRule = (i: number, patch: Partial<PronounRuleInput>) =>
     set(
       "pronoun_rules",
-      f.pronoun_rules.map((r, j) => (j === i ? { ...r, ...patch } : r)),
+      f.pronoun_rules.map((r, j) => (j === i ? { ...r, ...patch, origin: "user" } : r)),
     );
   const submit = (e: FormEvent) => {
     e.preventDefault();
@@ -229,8 +237,10 @@ export function SeriesSettingsDialog({
       setFocusErr((n) => n + 1);
       return;
     }
+    const body = buildPatch(base.current, { ...f, ignore_text: ignore.list });
+    if (!body) return onClose();
     // Callback ở `mutate` không chạy nếu modal đã đóng: lưu xong không kéo người dùng về lại màn series.
-    save.mutate(undefined, { onSuccess: onClose });
+    save.mutate(body, { onSuccess: onClose });
   };
   const invalidRule = (i: number, field: "speaker" | "listener" | "address") =>
     rulesChecked && !f.pronoun_rules[i]?.[field].trim() ? true : undefined;
@@ -411,7 +421,14 @@ export function SeriesSettingsDialog({
           )}
 
           <div className="settings-folds">
-            <Fold title="Giọng văn" summary={styleSummary(f.style_prompt)} open={open.style} onOpen={setGroup("style")}>
+            <Fold
+              title="Giọng văn"
+              // Giọng văn đang hiện đúng là bản AI ghi (chưa sửa); AI điền sau lúc mở form thì form chưa hiện nên không gắn.
+              tag={series.style_origin === "ai" && f.style_prompt === series.style_prompt && <AiTag />}
+              summary={styleSummary(f.style_prompt)}
+              open={open.style}
+              onOpen={setGroup("style")}
+            >
               <FieldLabel
                 htmlFor="s-style"
                 tipLabel="Giải thích Giọng văn"
@@ -447,7 +464,7 @@ export function SeriesSettingsDialog({
 
             <Fold
               title="Xưng hô"
-              summary={rulesInvalid ? "Thiếu thông tin" : rulesSummary(f.pronoun_rules, pendingHints.length)}
+              summary={rulesInvalid ? "Thiếu thông tin" : rulesSummary(f.pronoun_rules)}
               invalid={rulesInvalid}
               open={open.pronouns}
               onOpen={setGroup("pronouns")}
@@ -505,7 +522,8 @@ export function SeriesSettingsDialog({
                             onChange={(e) => setRule(i, { note: e.target.value })}
                           />
                         </td>
-                        <td>
+                        <td className="rule-actions">
+                          {r.origin === "ai" && <AiTag />}
                           <button
                             type="button"
                             className="btn-ghost btn-danger"
@@ -528,18 +546,15 @@ export function SeriesSettingsDialog({
                 <button
                   type="button"
                   onClick={() =>
-                    set("pronoun_rules", [...f.pronoun_rules, { speaker: "", listener: "", address: "", note: "" }])
+                    set("pronoun_rules", [
+                      ...f.pronoun_rules,
+                      { speaker: "", listener: "", address: "", note: "", origin: "user" },
+                    ])
                   }
                 >
                   + Thêm quy tắc
                 </button>
               </div>
-              <PronounSuggestions
-                seriesId={series.id}
-                items={pendingHints}
-                rules={f.pronoun_rules}
-                onAccept={(s) => set("pronoun_rules", [...f.pronoun_rules, ruleFromSuggestion(s)])}
-              />
             </Fold>
 
             <Fold title="Font khác" summary={fontsSummary} open={open.fonts} onOpen={setGroup("fonts")}>

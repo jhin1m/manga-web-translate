@@ -1,9 +1,12 @@
 /** Kiểu + query của series (khớp apps/api/src/routes/series.ts). */
-import type { TermKind } from "@mtl/shared";
+import type { Origin } from "@mtl/shared";
 import type { PageFormat, SourceLang, TargetLang } from "@mtl/shared/series-lang";
 import { api } from "../../lib/api.ts";
 
-export type PronounRule = { speaker: string; listener: string; address: string; note: string };
+/** Nội dung một cặp xưng hô — phần web gửi lên (server bỏ qua `origin` nếu có). */
+export type PronounRuleInput = { speaker: string; listener: string; address: string; note: string };
+/** Cặp xưng hô server trả về: `origin` = ai ghi (nhãn "AI" khi là `"ai"`; server tự tính lại khi lưu). */
+export type PronounRule = PronounRuleInput & { origin: Origin };
 export type FontSlot = "dialogue" | "narration" | "thought" | "note" | "sfx";
 
 export type SeriesSettings = {
@@ -22,6 +25,8 @@ export type SeriesSettings = {
 export type Series = SeriesSettings & {
   id: string;
   title: string;
+  /** Ai đặt Giọng văn: null (chưa ai), "user" hoặc "ai". */
+  style_origin: Origin | null;
   glossary_rev: number;
   settings_rev: number;
   /** Có ảnh bìa tuỳ chỉnh (xem `cover_src` ở danh sách). */
@@ -80,16 +85,25 @@ export const seriesKeys = {
   detail: (id: string) => ["series", id] as const,
   recent: () => ["series", "recent-chapters"] as const,
   skipImages: (id: string) => ["series", id, "skip-images"] as const,
-  suggestions: (id: string) => ["series", id, "suggestions"] as const,
 };
 
 export const fetchSeriesList = () => api<{ series: SeriesListItem[] }>("/api/series");
 export const fetchSeries = (id: string) => api<SeriesDetail>(`/api/series/${id}`);
 export const fetchRecentChapters = (limit = 20) =>
   api<{ chapters: RecentChapter[] }>(`/api/recent-chapters?limit=${limit}&open=1`);
-export const createSeries = (body: { title: string } & Partial<SeriesSettings>) =>
+/** Cài đặt series dạng gửi lên: cặp xưng hô chỉ có nội dung. */
+export type SeriesSettingsInput = Omit<SeriesSettings, "pronoun_rules"> & { pronoun_rules: PronounRuleInput[] };
+export type SeriesPatch = Partial<SeriesSettingsInput> & {
+  title?: string;
+  /**
+   * Khoá (`pronounKey`) các cặp xưng hô form đã hiện cho người dùng: cặp đang có mà form chưa thấy (AI vừa thêm) được
+   * server giữ khi lưu.
+   */
+  pronoun_keys_seen?: string[];
+};
+export const createSeries = (body: { title: string } & Partial<SeriesSettingsInput>) =>
   api<Series>("/api/series", { method: "POST", body });
-export const patchSeries = (id: string, body: Partial<SeriesSettings> & { title?: string }) =>
+export const patchSeries = (id: string, body: SeriesPatch) =>
   api<Series>(`/api/series/${id}`, { method: "PATCH", body });
 /** Xoá series cùng mọi chương + glossary riêng. */
 export const deleteSeries = (id: string) => api<void>(`/api/series/${id}`, { method: "DELETE" });
@@ -159,30 +173,6 @@ export const applyIgnoreApply = (seriesId: string, versions: Record<string, numb
   api<IgnoreApplied>(ignoreApply(seriesId, "apply"), { method: "POST", body: { versions } });
 export const undoIgnoreApply = (seriesId: string, batchId: string) =>
   api<IgnoreUndone>(ignoreApply(seriesId, "undo"), { method: "POST", body: { batch_id: batchId } });
-
-/** Gợi ý AI học được khi dịch (server đã ẩn mục đã bỏ và mục glossary / quy tắc xưng hô đã có). */
-export type TermSuggestion = {
-  id: string;
-  source: string;
-  target: string;
-  kind: TermKind;
-  chapter_number: string | null;
-  created_at: string;
-};
-export type PronounSuggestion = {
-  id: string;
-  speaker: string;
-  listener: string;
-  address: string;
-  chapter_number: string | null;
-  created_at: string;
-};
-export type SeriesSuggestions = { terms: TermSuggestion[]; pronouns: PronounSuggestion[] };
-
-export const fetchSuggestions = (seriesId: string) => api<SeriesSuggestions>(`/api/series/${seriesId}/suggestions`);
-/** Bỏ (dismissed = true) một gợi ý để không hiện lại; false = khôi phục. */
-export const dismissSuggestion = (id: string, dismissed = true) =>
-  api<{ id: string; dismissed: boolean }>(`/api/series-suggestions/${id}`, { method: "PATCH", body: { dismissed } });
 
 /** Số chương gợi ý cho lần upload tiếp theo: lớn nhất + 1. */
 export function nextChapterNumber(chapters: Pick<ChapterSummary, "number">[]): string {

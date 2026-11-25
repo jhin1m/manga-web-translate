@@ -79,10 +79,14 @@ export type FakeWorkerOptions = {
   pagesPerSource?: number;
   /** Loại job nhận (mặc định tất cả) — VD chỉ ingest + prepare để giữ chương ở "processing". */
   capabilities?: string[];
-  /** Thuật ngữ / cặp xưng hô "học được" gắn vào kết quả dịch — chỉ gắn khi truyền, spec khác không đổi. */
+  /**
+   * Thuật ngữ / cặp xưng hô / Giọng văn (`style_note`, một dòng ≤ 150 ký tự) "học được" gắn vào kết quả dịch — chỉ gắn
+   * khi truyền, spec khác không đổi.
+   */
   learned?: {
     new_terms?: { source: string; target: string; kind: "person" | "place" | "term" }[];
     pronoun_pairs?: { speaker: string; listener: string; address: string }[];
+    style_note?: string;
   };
 };
 

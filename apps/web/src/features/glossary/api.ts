@@ -1,6 +1,7 @@
 /**
  * Glossary riêng series hoặc glossary chung theo cặp nguồn→đích (khớp apps/api/src/routes/glossary.ts).
  */
+import type { Origin } from "@mtl/shared";
 import { api } from "../../lib/api.ts";
 import type { SourceLang, TargetLang } from "../series/lang-labels.ts";
 
@@ -14,6 +15,8 @@ export type GlossaryEntry = {
   target_term: string;
   note: string;
   case_sensitive: boolean;
+  /** Ai ghi: "ai" = AI tự thêm khi dịch (chip "AI"); sửa entry → server đặt "user". */
+  origin: Origin;
   updated_at: string;
 };
 export type EntryInput = Pick<GlossaryEntry, "source_term" | "target_term" | "note" | "case_sensitive">;

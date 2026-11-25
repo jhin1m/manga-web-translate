@@ -45,6 +45,13 @@ export async function apiReadyChapter(
   opts: FakeWorkerOptions = {},
   seriesId: string = state.seriesId,
 ) {
+  const chapterId = await apiCommitChapter(page, number, seriesId);
+  await runUntilReady(page, chapterId, opts);
+  return chapterId;
+}
+
+/** Tạo + upload + commit chương 1 ảnh qua API (chương "ingesting", chưa có worker nào nhận). Trả id chương. */
+export async function apiCommitChapter(page: Page, number: string, seriesId: string = state.seriesId) {
   const headers = { origin: WEB_URL };
   const created = await page.request.post(`/api/chapters`, {
     headers,
@@ -66,24 +73,27 @@ export async function apiReadyChapter(
   form.append("file", new Blob([new Uint8Array(PNG_1PX)], { type: "image/png" }));
   expect((await fetch(f.url, { method: "POST", body: form })).status).toBe(204);
   expect((await page.request.post(`/api/chapters/${chapter.id}/commit`, { headers, data: {} })).status()).toBe(202);
+  return chapter.id;
+}
 
+/** Chạy worker giả (+ bước 2) tới khi mọi page của chương đã commit là "ready". */
+export async function runUntilReady(page: Page, chapterId: string, opts: FakeWorkerOptions = {}) {
   let ready = false;
   let stop = false;
   const worker = runFakeWorker(state.token, () => stop, 30_000, opts);
   const deadline = Date.now() + 30_000;
   while (!ready && Date.now() < deadline) {
-    const p = (await (await page.request.get(`/api/chapters/${chapter.id}/progress`)).json()) as {
+    const p = (await (await page.request.get(`/api/chapters/${chapterId}/progress`)).json()) as {
       chapter: { status: string };
       pages: { status: string }[];
     };
-    await translateIfPrepared(page, chapter.id, p.chapter.status);
+    await translateIfPrepared(page, chapterId, p.chapter.status);
     ready = p.pages.length > 0 && p.pages.every((x) => x.status === "ready");
     if (!ready) await page.waitForTimeout(300);
   }
   stop = true;
   await worker;
   if (!ready) throw new Error("chapter not ready");
-  return chapter.id;
 }
 
 /**
