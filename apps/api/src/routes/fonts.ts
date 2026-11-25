@@ -5,12 +5,13 @@
  * và commit lặp trên key upload cũ không tạo được hàng thứ hai dùng chung object.
  */
 import { series, systemFonts, userFonts } from "@mtl/db";
-import { keyBelongsToUser, storageKeys, userPrefix } from "@mtl/shared";
+import { keyBelongsToUser, storageKeys, USER_FONT_LIMIT, userFontLimit, userPrefix } from "@mtl/shared";
 import { eq } from "drizzle-orm";
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { v7 as uuidv7 } from "uuid";
 import { z } from "zod";
+import { env } from "../env.ts";
 import { inJobTx } from "../jobs/enqueue.ts";
 import { MAX_FONT_BYTES } from "../lib/font-metrics.ts";
 import { discardUpload, fail, fontView, inspectUploadedFont } from "../lib/font-upload.ts";
@@ -19,7 +20,8 @@ import { parseJson } from "../lib/validate.ts";
 import type { AppEnv } from "../middleware/user.ts";
 import { copyObject, presignPost } from "../storage.ts";
 
-export const MAX_USER_FONTS = 20;
+/** Trần bản nhiều người (test); bản local nới theo `userFontLimit`. */
+export const MAX_USER_FONTS = USER_FONT_LIMIT.hosted;
 const UPLOAD_TTL_S = 10 * 60;
 const FONT_CONTENT_TYPE = "application/octet-stream";
 
@@ -32,7 +34,7 @@ fontRoutes.get("/fonts", async (c) => {
   const sdb = c.get("sdb");
   const [system, own] = await Promise.all([sdb.selectShared(systemFonts), sdb.select(userFonts)]);
   const byAge = <T extends { createdAt: Date }>(a: T, b: T) => a.createdAt.getTime() - b.createdAt.getTime();
-  // Font hệ thống đứng trước; giới hạn MAX_USER_FONTS chỉ tính font riêng.
+  // Font hệ thống đứng trước; giới hạn số font riêng không tính chúng.
   const fonts = [
     ...system.sort(byAge).map((f) => fontView(f, true)),
     ...own.sort(byAge).map((f) => fontView(f, false)),
@@ -64,9 +66,10 @@ fontRoutes.post("/fonts", async (c) => {
     if (existing.fileKey !== key) await discardUpload(key);
     return c.json(await fontView(existing, false));
   }
-  if ((await sdb.select(userFonts)).length >= MAX_USER_FONTS) {
+  const limit = userFontLimit(env.MTL_LOCAL_MODE);
+  if ((await sdb.select(userFonts)).length >= limit) {
     await discardUpload(key);
-    throw fail(409, "limit", `mỗi tài khoản tối đa ${MAX_USER_FONTS} font`);
+    throw fail(409, "limit", `mỗi tài khoản tối đa ${limit} font`);
   }
 
   const info = await font.info();

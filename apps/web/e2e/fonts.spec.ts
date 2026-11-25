@@ -1,5 +1,5 @@
 /**
- * Font tuỳ chỉnh của người dùng: upload ở Font của tôi → chọn làm font thoại mặc định của series → xoá bị chặn khi còn là
+ * Font tuỳ chỉnh của người dùng: upload ở trang Font → chọn làm font thoại mặc định của series → xoá bị chặn khi còn là
  * mặc định → editor liệt kê font ở nhóm "Font của bạn" và vẽ bằng nó → xoá font thì box cũ vẫn mở được (rơi về font
  * mặc định, không lỗi). Fixture: font gói sẵn trong worker/fonts.
  */
@@ -23,13 +23,15 @@ test("upload a font, make it the series default, use it in the editor, then dele
   page.on("pageerror", (e) => pageErrors.push(e.message));
   await login(page);
 
-  // Upload ở Font của tôi (link trong menu tài khoản).
+  // Upload ở trang Font (link trong menu tài khoản); trang cũng liệt kê font có sẵn.
   await page.getByLabel("Tài khoản", { exact: true }).click();
-  await page.getByRole("link", { name: "Font của tôi" }).click();
+  await page.getByRole("link", { name: "Font", exact: true }).click();
   await expect(page).toHaveURL(/\/fonts$/);
-  await expect(page.getByRole("heading", { name: "Font của tôi" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Font", exact: true })).toBeVisible();
+  await expect(page.getByRole("list", { name: "Danh sách font có sẵn" }).getByRole("listitem")).not.toHaveCount(0);
   await page.getByLabel("Chọn file font").setInputFiles(FIXTURE);
-  const row = page.getByRole("row", { name: /Itim/ });
+  await expect(page.getByRole("status")).toContainText("Đã thêm 1 font");
+  const row = page.getByRole("table", { name: "Danh sách font" }).getByRole("row", { name: /Itim/ });
   await expect(row).toBeVisible();
   await expect(row).toContainText("Đủ dấu");
   const list = (await (await page.request.get(`/api/fonts`)).json()) as {
@@ -129,12 +131,13 @@ test("admin uploads a system font: another user picks it for a series and the ed
   const pageErrors: string[] = [];
   page.on("pageerror", (e) => pageErrors.push(e.message));
 
-  // Admin upload ở Hệ thống › Font hệ thống.
+  // Admin thêm ở trang Font, tích "Cho mọi người dùng" → font dùng chung (nhãn "Dùng chung").
   await login(page);
-  await page.goto("/settings?section=fonts");
-  await expect(page.getByRole("heading", { name: "Font hệ thống" })).toBeVisible();
-  await page.getByLabel("Chọn file font hệ thống").setInputFiles(FIXTURE);
-  const sysRow = page.getByRole("table", { name: "Danh sách font hệ thống" }).getByRole("row", { name: /Itim/ });
+  await page.goto("/fonts");
+  await page.getByLabel("Cho mọi người dùng").check();
+  await page.getByLabel("Chọn file font").setInputFiles(FIXTURE);
+  const sysRow = page.getByRole("table", { name: "Danh sách font" }).getByRole("row", { name: /Itim/ });
+  await expect(sysRow).toContainText("Dùng chung");
   await expect(sysRow).toContainText("Đủ dấu");
   const list = (await (await page.request.get(`/api/admin/fonts`)).json()) as {
     fonts: { id: string; name: string; system: boolean }[];
@@ -143,7 +146,7 @@ test("admin uploads a system font: another user picks it for a series and the ed
   if (!font) throw new Error("system font not listed");
   expect(font.system).toBe(true);
 
-  // Người dùng thường: không thấy ở "Font của tôi" (chỉ font riêng), thấy ở picker series, chọn làm font thoại.
+  // Người dùng thường: thấy ở trang Font với nhãn "Dùng chung" nhưng không xoá được; chọn được ở picker series.
   const ctx = await browser.newContext({ baseURL: WEB_URL });
   const user = await ctx.newPage();
   user.on("pageerror", (e) => pageErrors.push(e.message));
@@ -153,15 +156,17 @@ test("admin uploads a system font: another user picks it for a series and the ed
   await user.getByRole("button", { name: "Đăng nhập" }).click();
   await expect(user.getByRole("region", { name: "Series", exact: true })).toBeVisible();
   await user.goto("/fonts");
-  await expect(user.getByText("Bạn chưa có font riêng.")).toBeVisible();
-  await expect(user.getByRole("row", { name: /Itim/ })).toHaveCount(0);
+  const userRow = user.getByRole("table", { name: "Danh sách font" }).getByRole("row", { name: /Itim/ });
+  await expect(userRow).toContainText("Dùng chung");
+  await expect(userRow.getByRole("button")).toHaveCount(0);
+  await expect(user.getByLabel("Cho mọi người dùng")).toHaveCount(0);
 
   const created = await user.request.post(`/api/series`, { headers, data: { title: "Series font hệ thống" } });
   expect(created.status()).toBe(201);
   const userSeries = ((await created.json()) as { id: string }).id;
   await user.goto(`/s/${userSeries}?tab=settings`);
   const slot = user.getByLabel("Font thoại", { exact: true });
-  await expect(slot.locator("optgroup[label='Font hệ thống'] option")).toHaveText([font.name]);
+  await expect(slot.locator("optgroup[label='Font dùng chung'] option")).toHaveText([font.name]);
   await expect(slot.locator("optgroup[label='Font của bạn']")).toHaveCount(0);
   await slot.selectOption(font.id);
   await user.getByRole("button", { name: "Lưu", exact: true }).click();
@@ -174,7 +179,7 @@ test("admin uploads a system font: another user picks it for a series and the ed
     })
     .toBe(font.id);
 
-  // Editor (owner): box dùng font hệ thống → option nằm trong nhóm "Font hệ thống", font đã nạp.
+  // Editor (owner): box dùng font dùng chung → option nằm trong nhóm "Font dùng chung", font đã nạp.
   const chapterId = await apiReadyChapter(page, "9402");
   const progress = (await (await page.request.get(`/api/chapters/${chapterId}/progress`)).json()) as {
     pages: { id: string }[];
@@ -217,12 +222,12 @@ test("admin uploads a system font: another user picks it for a series and the ed
   await openPanel(page, "select");
   const fontSelect = page.locator("#ed-font");
   await expect(fontSelect).toHaveValue(font.id);
-  await expect(fontSelect.locator("optgroup[label='Font hệ thống'] option")).toHaveText([font.name]);
+  await expect(fontSelect.locator("optgroup[label='Font dùng chung'] option")).toHaveText([font.name]);
   await expect(fontSelect.locator("optgroup[label='Font của bạn']")).toHaveCount(0);
   expect(await page.evaluate((id) => document.fonts.check(`20px "${id}"`), font.id)).toBe(true);
 
   // Xoá khi series của người khác còn dùng → bị chặn (nêu số series); gỡ mặc định rồi xoá được.
-  await page.goto("/settings?section=fonts");
+  await page.goto("/fonts");
   await page.getByRole("button", { name: `Xoá font ${font.name}` }).click();
   await page.getByRole("button", { name: "Huỷ" }).click();
   await page.getByRole("button", { name: `Xoá font ${font.name}` }).click();

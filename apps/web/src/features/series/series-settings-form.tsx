@@ -23,6 +23,7 @@ import {
   type UserFont,
   uploadCheckedFont,
   useBundledFonts,
+  useFontLimit,
   useUserFonts,
 } from "../fonts/api.ts";
 import { fontDisplayName, recommendedFirst } from "../fonts/font-names.ts";
@@ -214,8 +215,10 @@ export function SeriesSettingsDialog({
   // Tải font từ dropdown: chọn "Tải font lên…" → mở chọn file cho đúng ô; xong thì chọn font mới (chưa lưu).
   const fileInput = useRef<HTMLInputElement>(null);
   const uploadSlot = useRef<FontSlot>("dialogue");
+  const fontLimit = useFontLimit();
   const upload = useMutation({
-    mutationFn: ({ file }: { file: File; slot: FontSlot }) => uploadCheckedFont(file, ownFonts(custom.data).length),
+    mutationFn: ({ file }: { file: File; slot: FontSlot }) =>
+      uploadCheckedFont(file, ownFonts(custom.data).length, fontLimit),
     onSuccess: (font, { slot }) => {
       // Thêm ngay vào danh sách để select có option khớp giá trị mới trước khi refetch xong.
       qc.setQueryData<UserFont[]>(fontKeys.list(), (cur) => [...(cur ?? []), font]);
@@ -272,7 +275,7 @@ export function SeriesSettingsDialog({
         </option>
       ))}
       {[
-        { label: "Font hệ thống", list: (custom.data ?? []).filter((font) => font.system) },
+        { label: "Font dùng chung", list: (custom.data ?? []).filter((font) => font.system) },
         { label: "Font của bạn", list: ownFonts(custom.data) },
       ].map(
         ({ label, list }) =>

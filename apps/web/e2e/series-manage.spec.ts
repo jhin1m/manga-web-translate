@@ -412,7 +412,7 @@ test("home at 1280: drop strip is 56px, series are cards, Hoạt động is hidd
   // Glossary chung, Font, (Cài đặt cho admin) vẫn ở menu tài khoản.
   await page.locator("summary[aria-label='Tài khoản']").click();
   await expect(page.getByRole("link", { name: "Glossary chung" })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Font của tôi" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Font", exact: true })).toBeVisible();
 });
 
 test("dropping the files again onto an unfinished-upload chapter card resumes the upload", async ({ page }) => {

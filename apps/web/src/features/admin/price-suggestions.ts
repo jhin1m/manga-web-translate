@@ -40,6 +40,11 @@ export const ANTHROPIC_SUGGESTIONS: readonly PriceSuggestion[] = [
   { model_id: RECOMMENDED_ANTHROPIC_MODEL, price_in: 0.1, price_out: 0.5, vision: true, reasoning: false },
 ];
 
+/** Gemini: USD / 1M token, khớp bảng giá worker (`worker/mtl_pipeline/providers/base.py`). Admin xác nhận giá thật. */
+export const GEMINI_SUGGESTIONS: readonly PriceSuggestion[] = [
+  { model_id: "gemini-2.5-flash", price_in: 0.3, price_out: 2.5, vision: true, reasoning: false },
+];
+
 /** Endpoint tương thích OpenAI có phải DeepSeek không (theo host base URL). */
 export function isDeepSeek(baseUrl: string | null | undefined): boolean {
   try {
@@ -53,6 +58,7 @@ export function isDeepSeek(baseUrl: string | null | undefined): boolean {
 export function suggestionsFor(type: string, baseUrl?: string | null): readonly PriceSuggestion[] {
   if (type === "openai") return OPENAI_SUGGESTIONS;
   if (type === "anthropic") return ANTHROPIC_SUGGESTIONS;
+  if (type === "gemini") return GEMINI_SUGGESTIONS;
   if (type === "openai_compatible" && isDeepSeek(baseUrl)) return DEEPSEEK_SUGGESTIONS;
   return [];
 }

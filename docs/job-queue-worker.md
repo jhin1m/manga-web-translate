@@ -369,7 +369,7 @@ của **người dùng sở hữu job** mà job dùng, dựng lúc claim (`fontI
 - translate: `settings.font` + `settings.narration_font` + `settings.thought_font` + `settings.note_font` của payload (snapshot lúc enqueue);
 - export: `font_family` của mọi box ở trang được vẽ chữ + font mặc định hiện tại của series.
 
-**Font hệ thống** (admin upload ở Cài đặt › Font hệ thống, bảng `system_fonts`, object `system/fonts/<font_id>`) dùng cùng
+**Font hệ thống** (admin upload ở trang Font, tích "Cho mọi người dùng"; trong editor là nhóm "Font dùng chung"; bảng `system_fonts`, object `system/fonts/<font_id>`) dùng cùng
 dạng id `custom-<8 hex>` (id không trùng `user_fonts`) nên `resolveCustomFonts` trả chúng cho mọi người dùng cạnh font
 riêng, ở cùng danh sách `inputs.fonts` — hợp đồng và worker không đổi. Trần 20 font hoặc tổng 100MB. Xoá font hệ thống bị
 chặn (409 `in_use`, kèm số series) khi series của bất kỳ ai còn dùng làm mặc định; box cũ còn tham chiếu thì fallback như font riêng đã xoá.
@@ -379,7 +379,7 @@ bảng và object giữ lại vô hại (down: `migrations-down/0025_system_font
 
 Runbook gỡ font hệ thống đang được series dùng làm mặc định (vd. gỡ vì bản quyền): admin không sửa được series của người
 dùng khác nên phải chạy SQL. Slot thiếu trong `series.default_fonts` nghĩa là dùng font mặc định, nên chỉ cần bỏ các khoá
-đang trỏ tới font (thay `<font_id>` bằng id thật, dạng `custom-<8hex>`) rồi xoá bình thường ở Cài đặt › Font hệ thống:
+đang trỏ tới font (thay `<font_id>` bằng id thật, dạng `custom-<8hex>`) rồi xoá bình thường ở trang Font (`/fonts`):
 
 ```sql
 UPDATE series

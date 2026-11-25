@@ -4,6 +4,7 @@ import { useState } from "react";
 import { ApiError, api, errorMessage } from "../../lib/api.ts";
 import { type AdminSettings, adminSettingsKey, useAdminSettings } from "./api.ts";
 import { type ConfirmRequired, canEnableSignup, confirmWarnings, fmtUsd, parseUsd, usdText } from "./limits-model.ts";
+import { SectionHead } from "./settings-ui.tsx";
 
 type Body = {
   user_daily_usd: number | null;
@@ -189,9 +190,11 @@ export function LimitsSection() {
   if (q.error) return <p className="error">{errorMessage(q.error)}</p>;
   if (!q.data) return <p className="muted">Đang tải…</p>;
   return (
-    <div className="section-plain">
-      <h2>Hạn mức & đăng ký</h2>
-      <p className="muted small">Có hiệu lực ngay ở lần kiểm tra kế tiếp, không cần khởi động lại.</p>
+    <div className="set-section">
+      <SectionHead
+        title="Hạn mức & đăng ký"
+        desc="Giới hạn chi phí AI và mở / đóng đăng ký. Có hiệu lực ngay ở lần kiểm tra kế tiếp, không cần khởi động lại."
+      />
       <LimitsForm data={q.data} />
     </div>
   );

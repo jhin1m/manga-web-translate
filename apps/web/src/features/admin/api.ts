@@ -36,7 +36,7 @@ export const useProviders = () =>
 
 export type ProbeResult = { ok: boolean; reason: ProbeReason; http_status: number | null; model_found?: boolean };
 
-export const SLOT_LABEL: Record<AiTaskSlot, string> = { ocr: "OCR", translate: "Dịch", proofread: "Hiệu đính" };
+export const SLOT_LABEL: Record<AiTaskSlot, string> = { ocr: "Đọc chữ", translate: "Dịch", proofread: "Hiệu đính" };
 
 /** Lỗi API của phần AI → câu tiếng Việt nói rõ việc cần làm. */
 export function providerError(e: unknown): string {
@@ -51,8 +51,8 @@ export function providerError(e: unknown): string {
       return "Đổi base URL phải nhập lại API key.";
     case "in_use":
       return slot
-        ? `Model đang được gán cho tác vụ ${slot}. Bỏ gán ở mục Model tác vụ trước.`
-        : "Model đang được gán cho một tác vụ. Bỏ gán ở mục Model tác vụ trước.";
+        ? `Model đang được dùng cho bước ${slot}. Đổi model của bước đó ở mục Pipeline trước.`
+        : "Model đang được dùng cho một bước AI. Đổi model của bước đó ở mục Pipeline trước.";
     case "in_use_by_jobs":
       return `Còn ${String(e.body.jobs ?? "một số")} job đang chạy / chờ dùng nhà cung cấp hoặc model này. Thử lại khi các job xong.`;
     case "duplicate_model":
@@ -60,7 +60,7 @@ export function providerError(e: unknown): string {
     case "model_unsupported":
       return MODEL_UNSUPPORTED_MESSAGE;
     case "model_not_vision":
-      return `Tác vụ ${slot ?? ""} cần model có vision (đọc được ảnh).`.replace("  ", " ");
+      return `Bước ${slot ?? ""} cần model có vision (đọc được ảnh).`.replace("  ", " ");
     case "model_not_found":
       return "Model đã chọn không còn tồn tại. Tải lại trang.";
     default:

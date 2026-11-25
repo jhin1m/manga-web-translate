@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { ApiError, api, errorMessage } from "../../lib/api.ts";
 import { fmtUsd } from "./limits-model.ts";
+import { SectionHead } from "./settings-ui.tsx";
 import { type AdminUser, dateText, disableConfirmText, rowAction, statusLabel } from "./users-model.ts";
 
 const usersKey = ["admin", "users"] as const;
@@ -83,19 +84,20 @@ export function UsersSection() {
   });
 
   return (
-    <div className="section-plain">
-      <div className="page-head">
-        <h2>Người dùng</h2>
-        <span className="spacer" />
-        <input
-          type="search"
-          aria-label="Tìm người dùng"
-          placeholder="Tìm email hoặc tên"
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-        />
-      </div>
-      <p className="muted small">Chi phí tính theo ngày UTC. Tối đa 500 người, mới nhất trước.</p>
+    <div className="set-section">
+      <SectionHead
+        title="Người dùng"
+        desc="Chi phí tính theo ngày UTC. Tối đa 500 người, mới nhất trước."
+        aside={
+          <input
+            type="search"
+            aria-label="Tìm người dùng"
+            placeholder="Tìm email hoặc tên"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+          />
+        }
+      />
       {users.error && <p className="error">{errorMessage(users.error)}</p>}
       {error && (
         <p className="error" role="alert">

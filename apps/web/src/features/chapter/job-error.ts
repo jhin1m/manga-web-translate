@@ -26,7 +26,7 @@ const WAITING = new Set(["queued", "running"]);
 type ErrorJob = Pick<JobView, "status" | "error_class" | "error" | "provider_retries" | "run_after"> &
   Partial<Pick<JobView, "type">>;
 
-const SETUP_HINT = "Chọn model ở Cài đặt › Model tác vụ rồi chạy lại.";
+const SETUP_HINT = "Chọn model ở Cài đặt › Pipeline rồi chạy lại.";
 const TASK_OF_JOB: Record<string, string> = {
   "page.prepare": "OCR",
   "page.ocr_region": "OCR",
@@ -129,7 +129,7 @@ function rawErrors(pages: FailedPage[]) {
 /**
  * Trang lỗi gom theo nguyên nhân (nhiều trang nhất trước) → 1 dòng mỗi nguyên nhân thay vì liệt kê từng trang.
  * `hint` = việc cần làm khi chạy lại thôi chưa đủ; `raw` = lỗi thô đầu tiên; `details` = mọi lỗi thô của nhóm (theo
- * nội dung, kèm số trang) để đọc ở "Chi tiết kỹ thuật"; `needsSetup` = thiếu model, kèm lối tới Model tác vụ.
+ * nội dung, kèm số trang) để đọc ở "Chi tiết kỹ thuật"; `needsSetup` = thiếu model, kèm lối tới Cài đặt › Pipeline.
  */
 export function failedPageGroups(failed: FailedPage[]) {
   const by = new Map<string, FailedPage[]>();

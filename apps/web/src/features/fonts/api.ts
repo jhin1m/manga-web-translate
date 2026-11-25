@@ -1,11 +1,13 @@
 /** Font riêng của người dùng (khớp apps/api/src/routes/fonts.ts) + danh sách font gói sẵn từ /fonts/manifest.json. */
+import { userFontLimit } from "@mtl/shared";
 import { useQuery } from "@tanstack/react-query";
-import { api } from "../../lib/api.ts";
+import { api, useLocalMode } from "../../lib/api.ts";
 import { bundledFontIds, type FontManifest } from "../editor/fonts.ts";
 import { fontDisplayName } from "./font-names.ts";
 
 export const MAX_FONT_BYTES = 10 * 1024 * 1024;
-export const MAX_USER_FONTS = 20;
+/** Số font riêng tối đa của tài khoản (bản local nhiều hơn). */
+export const useFontLimit = () => userFontLimit(useLocalMode());
 
 export type UserFont = {
   /** `custom-<8 hex>` — dùng làm font_family / default_fonts. */
@@ -19,7 +21,7 @@ export type UserFont = {
   vi_complete: boolean;
   /** Chữ Việt font không có. */
   missing: string[];
-  /** Font hệ thống (admin upload, mọi người dùng thấy) — không tính vào giới hạn font riêng. */
+  /** Font dùng chung (admin upload, mọi người dùng thấy) — không tính vào giới hạn font riêng. */
   system: boolean;
   /** Presigned GET ngắn hạn; hết hạn lúc `url_expires_at`. */
   url: string;
@@ -35,7 +37,7 @@ export const deleteFont = (id: string) => api<void>(`/api/fonts/${id}`, { method
 
 type UploadSlot = { key: string; url: string; fields: Record<string, string> };
 
-/** Font riêng (bỏ font hệ thống): danh sách "Font của tôi" và số font tính vào giới hạn. */
+/** Font riêng (bỏ font dùng chung): số font tính vào giới hạn. */
 export const ownFonts = (fonts: readonly UserFont[] = []) => fonts.filter((f) => !f.system);
 
 /** Xin URL upload → POST thẳng lên storage → xác nhận với API (kiểm TTF/OTF, đọc metrics). `base`: `/api/fonts` hoặc `/api/admin/fonts`. */
@@ -53,17 +55,20 @@ const FONT_EXT = /\.(ttf|otf)$/i;
 /** `accept` cho input file font. */
 export const FONT_ACCEPT = ".ttf,.otf,font/ttf,font/otf";
 
-/** Lỗi trước khi gửi: đuôi file, dung lượng, số font (`count` = số font riêng đang có, không tính font hệ thống). */
-export function fontUploadError(file: File, count: number): string | null {
+/**
+ * Lỗi trước khi gửi: đuôi file, dung lượng, số font (`count` = số font riêng đang có, không tính font dùng chung;
+ * `limit` = `useFontLimit()`).
+ */
+export function fontUploadError(file: File, count: number, limit: number): string | null {
   if (!FONT_EXT.test(file.name)) return "Chỉ nhận font .ttf hoặc .otf (không nhận WOFF/WOFF2).";
   if (file.size > MAX_FONT_BYTES) return "Font tối đa 10MB.";
-  if (count >= MAX_USER_FONTS) return `Mỗi tài khoản tối đa ${MAX_USER_FONTS} font. Xoá bớt font không dùng.`;
+  if (count >= limit) return `Mỗi tài khoản tối đa ${limit} font. Xoá bớt font không dùng.`;
   return null;
 }
 
 /** `uploadFont` sau khi qua `fontUploadError` (lỗi kiểm tra → throw, không gửi). */
-export async function uploadCheckedFont(file: File, count: number): Promise<UserFont> {
-  const bad = fontUploadError(file, count);
+export async function uploadCheckedFont(file: File, count: number, limit: number): Promise<UserFont> {
+  const bad = fontUploadError(file, count, limit);
   if (bad) throw new Error(bad);
   return uploadFont(file);
 }

@@ -160,7 +160,7 @@ function AccountMenu() {
         <div className="shell-menu-list" onClick={() => closeMenu(ref.current)}>
           <span className="shell-menu-email muted small">{me.email}</span>
           <Link to="/glossary">Glossary chung</Link>
-          <Link to="/fonts">Font của tôi</Link>
+          <Link to="/fonts">Font</Link>
           {me.is_admin && <Link to="/settings">Cài đặt</Link>}
           {me.quota.limit_usd !== null && (
             <span className="shell-menu-quota muted small" data-testid="quota-line">

@@ -41,12 +41,13 @@ sẵn sàng. Lần đầu cả 2 worker cùng tải model vào `./data/models`: 
 
 Mở <http://localhost:8080> → **Cài đặt → Nhà cung cấp** → thêm nhà cung cấp:
 
-1. Loại **Anthropic**, nhập tên và API key.
-2. Bấm gợi ý **+ claude-haiku-5-5** (điền sẵn giá, đã tick Vision).
-3. Lưu. Nhà cung cấp **đầu tiên** tự được gán vào các tác vụ còn trống: Dịch dùng model đầu tiên trong danh sách; OCR
-   và Hiệu đính dùng model đầu tiên có Vision (không có thì để trống). Không cần mở **Model tác vụ**.
+1. Chọn **Anthropic** (đã chọn sẵn) và dán API key. Tên, model `claude-haiku-5-5` và giá được điền sẵn; muốn đổi thì
+   mở **Tuỳ chỉnh tên, model và giá**.
+2. Bấm **Thêm nhà cung cấp**. Nhà cung cấp **đầu tiên** tự được gán vào các bước AI còn trống: Dịch dùng model đầu tiên trong danh sách; OCR
+   và Hiệu đính dùng model đầu tiên có Vision (không có thì để trống). Không cần chọn model thủ công.
 
-Muốn đổi model sau đó: **Cài đặt → Model tác vụ**. Nhà cung cấp thêm sau không tự đổi gán.
+Muốn đổi model sau đó: **Cài đặt → Pipeline**, ô **Model AI** ở từng bước (Đọc chữ, Dịch, Hiệu đính). Đổi là tự lưu.
+Nhà cung cấp thêm sau không tự đổi gán.
 
 Với Anthropic, worker chưa chạy được Sonnet 5.5, Opus 5.5, Fable, Mythos nên form và API từ chối các model này.
 

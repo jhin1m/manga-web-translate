@@ -127,12 +127,12 @@ function TextStyleSelect({ box, config }: { box: TextBox; config: TextStyleConfi
   );
 }
 
-/** 2 nhóm option font tuỳ chỉnh: hệ thống trước, của bạn sau; nhóm rỗng không hiện. */
+/** 2 nhóm option font tuỳ chỉnh: dùng chung trước, của bạn sau; nhóm rỗng không hiện. */
 function CustomFontGroups({ fonts }: { fonts: { id: string; name: string; system?: boolean }[] }) {
   return (
     <>
       {[
-        { label: "Font hệ thống", list: fonts.filter((f) => f.system) },
+        { label: "Font dùng chung", list: fonts.filter((f) => f.system) },
         { label: "Font của bạn", list: fonts.filter((f) => !f.system) },
       ].map(
         ({ label, list }) =>
