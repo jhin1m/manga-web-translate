@@ -178,10 +178,13 @@ vào `payload.carry` của lô kế, worker nạp vào `RollingContext` đầu j
   có carry của lượt thì dùng carry đó.
 - Hợp đồng payload không đổi (vẫn `payload.carry`), trí nhớ không vào `input_rev` / idempotency.
 
-**Gợi ý từ AI**: `result.new_terms` (≤ 50, `MAX_LEARNED_TERMS`) và `result.pronoun_pairs` (≤ 30, `MAX_LEARNED_PRONOUNS`) đều
-optional, worker cắt theo UTF-16 như `carry`. Mỗi lô prompt xin ≤ 5 thuật ngữ, ≤ 3 cặp xưng hô và `context_notes` cộng
-dồn ≤ 300 ký tự (hạ từ 8/5/500 sau smoke LLM thật: token ra mỗi trang +15,4% → +3,1%). API lọc rồi lưu vào
-`series_suggestions`; xem mục Glossary ở [export-and-batch-edit](./export-and-batch-edit.md).
+**AI tự bổ sung trí nhớ series**: `result.new_terms` (≤ 50, `MAX_LEARNED_TERMS`), `result.pronoun_pairs` (≤ 30,
+`MAX_LEARNED_PRONOUNS`) và `result.style_note` (pipeline 0.13.0, ≤ `MAX_STYLE_NOTE`; worker chỉ xin khi payload có
+Giọng văn trống) đều optional, worker cắt theo UTF-16 như `carry`. Mỗi lô prompt xin ≤ 5 thuật ngữ, ≤ 3 cặp xưng hô và
+`context_notes` cộng dồn ≤ 300 ký tự (hạ từ 8/5/500 sau smoke LLM thật: token ra mỗi trang +15,4% → +3,1%). Ở nhánh
+complete `chapter.translate`, API ghi thẳng vào glossary series / Xưng hô / Giọng văn với nhãn AI và `glossary_rev` + 1
+(không đụng `settings_rev`), nên lô kế enqueue cùng transaction đã thấy; xem
+[export-and-batch-edit](./export-and-batch-edit.md#ai-tự-bổ-sung-trí-nhớ-series-nhãn-ai).
 
 Lỗi `schema` của lô (JSON sai sau retry, vượt guard token) không fail chương: lô nhiều trang tách dịch lại từng trang;
 1 trang vẫn hỏng → worker bỏ trang khỏi result → server đánh page `failed` (bản AI cũ giữ nguyên), job `succeeded` nhưng
@@ -331,10 +334,12 @@ API `PIPELINE_VERSION` (muối input_rev) vẫn 0.4.0. 0.8.0 (`Region.style` ở
 + input `user_mask` nên fail job xoá chữ theo khung. API `PIPELINE_VERSION` (muối input_rev) vẫn 0.4.0.
 0.11.0 (prompt dịch + hai key result optional `new_terms` / `pronoun_pairs`, trí nhớ series) **không** nâng
 `MIN_PIPELINE_VERSION` (giữ 0.10.0): API cũ bỏ qua key lạ, API mới nhận result thiếu key, payload không đổi; worker
-0.10.0 vẫn chạy nhưng không sinh gợi ý. API `PIPELINE_VERSION` vẫn 0.4.0.
+0.10.0 vẫn chạy nhưng không trả thuật ngữ / cặp xưng hô. API `PIPELINE_VERSION` vẫn 0.4.0.
 0.12.0 (`chapter.ingest` inputs `sources[].trim`, cắt mép ảnh gốc) nâng `MIN_PIPELINE_VERSION = 0.12.0`: schema input có
 `additionalProperties: false` nên worker cũ fail job có `trim`; worker < 0.12.0 nhận 426 khi claim. Worker 0.12.0 đọc được
 payload cũ không có `trim`. API `PIPELINE_VERSION` (muối input_rev) vẫn 0.4.0. Checklist ở [deployment-guide](./deployment-guide.md).
+0.13.0 (key result optional `style_note`, Giọng văn AI) **không** nâng `MIN_PIPELINE_VERSION` (giữ 0.12.0): worker
+0.12.0 vẫn chạy, chỉ không điền Giọng văn.
 
 ## Xoá chữ lại (`page.reinpaint`, pipeline 0.9.0)
 

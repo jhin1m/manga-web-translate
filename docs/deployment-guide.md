@@ -251,12 +251,21 @@ worker; job `auto_text_bbox` còn xếp hàng lúc đó sẽ fail hợp đồng 
    (`pnpm worker-token revoke`) và đổi key ở provider; bật giới hạn chi tiêu phía provider cho mọi key nhập vào.
 7. Sau một phiên bản ổn định: bỏ `model_tier` / `proofread_tier` legacy (cấp hiệu đính cũ chỉ còn dùng khi chưa gán slot Hiệu đính).
 
-### Ghi chú: trí nhớ series và gợi ý từ AI (migration 0026, worker 0.11.0)
+### Ghi chú: trí nhớ series (migration 0026, worker 0.11.0)
 
 `0026_series_memory` chỉ thêm (cột `chapters.translate_memory` nullable, bảng `series_suggestions`), nên deploy API và
 worker theo thứ tự nào cũng được; `MIN_PIPELINE_VERSION` giữ 0.10.0 và `PIPELINE_VERSION` API không đổi (worker 0.10.0
-vẫn chạy, chỉ không sinh gợi ý). Rollback app không cần down DB; gỡ hẳn thì chạy
+vẫn chạy, chỉ không trả thuật ngữ / cặp xưng hô). Rollback app không cần down DB; gỡ hẳn thì chạy
 `packages/db/migrations-down/0026_series_memory.down.sql` (đúng thứ tự ngược như checklist 0.10.0).
+
+### Ghi chú: AI tự bổ sung trí nhớ series (migration 0030, worker 0.13.0)
+
+`0030_auto_apply_series_memory` thêm cột nhãn nguồn (`glossary_entries.origin`, `series.style_origin`) và thêm tiền tố
+cặp ngôn ngữ vào khoá `series_suggestions` (bảng thành sổ khoá AI đã gặp). Gợi ý cũ còn chờ duyệt **không** được áp:
+chúng thành khoá đã gặp. Worker 0.13.0 là tuỳ chọn, `MIN_PIPELINE_VERSION` giữ 0.12.0: worker 0.12.0 vẫn chạy, chỉ
+không điền Giọng văn. Rollback app không cần down DB, nhưng API cũ hiện lại mục AI đã xoá thành gợi ý chờ duyệt và có
+thể gợi ý lại mục đã gặp (khoá có tiền tố không khớp). Gỡ hẳn thì chạy
+`packages/db/migrations-down/0030_auto_apply_series_memory.down.sql`.
 
 ### Checklist cắt mép credit (pipeline 0.12.0, migration 0027 + 0028)
 
