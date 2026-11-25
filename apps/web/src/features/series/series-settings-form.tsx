@@ -1,7 +1,7 @@
 /**
- * Cài đặt dịch của series (modal ở `?tab=settings`): bốn nhóm luôn hiện — Series (tên, ảnh bìa, cặp ngôn ngữ, định
- * dạng), Hướng dẫn cho AI (Giọng văn, Kính ngữ, Xưng hô, dòng Glossary mở modal glossary), Font chữ, Bỏ qua khi dịch
- * (Chữ bỏ qua, Ảnh tự bỏ). Không có nút Lưu: mỗi trường tự lưu (`use-settings-autosave.ts`), trạng thái "Đang lưu… /
+ * Cài đặt dịch của series (modal ở `?tab=settings`): bốn nhóm có icon — Series (tên, ảnh bìa, cặp ngôn ngữ, định dạng),
+ * Hướng dẫn cho AI (Giọng văn, Kính ngữ, Xưng hô, dòng Glossary mở modal glossary; gập sẵn mỗi lần mở modal vì AI ghi
+ * thêm theo từng chương nên dài dần, khi gập hiện tóm tắt; cả đầu thẻ bấm được), Font chữ, Bỏ qua khi dịch (Chữ bỏ qua, Ảnh tự bỏ). Không có nút Lưu: mỗi trường tự lưu (`use-settings-autosave.ts`), trạng thái "Đang lưu… /
  * Đã lưu / lỗi" ở đáy cạnh link đỏ "Xoá series" (bấm mới hiện ô gõ tên). Ô chữ lưu khi rời ô, hàng xưng hô lưu khi rời
  * hàng (hàng thiếu ô tô đỏ, không lưu). Ảnh bìa / Ảnh tự bỏ gọi API riêng ngay khi thao tác. Mục AI ghi có chip "AI";
  * bản series mới (AI vừa ghi khi dịch) hiện vào trường người dùng không đang sửa.
@@ -11,6 +11,7 @@ import { Link, useNavigate } from "@tanstack/react-router";
 import { useRef, useState } from "react";
 import { AiTag } from "../../app/ai-tag.tsx";
 import { Drawer } from "../../app/drawer.tsx";
+import { BookIcon, EyeOffIcon, SparklesIcon, TypeIcon } from "../../app/settings-icons.tsx";
 import { errorMessage } from "../../lib/api.ts";
 import { SaveStatus, SetGroup } from "../admin/settings-ui.tsx";
 import { fetchGlossary, glossaryKey } from "../glossary/api.ts";
@@ -30,7 +31,7 @@ import {
 } from "./lang-labels.ts";
 import { PronounRulesTable } from "./pronoun-rules-table.tsx";
 import { SeriesFontFields } from "./series-font-fields.tsx";
-import { type Draft, ruleComplete } from "./settings-draft.ts";
+import { aiGuideSummary, type Draft, ruleComplete } from "./settings-draft.ts";
 import { SettingsRow } from "./settings-row.tsx";
 import { SkipImagesSection } from "./skip-images-section.tsx";
 import { useSettingsAutosave } from "./use-settings-autosave.ts";
@@ -90,7 +91,7 @@ export function SeriesSettingsDialog({
       }
     >
       <div className="settings-dialog">
-        <SetGroup title="Series">
+        <SetGroup title="Series" icon={<BookIcon />}>
           <SettingsRow label="Tên series" htmlFor="s-title">
             <input
               id="s-title"
@@ -146,7 +147,13 @@ export function SeriesSettingsDialog({
           </SettingsRow>
         </SetGroup>
 
-        <SetGroup title="Hướng dẫn cho AI" desc="AI đọc mục này mỗi lần dịch và tự bổ sung khi dịch (nhãn AI).">
+        <SetGroup
+          title="Hướng dẫn cho AI"
+          icon={<SparklesIcon />}
+          collapsible
+          summary={aiGuideSummary(f, terms)}
+          tip="AI đọc mục này mỗi lần dịch và tự bổ sung khi dịch (nhãn AI)."
+        >
           <SettingsRow
             label="Giọng văn"
             htmlFor="s-style"
@@ -217,7 +224,7 @@ export function SeriesSettingsDialog({
           </SettingsRow>
         </SetGroup>
 
-        <SetGroup title="Font chữ">
+        <SetGroup title="Font chữ" icon={<TypeIcon />}>
           <SeriesFontFields
             fonts={f.default_fonts}
             targetLang={f.target_lang}
@@ -225,7 +232,7 @@ export function SeriesSettingsDialog({
           />
         </SetGroup>
 
-        <SetGroup title="Bỏ qua khi dịch">
+        <SetGroup title="Bỏ qua khi dịch" icon={<EyeOffIcon />}>
           <SettingsRow
             label="Chữ bỏ qua (watermark)"
             htmlFor="s-ignore"

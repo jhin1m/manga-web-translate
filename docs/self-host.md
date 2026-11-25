@@ -1,7 +1,7 @@
 # Tự host bằng Docker (bản cá nhân, 1 người dùng)
 
-Chạy toàn bộ app trên máy của bạn bằng **một file** `docker-compose.yml`: không cần `.env`, không tài khoản, không MinIO.
-Bản nhiều người dùng trên VPS (S3/MinIO + đăng nhập) xem [deployment-guide.md](./deployment-guide.md).
+Chạy toàn bộ app trên máy của bạn bằng **một file** `docker-compose.yml`: không cần `.env`, không tài khoản; file lưu
+thẳng ra đĩa (`./data/files`). Bản nhiều người dùng trên VPS (đăng nhập) xem [deployment-guide.md](./deployment-guide.md).
 
 > **Cảnh báo bảo mật — chế độ local KHÔNG có đăng nhập.** Ai gọi được cổng là toàn quyền (xem/xoá dữ liệu, dùng key
 > AI của bạn). Compose chỉ mở `127.0.0.1` — **đừng** đổi sang `0.0.0.0`, đừng mở ra LAN/Internet, đừng đặt sau reverse
@@ -183,7 +183,7 @@ Biến bên trong image (compose/image đã đặt sẵn, chỉ cần biết khi
 | Biến | Giá trị trong image | Ghi chú |
 |---|---|---|
 | `MTL_LOCAL_MODE` | `1` | Bật chế độ local: không đăng nhập, user local là admin, secret tự sinh, lưu file ra đĩa |
-| `MTL_DATA_DIR` | `/data` | Gốc `secrets/`, `files/`, `backups/`, `worker/`. Dev chạy `MTL_LOCAL_MODE=1` ngoài Docker **phải** đặt (mặc định `/data` không ghi được trên macOS) |
+| `MTL_DATA_DIR` | `/data` | Gốc `secrets/`, `files/`, `backups/`, `worker/`. Image đặt sẵn `/data`; dev chạy ngoài Docker không đặt = `<gốc repo>/.data` |
 | `API_PORT` | `8080` | Local mode mặc định 8080 (bản VPS 8787) |
 | `SPA_DIR` | `/app/apps/web/dist` | API phục vụ luôn web build sẵn |
 | `MTL_VERSION` | số phiên bản của tag (`dev` nếu build tay) | Phiên bản hiện ở menu tài khoản; `dev` thì không hỏi GitHub |

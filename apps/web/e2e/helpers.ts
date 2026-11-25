@@ -1,7 +1,7 @@
 /** Dùng chung cho các spec: state seed (global-setup) + đăng nhập (dev auto-login hoặc form) rồi chờ home `/`. */
 import { readFileSync } from "node:fs";
 import { expect, type Page } from "@playwright/test";
-import { type E2EState, STATE_FILE, WEB_URL } from "./env.ts";
+import { type E2EState, fileUrl, STATE_FILE, WEB_URL } from "./env.ts";
 import { type FakeWorkerOptions, PNG_1PX, runFakeWorker } from "./fake-worker.ts";
 
 export const state = JSON.parse(readFileSync(STATE_FILE, "utf8")) as E2EState;
@@ -71,7 +71,7 @@ export async function apiCommitChapter(page: Page, number: string, seriesId: str
   const form = new FormData();
   for (const [k, v] of Object.entries(f.fields)) form.append(k, v);
   form.append("file", new Blob([new Uint8Array(PNG_1PX)], { type: "image/png" }));
-  expect((await fetch(f.url, { method: "POST", body: form })).status).toBe(204);
+  expect((await fetch(fileUrl(f.url), { method: "POST", body: form })).status).toBe(204);
   expect((await page.request.post(`/api/chapters/${chapter.id}/commit`, { headers, data: {} })).status()).toBe(202);
   return chapter.id;
 }

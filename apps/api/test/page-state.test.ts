@@ -5,7 +5,7 @@ import { eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { INTERACTIVE_PRIORITY } from "../src/jobs/enqueue.ts";
 import { HISTORY_KEEP } from "../src/jobs/page-state-writer.ts";
-import { call, db, seedUser } from "./helpers.ts";
+import { call, db, fetchFile, seedUser } from "./helpers.ts";
 import { aiState, claimJobs, complete, PNG_1PX, putPng, SHA, workerToken } from "./worker-helpers.ts";
 
 type Seed = Awaited<ReturnType<typeof seedUser>>;
@@ -56,7 +56,7 @@ async function upload(post: { url: string; fields: Record<string, string> }, bod
   const form = new FormData();
   for (const [k, v] of Object.entries(post.fields)) form.append(k, v);
   form.append("file", new Blob([body], { type: "image/png" }));
-  return fetch(post.url, { method: "POST", body: form });
+  return fetchFile(post.url, { method: "POST", body: form });
 }
 
 beforeAll(async () => {

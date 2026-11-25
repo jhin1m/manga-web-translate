@@ -18,7 +18,7 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: cp .env.example .env
-      - name: Start Postgres + MinIO (+ files proxy)
+      - name: Start Postgres
         run: pnpm infra:up
       - run: pnpm typecheck
       - run: pnpm lint

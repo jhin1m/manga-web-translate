@@ -1,5 +1,6 @@
 /**
- * Cây route một người dùng: `/`, `/s/$seriesId[?tab]`, `/s/$seriesId/c/$chapterId[?page]`, `/settings`, `/fonts`.
+ * Cây route một người dùng: `/`, `/s/$seriesId[?tab]`, `/s/$seriesId/c/$chapterId[?page]`, `/settings[?section]`;
+ * `/fonts` cũ chuyển sang `/settings?section=fonts`.
  * Không có id tài khoản trên URL; path cũ `/w/...` và `/glossary` (glossary chỉ còn theo series) không còn → trang không
  * tìm thấy.
  */
@@ -45,7 +46,8 @@ test("series, chapter, glossary and settings open at their own URLs; old /w/ and
   await page.goto("/settings");
   await expect(page.getByRole("heading", { name: "Cài đặt", exact: true })).toBeVisible();
   await page.goto("/fonts");
-  await expect(page.getByRole("heading", { name: "Font", exact: true })).toBeVisible();
+  await expect(page).toHaveURL(`${WEB_URL}/settings?section=fonts`);
+  await expect(page.getByRole("heading", { name: "Thêm font" })).toBeVisible();
 
   await page.goto(`/w/${s}/s/${s}`);
   await expect(page.getByRole("heading", { name: "Không tìm thấy trang" })).toBeVisible();

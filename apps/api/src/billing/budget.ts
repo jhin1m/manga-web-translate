@@ -37,11 +37,7 @@ export async function budgetStatus(t: DbLike): Promise<BudgetStatus> {
     })
     .from(usageLedger)
     .where(gte(usageLedger.createdAt, monthStart));
-  const daily = budgetWindow(
-    Number(row?.day ?? 0),
-    (await effectiveLimits(t)).globalDailyUsd ?? undefined,
-    row?.dayKey ?? "",
-  );
+  const daily = budgetWindow(Number(row?.day ?? 0), effectiveLimits().globalDailyUsd ?? undefined, row?.dayKey ?? "");
   const monthly = budgetWindow(Number(row?.month ?? 0), env.GLOBAL_MONTHLY_USD, row?.monthKey ?? "");
   return { daily, monthly, exceeded: daily.ratio >= 1 || monthly.ratio >= 1 };
 }

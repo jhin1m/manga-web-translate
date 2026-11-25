@@ -1,17 +1,18 @@
 # Deploy production (MVP, tài khoản tạo tay) — runbook
 
-> Bản cá nhân 1 người dùng trên máy mình (Docker 1 lệnh, không đăng nhập, không MinIO): xem [self-host.md](./self-host.md).
+> Bản cá nhân 1 người dùng trên máy mình (Docker 1 lệnh, không đăng nhập): xem [self-host.md](./self-host.md).
 
-VPS chạy API + SPA tĩnh + Postgres + MinIO sau Cloudflare; worker GPU là Modal (serverless) hoặc Mac của người vận hành.
+VPS chạy API + SPA tĩnh + Postgres sau Cloudflare; file người dùng lưu trên đĩa VPS (`FILES_DIR`), API phục vụ qua
+`/files/…` (link ký HMAC, TTL ngắn). Worker GPU là Modal (serverless) hoặc Mac của người vận hành.
 Artifact trong repo: `infra/` (systemd, Caddy, compose prod, deploy/backup/restore/alert/smoke) và
 `worker/modal_app.py`. **Chưa deploy thật** — mọi bước dưới đây đã kiểm bằng Docker local (xem
 [Kết quả kiểm local](#kết-quả-kiểm-local-20102026)); phần cần owner làm trên hạ tầng thật ở
 [Việc chờ owner](#việc-chờ-owner-đo-thủ-công).
 
 ```
-Cloudflare (Full strict) ─> VPS: caddy ─┬─> mtl-api (systemd, :8787) ─> Postgres, MinIO (127.0.0.1, docker)
-                                        ├─> SPA tĩnh (current/apps/web/dist)
-                                        └─> files.<domain> ─> MinIO (nosniff, CORS chỉ app domain)
+Cloudflare (Full strict) ─> VPS: caddy ─┬─> mtl-api (systemd, :8787; /api /worker /files) ─> Postgres (127.0.0.1, docker)
+                                        │                                                 └─> FILES_DIR (đĩa VPS)
+                                        └─> SPA tĩnh (current/apps/web/dist)
                          mtl-jobs (systemd): reaper 30s + kill-switch ngân sách + dispatcher 5s ─> POST Modal /drain (HMAC)
 Modal container: mtl-worker --mode drain ── HTTPS ──> /worker/v1/claim|heartbeat|complete|fail|sessions/end
 Mac worker:      mtl-worker --mode loop (token kind=mac, chỉ người vận hành) ── cùng giao thức
@@ -20,12 +21,12 @@ Mac worker:      mtl-worker --mode loop (token kind=mac, chỉ người vận h�
 ## 1. Chuẩn bị VPS (1 lần)
 
 Ubuntu/Debian, Node 24 + corepack (pnpm theo `packageManager`), Docker + Compose v2, Caddy 2, `postgresql-client-17`
-(pg_dump/pg_restore cùng major với server), `mc` (MinIO client), `curl`, `git`.
+(pg_dump/pg_restore cùng major với server), `mc` (client S3, chỉ cho backup offsite), `curl`, `git`.
 
 ```bash
 sudo useradd -r -m -d /srv/mtl -s /bin/bash mtl
 sudo -u mtl git clone <repo> /srv/mtl/repo
-sudo -u mtl mkdir -p /srv/mtl/{releases,shared}
+sudo -u mtl mkdir -p /srv/mtl/{releases,shared,shared/files}
 sudo -u mtl install -m 600 /dev/null /srv/mtl/shared/.env   # điền theo mục 2
 docker compose -f /srv/mtl/repo/infra/docker-compose.prod.yml --env-file /srv/mtl/shared/.env -p mtl up -d --wait
 ```
@@ -47,26 +48,26 @@ Như `.env.example` + giá trị production. File được đọc bởi Node, sy
 | `NODE_ENV=production` | bật log JSON, bắt buộc có ngưỡng ngân sách |
 | `DATABASE_URL`, `PG_PASSWORD` | Postgres compose (127.0.0.1:5432) |
 | `BETTER_AUTH_SECRET` (≥ 32), `BETTER_AUTH_URL=https://<app>`, `WEB_ORIGIN=https://<app>` | |
-| `S3_ENDPOINT=http://127.0.0.1:9000`, `S3_ACCESS_KEY/SECRET_KEY`, `S3_BUCKET` | MinIO compose |
-| `FILES_DOMAIN=files.<domain>`, `FILES_SCHEME=https` | presigned URL ký theo host này |
-| `GLOBAL_DAILY_USD`, `GLOBAL_MONTHLY_USD` | kill-switch, xem mục 6. Ngưỡng ngày là mặc định, admin đổi được trên UI; ngưỡng tháng chỉ env |
+| `FILES_DIR=/srv/mtl/shared/files` | **bắt buộc** ở production: thư mục file người dùng (ảnh, font, export), ngoài thư mục release. API không khởi động nếu thiếu; `deploy.sh` tạo thư mục, unit systemd mở quyền ghi đúng đường dẫn này (đổi đường dẫn thì sửa `ReadWritePaths` trong `mtl-api.service` + `mtl-jobs.service`) |
+| `GLOBAL_DAILY_USD`, `GLOBAL_MONTHLY_USD` | kill-switch, xem mục 6. Chỉ cấu hình trong `.env` (không có trên UI); đổi xong restart `mtl-api` + `mtl-jobs` |
 | `DISPATCHER_ENABLED`, `MODAL_DRAIN_URL`, `MODAL_DRAIN_SECRET` (≥ 32) | Modal, xem mục 5 |
 | `MODAL_MAX_CONTAINERS=2`, `MODAL_SCALEDOWN_S=60`, `MODAL_MAX_LIFETIME_S=3600` | **khớp** `worker/modal_app.py` |
 | `ALERT_NTFY_URL=https://ntfy.sh/<topic-ngẫu-nhiên>` | kênh cảnh báo duy nhất |
 | `ADMIN_EMAILS=a@x.com,b@y.com` | email quản trị (không phân biệt hoa thường; phân tách bằng dấu phẩy). Chỉ các tài khoản này vào được `/settings` và `/api/admin/*`. Đăng ký qua web bằng các email này **luôn bị từ chối** (kể cả khi `SIGNUP_ENABLED=true`): tạo tài khoản admin bằng `pnpm create-user --email …` trước khi đặt biến. Không đặt = không ai là admin |
 | `SECRETS_KEY` | khoá chính 32 byte base64 (`openssl rand -base64 32`) mã hoá key provider AI (AES-256-GCM) lưu trong DB (Cài đặt → AI → Nhà cung cấp). **Sao lưu ngoài DB** (password manager): mất hoặc đổi khoá = mọi key provider không giải mã được → nhập lại key từng provider trên UI (API vẫn khởi động, log + ntfy cảnh báo). Không đặt = không lưu / đổi được key provider; worker vẫn chạy bằng key env |
-| `SIGNUP_ENABLED=false` | **mặc định** đăng ký công khai khi admin chưa chỉnh trên UI (Cài đặt › Hạn mức & đăng ký; giá trị trên UI thắng env, có hiệu lực ngay không restart). **Production giữ `false` tới Phase 8** (xác thực email + hạn mức dung lượng): admin bật trên UI = chấp nhận đăng ký chưa xác thực email. `true` (env) = ai cũng đăng ký được ở `/login` (rate limit 5/giờ/IP) và API từ chối khởi động nếu thiếu `GLOBAL_DAILY_USD` hoặc `USER_DAILY_USD`; bật trên UI cũng yêu cầu đủ 2 hạn mức hiệu lực. Tắt → tạo tài khoản bằng `pnpm create-user --email …` (`OWNER_PASSWORD=…` hoặc nhập trên terminal). **Đổi env không đóng được đăng ký nếu admin đã bật trên UI** (DB thắng): đóng khẩn cấp = tắt trên UI hoặc `UPDATE system_settings SET signup_enabled = false WHERE id = 1;`; `/healthz.signup` cho biết trạng thái thật |
-| `USER_DAILY_USD` | hạn mức chi phí AI mỗi người mỗi ngày UTC (LLM + GPU); `0` = chặn mọi job LLM; không đặt = không giới hạn. Là mặc định khi DB trống — admin đổi trên UI (giá trị UI thắng). Hành vi: [job-queue-worker.md](./job-queue-worker.md#hạn-mức-mỗi-người-user_daily_usd) |
+| `SIGNUP_ENABLED=false` | đăng ký công khai; chỉ cấu hình trong `.env` (không có trên UI). **Production giữ `false` tới Phase 8** (xác thực email + hạn mức dung lượng). `true` = ai cũng đăng ký được ở `/login` (rate limit 5/giờ/IP) và API từ chối khởi động nếu thiếu `GLOBAL_DAILY_USD` hoặc `USER_DAILY_USD`. Tắt → tạo tài khoản bằng `pnpm create-user --email …` (`OWNER_PASSWORD=…` hoặc nhập trên terminal). Đóng khẩn cấp = đặt `false` + restart `mtl-api`; `/healthz.signup` cho biết trạng thái thật |
+| `USER_DAILY_USD` | hạn mức chi phí AI mỗi người mỗi ngày UTC (LLM + GPU); `0` = chặn mọi job LLM; không đặt = không giới hạn. Chỉ cấu hình trong `.env`. Hành vi: [job-queue-worker.md](./job-queue-worker.md#hạn-mức-mỗi-người-user_daily_usd) |
 | `BACKUP_S3_ENDPOINT/ACCESS_KEY/SECRET_KEY`, `BACKUP_BUCKET` | đích backup ở nhà cung cấp **khác** |
-| Caddy: `APP_DOMAIN`, `FILES_DOMAIN`, `ORIGIN_CERT`, `ORIGIN_KEY`, `MTL_ROOT=/srv/mtl` | `systemctl edit caddy` → `EnvironmentFile=` |
+| Caddy: `APP_DOMAIN`, `ORIGIN_CERT`, `ORIGIN_KEY`, `MTL_ROOT=/srv/mtl` | `systemctl edit caddy` → `EnvironmentFile=` |
 
 ## 3. Cloudflare + Caddy
 
-- DNS: `<app>` và `files.<app>` → IP VPS, proxied. SSL/TLS = **Full (strict)**; tạo **Origin Certificate** (cả 2
-  host) → `ORIGIN_CERT`/`ORIGIN_KEY` (quyền đọc cho user caddy). Firewall VPS chỉ mở 443 cho dải IP Cloudflare + SSH.
+- DNS: `<app>` → IP VPS, proxied. SSL/TLS = **Full (strict)**; tạo **Origin Certificate** → `ORIGIN_CERT`/`ORIGIN_KEY` (quyền đọc cho user caddy). Firewall VPS chỉ mở 443 cho dải IP Cloudflare + SSH.
 - `sudo ln -sf /srv/mtl/current/infra/caddy/Caddyfile /etc/caddy/Caddyfile` — Caddyfile đi theo release, deploy reload.
 - Caddy giải IP client từ `CF-Connecting-IP` (trusted_proxies = dải Cloudflare) và gửi `X-Real-IP` cho API → rate
   limit better-auth theo IP thật. Dải IP Cloudflare đổi → cập nhật Caddyfile.
+- Caddy chuyển `/api/*`, `/worker/*`, `/healthz`, `/files/*` về API; file người dùng cùng origin với SPA, API đặt
+  `nosniff` + `Content-Security-Policy: sandbox` cho `/files`.
 - Upload qua Cloudflare bị giới hạn 100 MB/request (gói Free) — trần upload hiện tại nhỏ hơn.
 
 ## 4. systemd + deploy / rollback
@@ -79,7 +80,7 @@ sudo systemctl enable --now mtl-api mtl-jobs mtl-backup.timer mtl-alert.timer
 
 - `mtl-api` (HTTP) và `mtl-jobs` (reaper + dispatcher + ngân sách) **tách unit**: restart API không làm job kẹt.
 - `infra/deploy.sh <ref>`: `git archive` commit → `releases/<utc>-<sha12>` → `pnpm install --frozen-lockfile`, build
-  SPA, `pnpm db:migrate` → `minio-setup.sh` (bucket private + lifecycle export 7 ngày) → đổi symlink `current`
+  SPA, `pnpm db:migrate` → tạo `FILES_DIR` (đọc từ `shared/.env`) → đổi symlink `current`
   (nguyên tử) → restart → `smoke.sh` (healthz 200 + đăng ký công khai khớp `/healthz.signup`: đóng → 400 `EMAIL_PASSWORD_SIGN_UP_DISABLED`; mở → cảnh báo, 400 `PASSWORD_TOO_SHORT`, không tạo user). Smoke hỏng →
   tự quay về bản đang chạy, xoá release hỏng, cảnh báo. **Trừ khi** release mới có migration bản đang chạy chưa có:
   khi đó không tự quay về (bản cũ có thể hỏng trên schema mới mà smoke vẫn qua), giữ bản mới, cảnh báo và in lệnh
@@ -87,8 +88,9 @@ sudo systemctl enable --now mtl-api mtl-jobs mtl-backup.timer mtl-alert.timer
   `infra/deploy.sh rollback`.
 - `infra/deploy.sh rollback`: đổi `current` ↔ `previous` + restart + smoke, không build/migrate.
 - Migration chỉ thêm (additive) nên rollback app không cần down DB; down tay ở `packages/db/migrations-down/`.
-  Ngoại lệ: 0031 (bỏ glossary chung) gỡ cột — rollback app qua 0031 phải chạy file down trước (xem
-  [ghi chú 0031](#ghi-chú-bỏ-glossary-chung-migration-0031)).
+  Ngoại lệ: 0031 (bỏ glossary chung) và 0032 (bỏ 3 cột hạn mức / đăng ký của `system_settings`) gỡ cột — rollback
+  app qua chúng phải chạy file down trước, mới nhất trước (xem [ghi chú 0031](#ghi-chú-bỏ-glossary-chung-migration-0031),
+  [ghi chú 0032](#ghi-chú-hạn-mức-chỉ-từ-env-migration-0032)).
 - **Thứ tự khi nâng lên pipeline 0.5.1 (font tuỳ chỉnh)**: (1) cập nhật worker Mac + image Modal lên 0.5.1 trước —
   worker mới vẫn nhận job cũ vì `inputs.fonts` là optional; (2) rồi deploy API với `MIN_PIPELINE_VERSION=0.5.1`
   (mặc định trong `env.ts`; nếu `.env` có ghi đè thì sửa). Đảo thứ tự (hoặc để worker cũ chạy) → worker < 0.5.1 nhận
@@ -104,7 +106,8 @@ sudo systemctl enable --now mtl-api mtl-jobs mtl-backup.timer mtl-alert.timer
   > 20 lần sẽ `failed` ở lỗi provider kế tiếp.
 - Container chết không báo chiếm slot `active` tới khi reaper ước lượng (~`MAX_LIFETIME + SCALEDOWN`); trong lúc đó
   dispatcher không scale-up quá `MODAL_MAX_CONTAINERS`.
-- Khẩn cấp: `DISPATCHER_ENABLED=false` (chỉ worker Mac), hoặc kill-switch = đặt ngưỡng ngày 0 **trên UI admin** (Cài đặt › Hạn mức & đăng ký). Giá trị UI khác trống **thắng env**: nếu DB đã có giá trị thì đặt `GLOBAL_DAILY_USD=0` trong env không có tác dụng. Khi không vào được UI: `UPDATE system_settings SET global_daily_usd = 0 WHERE id = 1;` (có hiệu lực ngay, không restart).
+- Khẩn cấp: `DISPATCHER_ENABLED=false` (chỉ worker Mac), hoặc kill-switch = `GLOBAL_DAILY_USD=0` trong `.env` rồi
+  restart `mtl-api` + `mtl-jobs`.
 
 **Checklist release "small-features-batch"** (migration 0011 `pages_skip_changed_at` + 0012 `workspace_fonts` (tên lịch sử, nay là font theo người dùng), pipeline 0.5.1):
 
@@ -147,9 +150,9 @@ sudo systemctl enable --now mtl-api mtl-jobs mtl-backup.timer mtl-alert.timer
 dữ liệu gắn `user_id`. Release này không có đường lên mượt từ dữ liệu cũ và không rollback bằng down DB.
 
 1. Chuẩn bị: dừng `mtl-api` + `mtl-jobs`; backup nếu cần giữ gì đó (không có công cụ chuyển workspace → user).
-2. **Reset DB + MinIO**: `0015` raise lỗi nếu còn bất kỳ dòng `organization` nào; `0016`/`0017` có down chỉ báo lỗi ("không
-   rollback được — reset DB + checkout bản cũ"; 0015 down chỉ bỏ cột `kind`). Tạo lại Postgres rỗng và xoá object bucket
-   (key cũ `ws/{ws}/…`, key mới `u/{userId}/…`) — `infra/minio-setup.sh` dựng lại bucket private + lifecycle export.
+2. **Reset DB + file**: `0015` raise lỗi nếu còn bất kỳ dòng `organization` nào; `0016`/`0017` có down chỉ báo lỗi ("không
+   rollback được — reset DB + checkout bản cũ"; 0015 down chỉ bỏ cột `kind`). Tạo lại Postgres rỗng và xoá file người dùng
+   (key cũ `ws/{ws}/…`, key mới `u/{userId}/…`).
    Chạy `infra/deploy.sh <ref>` hoặc `pnpm db:migrate` để áp 0015–0017 trên DB rỗng.
 3. **Token worker**: DB mới nên token cũ mất; nếu vì lý do nào còn bảng cũ thì `pnpm worker-token revoke --id …` mọi token.
    Tạo lại: Mac `pnpm worker-token create --name mac-<tên> --kind mac --out ~/.config/mtl/worker.token` (**chỉ người vận
@@ -167,9 +170,9 @@ dữ liệu gắn `user_id`. Release này không có đường lên mượt từ
    `curl -s -X POST https://<app>/api/auth/sign-up/email -H 'content-type: application/json' -H 'origin: https://<app>' -d '{"email":"x@example.invalid","password":"x","name":"smoke"}'`;
    (c) `OWNER_PASSWORD=… pnpm create-user --email <bạn>` → đăng nhập ở `/login` (không còn `/workspaces`, `/w/…`,
    `/accept-invite`; không redirect) → dịch 1 chương, xuất; (d) `GET /api/me` có `quota` đúng hạn mức hiệu lực.
-   `infra/smoke.sh` (gọi bởi `deploy.sh`) tự kiểm (a) + (b) theo trạng thái thật — admin bật đăng ký trên UI **không** làm
+   `infra/smoke.sh` (gọi bởi `deploy.sh`) tự kiểm (a) + (b) theo trạng thái thật — đăng ký đang mở **không** làm
    deploy tự rollback (chỉ log cảnh báo); rollback chỉ khi API không trả `signup` hoặc phản hồi đăng ký sai trạng thái.
-6. Rollback: **không** lùi bằng down DB. Lùi = reset DB + MinIO và checkout bản cũ (cũng mất dữ liệu).
+6. Rollback: **không** lùi bằng down DB. Lùi = reset DB + file và checkout bản cũ (cũng mất dữ liệu).
 
 **Checklist nâng cấp lên pipeline 0.7.0 (dịch theo chuỗi lô)** (migration 0019 `jobs_progress_counts` + 0020 `translate_chain`):
 dịch chương theo chuỗi job lô, tiến độ từng trang, menu Xuất một nút.
@@ -304,6 +307,17 @@ hiệu lực) thì bị xoá.
    `glossary_global_archive` về glossary chung (đúng cặp) rồi xoá bảng này. Entry đã chép giữ nguyên là entry series,
    không quay lại trang Glossary chung. Muốn có lại đúng glossary chung cũ: khôi phục từ backup bước 1.
 
+### Ghi chú: hạn mức chỉ từ env (migration 0032)
+
+`0032_drop_system_settings_limits` gỡ 3 cột `system_settings.user_daily_usd` / `global_daily_usd` / `signup_enabled`
+(giá trị admin từng đặt trên UI). Từ bản này hạn mức + đăng ký chỉ đọc `USER_DAILY_USD`, `GLOBAL_DAILY_USD`,
+`SIGNUP_ENABLED` trong `.env`; `PUT /api/admin/settings/limits` và mục "Hạn mức & đăng ký" của trang Cài đặt đã bỏ.
+Trước khi nâng cấp: nếu DB có giá trị khác `null` ở 3 cột này thì chép sang `.env` (giá trị DB sẽ mất). Rollback app về
+bản cũ: chạy `packages/db/migrations-down/0032_drop_system_settings_limits.down.sql` **trước** (bản cũ đọc 3 cột này).
+
+Cùng bản này bỏ hẳn lưu file qua S3: file người dùng chỉ còn trên đĩa (`FILES_DIR`, link `/files` do API phục vụ).
+Bản VPS chưa deploy thật nên không có dữ liệu cần chuyển; đặt `FILES_DIR` (mục 2) trước lần deploy đầu.
+
 ### Checklist cắt mép credit (pipeline 0.12.0, migration 0027 + 0028)
 
 Cắt mép ảnh gốc trước Bước 1 + học dải credit theo series. `MIN_PIPELINE_VERSION = 0.12.0` (mặc định trong `env.ts`; nếu
@@ -370,12 +384,12 @@ modal deploy modal_app.py                                 # URL app `mtl-drain` 
 
 ## 6. Kill-switch ngân sách + guardrail token
 
-- `GLOBAL_DAILY_USD` / `GLOBAL_MONTHLY_USD` (ngưỡng ngày là mặc định, admin đổi trên UI; tháng chỉ env): tổng `usage_ledger.cost_usd` (server tính, gồm GPU rỗi) theo ngày/tháng
+- `GLOBAL_DAILY_USD` / `GLOBAL_MONTHLY_USD` (chỉ cấu hình trong `.env`): tổng `usage_ledger.cost_usd` (server tính, gồm GPU rỗi) theo ngày/tháng
   **UTC**. Vượt → claim (Mac lẫn Modal) không trả `page.prepare`/`chapter.translate`/`page.ocr_region`, job đó đang
   `queued` → `paused_budget`; heartbeat job đang chạy trả `stop:"paused_budget"` → worker dừng, job về
   `paused_budget` (không tính attempt, page về trạng thái trước claim, artifact đã ghi giữ nguyên); dispatcher dừng.
-- Mở lại: hết vượt (sang ngày/tháng mới, hoặc nâng ngưỡng ngày trên UI admin — có hiệu lực ngay, không restart; ngưỡng tháng chỉ env + restart) → `mtl-jobs` tự `paused_budget → queued`;
-  hoặc `pnpm budget-resume` (in trạng thái; `--force` không cần khi đã nâng ngưỡng trên UI).
+- Mở lại: hết vượt (sang ngày/tháng mới, hoặc nâng ngưỡng trong `.env` + restart `mtl-api` + `mtl-jobs`) → `mtl-jobs` tự `paused_budget → queued`;
+  hoặc `pnpm budget-resume` (in trạng thái; `--force` không cần khi đã nâng ngưỡng).
 - Cảnh báo 50/80/100% mỗi mốc 1 lần/kỳ (ngày, tháng) qua ntfy.
 > Trần guardrail mặc định **4096 token ra/call** (= `TRANSLATE_MAX_OUTPUT_TOKENS`, = clamp server). Mặc định cũ
 > 2000 loại cả lô dịch 4 trang hợp lệ (đo thật: 2022 token) → cả chương `chapter.translate` fail. Muốn chặt hơn thì
@@ -403,41 +417,42 @@ chờ của các tài khoản đang bị khoá, hoặc chấp nhận, rồi mớ
 ## 7. Backup + restore
 
 ```bash
-infra/backup.sh init        # 1 lần: bucket đích, versioning, lifecycle (dump 14 ngày, object bị xoá giữ 14 ngày)
+infra/backup.sh init        # 1 lần: bucket đích, versioning, lifecycle (dump 14 ngày, file bị xoá giữ 14 ngày)
 systemctl start mtl-backup  # chạy tay lần đầu; timer 03:30 UTC hằng đêm
 ```
 
-- `backup.sh`: `pg_dump -Fc` + `.sha256` → `<đích>/pg/`; `mc mirror --remove` bucket → `<đích>/objects/`. Lỗi →
+- `backup.sh`: `pg_dump -Fc` + `.sha256` → `<đích>/pg/`; `mc mirror --remove` thư mục `FILES_DIR` (bỏ `.tmp/`, giữ
+  sidecar `.meta.json`) → `<đích>/objects/`. Lỗi →
   ntfy (urgent).
 - `restore.sh [mtl-<stamp>.dump|latest]` trên máy **khác**, DB đích rỗng: kiểm sha256 → `pg_restore` →
-  `minio-setup.sh` → mirror object → kiểm mọi `pages.original_key` có object. Biến: `RESTORE_DATABASE_URL`, `S3_*`
-  (đích), `BACKUP_S3_*`.
+  mirror `<đích>/objects/` → `RESTORE_FILES_DIR` → kiểm mọi `pages.original_key` có file. Biến: `RESTORE_DATABASE_URL`,
+  `RESTORE_FILES_DIR` (= `FILES_DIR` của app chạy sau restore), `BACKUP_S3_*`.
 - Key provider AI trong DB được mã hoá bằng `SECRETS_KEY`: backup DB **không** chứa khoá → giữ `SECRETS_KEY` ở nơi
   riêng; restore cần đúng `SECRETS_KEY` lúc backup (sai khoá = nhập lại key từng provider trên UI).
 - Ghi kết quả lần restore thử thật vào bảng dưới.
 
 | Ngày | Nơi | Dump | Page / object | Mở chương trong editor | Ghi chú |
 |---|---|---|---|---|---|
-| 20/10/2026 | Docker local (2 stack + MinIO "offsite" riêng) | 56 KB | 3 / 3 khớp | chưa (không có UI ở bài thử) | thử kỹ thuật, không phải máy khác thật |
+| 20/10/2026 | Docker local (2 stack + bucket S3 "offsite" giả lập) | 56 KB | 3 / 3 khớp | chưa (không có UI ở bài thử) | thử kỹ thuật, không phải máy khác thật |
 | _chờ owner_ | máy khác thật | | | | |
 
 ## 8. Giám sát
 
-- `GET /healthz` (không auth): 200 khi DB + MinIO + runner (`runtime_flags.runner_heartbeat` < 90s) ổn, ngược lại
+- `GET /healthz` (không auth): 200 khi DB + thư mục file ghi được + runner (`runtime_flags.runner_heartbeat` < 90s) ổn, ngược lại
   503; kèm `oldest_queued_age_s`.
 - `infra/alert.sh` (timer 1'): healthz lỗi 2 lần liên tiếp → urgent (báo lặp tối đa 1 lần/giờ, báo hồi phục);
   hàng đợi cũ > 15' → high. Ngân sách 50/80/100% và Modal `no_claim` do `mtl-jobs` báo — cùng 1 topic ntfy.
 
 ## 9. Pháp lý tối thiểu (tài khoản tạo tay)
 
-Production mặc định tắt đăng ký công khai (`SIGNUP_ENABLED=false`, tài khoản tạo bằng `pnpm create-user`; admin chỉ bật trên UI khi chấp nhận đăng ký chưa xác thực email; smoke kiểm theo trạng thái thật sau mỗi deploy); bucket private (`mc anonymous set none`), chỉ presigned URL
-TTL ngắn, không link chia sẻ công khai; không train model trên dữ liệu người dùng. ToS/takedown → Phase 8.
+Production mặc định tắt đăng ký công khai (`SIGNUP_ENABLED=false`, tài khoản tạo bằng `pnpm create-user`; smoke kiểm theo trạng thái thật sau mỗi deploy); file
+người dùng chỉ mở qua link `/files` ký HMAC TTL ngắn, không link chia sẻ công khai; không train model trên dữ liệu người dùng. ToS/takedown → Phase 8.
 
 ## Kết quả kiểm local (20/10/2026)
 
 | Hạng mục | Cách kiểm | Kết quả |
 |---|---|---|
-| Compose prod | 2 stack `docker-compose.prod.yml` (nguồn, đích) + MinIO offsite | healthy |
+| Compose prod | 2 stack `docker-compose.prod.yml` (nguồn, đích) + bucket S3 offsite giả lập | healthy |
 | Caddyfile | `caddy adapt` (image caddy:2) | hợp lệ |
 | Deploy | `deploy.sh` trong `node:24-bookworm` (clone sạch, systemctl giả chờ process thoát như systemd) | lần đầu ~11s, lần sau ~2s; smoke qua |
 | Smoke hỏng | release ném lỗi lúc start | quay về bản đang chạy, xoá release hỏng, `previous` giữ nguyên |
@@ -458,7 +473,7 @@ Không làm được trong phiên này (cần hạ tầng thật, key LLM, máy/
 - [ ] Kill-switch thật: `GLOBAL_DAILY_USD` thấp → claim rỗng ≤ 1 chu kỳ ở cả Mac và Modal, job đang chạy về
       `paused_budget`, không mất artifact.
 - [ ] Cảnh báo tới ntfy thật khi tắt Postgres và khi hàng đợi cũ > 15'.
-- [ ] Đăng ký ở production khi đang tắt (`SIGNUP_ENABLED=false`, hoặc admin tắt trên UI) bị chặn (smoke tự kiểm theo `/healthz.signup`, xác nhận bằng trình duyệt).
+- [ ] Đăng ký ở production khi đang tắt (`SIGNUP_ENABLED=false`) bị chặn (smoke tự kiểm theo `/healthz.signup`, xác nhận bằng trình duyệt).
 - [ ] Hiệu năng editor với trang 12k/20k px + Safari.
 - [ ] Re-inpaint ≤ 15s với worker thật; `kill -9` worker → job về hàng đợi ≤ 150s.
 - [ ] Export 100 trang thật; mở CBZ bằng YACReader/Komga; soi mắt 5 trang.

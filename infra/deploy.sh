@@ -97,8 +97,10 @@ deploy() {
     pnpm --filter @mtl/web build
     pnpm db:migrate
   )
-  # Nạp env (S3_*) cho cấu hình bucket — private + lifecycle export 7 ngày.
-  (set -a && . "$MTL_ROOT/shared/.env" && set +a && "$rel/infra/minio-setup.sh")
+  # Thư mục file bền (FILES_DIR trong shared/.env, ngoài thư mục release) phải có trước khi API khởi động.
+  files_dir=$(set -a && . "$MTL_ROOT/shared/.env" && printf '%s' "${FILES_DIR:-}")
+  [ -n "$files_dir" ] || die "$MTL_ROOT/shared/.env thiếu FILES_DIR"
+  mkdir -p "$files_dir"
   switch_to "$rel"
   restart
   if ! smoke; then

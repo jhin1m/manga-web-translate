@@ -1,16 +1,19 @@
 import { describe, expect, it } from "vitest";
-import { ADMIN_SECTIONS, groupedSections, parseSection, validSection, visibleSections } from "./admin-sections.ts";
+import { groupedSections, parseSection, SETTINGS_SECTIONS, validSection, visibleSections } from "./admin-sections.ts";
 
-describe("admin sections", () => {
-  it("parses known ids and falls back to the first section", () => {
+const ids = (list: readonly { id: string }[]) => list.map((s) => s.id);
+
+describe("settings sections", () => {
+  it("parses known ids and falls back to the first section (Font)", () => {
     expect(parseSection("pipeline")).toBe("pipeline");
-    for (const bad of ["nope", "", undefined, null, 3, ["pipeline"]])
-      expect(parseSection(bad)).toBe(ADMIN_SECTIONS[0].id);
+    for (const bad of ["nope", "", undefined, null, 3, ["pipeline"]]) expect(parseSection(bad)).toBe("fonts");
   });
 
-  it("fonts are not a settings section (managed on /fonts); the old link falls back to the first section", () => {
-    expect(validSection("fonts")).toBeUndefined();
-    expect(parseSection("fonts")).toBe("pipeline");
+  it("fonts are a settings section shown first; signup/limits are gone (env only)", () => {
+    expect(SETTINGS_SECTIONS[0].id).toBe("fonts");
+    expect(validSection("fonts")).toBe("fonts");
+    expect(validSection("limits")).toBeUndefined();
+    expect(parseSection("limits")).toBe("fonts");
   });
 
   it("validSection drops unknown values instead of defaulting", () => {
@@ -20,21 +23,36 @@ describe("admin sections", () => {
 
   it("groups sections keeping declaration order, every section once", () => {
     const groups = groupedSections();
-    expect(groups.flatMap((g) => g.sections.map((s) => s.id))).toEqual(ADMIN_SECTIONS.map((s) => s.id));
+    expect(groups.flatMap((g) => ids(g.sections))).toEqual(ids(SETTINGS_SECTIONS));
     expect(new Set(groups.map((g) => g.group)).size).toBe(groups.length);
+    expect(groups[0]?.group).toBe("Chung");
   });
 
-  it("AI models live in the pipeline section; the old tasks link falls back to it", () => {
+  it("AI models live in the pipeline section; the old tasks link falls back to the first section", () => {
     expect(validSection("tasks")).toBeUndefined();
-    expect(parseSection("tasks")).toBe("pipeline");
+    expect(parseSection("tasks")).toBe("fonts");
   });
 
-  it("local mode hides multi-user sections (signup/limits, users) and parses against the filtered list", () => {
-    const local = visibleSections(true);
-    expect(local.map((s) => s.id)).toEqual(["pipeline", "providers"]);
-    expect(visibleSections(false)).toEqual(ADMIN_SECTIONS);
-    expect(parseSection("users", local)).toBe("pipeline");
-    expect(validSection("limits", local)).toBeUndefined();
-    expect(groupedSections(local).flatMap((g) => g.sections.map((s) => s.id))).toEqual(local.map((s) => s.id));
+  it("admins see every section; local mode hides the users section", () => {
+    expect(ids(visibleSections({ admin: true, localMode: false }))).toEqual([
+      "fonts",
+      "pipeline",
+      "providers",
+      "users",
+    ]);
+    const local = visibleSections({ admin: true, localMode: true });
+    expect(ids(local)).toEqual(["fonts", "pipeline", "providers"]);
+    expect(parseSection("users", local)).toBe("fonts");
+    expect(groupedSections(local).flatMap((g) => ids(g.sections))).toEqual(ids(local));
+  });
+
+  it("regular users only see Font; an admin section in the URL falls back to Font", () => {
+    for (const localMode of [false, true]) {
+      const plain = visibleSections({ admin: false, localMode });
+      expect(ids(plain)).toEqual(["fonts"]);
+      expect(parseSection("pipeline", plain)).toBe("fonts");
+      expect(validSection("providers", plain)).toBeUndefined();
+      expect(groupedSections(plain).map((g) => g.group)).toEqual(["Chung"]);
+    }
   });
 });

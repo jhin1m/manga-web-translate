@@ -317,7 +317,7 @@ test("a very long series name is truncated with a full-name title and never over
   expect(del.ok()).toBe(true);
 });
 
-test("settings groups are always open; complete pronoun rows save while an incomplete row stays red on the form, text saves on leave", async ({
+test("the AI group starts collapsed with a summary; complete pronoun rows save while an incomplete row stays red on the form, text saves on leave", async ({
   page,
 }) => {
   await login(page);
@@ -333,11 +333,21 @@ test("settings groups are always open; complete pronoun rows save while an incom
     for (const name of ["Series", "Hướng dẫn cho AI", "Font chữ", "Bỏ qua khi dịch"]) {
       await expect(settings.getByRole("region", { name })).toBeVisible();
     }
-    for (const label of ["Tên series", "Dịch từ", "Sang", "Định dạng", "Giọng văn", "Kính ngữ", "Font thoại"]) {
+    for (const label of ["Tên series", "Dịch từ", "Sang", "Định dạng", "Font thoại"]) {
       await expect(settings.getByLabel(label, { exact: true })).toBeVisible();
     }
     await expect(settings.getByRole("button", { name: "Lưu", exact: true })).toHaveCount(0);
+    // "Hướng dẫn cho AI" gập sẵn (chỉ hiện tóm tắt); bấm tiêu đề để mở.
     const ai = settings.getByRole("region", { name: "Hướng dẫn cho AI" });
+    const aiToggle = ai.getByRole("button", { name: "Hướng dẫn cho AI" });
+    await expect(aiToggle).toHaveAttribute("aria-expanded", "false");
+    await expect(ai.getByText("Chưa có", { exact: true })).toBeVisible();
+    await expect(ai.getByLabel("Giọng văn", { exact: true })).toBeHidden();
+    await aiToggle.click();
+    await expect(aiToggle).toHaveAttribute("aria-expanded", "true");
+    for (const label of ["Giọng văn", "Kính ngữ"]) {
+      await expect(ai.getByLabel(label, { exact: true })).toBeVisible();
+    }
     await expect(ai.getByText("0 thuật ngữ")).toBeVisible();
 
     // Thêm quy tắc, bỏ trống rồi rời hàng → báo lỗi tại hàng, không gọi PATCH.
@@ -389,6 +399,10 @@ test("settings groups are always open; complete pronoun rows save while an incom
     await settings.getByRole("button", { name: "Đóng" }).click();
     await expect(settings).toHaveCount(0);
     await page.goto(`/s/${id}?tab=settings`);
+    // Mở lại modal: nhóm lại gập, tóm tắt có Giọng văn vừa lưu (hàng dở đã bỏ).
+    await expect(aiToggle).toHaveAttribute("aria-expanded", "false");
+    await expect(ai.getByText("Có giọng văn", { exact: true })).toBeVisible();
+    await aiToggle.click();
     await expect(rows).toHaveCount(0);
     expect(patched).toBe(afterStyle);
     expect((await saved()).pronoun_rules).toEqual([]);
@@ -448,9 +462,9 @@ test("home at 1280: drop strip is 56px, series are cards, Hoạt động is hidd
   const row = page.locator(`.card[data-series="${state.seriesId}"]`);
   await expect(row).toBeVisible();
   await expect(page.getByRole("button", { name: /^Hoạt động/ })).toHaveCount(0);
-  // Font, (Cài đặt cho admin) vẫn ở menu tài khoản.
+  // Cài đặt (gồm mục Font) vẫn ở menu tài khoản.
   await page.locator("summary[aria-label='Tài khoản']").click();
-  await expect(page.getByRole("link", { name: "Font", exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Cài đặt", exact: true })).toBeVisible();
 });
 
 test("dropping the files again onto an unfinished-upload chapter card resumes the upload", async ({ page }) => {

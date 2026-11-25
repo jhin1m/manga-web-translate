@@ -30,11 +30,11 @@ test("drop a 10-page ZIP on home, open the chapter while uploading, prepare it, 
     ]),
   );
 
-  // Giữ mọi POST lên storage (presigned) tới khi đã ở màn chương → chứng minh điều hướng xảy ra trước khi upload xong.
+  // Giữ mọi POST lên storage (link `/files/…` ký) tới khi đã ở màn chương → chứng minh điều hướng xảy ra trước khi upload xong.
   const held: Route[] = [];
   let hold = true;
   await page.route(
-    (url) => !url.href.startsWith(WEB_URL),
+    (url) => url.pathname.startsWith("/files/"),
     (route) => {
       if (hold && route.request().method() === "POST") held.push(route);
       else void route.continue();
@@ -152,8 +152,8 @@ test("drop a 10-page ZIP on home, open the chapter while uploading, prepare it, 
   ready = true;
   await worker;
   await expect(rail.getByRole("button", { name: /· Xong$/ })).toHaveCount(9);
-  // Thumbnail là ảnh sạch ký qua FILES_DOMAIN.
-  await expect(rail.locator("img").first()).toHaveAttribute("src", /localhost:9100\/.*\/clean\//);
+  // Thumbnail là ảnh sạch, link `/files/…` ký HMAC do API phục vụ.
+  await expect(rail.locator("img").first()).toHaveAttribute("src", /^\/files\/.*\/clean\//);
 
   // Màn series: hàng chương vừa dịch báo "Chờ sửa"; bấm hàng mở lại màn chương (không còn icon Sửa riêng).
   await page.getByRole("link", { name: "Series e2e" }).click();
@@ -308,18 +308,18 @@ test("shell activity button shows only while an upload has failed, and its drawe
   // Chưa có upload nào trong tab → không có nút Hoạt động trên shell.
   await expect(page.getByRole("button", { name: /^Hoạt động/ })).toHaveCount(0);
 
-  // Chặn POST lên storage (presigned): trả 500 tới khi mở lại route. Mỗi file thử tối đa 3 lần → upload thất bại thật.
+  // Chặn POST lên storage (link `/files/…` ký): trả 500 tới khi mở lại route. Mỗi file thử tối đa 3 lần → upload thất bại thật.
   let storageOpen = false;
   let rejected = 0;
   await page.route(
-    (url) => !url.href.startsWith(WEB_URL),
+    (url) => url.pathname.startsWith("/files/"),
     (route) => {
       if (route.request().method() !== "POST" || storageOpen) {
         void route.continue();
         return;
       }
       rejected++;
-      void route.fulfill({ status: 500, headers: { "access-control-allow-origin": WEB_URL }, body: "storage down" });
+      void route.fulfill({ status: 500, body: "storage down" });
     },
   );
 

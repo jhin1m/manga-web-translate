@@ -9,7 +9,8 @@ import { OcrRegion, OcrResult, PageState } from "./page-state.ts";
 
 const Uuid = z.uuid();
 const Rev = z.number().int().nonnegative();
-const Url = z.url();
+/** Link file ký: `/files/…` tương đối API (worker ghép với địa chỉ API); vẫn nhận URL tuyệt đối như trước. */
+const Url = z.union([z.url(), z.string().regex(/^\/files\//)]);
 /** major.minor.patch — so sánh với MIN_PIPELINE_VERSION ở claim. */
 export const PipelineVersion = z.string().regex(/^\d+\.\d+\.\d+$/);
 

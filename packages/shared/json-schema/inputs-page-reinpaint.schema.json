@@ -4,12 +4,28 @@
   "type": "object",
   "properties": {
     "base_clean": {
-      "type": "string",
-      "format": "uri"
+      "anyOf": [
+        {
+          "type": "string",
+          "format": "uri"
+        },
+        {
+          "type": "string",
+          "pattern": "^\\/files\\/"
+        }
+      ]
     },
     "user_mask": {
-      "type": "string",
-      "format": "uri"
+      "anyOf": [
+        {
+          "type": "string",
+          "format": "uri"
+        },
+        {
+          "type": "string",
+          "pattern": "^\\/files\\/"
+        }
+      ]
     }
   },
   "required": [

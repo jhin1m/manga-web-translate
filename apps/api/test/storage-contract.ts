@@ -1,6 +1,6 @@
 /**
- * Hợp đồng hành vi chung của mọi driver lưu file (S3/MinIO và đĩa): cùng bộ kiểm chạy cho cả 2 → disk driver hành
- * xử như MinIO ở mọi chỗ web/worker dựa vào (policy POST, link GET có hạn, PUT có header ký).
+ * Hợp đồng hành vi của driver lưu file: ngữ nghĩa presigned kiểu S3 mà web/worker dựa vào (policy POST, link GET có
+ * hạn, PUT có header ký).
  */
 import { v7 as uuidv7 } from "uuid";
 import { describe, expect, it } from "vitest";
@@ -11,9 +11,9 @@ export type ContractTarget = Pick<
   StorageDriver,
   "presignPost" | "presignGet" | "presignPut" | "head" | "readPrefix"
 > & {
-  /** Gọi link presign (URL tuyệt đối với S3, tương đối `/files/…` với disk). */
+  /** Gọi link presign (tương đối `/files/…`). */
   fetcher: (url: string, init?: RequestInit) => Promise<Response>;
-  /** Làm mọi link TTL 1s đã ký hết hạn (S3: chờ thật; disk: tua đồng hồ). */
+  /** Làm mọi link TTL 1s đã ký hết hạn (tua đồng hồ). */
   expire: () => Promise<void>;
 };
 

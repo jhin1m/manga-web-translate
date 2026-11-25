@@ -159,8 +159,8 @@ function AccountMenu() {
         {/* biome-ignore lint/a11y/useKeyWithClickEvents: phím Enter trên link cũng phát click */}
         <div className="shell-menu-list" onClick={() => closeMenu(ref.current)}>
           <span className="shell-menu-email muted small">{me.email}</span>
-          <Link to="/fonts">Font</Link>
-          {me.is_admin && <Link to="/settings">Cài đặt</Link>}
+          {/* Mọi người dùng: Cài đặt có mục Font; mục AI / Hệ thống chỉ hiện với admin. */}
+          <Link to="/settings">Cài đặt</Link>
           {me.quota.limit_usd !== null && (
             <span className="shell-menu-quota muted small" data-testid="quota-line">
               Hạn mức AI hôm nay: {usd(me.quota.spent_usd)} / {usd(me.quota.limit_usd)}

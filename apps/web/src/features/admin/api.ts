@@ -7,20 +7,12 @@ import {
 } from "@mtl/shared";
 import { useQuery } from "@tanstack/react-query";
 import { ApiError, api, errorMessage } from "../../lib/api.ts";
-import type { StoredLimits } from "./limits-model.ts";
 import type { SavedProvider } from "./provider-form-model.ts";
 
-/**
- * `GET /api/admin/settings`: cài đặt toàn hệ thống. `limits` = giá trị lưu (null = theo env), `effective` = sau fallback,
- * `env` = mặc định khi để trống.
- */
+/** `GET /api/admin/settings`: pipeline + model AI của từng bước. Hạn mức / đăng ký chỉ cấu hình qua `.env` của API. */
 export type AdminSettings = {
   pipeline: PipelineSettings;
   slots: AiSlots;
-  limits: StoredLimits;
-  effective: StoredLimits & { signup_enabled: boolean; signup_open: boolean };
-  env: StoredLimits & { signup_enabled: boolean };
-  today: { global_spent_usd: number; max_user_spent_usd: number };
 };
 
 export const adminSettingsKey = ["admin", "settings"] as const;

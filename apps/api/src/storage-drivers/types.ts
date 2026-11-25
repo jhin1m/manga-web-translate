@@ -1,6 +1,6 @@
 /**
- * Hợp đồng chung của driver lưu file (S3/MinIO hoặc đĩa). `storage.ts` chọn 1 driver lúc khởi động và re-export các
- * hàm này với nguyên tên/chữ ký cũ → caller không biết đang chạy driver nào.
+ * Hợp đồng của driver lưu file (giữ ngữ nghĩa presigned kiểu S3 mà web/worker dựa vào: policy POST, link GET có hạn,
+ * PUT có header ký). `storage.ts` re-export các hàm này cho caller.
  */
 
 /** Trần TTL (red team #12): xem ảnh ≤ 15', tải export ≤ 5' (caller tự chọn ttl thấp hơn). */
@@ -21,7 +21,6 @@ export interface StorageDriver {
   presignGet(key: string, ttlSeconds: number, disposition?: string): Promise<string>;
   /** PUT cho output worker; Content-Type (+ `x-amz-tagging` nếu có) nằm trong chữ ký → worker phải gửi đúng header. */
   presignPut(key: string, contentType: string, ttlSeconds: number, opts?: { tagging?: string }): Promise<string>;
-  objectTags(key: string): Promise<Record<string, string>>;
   /** Metadata object; null nếu không tồn tại. */
   head(key: string): Promise<HeadResult | null>;
   /** Đọc n byte đầu (magic bytes) — không tải cả file. */

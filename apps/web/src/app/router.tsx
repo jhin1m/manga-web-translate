@@ -3,7 +3,8 @@
  * props — không import ngược router.
  *
  * Đích: `/` (home), `/s/$seriesId[?tab]`, `/s/$seriesId/c/$chapterId[?page&drawer]`,
- * `/settings[?section]` (admin), `/fonts`, `/login`. Mỗi người một tài khoản → không có id tài khoản trên URL.
+ * `/settings[?section]` (Font cho mọi người; mục AI / Hệ thống chỉ admin), `/login`; `/fonts` cũ chuyển sang
+ * `/settings?section=fonts`. Mỗi người một tài khoản → không có id tài khoản trên URL.
  *
  * Màn chương (= editor gộp, `chapterRoute`) nằm dưới `authedRoute` nhưng NGOÀI `shellRoute` → chiếm toàn màn hình,
  * không có thanh trên của app shell.
@@ -11,11 +12,10 @@
 import { QueryClient } from "@tanstack/react-query";
 import { createRootRouteWithContext, createRoute, createRouter, Link, Outlet, redirect } from "@tanstack/react-router";
 import { lazy, Suspense } from "react";
-import { type AdminSection, parseSection, validSection, visibleSections } from "../features/admin/admin-sections.ts";
+import { type SettingsSection, validSection } from "../features/admin/admin-sections.ts";
 import { HomePage } from "../features/home/home-page.tsx";
 import { SeriesPage } from "../features/series/series-page.tsx";
-import { appConfigQuery, useLocalMode } from "../lib/api.ts";
-import { FontsPage } from "../routes/fonts.tsx";
+import { appConfigQuery } from "../lib/api.ts";
 import { LoginPage } from "../routes/login.tsx";
 import { SettingsPage } from "../routes/settings.tsx";
 import { AppShell } from "./app-shell.tsx";
@@ -110,20 +110,25 @@ export const chapterRoute = createRoute({
 export const settingsRoute = createRoute({
   getParentRoute: () => shellRoute,
   path: "settings",
-  // `section`: mục Cài đặt admin; thiếu/lạ = mục đầu.
-  validateSearch: (search: Record<string, unknown>): { section?: AdminSection } => {
+  // `section`: mục Cài đặt; thiếu/lạ = mục đầu. Mục người này không được thấy (theo quyền admin / chế độ local) do
+  // SettingsPage đưa về mục đầu.
+  validateSearch: (search: Record<string, unknown>): { section?: SettingsSection } => {
     const section = validSection(search.section);
     return section ? { section } : {};
   },
   component: function SettingsRoute() {
-    const { section } = settingsRoute.useSearch();
-    // Chế độ local: mục nhiều người dùng bị ẩn → `?section=users` rơi về mục đầu.
-    return <SettingsPage section={parseSection(section, visibleSections(useLocalMode()))} />;
+    return <SettingsPage section={settingsRoute.useSearch().section} />;
   },
 });
 
-/** Font: thêm (từ máy / file), xem, xoá font riêng + font dùng chung; xem font có sẵn. */
-const fontsRoute = createRoute({ getParentRoute: () => shellRoute, path: "fonts", component: FontsPage });
+/** Link / bookmark cũ: trang Font nay là một mục của Cài đặt. */
+const fontsRoute = createRoute({
+  getParentRoute: () => shellRoute,
+  path: "fonts",
+  beforeLoad: () => {
+    throw redirect({ to: "/settings", search: { section: "fonts" }, replace: true });
+  },
+});
 
 export const routeTree = rootRoute.addChildren([
   loginRoute,

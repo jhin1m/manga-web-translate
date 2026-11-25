@@ -190,8 +190,8 @@ không hợp vẫn hiện, ghi `(thiếu chữ …)`. Không chặn ở API/work
 một số file đã được sửa metric dọc lúc thêm vào (bảng `typo` Việt hoá hỏng → bỏ cờ `USE_TYPO_METRICS` hoặc sửa dấu
 `sTypoDescender`), nên khi thay file phải kiểm lại khoảng cách dòng.
 
-**Font của bạn** (trang Font `/fonts`: chọn font trong máy hoặc upload TTF/OTF ≤ 10MB, ≤ 20 font, bản local 200): `loadFonts(fetchCustom)` ở
-`fonts.ts` nạp thêm từng font bằng `FontFace(font_id, url(presigned))` (`font_id` = `custom-<8 hex>`), metric
+**Font của bạn** (Cài đặt › Font `/settings?section=fonts`: chọn font trong máy hoặc upload TTF/OTF ≤ 10MB, ≤ 20 font, bản local 200): `loadFonts(fetchCustom)` ở
+`fonts.ts` nạp thêm từng font bằng `FontFace(font_id, url(link /files ký))` (`font_id` = `custom-<8 hex>`), metric
 (`units_per_em/ascent/descent`) lấy từ API — API đọc bằng fontkit theo đúng quy tắc `read_metrics` của worker (test parity
 với manifest). Danh sách lấy tươi mỗi phiên chương (`staleTime: 0`) nên URL còn hạn; font nạp lỗi (URL hết hạn) → lấy lại danh sách
 1 lần rồi nạp lại; không lấy được font tuỳ chỉnh thì editor vẫn chạy với font gói sẵn. Panel khối liệt kê thêm 2 nhóm "Font dùng chung" (admin upload, mọi người dùng thấy; `GET /api/fonts` trả `system: true`, `FontKit.custom` giữ cờ này) và "Font của bạn"; giới hạn số font (20, bản local 200) chỉ đếm font riêng.
@@ -201,7 +201,7 @@ Box có font không biết (font tuỳ chỉnh đã xoá, state cũ): metric the
 
 Cài đặt series (`?tab=settings`, nhóm Font chữ ở `series-font-fields.tsx`) cũng gọi `loadFonts` để dropdown Font mặc định vẽ
 mỗi option bằng chính font đó (`.font-select` bật `appearance: base-select` khi trình duyệt hỗ trợ). Dropdown có option "+ Tải
-font lên…" cuối dropdown: chọn file → `uploadCheckedFont` (cùng kiểm tra đuôi / 10MB / giới hạn số font với trang Font) → font
+font lên…" cuối dropdown: chọn file → `uploadCheckedFont` (cùng kiểm tra đuôi / 10MB / giới hạn số font với Cài đặt › Font) → font
 mới được chọn cho đúng ô và tự lưu làm mặc định như mọi ô chọn của Cài đặt series.
 
 Cờ "tràn khung" (bảng văn bản, cột thumbnail, panel khối, cảnh báo xuất) dùng chung `boxOverflow` trong `measure.ts`, có dung

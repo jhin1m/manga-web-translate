@@ -106,7 +106,7 @@ export const EXPORT_FILE = {
   png_zip: { ext: "zip", mime: "application/zip" },
   cbz: { ext: "cbz", mime: "application/vnd.comicbook+zip" },
 } as const satisfies Record<ExportFormat, { ext: "zip" | "cbz"; mime: string }>;
-/** File export bị xoá sau 7 ngày (lifecycle MinIO theo tag `EXPORT_OBJECT_TAG`); quá hạn → download 410. */
+/** File export bị xoá sau 7 ngày (job `export-cleanup` của API); quá hạn → download 410. Tag `EXPORT_OBJECT_TAG` nằm trong chữ ký PUT. */
 export const EXPORT_RETENTION_DAYS = 7;
 export const EXPORT_OBJECT_TAG = "mtl-kind=export";
 

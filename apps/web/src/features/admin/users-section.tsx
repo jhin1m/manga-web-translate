@@ -1,10 +1,10 @@
 /** Hệ thống › Người dùng: bảng người dùng + chi phí hôm nay / 30 ngày (UTC), icon khoá / mở tài khoản. */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
+import { UsersIcon } from "../../app/settings-icons.tsx";
 import { ApiError, api, errorMessage } from "../../lib/api.ts";
-import { fmtUsd } from "./limits-model.ts";
 import { SectionHead } from "./settings-ui.tsx";
-import { type AdminUser, dateText, disableConfirmText, rowAction, statusLabel } from "./users-model.ts";
+import { type AdminUser, dateText, disableConfirmText, fmtUsd, rowAction, statusLabel } from "./users-model.ts";
 
 const usersKey = ["admin", "users"] as const;
 
@@ -87,7 +87,9 @@ export function UsersSection() {
     <div className="set-section">
       <SectionHead
         title="Người dùng"
-        desc="Chi phí tính theo ngày UTC. Tối đa 500 người, mới nhất trước."
+        icon={<UsersIcon />}
+        desc="Tài khoản và chi phí AI, mới nhất trước."
+        tip="Chi phí tính theo ngày UTC. Hiện tối đa 500 người."
         aside={
           <input
             type="search"
@@ -107,24 +109,26 @@ export function UsersSection() {
       {!users.data && !users.error && <p className="muted">Đang tải…</p>}
       {users.data && users.data.length === 0 && <p className="muted">Không có người dùng nào.</p>}
       {users.data && users.data.length > 0 && (
-        <table className="data" aria-label="Danh sách người dùng">
-          <thead>
-            <tr>
-              <th>Email</th>
-              <th>Tên</th>
-              <th>Ngày tạo</th>
-              <th className="num">Hôm nay</th>
-              <th className="num">30 ngày</th>
-              <th>Trạng thái</th>
-              <th />
-            </tr>
-          </thead>
-          <tbody>
-            {users.data.map((u) => (
-              <UserRow key={u.id} u={u} onError={setError} />
-            ))}
-          </tbody>
-        </table>
+        <div className="set-card set-table-card">
+          <table className="data set-table" aria-label="Danh sách người dùng">
+            <thead>
+              <tr>
+                <th>Email</th>
+                <th>Tên</th>
+                <th>Ngày tạo</th>
+                <th className="num">Hôm nay</th>
+                <th className="num">30 ngày</th>
+                <th>Trạng thái</th>
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              {users.data.map((u) => (
+                <UserRow key={u.id} u={u} onError={setError} />
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
     </div>
   );

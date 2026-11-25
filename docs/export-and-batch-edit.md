@@ -18,7 +18,7 @@ Render phía server bằng chính `worker/mtl_pipeline/render.py` (một rendere
 | `POST /api/chapters/:id/export` | `{format: png_zip\|cbz, layout: original_slices\|pages, quality=90, include_untranslated=false}` → 202 `{job, created}`; chưa có page → 409 `no_pages`; chương đang ingest/xử lý → 409 `chapter_busy`; bấm lại khi job cũ còn chạy và chương chưa đổi → trả job cũ |
 | `GET …/chapters/:id/exports` | ≤ 10 export gần nhất (7 ngày) |
 | `GET /api/exports/:jobId` | trạng thái, `bytes`, `expires_at`, `download_url` |
-| `GET /api/exports/:jobId/download` | 302 → presigned GET 5' + `Content-Disposition: attachment`; chưa xong 409; quá 7 ngày/đã xoá 410; job của người dùng khác 404 |
+| `GET /api/exports/:jobId/download` | 302 → link `/files` ký 5' + `Content-Disposition: attachment`; chưa xong 409; quá 7 ngày/đã xoá 410; job của người dùng khác 404 |
 
 - **Inputs** (chốt lúc claim, `ExportInputs`): page theo `ord`, `translated` = page `ready` + có ảnh sạch (page khác
   dùng ảnh gốc, không vẽ chữ; bị bỏ khi `include_untranslated=false`), `state`, `source_map`, slice gốc theo `ord`.
@@ -34,11 +34,11 @@ Render phía server bằng chính `worker/mtl_pipeline/render.py` (một rendere
   Tên file `{ord+1}` đệm ≥ 3 chữ số (đủ chữ số khi > 999 ảnh).
 - **Ảnh**: `png_zip` luôn PNG; `cbz` quality 100 → PNG, < 100 → JPEG. Zip ghi ra file tạm (entry STORED), CBZ có
   `ComicInfo.xml` tối thiểu.
-- **Output**: `ws/{ws}/ch/{ch}/export/{jobId}.{zip|cbz}`. Presigned PUT mang `headers` đã ký (`content-type` +
+- **Output**: `u/{user}/ch/{ch}/export/{jobId}.{zip|cbz}`. Presigned PUT mang `headers` đã ký (`content-type` +
   `x-amz-tagging: mtl-kind=export`) — worker gửi đúng các header này, xin URL mới ngay trước khi upload (TTL ≤ 120s).
-  Complete chỉ nhận đúng key cấp lúc claim, `bytes` lấy từ HEAD object.
-- **Xoá sau 7 ngày**: lifecycle MinIO lọc theo tag (`minio-init` trong `infra/docker-compose.dev.yml`,
-  `mc ilm import`); production phải cấu hình rule tương đương trên bucket.
+  Complete chỉ nhận đúng key cấp lúc claim, `bytes` lấy từ kích thước file.
+- **Xoá sau 7 ngày**: job `export-cleanup` trong `pnpm jobs` (mỗi giờ, `apps/api/src/jobs/export-cleanup.ts`) xoá
+  file `…/export/` cũ hơn `EXPORT_RETENTION_DAYS` cùng file tạm ghi dở.
 
 ## Menu Xuất chương
 

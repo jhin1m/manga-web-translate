@@ -7,7 +7,7 @@ import { MIN_BAND_PX } from "@mtl/shared";
 import { eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { deletePrefix, head } from "../src/storage.ts";
-import { call, db, seedUser } from "./helpers.ts";
+import { call, db, fetchFile, seedUser } from "./helpers.ts";
 import { type Claimed, claimJobs, doIngest, makeRunnable, PNG_1PX, workerToken } from "./worker-helpers.ts";
 
 type Seed = Awaited<ReturnType<typeof seedUser>>;
@@ -35,7 +35,7 @@ async function postFile(u: Upload) {
   const form = new FormData();
   for (const [k, v] of Object.entries(u.fields)) form.append(k, v);
   form.append("file", new Blob([PNG_1PX]));
-  expect((await fetch(u.url, { method: "POST", body: form })).status).toBe(204);
+  expect((await fetchFile(u.url, { method: "POST", body: form })).status).toBe(204);
 }
 
 async function newSeries(title: string) {
@@ -138,7 +138,7 @@ describe("series skip images", () => {
 
     const [img] = await list(s);
     expect(img).toMatchObject({ width: 800, height: 1200 });
-    expect((await fetch(img?.url ?? "")).status).toBe(200);
+    expect((await fetchFile(img?.url ?? "")).status).toBe(200);
     const [row] = await db.select().from(seriesSkipImages).where(eq(seriesSkipImages.seriesId, s));
     expect(row?.learnedFromChapterId).toBe(one.ch);
     expect(row?.thumbKey.startsWith(`u/${A.userId}/series/${s}/`)).toBe(true);
@@ -270,7 +270,7 @@ describe("series skip images", () => {
       expect(await json(await learnBand(s, id, "top"), 200)).toEqual({ learned: 1, known: 0 });
       const [img] = await list(s);
       expect(img).toMatchObject({ edge: "top", dhash: BASE, width: 800, height: 120 });
-      expect((await fetch(img?.url ?? "")).status).toBe(200);
+      expect((await fetchFile(img?.url ?? "")).status).toBe(200);
       const [row] = await db.select().from(seriesSkipImages).where(eq(seriesSkipImages.seriesId, s));
       expect(row).toMatchObject({ edge: "top", dhash: BASE, learnedFromChapterId: ch });
       // Học lại cùng dải / dải gần giống (cùng mép, hash lệch ≤ 6 bit, chiều cao lệch ≤ 5%) → đã học.

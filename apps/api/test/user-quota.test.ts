@@ -121,9 +121,9 @@ describe("user daily quota — API", () => {
 describe("quota failure message", () => {
   it("names the effective per-day limit (env when the database has none; 0 when unset)", async () => {
     env.USER_DAILY_USD = 2.5;
-    await expect(inJobTx((tx) => quotaFailMessage(tx))).resolves.toBe("quota_exceeded: vượt hạn mức $2.5/ngày");
+    expect(quotaFailMessage()).toBe("quota_exceeded: vượt hạn mức $2.5/ngày");
     env.USER_DAILY_USD = undefined;
-    await expect(inJobTx((tx) => quotaFailMessage(tx))).resolves.toBe("quota_exceeded: vượt hạn mức $0/ngày");
+    expect(quotaFailMessage()).toBe("quota_exceeded: vượt hạn mức $0/ngày");
   });
 });
 

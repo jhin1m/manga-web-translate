@@ -674,15 +674,26 @@ label.file-pick input {
 .new-series-dialog > .hint {
   margin: 0;
 }
-/* Modal Cài đặt dịch: nhóm dùng khung SetGroup của trang Cài đặt (admin.css), thẻ hẹp hơn; hàng nhãn | ô, ô chữ dài và
+/* Modal Cài đặt dịch: nhóm dùng thẻ SetGroup của trang Cài đặt (admin.css), lề hẹp hơn; hàng nhãn | ô, ô chữ dài và
    bảng xếp dọc (`data-stack`). */
 .settings-dialog {
   display: flex;
   flex-direction: column;
-  gap: var(--sp-5);
+  gap: var(--sp-3);
 }
-.settings-dialog .set-card {
-  margin-top: var(--sp-2);
+.settings-dialog .set-group-head {
+  padding: 10px var(--sp-4);
+}
+.settings-dialog .set-icon {
+  width: 28px;
+  height: 28px;
+}
+.settings-dialog .set-icon svg {
+  width: 16px;
+  height: 16px;
+}
+.settings-dialog .set-card,
+.settings-dialog .set-group > .set-card {
   padding: 0 var(--sp-4);
 }
 .settings-dialog .set-row {
@@ -926,7 +937,7 @@ button.link-danger:hover {
 
 /* Nhãn hàng trong modal Cài đặt dịch (đặt cuối để không bị luật `label` chung ghi đè). */
 .settings-dialog .set-row-label > label,
-.settings-dialog .set-row-label > span {
+.settings-dialog .set-row-label > span:not(.info-tip) {
   display: inline;
   margin: 0;
   padding: 0;

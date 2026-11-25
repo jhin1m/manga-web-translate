@@ -89,3 +89,15 @@ export function adoptServer(
   }
   return next;
 }
+
+/**
+ * Tóm tắt nhóm "Hướng dẫn cho AI" khi gập, vd "Có giọng văn · 3 xưng hô · 12 thuật ngữ". `terms` chưa tải
+ * (`undefined`) thì bỏ phần thuật ngữ; không có gì → "Chưa có".
+ */
+export function aiGuideSummary(d: Pick<Draft, "style_prompt" | "pronoun_rules">, terms: number | undefined): string {
+  const parts: string[] = [];
+  if (d.style_prompt.trim()) parts.push("Có giọng văn");
+  if (d.pronoun_rules.length) parts.push(`${d.pronoun_rules.length} xưng hô`);
+  if (terms) parts.push(`${terms} thuật ngữ`);
+  return parts.length ? parts.join(" · ") : "Chưa có";
+}

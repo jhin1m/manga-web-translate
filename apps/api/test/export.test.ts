@@ -1,11 +1,11 @@
-/** Xuất chương: enqueue, inputs lúc claim, output export có tag lifecycle, complete kiểm key/size, tải qua 302 ≤ 5'. */
+/** Xuất chương: enqueue, inputs lúc claim, output export có header tag đã ký, complete kiểm key/size, tải qua 302 ≤ 5'. */
 import { chapters, jobs, pageStates, pages, scoped } from "@mtl/db";
 import { ExportInputs, pageId, storageKeys } from "@mtl/shared";
 import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { attachmentDisposition } from "../src/routes/export.ts";
-import { objectTags } from "../src/storage.ts";
-import { call, db, seedUser } from "./helpers.ts";
+import { head } from "../src/storage.ts";
+import { call, db, fetchFile, seedUser } from "./helpers.ts";
 import { aiState, type Claimed, claimJobs, complete, SHA, wcall, workerToken } from "./worker-helpers.ts";
 
 type Seed = Awaited<ReturnType<typeof seedUser>>;
@@ -56,7 +56,7 @@ async function claimExport(): Promise<Claimed> {
 
 async function putExport(j: Claimed, body: Uint8Array, headers?: Record<string, string>) {
   const out = j.outputs.export as Claimed["outputs"][string] & { headers: Record<string, string> };
-  return fetch(out.put, { method: "PUT", body, headers: headers ?? out.headers });
+  return fetchFile(out.put, { method: "PUT", body, headers: headers ?? out.headers });
 }
 
 beforeAll(async () => {
@@ -125,12 +125,12 @@ describe("export job lifecycle", () => {
     });
   });
 
-  it("PUT without the signed tagging header is rejected; with it the object carries the lifecycle tag", async () => {
+  it("PUT without the signed tagging header is rejected; with it the file is stored", async () => {
     const bad = await putExport(j, new Uint8Array([1, 2, 3]), { "content-type": "application/vnd.comicbook+zip" });
-    expect(bad.ok).toBe(false); // thiếu header đã ký → MinIO từ chối (400/403)
+    expect(bad.ok).toBe(false); // thiếu header đã ký → route /files từ chối (400/403)
     const ok = await putExport(j, new Uint8Array(1234));
     expect(ok.status, await ok.text()).toBe(200);
-    expect(await objectTags(j.outputs.export?.key ?? "")).toEqual({ "mtl-kind": "export" });
+    expect(await head(j.outputs.export?.key ?? "")).toMatchObject({ bytes: 1234 });
   });
 
   it("download before completion → 409", async () => {
@@ -153,12 +153,12 @@ describe("export job lifecycle", () => {
   it("download → 302 to a presigned GET valid ≤ 5 minutes, as attachment", async () => {
     const res = await api(A, `/exports/${j.id}/download`);
     expect(res.status).toBe(302);
-    const loc = new URL(res.headers.get("location") ?? "");
-    expect(Number(loc.searchParams.get("X-Amz-Expires"))).toBeLessThanOrEqual(300);
-    expect(loc.searchParams.get("response-content-disposition")).toMatch(
-      /^attachment; filename="Series exp-a-ch1\.cbz"/,
-    );
-    const file = await fetch(loc);
+    const location = res.headers.get("location") ?? "";
+    expect(location.startsWith("/files/")).toBe(true);
+    const loc = new URL(location, "http://local");
+    expect(Number(loc.searchParams.get("exp")) - Date.now() / 1000).toBeLessThanOrEqual(300);
+    expect(loc.searchParams.get("cd")).toMatch(/^attachment; filename="Series exp-a-ch1\.cbz"/);
+    const file = await fetchFile(location);
     expect(file.status).toBe(200);
     expect(file.headers.get("content-disposition")).toMatch(/^attachment/);
     expect((await file.arrayBuffer()).byteLength).toBe(1234);

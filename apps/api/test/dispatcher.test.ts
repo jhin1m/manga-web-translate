@@ -298,7 +298,7 @@ describe("HMAC + healthz", () => {
     );
   });
 
-  it("/healthz: 503 without runner heartbeat, 200 when DB + MinIO + runner are fine", async () => {
+  it("/healthz: 503 without runner heartbeat, 200 when DB + storage + runner are fine", async () => {
     const down = await app.request("/healthz");
     expect(down.status).toBe(503);
     expect(await down.json()).toMatchObject({ ok: false, db: true, storage: true, runner: false });

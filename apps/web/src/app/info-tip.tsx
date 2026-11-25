@@ -1,12 +1,14 @@
 /**
  * Nút ⓘ kèm lời giải thích ngắn (thay cho dòng hint dưới trường). Hiện khi rê chuột, khi focus bằng phím (Tab) hoặc
  * khi bấm/chạm; ẩn khi rời đi hoặc blur. Nội dung gắn vào nút qua `aria-describedby` nên trình đọc màn hình đọc được.
+ * `id`: id cố định cho phần nội dung — để ô điều khiển cạnh nút cũng trỏ `aria-describedby` vào cùng lời giải thích.
  */
 import { type ReactNode, useId, useState } from "react";
 import "./info-tip.css";
 
-export function InfoTip({ label, children }: { label: string; children: ReactNode }) {
-  const id = useId();
+export function InfoTip({ label, id: fixedId, children }: { label: string; id?: string; children: ReactNode }) {
+  const autoId = useId();
+  const id = fixedId ?? autoId;
   const [hover, setHover] = useState(false);
   const [focus, setFocus] = useState(false);
   const [pinned, setPinned] = useState(false);

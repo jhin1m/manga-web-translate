@@ -24,6 +24,14 @@ import {
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
+import {
+  EraserIcon,
+  LanguagesIcon,
+  ScanIcon,
+  ScanTextIcon,
+  SpellCheckIcon,
+  WorkflowIcon,
+} from "../../app/settings-icons.tsx";
 import { api } from "../../lib/api.ts";
 import { adminSettingsKey, providerError, useAdminSettings, useProviders } from "../admin/api.ts";
 import type { SavedProvider } from "../admin/provider-form-model.ts";
@@ -59,8 +67,8 @@ function useSynced<T>(server: T) {
 }
 
 /**
- * Ô số tự lưu: gõ tự do, rời ô / Enter mới lưu nếu trình duyệt thấy hợp lệ (min / max / required); sai thì báo lỗi
- * dưới ô và không lưu. `null` = để trống (chỉ khi `allowEmpty`).
+ * Ô số tự lưu (hẹp, kèm khoảng cho phép bên cạnh): gõ tự do, rời ô / Enter mới lưu nếu trình duyệt thấy hợp lệ (min /
+ * max / required); sai thì báo lỗi dưới ô và không lưu. `null` = để trống (chỉ khi `allowEmpty`).
  */
 function NumField(props: {
   id: string;
@@ -87,26 +95,31 @@ function NumField(props: {
   };
   return (
     <>
-      <input
-        id={props.id}
-        aria-describedby={descId(props.id)}
-        aria-invalid={err ? true : undefined}
-        type="number"
-        step={props.step}
-        min={props.min}
-        max={props.max}
-        required={!props.allowEmpty}
-        placeholder={props.placeholder}
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        onBlur={(e) => commit(e.currentTarget)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") {
-            e.preventDefault();
-            commit(e.currentTarget);
-          }
-        }}
-      />
+      <span className="num-field">
+        <input
+          id={props.id}
+          aria-describedby={descId(props.id)}
+          aria-invalid={err ? true : undefined}
+          type="number"
+          step={props.step}
+          min={props.min}
+          max={props.max}
+          required={!props.allowEmpty}
+          placeholder={props.placeholder}
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          onBlur={(e) => commit(e.currentTarget)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              commit(e.currentTarget);
+            }
+          }}
+        />
+        <span className="muted small">
+          {props.min}–{props.max}
+        </span>
+      </span>
       {err && <span className="error small">{err}</span>}
     </>
   );
@@ -183,7 +196,9 @@ function PipelineForm(props: { pipeline: PipelineSettings; slots: AiSlots; provi
     <form className="set-section" aria-label="Cài đặt pipeline" onSubmit={(e) => e.preventDefault()}>
       <SectionHead
         title="Pipeline"
-        desc="Chọn model và tuỳ chọn dùng để xử lý từng trang. Áp dụng cho mọi người dùng từ lần chạy sau; chương đã xử lý không tự chạy lại."
+        icon={<WorkflowIcon />}
+        desc="Model và tuỳ chọn xử lý từng trang, cho mọi người dùng."
+        tip="Áp dụng từ lần chạy sau; chương đã xử lý không tự chạy lại."
         aside={
           <>
             <SaveStatus
@@ -231,7 +246,7 @@ function PipelineForm(props: { pipeline: PipelineSettings; slots: AiSlots; provi
         </p>
       )}
 
-      <SetGroup title="Phát hiện chữ" desc="Tìm chữ và bóng thoại trên trang.">
+      <SetGroup title="Phát hiện chữ" icon={<ScanIcon />} step={1} desc="Tìm chữ và bóng thoại trên trang.">
         <SetRow
           label="Model"
           htmlFor="p-detector"
@@ -268,7 +283,10 @@ function PipelineForm(props: { pipeline: PipelineSettings; slots: AiSlots; provi
 
       <SetGroup
         title="Đọc chữ (OCR)"
-        desc="Đọc chữ gốc trong vùng đã phát hiện, chọn theo ngôn ngữ gốc của series. OCR local miễn phí và ảnh không rời máy; AI đọc tốt mọi ngôn ngữ, nhận cả SFX nhưng tính token."
+        icon={<ScanTextIcon />}
+        step={2}
+        desc="Đọc chữ gốc trong vùng đã phát hiện, theo ngôn ngữ gốc của series."
+        tip="OCR local miễn phí và ảnh không rời máy; AI đọc tốt mọi ngôn ngữ, nhận cả SFX nhưng tính token."
       >
         {SOURCE_LANGS.map((lang) => (
           <SetRow key={lang} label={LANG_NAMES[lang]} htmlFor={`p-ocr-${lang}`}>
@@ -304,7 +322,13 @@ function PipelineForm(props: { pipeline: PipelineSettings; slots: AiSlots; provi
         </SetRow>
       </SetGroup>
 
-      <SetGroup title="Xoá chữ" desc="Vẽ lại nền sau khi xoá chữ. Nền phẳng luôn được tô màu trực tiếp trước.">
+      <SetGroup
+        title="Xoá chữ"
+        icon={<EraserIcon />}
+        step={3}
+        desc="Vẽ lại nền sau khi xoá chữ."
+        tip="Nền phẳng luôn được tô màu trực tiếp trước."
+      >
         <SetRow
           label="Model"
           htmlFor="p-inpainter"
@@ -355,7 +379,7 @@ function PipelineForm(props: { pipeline: PipelineSettings; slots: AiSlots; provi
         </SetRow>
       </SetGroup>
 
-      <SetGroup title="Dịch" desc="Dịch chữ gốc sang ngôn ngữ đích của series.">
+      <SetGroup title="Dịch" icon={<LanguagesIcon />} step={4} desc="Dịch chữ gốc sang ngôn ngữ đích của series.">
         <SetRow label="Model AI" htmlFor="slot-translate" desc={ENV_HINT}>
           <ModelSelect
             id="slot-translate"
@@ -367,7 +391,12 @@ function PipelineForm(props: { pipeline: PipelineSettings; slots: AiSlots; provi
         </SetRow>
       </SetGroup>
 
-      <SetGroup title="Hiệu đính" desc="AI đối chiếu bản dịch với ảnh trang để sửa lỗi đọc / dịch.">
+      <SetGroup
+        title="Hiệu đính"
+        icon={<SpellCheckIcon />}
+        step={5}
+        desc="AI đối chiếu bản dịch với ảnh trang để sửa lỗi đọc / dịch."
+      >
         <SetRow label="Model AI" htmlFor="slot-proofread" desc={`Chỉ hiện model có vision. ${ENV_HINT}`}>
           <ModelSelect
             id="slot-proofread"

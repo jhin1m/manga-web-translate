@@ -7,7 +7,7 @@
  * panel khối (Dịch lại, Nhân đôi, Xoá), drawer Hoạt động khi chương đang dịch. Chương tạo qua API + worker giả.
  */
 import { expect, type Page, test } from "@playwright/test";
-import { WEB_URL } from "./env.ts";
+import { fileUrl, WEB_URL } from "./env.ts";
 import { type FakeWorkerOptions, PNG_1PX, runFakeWorker } from "./fake-worker.ts";
 import {
   apiReadyChapter,
@@ -52,7 +52,7 @@ async function committedChapter(page: Page) {
   const form = new FormData();
   for (const [k, v] of Object.entries(f.fields)) form.append(k, v);
   form.append("file", new Blob([new Uint8Array(PNG_1PX)], { type: "image/png" }));
-  expect((await fetch(f.url, { method: "POST", body: form })).status).toBe(204);
+  expect((await fetch(fileUrl(f.url), { method: "POST", body: form })).status).toBe(204);
   expect((await page.request.post(`/api/chapters/${chapter.id}/commit`, { headers, data: {} })).status()).toBe(202);
   return chapter.id;
 }

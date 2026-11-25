@@ -1,6 +1,6 @@
 /**
  * Luồng đầy đủ qua HTTP: commit → chapter.ingest → page.prepare × 40 (song song) → chapter.translate → review.
- * Worker giả lập gọi đúng giao thức (fencing, presigned PUT thật vào MinIO).
+ * Worker giả lập gọi đúng giao thức (fencing, presigned PUT thật qua /files).
  */
 import { chapters, jobs, pageStates, usageLedger } from "@mtl/db";
 import { eq, inArray } from "drizzle-orm";

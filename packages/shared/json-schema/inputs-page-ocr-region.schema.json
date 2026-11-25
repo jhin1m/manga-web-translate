@@ -4,8 +4,16 @@
   "type": "object",
   "properties": {
     "original": {
-      "type": "string",
-      "format": "uri"
+      "anyOf": [
+        {
+          "type": "string",
+          "format": "uri"
+        },
+        {
+          "type": "string",
+          "pattern": "^\\/files\\/"
+        }
+      ]
     },
     "context_lines": {
       "type": "array",

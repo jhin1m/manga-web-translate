@@ -6,7 +6,7 @@ import { v7 as uuidv7 } from "uuid";
 import { inJobTx } from "../src/jobs/enqueue.ts";
 import { translatePrepared } from "../src/jobs/translate-chain.ts";
 import { createWorkerToken } from "../src/lib/worker-token.ts";
-import { app, db } from "./helpers.ts";
+import { app, db, fetchFile } from "./helpers.ts";
 
 /** PNG 1×1 hợp lệ. */
 export const PNG_1PX = Buffer.from(
@@ -55,7 +55,7 @@ export async function claimJobs(token: string, opts: { max?: number; caps?: stri
 }
 
 export async function putPng(url: string) {
-  const res = await fetch(url, { method: "PUT", body: PNG_1PX, headers: { "content-type": "image/png" } });
+  const res = await fetchFile(url, { method: "PUT", body: PNG_1PX, headers: { "content-type": "image/png" } });
   if (!res.ok) throw new Error(`PUT ${res.status} ${await res.text()}`);
 }
 

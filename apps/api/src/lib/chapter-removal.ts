@@ -1,6 +1,6 @@
 /**
  * Xoá chương / series: huỷ job đang chạy → xoá hàng DB (FK cascade dọn pages, page_states, jobs…) → dọn object
- * MinIO của chương (`u/{user}/ch/{id}/`) và của từng page (`u/{user}/pg/{id}/`). Chương đang mở để sửa ở tab khác
+ * file của chương (`u/{user}/ch/{id}/`) và của từng page (`u/{user}/pg/{id}/`). Chương đang mở để sửa ở tab khác
  * (khoá còn hạn) thì từ chối 423 — không xoá dưới tay tab đang làm.
  */
 import { chapters, jobs, pages, type Scoped } from "@mtl/db";

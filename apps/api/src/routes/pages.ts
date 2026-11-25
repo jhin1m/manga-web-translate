@@ -1,7 +1,7 @@
 /**
  * Danh sách page của chương cho lưới thumbnail: ảnh sạch rev hiện tại khi có, fallback ảnh gốc sau ingest.
  * `images` = cả ảnh gốc lẫn ảnh sạch (canvas màn chương vẽ từng page, so sánh gốc/dịch); `image` giữ cho client cũ.
- * URL là presigned GET TTL ngắn trên FILES_DOMAIN (bucket private) — tách khỏi /progress để polling 2–3s
+ * URL là link `/files` ký TTL ngắn — tách khỏi /progress để polling 2–3s
  * không ký lại URL mỗi lượt.
  */
 import { chapters, pages, scoped, sourceFiles } from "@mtl/db";

@@ -1,8 +1,8 @@
 /**
  * Xuất chương PNG/ZIP/CBZ: render phía server (worker, cùng render.py với auto-typeset) từ page_state chốt lúc
  * claim. File nằm ở `u/{user}/ch/{ch}/export/{jobId}.{zip|cbz}`, chỉ tải qua endpoint có xác thực → 302 tới presigned
- * GET ≤ 5' + `Content-Disposition: attachment` (không phát link dài hạn). Lifecycle MinIO xoá file sau 7 ngày
- * (tag `EXPORT_OBJECT_TAG`); quá hạn → 410.
+ * GET ≤ 5' + `Content-Disposition: attachment` (không phát link dài hạn). Job `export-cleanup` trong `jobs` xoá file sau
+ * EXPORT_RETENTION_DAYS ngày; quá hạn → 410.
  */
 import { chapters, jobs, type Scoped, series } from "@mtl/db";
 import {
@@ -113,7 +113,7 @@ exportRoutes.get("/exports/:jobId", async (c) => {
   return c.json(exportView(await exportJob(c.get("sdb"), c.req.param("jobId"))));
 });
 
-/** 302 → presigned GET 5'. Chưa xong → 409; quá 7 ngày hoặc object đã bị lifecycle xoá → 410. */
+/** 302 → presigned GET 5'. Chưa xong → 409; quá 7 ngày hoặc file đã bị dọn → 410. */
 exportRoutes.get("/exports/:jobId/download", async (c) => {
   const userId = c.get("userId");
   const job = await exportJob(c.get("sdb"), c.req.param("jobId"));

@@ -8,11 +8,10 @@ import { env } from "./env.ts";
 import { isSignupOpen } from "./lib/system-settings.ts";
 import { isAdminEmail } from "./middleware/admin.ts";
 
-const defaultIsSignupEnabled = () => isSignupOpen(db);
+const defaultIsSignupEnabled = async () => isSignupOpen();
 
 /**
- * `isSignupEnabled` đọc trạng thái đăng ký MỖI request (admin đổi trên UI có hiệu lực ngay, không restart); mặc định =
- * DB ?? env và phải đủ 2 hạn mức. Lỗi đọc DB → 500 (fail-closed). `rateLimitEnabled` tách ra vì test dùng chung bộ
+ * `isSignupEnabled` đọc trạng thái đăng ký MỖI request; mặc định = env SIGNUP_ENABLED và phải đủ 2 hạn mức. `rateLimitEnabled` tách ra vì test dùng chung bộ
  * đếm bộ nhớ cấp module: mặc định tắt khi NODE_ENV=test, ca cần kiểm rate limit tự bật + IP riêng.
  */
 export const createAuth = ({

@@ -34,7 +34,7 @@ MTL_TOKEN_FILE=~/.config/mtl/worker.token uv run mtl-worker --api http://localho
   `modal` (qua dispatcher); `--capabilities a,b` (tuỳ chọn) giới hạn loại job. Token nào cũng claim được job — và nhận
   URL ảnh presigned — của **mọi** người dùng, nên token Mac là credential toàn nền tảng: chỉ cấp cho người vận hành,
   không đưa cho người dùng thường. Cờ cũ `--workspace` / `--platform` và setting `worker_mode` đã bỏ.
-- Worker chỉ gọi ra ngoài (API + domain file `FILES_DOMAIN`) → chạy sau NAT được.
+- Worker chỉ gọi ra ngoài (API, kể cả link file `/files/…` do API phục vụ) → chạy sau NAT được.
 - **Nhiều worker cùng lúc**: mỗi worker chạy 1 job một lúc, N worker (dùng chung token được) chạy N job song song —
   claim `SKIP LOCKED`, fencing theo `lease_token` từng job, model tải về ghi file tạm rồi đổi tên. `--threads` (luồng
   onnxruntime) mặc định lấy `MTL_THREADS`; không đặt mà `MTL_WORKERS ≥ 2` thì `số nhân / MTL_WORKERS` (tối thiểu 1) để
@@ -369,17 +369,17 @@ của **người dùng sở hữu job** mà job dùng, dựng lúc claim (`fontI
 - translate: `settings.font` + `settings.narration_font` + `settings.thought_font` + `settings.note_font` của payload (snapshot lúc enqueue);
 - export: `font_family` của mọi box ở trang được vẽ chữ + font mặc định hiện tại của series.
 
-**Font hệ thống** (admin upload ở trang Font, tích "Cho mọi người dùng"; trong editor là nhóm "Font dùng chung"; bảng `system_fonts`, object `system/fonts/<font_id>`) dùng cùng
+**Font hệ thống** (admin upload ở Cài đặt › Font, tích "Cho mọi người dùng"; trong editor là nhóm "Font dùng chung"; bảng `system_fonts`, object `system/fonts/<font_id>`) dùng cùng
 dạng id `custom-<8 hex>` (id không trùng `user_fonts`) nên `resolveCustomFonts` trả chúng cho mọi người dùng cạnh font
 riêng, ở cùng danh sách `inputs.fonts` — hợp đồng và worker không đổi. Trần 20 font hoặc tổng 100MB. Xoá font hệ thống bị
 chặn (409 `in_use`, kèm số series) khi series của bất kỳ ai còn dùng làm mặc định; box cũ còn tham chiếu thì fallback như font riêng đã xoá.
 Rollback code về bản trước: series đã trỏ font hệ thống bị từ chối khi lưu lại (`unknownFonts` cũ) và job fallback font mặc định;
-bảng và object giữ lại vô hại (down: `migrations-down/0025_system_fonts.down.sql`). Backup `infra/backup.sh` mirror cả bucket nên gồm
-`system/`; lifecycle MinIO chỉ áp tag export.
+bảng và object giữ lại vô hại (down: `migrations-down/0025_system_fonts.down.sql`). Backup `infra/backup.sh` mirror cả thư mục file nên
+gồm `system/`; job dọn export (`export-cleanup`) chỉ xoá `…/export/`.
 
 Runbook gỡ font hệ thống đang được series dùng làm mặc định (vd. gỡ vì bản quyền): admin không sửa được series của người
 dùng khác nên phải chạy SQL. Slot thiếu trong `series.default_fonts` nghĩa là dùng font mặc định, nên chỉ cần bỏ các khoá
-đang trỏ tới font (thay `<font_id>` bằng id thật, dạng `custom-<8hex>`) rồi xoá bình thường ở trang Font (`/fonts`):
+đang trỏ tới font (thay `<font_id>` bằng id thật, dạng `custom-<8hex>`) rồi xoá bình thường ở Cài đặt › Font (`/settings?section=fonts`):
 
 ```sql
 UPDATE series
@@ -519,24 +519,20 @@ dispatch (GPU Modal là chi phí thật).
 ## Xuất chương
 
 `chapter.export` (`worker/mtl_worker/export.py`) không cần model ONNX hay LLM (chạy được với `--no-llm`). Output
-`export` mang `headers` đã ký (content-type + tag lifecycle) — xem [export-and-batch-edit.md](./export-and-batch-edit.md).
+`export` mang `headers` đã ký (content-type + tag export) — xem [export-and-batch-edit.md](./export-and-batch-edit.md).
 
 ## Hạn mức mỗi người (`USER_DAILY_USD`)
 
 Tách khỏi kill-switch toàn cục (`GLOBAL_DAILY_USD`, `paused_budget`, `pnpm budget-resume` — không đổi): một tài khoản
 dùng quá tay không làm cạn ngân sách chung. Code: `apps/api/src/billing/user-quota.ts`.
 
-**Chỉnh trên UI**: admin đặt hạn mức mỗi người, ngân sách ngày toàn hệ thống và bật/tắt đăng ký ở Cài đặt › Hệ thống › Hạn
-mức & đăng ký (`PUT /api/admin/settings/limits`, cột trong `system_settings`). Hạn mức hiệu lực = giá trị DB, trống (`null`)
-thì rơi về env (`USER_DAILY_USD`, `GLOBAL_DAILY_USD`, `SIGNUP_ENABLED`); đọc mỗi lần đánh giá nên có hiệu lực ngay, không
-restart `mtl-api` / `mtl-jobs`. Không có cách đặt "không giới hạn" khi env có ngưỡng; ngân sách tháng
-(`GLOBAL_MONTHLY_USD`) chỉ đặt bằng env. Hạ hạn mức xuống dưới số đã chi hôm nay (người chi nhiều nhất / tổng toàn hệ
-thống) cần `confirm: true` (UI hỏi, API 409 `confirm_required` kèm số liệu và số job bị ảnh hưởng): job LLM đang chờ của
-người vượt bị `failed` `quota_exceeded`, nâng lại không tự chạy lại; ngân sách ngày thấp hơn tổng đã chi làm mọi job AI
-`paused_budget` tới ngày UTC mới hoặc khi nâng ngưỡng.
+**Chỉ cấu hình trong `.env`** (không có trên UI): `USER_DAILY_USD`, `GLOBAL_DAILY_USD`, `GLOBAL_MONTHLY_USD`,
+`SIGNUP_ENABLED` (`effectiveLimits` ở `apps/api/src/lib/system-settings.ts`). Đổi xong restart `mtl-api` + `mtl-jobs`.
+Hạ hạn mức xuống dưới số đã chi hôm nay: job LLM đang chờ của người vượt bị `failed` `quota_exceeded`, nâng lại không tự
+chạy lại; ngân sách ngày thấp hơn tổng đã chi làm mọi job AI `paused_budget` tới ngày UTC mới hoặc khi nâng ngưỡng.
 
 - Cửa sổ = ngày **UTC** (cùng `billing/budget.ts`), tính **mọi** chi phí của người dùng trong `usage_ledger` (token LLM
-  + GPU). `0` = chặn mọi job LLM; không đặt (cả DB lẫn env) = không giới hạn. Bật đăng ký (env hoặc UI) bắt buộc đủ cả 2 hạn mức.
+  + GPU). `0` = chặn mọi job LLM; không đặt = không giới hạn. Bật đăng ký bắt buộc đủ cả 2 hạn mức.
 - Endpoint tạo job LLM → 402 `{error:"quota_exceeded", spent_usd, limit_usd, resets_at}`: commit (khi OCR là LLM hoặc đích
   `translated` tường minh), dịch, `translate-prepared`, chạy lại trang lỗi, `ocr-region`, hiệu đính. Job không-LLM (xoá chữ
   lại, xuất…) vẫn tạo được. Hết hạn mức **giữa** chuỗi lô → đóng lượt, trang chưa tới lượt giữ `prepared` / `ready`.

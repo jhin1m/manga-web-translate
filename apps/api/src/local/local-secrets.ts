@@ -7,13 +7,15 @@
 import { randomBytes } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 type RawEnv = Record<string, string | undefined>;
 
 /** `MTL_LOCAL_MODE` thô (trước parse) có bật không — cùng tập giá trị với schema env. */
 export const localModeRequested = (raw: RawEnv): boolean => ["1", "true"].includes(raw.MTL_LOCAL_MODE ?? "");
 
-export const DEFAULT_DATA_DIR = "/data";
+/** `<gốc repo>/.data` — dev chạy thẳng từ repo; image Docker luôn đặt `MTL_DATA_DIR=/data` nên không dùng tới. */
+export const DEFAULT_DATA_DIR = fileURLToPath(new URL("../../../../.data", import.meta.url));
 export const LOCAL_PORT = 8080;
 
 const SECRETS: { name: string; file: string; generate: () => string }[] = [
@@ -49,7 +51,7 @@ export function readOrCreateSecret(path: string, generate: () => string): string
 /**
  * Nạp mặc định cho chế độ local vào `raw` (thường là `process.env`): secret từ file (sinh nếu chưa có),
  * `BETTER_AUTH_URL`/`WEB_ORIGIN` = http://localhost:8080, `API_PORT` = 8080. Chỉ gán biến chưa đặt.
- * `STORAGE_DRIVER` và `FILES_DIR` mặc định theo chế độ local nằm trong schema env (parse thuần, test được).
+ * `FILES_DIR` mặc định nằm trong schema env (parse thuần, test được).
  */
 export function applyLocalEnvDefaults(raw: RawEnv): void {
   const dataDir = isSet(raw.MTL_DATA_DIR) ? raw.MTL_DATA_DIR : DEFAULT_DATA_DIR;

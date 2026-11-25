@@ -50,7 +50,7 @@ Mọi test tự động hiện dùng worker giả lập; chưa có số đo vớ
 - [ ] **Deploy**: chạy migration mới (`0009_series_skip_images`, `0010_series_ignore_text`,
       `0011_pages_skip_changed_at`, `0012_workspace_fonts`, `0013_workspace_pipeline_settings`,
       `0014_proofread_suggestions`, `0015_single_user_guard_worker_kind`, `0016_drop_workspaces`,
-      `0017_user_ownership`, `0018_auth_error_class`, `0019_jobs_progress_counts`, `0020_translate_chain`, `0021_system_settings`, `0022_ai_providers`, `0023_drop_series_llm_tier`, `0024_user_disabled_at`, `0025_system_fonts`, `0026_series_memory` — chỉ thêm cột + bảng, deploy API / worker thứ tự nào cũng được) — 0015 từ chối chạy nếu còn dữ liệu workspace nên **bắt buộc reset DB + MinIO và tạo lại
+      `0017_user_ownership`, `0018_auth_error_class`, `0019_jobs_progress_counts`, `0020_translate_chain`, `0021_system_settings`, `0022_ai_providers`, `0023_drop_series_llm_tier`, `0024_user_disabled_at`, `0025_system_fonts`, `0026_series_memory` — chỉ thêm cột + bảng, deploy API / worker thứ tự nào cũng được) — 0015 từ chối chạy nếu còn dữ liệu workspace nên **bắt buộc reset DB + file người dùng và tạo lại
       token worker** theo "Checklist release single-user-accounts" ở `docs/deployment-guide.md`; worker Mac/Modal phải lên pipeline **0.10.0** (key AI theo job qua claim, provider OpenAI / OpenAI-compatible; gồm mọi bản 0.6–0.9) **trước** khi deploy API (`MIN_PIPELINE_VERSION` 0.10.0, worker cũ nhận 426); `.env` API cần `SECRETS_KEY` + `ADMIN_EMAILS` — worker 0.11.0 (trí nhớ series) là tuỳ chọn, 0.10.0 vẫn chạy, chỉ không trả thuật ngữ / cặp xưng hô; xem "Checklist nâng cấp lên pipeline 0.10.0" ở `docs/deployment-guide.md`, không thì
       hàng đợi dừng; chương manga đang cắt trang / xoá chữ lúc
       deploy sẽ dừng ở "Chờ dịch" (bấm "Dịch chương" để tiếp) — xem "Checklist nâng cấp lên pipeline 0.7.0" ở `docs/deployment-guide.md` (API deploy trước hoặc cùng web: web mới cần `ocr_ready` trong `/progress`); nạp model
@@ -58,7 +58,7 @@ Mọi test tự động hiện dùng worker giả lập; chưa có số đo vớ
       "Checklist OCR local mặc định"; production từng bấm Lưu ở Pipeline chung thì cài đặt đã lưu (OCR = LLM) thắng mặc
       định mới → đổi tay trên UI; VPS cần dựng được addon `re2` — xem checklist ở
       `docs/deployment-guide.md` mục 4.
-- [ ] **Phase 8 — trước khi mở đăng ký công khai ở production** (`SIGNUP_ENABLED` giữ `false` và admin không bật trên UI tới lúc này): xác thực
+- [ ] **Phase 8 — trước khi mở đăng ký công khai ở production** (`SIGNUP_ENABLED` giữ `false` tới lúc này): xác thực
       email, hạn mức dung lượng lưu trữ mỗi người, BYOK, takedown, ToS. (Hạn mức chi phí AI mỗi người
       `USER_DAILY_USD` → 402 và admin nền tảng một phần — Cài đặt, danh sách người dùng, khoá / mở tài khoản — đã có.)
 - [ ] **Phase 9 — Chrome extension** (phác thảo, sau MVP).

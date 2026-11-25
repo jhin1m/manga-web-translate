@@ -66,36 +66,22 @@ export async function saveSlots(t: DbLike, slots: AiSlots): Promise<AiSlots> {
   return systemSlots(t);
 }
 
-export type StoredLimits = {
-  user_daily_usd: number | null;
-  global_daily_usd: number | null;
-  signup_enabled: boolean | null;
-};
 export type EffectiveLimits = {
   userDailyUsd: number | null;
   globalDailyUsd: number | null;
   signupEnabled: boolean;
-  /** Đăng ký công khai mở thật sự: bật + đủ 2 hạn mức hiệu lực (khớp `/healthz.signup`). */
+  /** Đăng ký công khai mở thật sự: bật + đủ 2 hạn mức (khớp `/healthz.signup`). */
   signupOpen: boolean;
 };
 
-const num = (v: string | null | undefined) => (v === null || v === undefined ? null : Number(v));
-
-/** Giá trị lưu ở DB (`null` = theo env). */
-export async function storedLimits(t: DbLike): Promise<StoredLimits> {
-  const row = await readSystemSettings(t);
-  return {
-    user_daily_usd: num(row?.userDailyUsd),
-    global_daily_usd: num(row?.globalDailyUsd),
-    signup_enabled: row?.signupEnabled ?? null,
-  };
-}
-
-/** Hạn mức hiệu lực từ giá trị lưu: DB ?? env (đọc env lúc gọi). `null` = không giới hạn. Nguồn duy nhất của quy tắc rơi về env. */
-export function resolveLimits(s: StoredLimits): EffectiveLimits {
-  const userDailyUsd = s.user_daily_usd ?? env.USER_DAILY_USD ?? null;
-  const globalDailyUsd = s.global_daily_usd ?? env.GLOBAL_DAILY_USD ?? null;
-  const signupEnabled = s.signup_enabled ?? env.SIGNUP_ENABLED;
+/**
+ * Hạn mức + đăng ký chỉ cấu hình trong `.env` (USER_DAILY_USD, GLOBAL_DAILY_USD, SIGNUP_ENABLED), đọc env lúc gọi (test
+ * đổi env lúc chạy vẫn có hiệu lực). `null` = không giới hạn.
+ */
+export function effectiveLimits(): EffectiveLimits {
+  const userDailyUsd = env.USER_DAILY_USD ?? null;
+  const globalDailyUsd = env.GLOBAL_DAILY_USD ?? null;
+  const signupEnabled = env.SIGNUP_ENABLED;
   return {
     userDailyUsd,
     globalDailyUsd,
@@ -104,33 +90,8 @@ export function resolveLimits(s: StoredLimits): EffectiveLimits {
   };
 }
 
-/** Hạn mức hiệu lực = DB ?? env; 1 truy vấn PK. */
-export async function effectiveLimits(t: DbLike): Promise<EffectiveLimits> {
-  return resolveLimits(await storedLimits(t));
-}
+/** Đăng ký công khai đang mở thật sự: bật + đủ 2 hạn mức (fail-closed). */
+export const isSignupOpen = (): boolean => effectiveLimits().signupOpen;
 
-/** Đăng ký công khai đang mở thật sự: bật + đủ 2 hạn mức hiệu lực (fail-closed). */
-export async function isSignupOpen(t: DbLike): Promise<boolean> {
-  return (await effectiveLimits(t)).signupOpen;
-}
-
-/**
- * Biểu thức SQL hạn mức user hiệu lực (subquery PK `system_settings`, rơi về env). Dựng mỗi lần gọi để đổi env lúc
- * chạy (test) có hiệu lực.
- */
-export const userDailyLimitSql = () =>
-  sql`coalesce((select ${systemSettings.userDailyUsd} from ${systemSettings} where ${systemSettings.id} = ${ID}), ${env.USER_DAILY_USD ?? null}::numeric)`;
-
-/** Ghi đủ bộ hạn mức + đăng ký (null = theo env); upsert để chạy được khi DB chưa có hàng. */
-export async function saveLimits(t: DbLike, v: StoredLimits): Promise<StoredLimits> {
-  const set = {
-    userDailyUsd: v.user_daily_usd === null ? null : String(v.user_daily_usd),
-    globalDailyUsd: v.global_daily_usd === null ? null : String(v.global_daily_usd),
-    signupEnabled: v.signup_enabled,
-  };
-  await t
-    .insert(systemSettings)
-    .values({ id: ID, ...set })
-    .onConflictDoUpdate({ target: systemSettings.id, set: { ...set, updatedAt: sql`now()` } });
-  return storedLimits(t);
-}
+/** Hạn mức user dạng tham số SQL (`null` = không giới hạn). Dựng mỗi lần gọi để đổi env lúc chạy (test) có hiệu lực. */
+export const userDailyLimitSql = () => sql`${env.USER_DAILY_USD ?? null}::numeric`;

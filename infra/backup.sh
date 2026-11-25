@@ -1,29 +1,29 @@
 #!/usr/bin/env bash
-# Backup hằng đêm (systemd mtl-backup.timer): pg_dump (custom format) + mc mirror bucket MinIO → bucket đích ở
-# nhà cung cấp khác (BACKUP_S3_*). Giữ 14 ngày nhờ lifecycle của bucket đích (versioning + offsite-lifecycle.json):
-# dump pg/ hết hạn sau 14 ngày; object bị xoá/ghi đè ở nguồn còn bản cũ 14 ngày.
+# Backup hằng đêm (systemd mtl-backup.timer): pg_dump (custom format) + `mc mirror` thư mục file (FILES_DIR) → bucket
+# S3 đích ở nhà cung cấp khác (BACKUP_S3_*). Giữ 14 ngày nhờ lifecycle của bucket đích (versioning +
+# offsite-lifecycle.json): dump pg/ hết hạn sau 14 ngày; file bị xoá/ghi đè ở nguồn còn bản cũ 14 ngày.
 #   infra/backup.sh init   # 1 lần: tạo bucket đích, bật versioning, áp lifecycle
 #   infra/backup.sh        # backup
-# Biến: DATABASE_URL (hoặc BACKUP_DATABASE_URL), S3_ENDPOINT/S3_ACCESS_KEY/S3_SECRET_KEY/S3_BUCKET,
+# Biến: DATABASE_URL (hoặc BACKUP_DATABASE_URL), FILES_DIR,
 #       BACKUP_S3_ENDPOINT/BACKUP_S3_ACCESS_KEY/BACKUP_S3_SECRET_KEY/BACKUP_BUCKET, ALERT_NTFY_URL (tuỳ chọn).
 set -euo pipefail
 cd "$(dirname "$0")"
 . ./lib.sh
-need S3_ENDPOINT S3_ACCESS_KEY S3_SECRET_KEY S3_BUCKET BACKUP_S3_ENDPOINT BACKUP_S3_ACCESS_KEY BACKUP_S3_SECRET_KEY \
-  BACKUP_BUCKET
+need BACKUP_S3_ENDPOINT BACKUP_S3_ACCESS_KEY BACKUP_S3_SECRET_KEY BACKUP_BUCKET
 PG_URL=${BACKUP_DATABASE_URL:-${DATABASE_URL:-}}
-mc_alias src "$S3_ENDPOINT" "$S3_ACCESS_KEY" "$S3_SECRET_KEY"
 mc_alias offsite "$BACKUP_S3_ENDPOINT" "$BACKUP_S3_ACCESS_KEY" "$BACKUP_S3_SECRET_KEY"
 DEST="offsite/$BACKUP_BUCKET"
 
 if [ "${1:-}" = "init" ]; then
   $MC mb --ignore-existing "$DEST"
   $MC version enable "$DEST"
-  $MC ilm import "$DEST" <minio/offsite-lifecycle.json
+  $MC ilm import "$DEST" <offsite-lifecycle.json
   log "đích $DEST: versioning bật, giữ 14 ngày"
   exit 0
 fi
 [ -n "$PG_URL" ] || die "thiếu DATABASE_URL"
+need FILES_DIR
+[ -d "$FILES_DIR" ] || die "FILES_DIR=$FILES_DIR không phải thư mục"
 
 stamp=$(date -u +%Y%m%dT%H%M%SZ)
 work=$(mktemp -d "${BACKUP_TMPDIR:-${TMPDIR:-/tmp}}/mtl-backup.XXXXXX")
@@ -42,9 +42,10 @@ $PG_DUMP --format=custom --no-owner --no-privileges "$PG_URL" >"$dump"
 (cd "$work" && sha256 "${dump##*/}" >"${dump##*/}.sha256")
 $MC cp --quiet "$dump" "$dump.sha256" "$DEST/pg/"
 
-log "mirror $S3_BUCKET → $DEST/objects/"
-# --remove: đích phản chiếu đúng nguồn; bản bị xoá còn giữ ở version cũ 14 ngày (lifecycle đích).
-$MC mirror --quiet --overwrite --remove "src/$S3_BUCKET" "$DEST/objects/"
+log "mirror $FILES_DIR → $DEST/objects/"
+# --remove: đích phản chiếu đúng nguồn; bản bị xoá còn giữ ở version cũ 14 ngày (lifecycle đích). Sidecar
+# `.meta.json` (Content-Type) đi cùng file; `.tmp/` là file ghi dở → bỏ.
+$MC mirror --quiet --overwrite --remove --exclude ".tmp/*" "${FILES_DIR%/}/" "$DEST/objects/"
 
 bytes=$(wc -c <"$dump" | tr -d ' ')
-log "xong: pg/mtl-$stamp.dump ($bytes byte) + objects"
+log "xong: pg/mtl-$stamp.dump ($bytes byte) + files"

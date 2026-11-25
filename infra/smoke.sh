@@ -33,5 +33,5 @@ if [ "$signup" = closed ]; then
 else
   [ "$code" = 400 ] && grep -q PASSWORD_TOO_SHORT <<<"$body" ||
     die "đăng ký đang mở nhưng trả HTTP $code (cần 400 PASSWORD_TOO_SHORT): $body"
-  log "CẢNH BÁO: đăng ký công khai đang mở (chưa xác thực email) — do admin bật trên UI hoặc SIGNUP_ENABLED=true"
+  log "CẢNH BÁO: đăng ký công khai đang mở (chưa xác thực email) — SIGNUP_ENABLED=true trong .env"
 fi

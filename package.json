@@ -9,7 +9,7 @@
   "scripts": {
     "dev": "pnpm --parallel --filter @mtl/api --filter @mtl/web dev",
     "dev:all": "bash scripts/dev-all.sh",
-    "infra:up": "docker compose -f infra/docker-compose.dev.yml up -d --wait postgres minio files-proxy && docker compose -f infra/docker-compose.dev.yml run --rm minio-init",
+    "infra:up": "docker compose -f infra/docker-compose.dev.yml up -d --wait postgres",
     "infra:down": "docker compose -f infra/docker-compose.dev.yml down",
     "db:generate": "pnpm --filter @mtl/db generate",
     "db:migrate": "pnpm --filter @mtl/db migrate",

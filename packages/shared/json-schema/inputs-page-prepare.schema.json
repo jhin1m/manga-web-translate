@@ -4,8 +4,16 @@
   "type": "object",
   "properties": {
     "original": {
-      "type": "string",
-      "format": "uri"
+      "anyOf": [
+        {
+          "type": "string",
+          "format": "uri"
+        },
+        {
+          "type": "string",
+          "pattern": "^\\/files\\/"
+        }
+      ]
     },
     "partial": {
       "anyOf": [
@@ -13,12 +21,28 @@
           "type": "object",
           "properties": {
             "clean": {
-              "type": "string",
-              "format": "uri"
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uri"
+                },
+                {
+                  "type": "string",
+                  "pattern": "^\\/files\\/"
+                }
+              ]
             },
             "mask": {
-              "type": "string",
-              "format": "uri"
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uri"
+                },
+                {
+                  "type": "string",
+                  "pattern": "^\\/files\\/"
+                }
+              ]
             },
             "regions": {
               "type": "array",

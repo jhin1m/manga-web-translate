@@ -1,6 +1,5 @@
 /**
- * Dọn file export hết hạn của disk driver (S3 dùng lifecycle của bucket). Chạy trong `jobs` mỗi giờ khi
- * STORAGE_DRIVER=disk: xoá `root/u/<user>/ch/<chapter>/export/<file>` cũ hơn `retentionMs` (kèm sidecar `.meta.json`)
+ * Dọn file export hết hạn trong thư mục file. Chạy trong `jobs` mỗi giờ: xoá `root/u/<user>/ch/<chapter>/export/<file>` cũ hơn `retentionMs` (kèm sidecar `.meta.json`)
  * và file tạm `root/.tmp/*` cũ hơn 24h (ghi dở do process chết). Chỉ xoá file thường; symlink/thư mục bỏ qua.
  */
 import type { Dirent } from "node:fs";

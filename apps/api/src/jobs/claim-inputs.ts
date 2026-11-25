@@ -64,7 +64,7 @@ export async function presignOutputs(job: Job, names: string[]): Promise<Record<
   for (const name of names) {
     const k = outputKey(job, name);
     if (!k) throw new HTTPException(400, { message: `output "${name}" not valid for ${job.type}` });
-    // File export: MIME theo format + tag cho lifecycle xoá sau 7 ngày; còn lại là PNG.
+    // File export: MIME theo format + tag đánh dấu export (nằm trong chữ ký PUT); còn lại là PNG.
     const exp = name === "export" && job.payload.type === "chapter.export" ? EXPORT_FILE[job.payload.format] : null;
     const headers: Record<string, string> = { "content-type": exp?.mime ?? PNG };
     if (exp) headers["x-amz-tagging"] = EXPORT_OBJECT_TAG;

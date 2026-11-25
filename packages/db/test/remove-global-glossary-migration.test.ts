@@ -2,7 +2,7 @@
  * Migration bỏ glossary chung: entry chung được chép vào series cùng người dùng + cùng cặp nguồn→đích mà series chưa có
  * term đó (entry series thắng); entry không có series cùng cặp (hoặc cặp NULL) chuyển vào glossary_global_archive; sau
  * đó series_id NOT NULL, unique (user_id, series_id, source_term). File down thêm lại cột / unique cũ và trả entry lưu
- * trữ về glossary chung. Mỗi ca dựng DB riêng tới 0030 (thư mục migration tạm, journal cắt) rồi chạy tiếp toàn bộ.
+ * trữ về glossary chung. Mỗi ca dựng DB riêng tới 0030 (thư mục migration tạm, journal cắt) rồi chạy tiếp tới 0031.
  */
 import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -19,13 +19,21 @@ const dbName = decodeURIComponent(new URL(url).pathname.slice(1));
 const tmp = mkdtempSync(join(tmpdir(), "mtl-mig-"));
 const downFile = join(migrationsFolder, "..", "migrations-down", "0031_remove_global_glossary.down.sql");
 
-/** Thư mục migration chỉ gồm 0000–0030 (còn glossary chung). */
-const before = join(tmp, "before");
-cpSync(migrationsFolder, before, { recursive: true });
-const journalPath = join(before, "meta", "_journal.json");
-const journal = JSON.parse(readFileSync(journalPath, "utf8")) as { entries: { idx: number }[] };
-journal.entries = journal.entries.filter((e) => e.idx <= 30);
-writeFileSync(journalPath, JSON.stringify(journal));
+/** Bản sao thư mục migration chỉ gồm 0000–`maxIdx` (journal cắt). */
+function migrationsThrough(name: string, maxIdx: number): string {
+  const dir = join(tmp, name);
+  cpSync(migrationsFolder, dir, { recursive: true });
+  const journalPath = join(dir, "meta", "_journal.json");
+  const journal = JSON.parse(readFileSync(journalPath, "utf8")) as { entries: { idx: number }[] };
+  journal.entries = journal.entries.filter((e) => e.idx <= maxIdx);
+  writeFileSync(journalPath, JSON.stringify(journal));
+  return dir;
+}
+
+/** 0000–0030: còn glossary chung. */
+const before = migrationsThrough("before", 30);
+/** 0000–0031: file down của 0031 gỡ dòng migration mới nhất nên phải là 0031 (down chạy từ mới nhất về). */
+const through = migrationsThrough("through", 31);
 
 async function admin<T>(fn: (sql: postgres.Sql) => Promise<T>): Promise<T> {
   const u = new URL(url);
@@ -155,7 +163,7 @@ describe("remove global glossary migration", () => {
   it("copies shared entries into same-pair series without overriding series entries, then drops them", async () => {
     await seed();
     const ids = new Map((await sharedRows()).map((r) => [`${r.user_id}|${r.source_term}|${r.source_lang}`, r.id]));
-    await migrateTo(migrationsFolder);
+    await migrateTo(through);
 
     expect(await rows()).toEqual([
       { series_id: KO_VI, source_term: "검", target_term: "kiếm", note: "n-kiếm", case_sensitive: false },
@@ -231,7 +239,7 @@ describe("remove global glossary migration", () => {
   it("down file restores the old columns, scope unique and archived shared entries", async () => {
     await seed();
     const shared = await sharedRows();
-    await migrateTo(migrationsFolder);
+    await migrateTo(through);
     const count = async () =>
       (await query<{ n: number }>(`SELECT count(*)::int AS n FROM glossary_entries`))[0]?.n ?? 0;
     const n = await count();
@@ -263,7 +271,7 @@ describe("remove global glossary migration", () => {
     await expect(query(insertShared)).rejects.toThrow(/glossary_entries_scope_term_uq/);
     // Chạy lại up sau down: migration được gỡ khỏi bảng drizzle nên áp lại; entry chung mới được chép rồi xoá, entry
     // không có series cùng cặp lại vào lưu trữ.
-    await migrateTo(migrationsFolder);
+    await migrateTo(through);
     expect(await query(`SELECT count(*)::int AS n FROM glossary_entries WHERE series_id IS NULL`)).toEqual([{ n: 0 }]);
     expect(await count()).toBe(n);
     expect((await archived()).length).toBe(archivedN);
