@@ -70,7 +70,7 @@ export async function memoryCarry(tx: DbLike, ch: Chapter, s: Series): Promise<T
 
 type Covered = { terms: Set<string>; pronouns: Set<string> };
 
-/** Khoá đã có sẵn: nguồn trong glossary hiệu lực (riêng series + chung đúng cặp) và cặp trong pronoun_rules. */
+/** Khoá đã có sẵn: nguồn trong glossary của series và cặp trong pronoun_rules. */
 async function coveredKeys(tx: DbLike, s: Series): Promise<Covered> {
   const rows = await tx
     .select({ sourceTerm: glossaryEntries.sourceTerm })
@@ -255,8 +255,6 @@ export async function applyLearned(
           writtenTerms.map((a) => ({
             userId: s.userId,
             seriesId: s.id,
-            sourceLang: null,
-            targetLang: null,
             sourceTerm: a.data.source,
             targetTerm: a.data.target,
             note: "",

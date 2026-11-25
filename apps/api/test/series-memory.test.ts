@@ -396,9 +396,7 @@ describe("AI writes learned memory into the series", () => {
     expect(after.pronounRules).toEqual([rule("Hana", "Minjun", "ai")]);
     expect([after.stylePrompt, after.styleOrigin]).toEqual(["Giọng trẻ trung", "ai"]);
     const entries = await glossaryOf(S.seriesId);
-    expect(entries.map((e) => [e.sourceTerm, e.targetTerm, e.origin, e.sourceLang, e.targetLang, e.note])).toEqual([
-      ["민준", "Minjun", "ai", null, null, ""],
-    ]);
+    expect(entries.map((e) => [e.sourceTerm, e.targetTerm, e.origin, e.note])).toEqual([["민준", "Minjun", "ai", ""]]);
     expect((await ledgerOf(S.seriesId)).map((r) => [r.kind, r.key]).sort()).toEqual([
       ["pronoun", ko(pronounKey("Hana", "Minjun"))],
       ["term", ko(termKey("민준"))],
@@ -436,14 +434,10 @@ describe("AI writes learned memory into the series", () => {
     const S = await seedUser("auto-filter");
     const sdb = scoped(db, S.userId);
     await sdb.insert(glossaryEntries, { seriesId: S.seriesId, sourceTerm: "검", targetTerm: "kiếm" });
-    await sdb.insert(glossaryEntries, {
-      sourceLang: "ko",
-      targetLang: "vi",
-      sourceTerm: "마법",
-      targetTerm: "ma pháp",
-    });
-    // Glossary chung của cặp ngôn ngữ khác không phủ.
-    await sdb.insert(glossaryEntries, { sourceLang: "ja", targetLang: "vi", sourceTerm: "城", targetTerm: "thành" });
+    await sdb.insert(glossaryEntries, { seriesId: S.seriesId, sourceTerm: "마법", targetTerm: "ma pháp" });
+    // Glossary của series khác không phủ.
+    const other = await sdb.insert(series, { title: "Series khác" });
+    await sdb.insert(glossaryEntries, { seriesId: other.id, sourceTerm: "城", targetTerm: "thành" });
     await db
       .update(series)
       .set({ pronounRules: [{ speaker: "Minjun", listener: "Hana", address: "anh/em", note: "" }] })

@@ -15,7 +15,7 @@ import { HTTPException } from "hono/http-exception";
 import { z } from "zod";
 import { applyBatch, chapterPages, httpError, previewPages, undoBatch } from "../lib/batch-edit.ts";
 import { assertChapterIdle, assertChapterLock } from "../lib/chapter-lock.ts";
-import { mergeBySourceTerm, seriesGlossaryWhere } from "../lib/glossary-scope.ts";
+import { seriesGlossaryWhere } from "../lib/glossary-scope.ts";
 import { parseJson } from "../lib/validate.ts";
 import type { AppEnv } from "../middleware/user.ts";
 
@@ -109,13 +109,13 @@ export function applyRules(state: PageState, rules: ReplaceRule[]): { state: Pag
   return { state: { ...state, regions, text_boxes: boxes }, matches };
 }
 
-/** Glossary đã gộp của series chương (entry series đè entry chung đúng cặp) → quy tắc thay có phạm vi theo term nguồn. */
+/** Glossary của series chương → quy tắc thay có phạm vi theo term nguồn. */
 async function glossaryRules(
   sdb: Scoped,
   s: typeof series.$inferSelect,
   body: z.infer<typeof GlossaryBody>,
 ): Promise<ReplaceRule[]> {
-  const map = mergeBySourceTerm(await sdb.select(glossaryEntries, seriesGlossaryWhere(s)));
+  const map = new Map((await sdb.select(glossaryEntries, seriesGlossaryWhere(s))).map((e) => [e.sourceTerm, e]));
   const unknown = body.rules.filter((r) => !map.has(r.source_term)).map((r) => r.source_term);
   if (unknown.length) {
     throw new HTTPException(400, {
