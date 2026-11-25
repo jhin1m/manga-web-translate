@@ -1,16 +1,12 @@
 /**
- * Glossary riêng series hoặc glossary chung theo cặp nguồn→đích (khớp apps/api/src/routes/glossary.ts).
+ * Glossary riêng của series (khớp apps/api/src/routes/glossary.ts).
  */
 import type { Origin } from "@mtl/shared";
 import { api } from "../../lib/api.ts";
-import type { SourceLang, TargetLang } from "../series/lang-labels.ts";
 
 export type GlossaryEntry = {
   id: string;
-  series_id: string | null;
-  /** Chỉ entry chung mang cặp; entry series là null. */
-  source_lang: string | null;
-  target_lang: string | null;
+  series_id: string;
   source_term: string;
   target_term: string;
   note: string;
@@ -21,22 +17,14 @@ export type GlossaryEntry = {
 };
 export type EntryInput = Pick<GlossaryEntry, "source_term" | "target_term" | "note" | "case_sensitive">;
 
-export type LangPair = { source_lang: SourceLang; target_lang: TargetLang };
-export type GlossaryScope = { seriesId: string } | { pair: LangPair };
+export type GlossaryScope = { seriesId: string };
 
-export const scopePath = (scope: GlossaryScope, path = "") =>
-  "seriesId" in scope
-    ? `/api/series/${scope.seriesId}/glossary${path}`
-    : `/api/glossary${path}?source_lang=${scope.pair.source_lang}&target_lang=${scope.pair.target_lang}`;
+export const scopePath = (scope: GlossaryScope, path = "") => `/api/series/${scope.seriesId}/glossary${path}`;
 
-/** Mọi key bắt đầu bằng `["glossary"]` — invalidate theo prefix đó làm mới cả hai cấp. */
-export const glossaryKey = (scope: GlossaryScope): readonly string[] =>
-  "seriesId" in scope
-    ? ["glossary", scope.seriesId]
-    : ["glossary", "shared", scope.pair.source_lang, scope.pair.target_lang];
+/** Mọi key bắt đầu bằng `["glossary"]` — invalidate theo prefix đó làm mới glossary mọi series. */
+export const glossaryKey = (scope: GlossaryScope): readonly string[] => ["glossary", scope.seriesId];
 
-export const fetchGlossary = (scope: GlossaryScope) =>
-  api<{ entries: GlossaryEntry[]; inherited: GlossaryEntry[] }>(scopePath(scope));
+export const fetchGlossary = (scope: GlossaryScope) => api<{ entries: GlossaryEntry[] }>(scopePath(scope));
 export const createEntry = (scope: GlossaryScope, body: EntryInput) =>
   api<GlossaryEntry>(scopePath(scope), { method: "POST", body });
 export const updateEntry = (id: string, body: Partial<EntryInput>) =>

@@ -624,24 +624,6 @@ label.file-pick input {
   font-size: var(--fs-xs);
   color: var(--c-fg-muted);
 }
-.settings-group {
-  border: 1px solid var(--c-line);
-  border-radius: 6px;
-  margin: 0;
-  padding: var(--sp-2) var(--sp-4) var(--sp-4);
-  min-width: 0;
-}
-.settings-group legend {
-  padding: 0 var(--sp-1);
-  font-weight: 600;
-}
-.settings-group > .hint {
-  display: block;
-  margin-top: var(--sp-1);
-}
-.settings-group table.data {
-  margin: var(--sp-3) 0 0;
-}
 .add-rule {
   margin-top: var(--sp-3);
 }
@@ -692,94 +674,73 @@ label.file-pick input {
 .new-series-dialog > .hint {
   margin: 0;
 }
+/* Modal Cài đặt dịch: nhóm dùng khung SetGroup của trang Cài đặt (admin.css), thẻ hẹp hơn; hàng nhãn | ô, ô chữ dài và
+   bảng xếp dọc (`data-stack`). */
 .settings-dialog {
   display: flex;
   flex-direction: column;
+  gap: var(--sp-5);
 }
-.settings-form {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-3);
+.settings-dialog .set-card {
+  margin-top: var(--sp-2);
+  padding: 0 var(--sp-4);
 }
-.settings-form label,
-.fold-body label {
-  margin: 0 0 var(--sp-1);
+.settings-dialog .set-row {
+  grid-template-columns: 136px minmax(0, 1fr);
+  gap: var(--sp-2) var(--sp-4);
+  padding: var(--sp-3) 0;
 }
-.settings-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--sp-3);
+.settings-dialog .set-row[data-stack] {
+  grid-template-columns: minmax(0, 1fr);
 }
-.field-head {
+.settings-dialog .set-row-label {
   display: flex;
   align-items: center;
   gap: var(--sp-1);
-  margin: 0 0 var(--sp-1);
-  font-size: var(--fs-sm);
-  color: var(--c-fg-muted);
+  min-height: 34px;
 }
-.field-head label {
+.settings-dialog .set-row[data-stack] .set-row-label {
+  min-height: 0;
+}
+.settings-dialog .set-row-control {
+  justify-content: center;
+  min-height: 34px;
+}
+.settings-dialog .set-row-control > .notice {
+  margin: var(--sp-1) 0 0;
+}
+.settings-dialog .set-card-note {
+  margin: 0;
+  padding: 0 0 var(--sp-3);
+}
+.settings-dialog table.data {
   margin: 0;
 }
-/* Nhóm thu gọn: tên bên trái, tóm tắt một dòng bên phải, mũi tên xoay khi mở. */
-.settings-folds {
-  display: flex;
-  flex-direction: column;
-  margin-top: var(--sp-1);
-}
-.settings-fold {
-  border-top: 1px solid var(--c-line);
-}
-.settings-dialog > .settings-fold {
-  border-bottom: 1px solid var(--c-line);
-}
-.settings-fold > summary {
+.lang-pair {
   display: flex;
   align-items: center;
-  gap: var(--sp-3);
-  min-height: 44px;
-  padding: 0 var(--sp-1);
-  cursor: pointer;
-  list-style: none;
+  gap: var(--sp-2);
 }
-.settings-fold > summary::-webkit-details-marker {
-  display: none;
-}
-.fold-title {
+.lang-pair > span {
   flex: none;
-  font-weight: 500;
-}
-.fold-sum {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  text-align: right;
   color: var(--c-fg-muted);
 }
-.fold-sum[data-invalid] {
-  color: var(--c-danger);
-  font-weight: 500;
+.glossary-line {
+  color: var(--c-fg-muted);
 }
-.fold-chevron {
-  flex: none;
-  color: var(--c-fg-subtle);
-  transition: transform 0.12s;
-}
-.settings-fold[open] > summary .fold-chevron {
-  transform: rotate(180deg);
-}
-.fold-body {
+.pronoun-rules {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
   display: flex;
   flex-direction: column;
   gap: var(--sp-2);
-  padding: var(--sp-1) var(--sp-1) var(--sp-3);
 }
-.fold-body table.data {
+.pronoun-rules .add-rule {
   margin: 0;
 }
-/* Đáy modal: link Xoá series (trái), trạng thái + Lưu (phải); ô xác nhận xoá nằm trên hàng này. */
+/* Đáy modal: link Xoá series (trái), trạng thái lưu / nút chính (phải); ô xác nhận xoá nằm trên hàng này. */
 .settings-foot {
   flex: 1;
   display: flex;
@@ -817,12 +778,15 @@ button.link-danger:hover {
   padding: 0;
   border: 0;
 }
+.skip-images > p {
+  margin: 0;
+}
 /* Ảnh tự bỏ của series: lưới thumbnail, icon Xoá góc trên phải. */
 .skip-images-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
   gap: var(--sp-2);
-  margin: var(--sp-3) 0 0;
+  margin: 0;
   padding: 0;
   list-style: none;
 }
@@ -960,13 +924,23 @@ button.link-danger:hover {
   width: 240px;
 }
 
+/* Nhãn hàng trong modal Cài đặt dịch (đặt cuối để không bị luật `label` chung ghi đè). */
+.settings-dialog .set-row-label > label,
+.settings-dialog .set-row-label > span {
+  display: inline;
+  margin: 0;
+  padding: 0;
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  color: var(--c-fg);
+}
 @media (max-width: 640px) {
   .home,
   .series-main {
     padding-inline: var(--sp-4);
   }
-  .settings-grid,
-  .new-series-grid {
+  .new-series-grid,
+  .settings-dialog .set-row {
     grid-template-columns: minmax(0, 1fr);
   }
 }

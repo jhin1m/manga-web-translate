@@ -69,8 +69,7 @@ beforeAll(async () => {
     });
     jobOf[s.userId] = j.id;
     const e = await scoped(db, s.userId).insert(glossaryEntries, {
-      sourceLang: "ko",
-      targetLang: "vi",
+      seriesId: s.seriesId,
       sourceTerm: "검",
       targetTerm: "kiếm",
     });
@@ -189,10 +188,8 @@ const BODIES: Record<string, unknown> = {
   "PUT /api/series/:seriesId/cover": {},
   "POST /api/fonts/upload-url": { bytes: 1024 },
   "POST /api/fonts": { key: "u/x/fonts/x" },
-  "POST /api/glossary": { source_term: "마법", target_term: "ma pháp" },
   "POST /api/series/:seriesId/glossary": { source_term: "마법", target_term: "phép thuật" },
   "PATCH /api/glossary/:entryId": { note: "tên kiếm" },
-  "POST /api/glossary/csv": { csv: "source_term,target_term\n용,rồng\n" },
   "POST /api/series/:seriesId/glossary/csv": { csv: "source_term,target_term\n용,long\n" },
   "PUT /api/pages/:pageId/state": { state: emptyPageState(100, 100) },
   get "PUT /api/chapters/:chapterId/states"() {

@@ -1,14 +1,11 @@
 /**
- * Bảng glossary sửa tại chỗ + import/export CSV. Dùng cho cả glossary chung (theo cặp nguồn→đích, chọn ở trang
- * Glossary chung) và cấp series (series ghi đè entry chung cùng cặp trùng từ gốc). Mọi thay đổi làm server tăng
- * glossary_rev — lần dịch sau dùng term mới. Entry AI tự thêm khi dịch có chip "AI" (mất khi sửa).
+ * Bảng glossary của series, sửa tại chỗ + import/export CSV. Mọi thay đổi làm server tăng glossary_rev — lần dịch sau
+ * dùng term mới. Entry AI tự thêm khi dịch có chip "AI" (mất khi sửa).
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type FormEvent, useState } from "react";
 import { AiTag } from "../../app/ai-tag.tsx";
 import { ApiError, errorMessage } from "../../lib/api.ts";
-import { LANG_NAMES, pairLabel, TARGET_LANGS, type TargetLang } from "../series/lang-labels.ts";
-import { SourceLangSelect } from "../series/source-lang-select.tsx";
 import {
   createEntry,
   deleteEntry,
@@ -19,20 +16,12 @@ import {
   type GlossaryScope,
   glossaryKey,
   importCsv,
-  type LangPair,
   updateEntry,
 } from "./api.ts";
 
 const EMPTY: EntryInput = { source_term: "", target_term: "", note: "", case_sensitive: false };
 
-/** `inheritedLabel`: nhãn dòng kế thừa từ glossary chung (chỉ cấp series, VD "từ glossary chung (Hàn → Việt)"). */
-export function GlossaryEditor({
-  scope,
-  inheritedLabel = "từ glossary chung",
-}: {
-  scope: GlossaryScope;
-  inheritedLabel?: string;
-}) {
+export function GlossaryEditor({ scope }: { scope: GlossaryScope }) {
   const qc = useQueryClient();
   const key = glossaryKey(scope);
   const q = useQuery({ queryKey: key, queryFn: () => fetchGlossary(scope) });
@@ -99,10 +88,7 @@ export function GlossaryEditor({
     e.source_term.toLowerCase().includes(filter.toLowerCase()) ||
     e.target_term.toLowerCase().includes(filter.toLowerCase());
   const entries = (q.data?.entries ?? []).filter(match);
-  const overridden = new Set(q.data?.entries.map((e) => e.source_term));
-  const inherited = (q.data?.inherited ?? []).filter(match);
-
-  const total = (q.data?.entries.length ?? 0) + (q.data?.inherited.length ?? 0);
+  const total = q.data?.entries.length ?? 0;
 
   return (
     <div className="glossary">
@@ -305,18 +291,7 @@ export function GlossaryEditor({
                 </tr>
               ),
             )}
-            {inherited.map((e) => (
-              <tr key={e.id} className="muted">
-                <td>{e.source_term}</td>
-                <td>{e.target_term}</td>
-                <td>{e.note}</td>
-                <td>{e.case_sensitive ? "Có" : ""}</td>
-                <td className="small" style={{ textAlign: "right" }}>
-                  {overridden.has(e.source_term) ? "bị series ghi đè" : inheritedLabel}
-                </td>
-              </tr>
-            ))}
-            {q.data && entries.length + inherited.length === 0 && (
+            {q.data && entries.length === 0 && (
               <tr>
                 <td colSpan={5} className="muted">
                   Không có từ nào khớp “{filter}”.
@@ -326,35 +301,6 @@ export function GlossaryEditor({
           </tbody>
         </table>
       )}
-    </div>
-  );
-}
-
-/** Glossary chung của một cặp nguồn→đích (cặp giữ trong URL `?src=&tgt=`, route đổi khi chọn). */
-export function GlossaryPage(props: { pair: LangPair; onPairChange: (p: LangPair) => void }) {
-  const { pair, onPairChange } = props;
-  return (
-    <div className="page page-narrow">
-      <div className="page-head">
-        <h1>Glossary chung</h1>
-        <span className="spacer" />
-        <SourceLangSelect value={pair.source_lang} onChange={(v) => onPairChange({ ...pair, source_lang: v })} />
-        <span aria-hidden="true">→</span>
-        <select
-          aria-label="Ngôn ngữ đích"
-          value={pair.target_lang}
-          onChange={(e) => onPairChange({ ...pair, target_lang: e.target.value as TargetLang })}
-        >
-          {TARGET_LANGS.map((l) => (
-            <option key={l} value={l}>
-              {LANG_NAMES[l]}
-            </option>
-          ))}
-        </select>
-      </div>
-      <p className="muted small">Áp cho series dịch {pairLabel(pair)}; entry trùng ở series sẽ ghi đè.</p>
-      {/* key: đổi cặp = bảng mới (bỏ nháp, bản sửa dở và xác nhận "thay toàn bộ" của cặp cũ). */}
-      <GlossaryEditor key={`${pair.source_lang}-${pair.target_lang}`} scope={{ pair }} />
     </div>
   );
 }

@@ -1,45 +1,20 @@
 /**
- * Cài đặt dịch của series (modal): luôn hiện Tên, Dịch từ, Sang, Định dạng, Font thoại; Giọng văn, Kính ngữ, Xưng hô,
- * Font khác, Chữ bỏ qua và Ảnh tự bỏ thu gọn kèm tóm tắt một dòng. Nút Lưu dính đáy modal. "Ảnh tự bỏ" tự lưu từng
- * thao tác (không thuộc form, không cần bấm Lưu). Lỗi nhập nằm trong nhóm đang thu gọn thì nhóm đó tự mở và trường
- * lỗi được focus. "Xoá series" là link đỏ dưới đáy; bấm mới hiện ô gõ tên xác nhận. Server tăng settings_rev khi
- * trường ảnh hưởng dịch đổi. Dùng ở `?tab=settings` của màn series.
- * Lưu chỉ gửi trường khác mốc lúc mở form (không đổi gì → đóng, không gọi API): Giọng văn / cặp xưng hô AI ghi trong
- * lúc form mở không bị đè. Mục AI ghi có chip "AI"; sửa hàng xưng hô thì chip của hàng đó mất ngay.
+ * Cài đặt dịch của series (modal ở `?tab=settings`): bốn nhóm luôn hiện — Series (tên, ảnh bìa, cặp ngôn ngữ, định
+ * dạng), Hướng dẫn cho AI (Giọng văn, Kính ngữ, Xưng hô, dòng Glossary mở modal glossary), Font chữ, Bỏ qua khi dịch
+ * (Chữ bỏ qua, Ảnh tự bỏ). Không có nút Lưu: mỗi trường tự lưu (`use-settings-autosave.ts`), trạng thái "Đang lưu… /
+ * Đã lưu / lỗi" ở đáy cạnh link đỏ "Xoá series" (bấm mới hiện ô gõ tên). Ô chữ lưu khi rời ô, hàng xưng hô lưu khi rời
+ * hàng (hàng thiếu ô tô đỏ, không lưu). Ảnh bìa / Ảnh tự bỏ gọi API riêng ngay khi thao tác. Mục AI ghi có chip "AI";
+ * bản series mới (AI vừa ghi khi dịch) hiện vào trường người dùng không đang sửa.
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useNavigate } from "@tanstack/react-router";
-import { type FormEvent, type ReactNode, useEffect, useId, useRef, useState } from "react";
+import { Link, useNavigate } from "@tanstack/react-router";
+import { useRef, useState } from "react";
 import { AiTag } from "../../app/ai-tag.tsx";
 import { Drawer } from "../../app/drawer.tsx";
-import { InfoTip } from "../../app/info-tip.tsx";
 import { errorMessage } from "../../lib/api.ts";
-import { fontPreview, loadFonts } from "../editor/fonts.ts";
-import {
-  FONT_ACCEPT,
-  fontKeys,
-  fontLabel,
-  ownFonts,
-  type UserFont,
-  uploadCheckedFont,
-  useBundledFonts,
-  useFontLimit,
-  useUserFonts,
-} from "../fonts/api.ts";
-import { fontDisplayName, recommendedFirst } from "../fonts/font-names.ts";
+import { SaveStatus, SetGroup } from "../admin/settings-ui.tsx";
 import { fetchGlossary, glossaryKey } from "../glossary/api.ts";
-import {
-  deleteSeries,
-  type FontSlot,
-  fetchSkipImages,
-  type PronounRule,
-  type PronounRuleInput,
-  patchSeries,
-  type Series,
-  type SeriesPatch,
-  type SeriesSettings,
-  seriesKeys,
-} from "./api.ts";
+import { deleteSeries, type PronounRuleInput, type Series, seriesKeys } from "./api.ts";
 import { CoverSection } from "./cover-section.tsx";
 import { IgnoreApplySection } from "./ignore-apply-section.tsx";
 import { parseIgnoreText } from "./ignore-text-input.ts";
@@ -48,101 +23,18 @@ import {
   HONORIFIC_EXAMPLES,
   LANG_NAMES,
   langChangeWarning,
-  langShort,
   PAGE_FORMAT_LABELS,
   PAGE_FORMATS,
   SOURCE_LANGS,
   TARGET_LANGS,
 } from "./lang-labels.ts";
-import { buildPatch } from "./settings-diff.ts";
-import { countSummary, firstMissingRuleField, rulesSummary, styleSummary } from "./settings-summary.ts";
+import { PronounRulesTable } from "./pronoun-rules-table.tsx";
+import { SeriesFontFields } from "./series-font-fields.tsx";
+import { type Draft, ruleComplete } from "./settings-draft.ts";
+import { SettingsRow } from "./settings-row.tsx";
 import { SkipImagesSection } from "./skip-images-section.tsx";
-
-// Không có ô SFX: SFX giữ nguyên chữ gốc (không dịch / đặt chữ). Khoá `sfx` đã lưu vẫn được giữ khi lưu form.
-const OTHER_FONT_SLOTS: { slot: FontSlot; label: string; empty: string }[] = [
-  { slot: "narration", label: "Dẫn truyện", empty: "Giống font thoại" },
-  { slot: "thought", label: "Suy nghĩ", empty: "Như thoại/dẫn truyện" },
-  { slot: "note", label: "Ghi chú", empty: "Như thoại/dẫn truyện" },
-];
-
-/** Giá trị option "Tải font lên…" — không phải font id (font của bạn là `custom-…`, font gói sẵn là tên file). */
-const UPLOAD_OPTION = "__upload__";
-
-type GroupId = "style" | "honorific" | "pronouns" | "fonts" | "ignore" | "skip";
-const ALL_CLOSED: Record<GroupId, boolean> = {
-  style: false,
-  honorific: false,
-  pronouns: false,
-  fonts: false,
-  ignore: false,
-  skip: false,
-};
-
-/**
- * Chữ bỏ qua sửa ở ô riêng (chuỗi nhiều dòng), ghép vào lúc lưu. Hàng xưng hô thêm / sửa trên form mang `origin: "user"`
- * (chỉ để ẩn chip AI; không gửi lên).
- */
-type FormRule = PronounRuleInput & { origin?: PronounRule["origin"] };
-type Form = Omit<SeriesSettings, "ignore_text" | "pronoun_rules"> & { title: string; pronoun_rules: FormRule[] };
-
-const toForm = (s: Series): Form => ({
-  title: s.title,
-  source_lang: s.source_lang,
-  target_lang: s.target_lang,
-  page_format: s.page_format,
-  honorific_policy: s.honorific_policy,
-  pronoun_rules: s.pronoun_rules,
-  style_prompt: s.style_prompt,
-  default_fonts: s.default_fonts,
-});
-
-/** Nhóm thu gọn: tên (+ `tag`) + tóm tắt (đỏ khi `invalid`); `open` do cha điều khiển để mở tự động khi có lỗi. */
-function Fold(props: {
-  title: string;
-  tag?: ReactNode;
-  summary: string;
-  open: boolean;
-  onOpen: (open: boolean) => void;
-  invalid?: boolean;
-  children: ReactNode;
-}) {
-  return (
-    <details className="settings-fold" open={props.open} onToggle={(e) => props.onOpen(e.currentTarget.open)}>
-      <summary>
-        <span className="fold-title">
-          {props.title}
-          {props.tag}
-        </span>
-        <span className="fold-sum" data-invalid={props.invalid || undefined}>
-          {props.summary}
-        </span>
-        <svg
-          className="fold-chevron"
-          width="14"
-          height="14"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          aria-hidden="true"
-        >
-          <path d="M6 9l6 6 6-6" />
-        </svg>
-      </summary>
-      <div className="fold-body">{props.children}</div>
-    </details>
-  );
-}
-
-/** Nhãn + ⓘ (hint dài nằm trong tooltip thay vì dòng chữ dưới trường). */
-function FieldLabel(props: { htmlFor: string; children: ReactNode; tip: ReactNode; tipLabel: string }) {
-  return (
-    <div className="field-head">
-      <label htmlFor={props.htmlFor}>{props.children}</label>
-      <InfoTip label={props.tipLabel}>{props.tip}</InfoTip>
-    </div>
-  );
-}
+import { useSettingsAutosave } from "./use-settings-autosave.ts";
+import "../admin/admin.css";
 
 export function SeriesSettingsDialog({
   series,
@@ -151,153 +43,28 @@ export function SeriesSettingsDialog({
   series: Series & { chapters?: unknown[] };
   onClose(): void;
 }) {
-  const qc = useQueryClient();
-  const formId = useId();
-  const formRef = useRef<HTMLFormElement>(null);
-  const [f, setF] = useState<Form>(() => toForm(series));
-  // Mốc so khi Lưu: chụp lúc mở, không làm mới khi detail series được poll lại.
-  const base = useRef({ ...toForm(series), ignore_text: series.ignore_text });
-  const bundled = useBundledFonts();
-  const custom = useUserFonts();
-  // Nạp font gói sẵn + font của bạn vào trình duyệt để dropdown xem trước được (lỗi → chỉ mất preview).
-  const customFonts = custom.data;
-  useEffect(() => {
-    loadFonts(customFonts && (() => Promise.resolve(customFonts))).catch(() => {});
-  }, [customFonts]);
-  const [ignoreRaw, setIgnoreRaw] = useState(() => series.ignore_text.join("\n"));
-  const ignore = parseIgnoreText(ignoreRaw);
+  const { draft: f, set, commit, leave, rulesChecked, setRulesChecked, status } = useSettingsAutosave(series);
   const glossaryScope = { seriesId: series.id };
-  const glossary = useQuery({
-    queryKey: glossaryKey(glossaryScope),
-    queryFn: () => fetchGlossary(glossaryScope),
-  });
-  const skipImages = useQuery({
-    queryKey: seriesKeys.skipImages(series.id),
-    queryFn: () => fetchSkipImages(series.id),
-    staleTime: 10 * 60_000,
-  });
-  const langWarning = langChangeWarning(series, f, glossary.data?.entries.length);
+  const glossary = useQuery({ queryKey: glossaryKey(glossaryScope), queryFn: () => fetchGlossary(glossaryScope) });
+  const terms = glossary.data?.entries.length;
+  // Cảnh báo so với cặp lúc mở modal: cặp mới lưu ngay nên so với bản server thì cảnh báo biến mất tức thì.
+  const opened = useRef({ source_lang: series.source_lang, target_lang: series.target_lang });
+  const langWarning = langChangeWarning(opened.current, f, terms);
+  const ignore = parseIgnoreText(f.ignore_text);
+  const rulesInvalid = rulesChecked && !f.pronoun_rules.every(ruleComplete);
+  const [deleting, setDeleting] = useState(false);
 
-  // Nhóm nào đang mở; lỗi nhập → mở nhóm chứa lỗi rồi focus đúng trường (effect chạy sau khi <details> đã mở).
-  const [open, setOpen] = useState(ALL_CLOSED);
-  const setGroup = (id: GroupId) => (o: boolean) => setOpen((cur) => (cur[id] === o ? cur : { ...cur, [id]: o }));
-  const [rulesChecked, setRulesChecked] = useState(false);
-  const [focusErr, setFocusErr] = useState(0);
-  const missing = firstMissingRuleField(f.pronoun_rules);
-  const rulesInvalid = rulesChecked && missing !== null;
-  useEffect(() => {
-    if (focusErr > 0) formRef.current?.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus();
-  }, [focusErr]);
-  // Lỗi "Chữ bỏ qua" chặn lưu: mở nhóm để thấy lý do ngay khi lỗi xuất hiện.
-  useEffect(() => {
-    if (ignore.error) setOpen((cur) => (cur.ignore ? cur : { ...cur, ignore: true }));
-  }, [ignore.error]);
-
-  const save = useMutation({
-    mutationFn: (body: SeriesPatch) => patchSeries(series.id, body),
-    onSuccess: (s) => {
-      // Ghi ngay bản server trả về: mở lại modal trước khi refetch xong vẫn thấy giá trị mới.
-      qc.setQueryData<Series>(seriesKeys.detail(series.id), (cur) => (cur ? { ...cur, ...s } : cur));
-      void qc.invalidateQueries({ queryKey: ["series"] });
-      // Key glossary series không chứa cặp → làm mới để mục kế thừa / Áp glossary theo cặp mới.
-      if (s.source_lang !== series.source_lang || s.target_lang !== series.target_lang) {
-        void qc.invalidateQueries({ queryKey: ["glossary"] });
-      }
-    },
-  });
-  const set = <K extends keyof Form>(k: K, v: Form[K]) => setF((cur) => ({ ...cur, [k]: v }));
-  const setFont = (slot: FontSlot, id: string) => {
-    const next = { ...f.default_fonts };
-    if (id) next[slot] = id;
-    else delete next[slot];
-    set("default_fonts", next);
-  };
-  // Tải font từ dropdown: chọn "Tải font lên…" → mở chọn file cho đúng ô; xong thì chọn font mới (chưa lưu).
-  const fileInput = useRef<HTMLInputElement>(null);
-  const uploadSlot = useRef<FontSlot>("dialogue");
-  const fontLimit = useFontLimit();
-  const upload = useMutation({
-    mutationFn: ({ file }: { file: File; slot: FontSlot }) =>
-      uploadCheckedFont(file, ownFonts(custom.data).length, fontLimit),
-    onSuccess: (font, { slot }) => {
-      // Thêm ngay vào danh sách để select có option khớp giá trị mới trước khi refetch xong.
-      qc.setQueryData<UserFont[]>(fontKeys.list(), (cur) => [...(cur ?? []), font]);
-      void qc.invalidateQueries({ queryKey: fontKeys.list() });
-      setFont(slot, font.id);
-    },
-  });
+  const select =
+    <K extends "source_lang" | "target_lang" | "page_format" | "honorific_policy">(k: K) =>
+    (e: { target: { value: string } }) =>
+      set(k, e.target.value as Draft[K], "now");
   // Sửa hàng = người dùng xác nhận → bỏ chip AI ngay (server tính lại `origin` khi lưu).
-  const setRule = (i: number, patch: Partial<PronounRuleInput>) =>
+  const editRule = (i: number, patch: Partial<PronounRuleInput>) =>
     set(
       "pronoun_rules",
-      f.pronoun_rules.map((r, j) => (j === i ? { ...r, ...patch, origin: "user" } : r)),
+      f.pronoun_rules.map((r, j) => (j === i ? { ...r, ...patch, origin: "user" as const } : r)),
+      "later",
     );
-  const submit = (e: FormEvent) => {
-    e.preventDefault();
-    if (missing) {
-      setRulesChecked(true);
-      setOpen((cur) => ({ ...cur, pronouns: true }));
-      setFocusErr((n) => n + 1);
-      return;
-    }
-    const body = buildPatch(base.current, { ...f, ignore_text: ignore.list });
-    if (!body) return onClose();
-    // Callback ở `mutate` không chạy nếu modal đã đóng: lưu xong không kéo người dùng về lại màn series.
-    save.mutate(body, { onSuccess: onClose });
-  };
-  const invalidRule = (i: number, field: "speaker" | "listener" | "address") =>
-    rulesChecked && !f.pronoun_rules[i]?.[field].trim() ? true : undefined;
-
-  const fontSelect = (slot: FontSlot, id: string, empty: string) => (
-    <select
-      id={id}
-      className="font-select"
-      style={f.default_fonts[slot] ? fontPreview(f.default_fonts[slot]) : undefined}
-      value={f.default_fonts[slot] ?? ""}
-      disabled={upload.isPending}
-      onChange={(e) => {
-        if (e.target.value !== UPLOAD_OPTION) return setFont(slot, e.target.value);
-        uploadSlot.current = slot;
-        fileInput.current?.click();
-      }}
-    >
-      <option value="">{empty}</option>
-      {/* Font đã chọn nhưng thiếu chữ ngôn ngữ đích (vừa đổi ngôn ngữ) → vẫn hiện để không mất giá trị. */}
-      {bundled.data?.has(f.default_fonts[slot] ?? "") &&
-        !bundled.data.ids(f.target_lang).includes(f.default_fonts[slot] ?? "") && (
-          <option value={f.default_fonts[slot]}>
-            {fontDisplayName(f.default_fonts[slot] ?? "")} (thiếu chữ tiếng {langShort(f.target_lang)})
-          </option>
-        )}
-      {recommendedFirst(bundled.data?.ids(f.target_lang) ?? []).map((fid) => (
-        <option key={fid} value={fid} style={fontPreview(fid)}>
-          {fontDisplayName(fid)}
-        </option>
-      ))}
-      {[
-        { label: "Font dùng chung", list: (custom.data ?? []).filter((font) => font.system) },
-        { label: "Font của bạn", list: ownFonts(custom.data) },
-      ].map(
-        ({ label, list }) =>
-          list.length > 0 && (
-            <optgroup key={label} label={label}>
-              {list.map((font) => (
-                <option key={font.id} value={font.id} style={fontPreview(font.id)}>
-                  {font.name}
-                </option>
-              ))}
-            </optgroup>
-          ),
-      )}
-      <option value={UPLOAD_OPTION}>+ Tải font lên…</option>
-    </select>
-  );
-
-  const otherFonts = OTHER_FONT_SLOTS.filter(({ slot }) => f.default_fonts[slot]);
-  const fontsSummary = otherFonts.length
-    ? otherFonts.map(({ slot, label }) => `${label}: ${fontLabel(f.default_fonts[slot], custom.data)}`).join(" · ")
-    : "Như font thoại";
-  const [deleting, setDeleting] = useState(false);
 
   return (
     <Drawer
@@ -317,320 +84,189 @@ export function SeriesSettingsDialog({
               Xoá series
             </button>
             <span className="spacer" />
-            {save.error && <span className="small error">{errorMessage(save.error)}</span>}
-            {ignore.error && <span className="small error">Sửa lỗi ở “Chữ bỏ qua” trước khi lưu.</span>}
-            {rulesInvalid && <span className="small error">Điền đủ người nói, người nghe, xưng/gọi.</span>}
-            <button
-              type="submit"
-              form={formId}
-              className="btn-primary"
-              disabled={save.isPending || !f.title.trim() || !!ignore.error}
-            >
-              {save.isPending ? "Đang lưu…" : "Lưu"}
-            </button>
+            <SaveStatus {...status} />
           </div>
         </div>
       }
     >
       <div className="settings-dialog">
-        <form id={formId} ref={formRef} onSubmit={submit} className="settings-form">
-          <div>
-            <label htmlFor="s-title">Tên series</label>
-            <input id="s-title" required value={f.title} onChange={(e) => set("title", e.target.value)} />
-          </div>
-          <CoverSection series={series} />
-          <div className="settings-grid">
-            <div>
-              <label htmlFor="s-src">Dịch từ</label>
-              <select
-                id="s-src"
-                value={f.source_lang}
-                onChange={(e) => set("source_lang", e.target.value as Form["source_lang"])}
-              >
+        <SetGroup title="Series">
+          <SettingsRow label="Tên series" htmlFor="s-title">
+            <input
+              id="s-title"
+              data-field="title"
+              required
+              aria-invalid={f.title.trim() ? undefined : true}
+              value={f.title}
+              onChange={(e) => set("title", e.target.value, "later")}
+              onBlur={() => leave("title")}
+            />
+            {!f.title.trim() && <span className="small error">Nhập tên series.</span>}
+          </SettingsRow>
+          <SettingsRow label="Ảnh bìa">
+            <CoverSection series={series} />
+          </SettingsRow>
+          <SettingsRow label="Ngôn ngữ">
+            <div className="lang-pair">
+              <select aria-label="Dịch từ" value={f.source_lang} onChange={select("source_lang")}>
                 {SOURCE_LANGS.map((l) => (
                   <option key={l} value={l}>
-                    {LANG_NAMES[l]} ({l})
+                    {LANG_NAMES[l]}
                   </option>
                 ))}
               </select>
-            </div>
-            <div>
-              <label htmlFor="s-tgt">Sang</label>
-              <select
-                id="s-tgt"
-                value={f.target_lang}
-                onChange={(e) => set("target_lang", e.target.value as Form["target_lang"])}
-              >
+              <span aria-hidden="true">→</span>
+              <select aria-label="Sang" value={f.target_lang} onChange={select("target_lang")}>
                 {TARGET_LANGS.map((l) => (
                   <option key={l} value={l}>
-                    {LANG_NAMES[l]} ({l})
+                    {LANG_NAMES[l]}
                   </option>
                 ))}
               </select>
             </div>
             {langWarning && (
-              <p className="notice" role="status" style={{ gridColumn: "1 / -1" }}>
+              <p className="notice small" role="status">
                 {langWarning}
               </p>
             )}
-            <div>
-              <FieldLabel htmlFor="s-fmt" tipLabel="Giải thích Định dạng" tip="Áp dụng cho chương upload sau khi lưu.">
-                Định dạng
-              </FieldLabel>
-              <select
-                id="s-fmt"
-                value={f.page_format}
-                onChange={(e) => set("page_format", e.target.value as Form["page_format"])}
-              >
-                {PAGE_FORMATS.map((p) => (
-                  <option key={p} value={p}>
-                    {PAGE_FORMAT_LABELS[p]}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label htmlFor="s-font-dialogue">Font thoại</label>
-              {fontSelect(
-                "dialogue",
-                "s-font-dialogue",
-                bundled.data?.defaultId ? `Mặc định (${fontDisplayName(bundled.data.defaultId)})` : "Mặc định",
-              )}
-            </div>
-          </div>
-          <input
-            ref={fileInput}
-            type="file"
-            hidden
-            accept={FONT_ACCEPT}
-            aria-label="Chọn file font"
-            onChange={(e) => {
-              const file = e.target.files?.[0];
-              e.target.value = "";
-              if (file) upload.mutate({ file, slot: uploadSlot.current });
-            }}
-          />
-          {upload.isPending && <span className="hint">Đang tải font lên…</span>}
-          {upload.error && (
-            <span className="small error" role="alert">
-              {errorMessage(upload.error)}
-            </span>
-          )}
-          {upload.isSuccess && (
-            <span className="hint" role="status">
-              Đã thêm font {upload.data.name} vào font của bạn
-              {upload.data.vi_complete ? "" : " (thiếu một số dấu tiếng Việt)"}. Bấm Lưu để dùng làm mặc định.
-            </span>
-          )}
+          </SettingsRow>
+          <SettingsRow
+            label="Định dạng"
+            htmlFor="s-fmt"
+            tip="Áp dụng cho chương upload sau."
+            tipLabel="Giải thích Định dạng"
+          >
+            <select id="s-fmt" value={f.page_format} onChange={select("page_format")}>
+              {PAGE_FORMATS.map((p) => (
+                <option key={p} value={p}>
+                  {PAGE_FORMAT_LABELS[p]}
+                </option>
+              ))}
+            </select>
+          </SettingsRow>
+        </SetGroup>
 
-          <div className="settings-folds">
-            <Fold
-              title="Giọng văn"
-              // Giọng văn đang hiện đúng là bản AI ghi (chưa sửa); AI điền sau lúc mở form thì form chưa hiện nên không gắn.
-              tag={series.style_origin === "ai" && f.style_prompt === series.style_prompt && <AiTag />}
-              summary={styleSummary(f.style_prompt)}
-              open={open.style}
-              onOpen={setGroup("style")}
-            >
-              <FieldLabel
-                htmlFor="s-style"
-                tipLabel="Giải thích Giọng văn"
-                tip="Mô tả ngắn gửi kèm cho AI ở mọi lần dịch."
-              >
-                Giọng văn
-              </FieldLabel>
-              <textarea
-                id="s-style"
-                maxLength={1000}
-                placeholder="VD: giọng trẻ, đời thường; giữ tên riêng phiên âm"
-                value={f.style_prompt}
-                onChange={(e) => set("style_prompt", e.target.value)}
-              />
-            </Fold>
-
-            <Fold
-              title="Kính ngữ"
-              summary={f.honorific_policy === "keep" ? "Giữ nguyên" : "Chuyển sang cách gọi đích"}
-              open={open.honorific}
-              onOpen={setGroup("honorific")}
-            >
-              <label htmlFor="s-hon">Kính ngữ ({HONORIFIC_EXAMPLES[f.source_lang]})</label>
-              <select
-                id="s-hon"
-                value={f.honorific_policy}
-                onChange={(e) => set("honorific_policy", e.target.value as Form["honorific_policy"])}
-              >
-                <option value="translate">Chuyển sang cách gọi của ngôn ngữ đích</option>
-                <option value="keep">Giữ nguyên kính ngữ (phiên âm)</option>
-              </select>
-            </Fold>
-
-            <Fold
-              title="Xưng hô"
-              summary={rulesInvalid ? "Thiếu thông tin" : rulesSummary(f.pronoun_rules)}
+        <SetGroup title="Hướng dẫn cho AI" desc="AI đọc mục này mỗi lần dịch và tự bổ sung khi dịch (nhãn AI).">
+          <SettingsRow
+            label="Giọng văn"
+            htmlFor="s-style"
+            stack
+            // Chip khi Giọng văn đang hiện đúng là bản AI ghi (chưa sửa).
+            tag={series.style_origin === "ai" && f.style_prompt === series.style_prompt && <AiTag />}
+            tip="Mô tả ngắn gửi kèm cho AI ở mọi lần dịch."
+            tipLabel="Giải thích Giọng văn"
+          >
+            <textarea
+              id="s-style"
+              data-field="style_prompt"
+              maxLength={1000}
+              placeholder="VD: giọng trẻ, đời thường; giữ tên riêng phiên âm"
+              value={f.style_prompt}
+              onChange={(e) => set("style_prompt", e.target.value, "later")}
+              onBlur={() => leave("style_prompt")}
+            />
+          </SettingsRow>
+          <SettingsRow
+            label="Kính ngữ"
+            htmlFor="s-hon"
+            tip={`Kính ngữ như ${HONORIFIC_EXAMPLES[f.source_lang]}.`}
+            tipLabel="Giải thích Kính ngữ"
+          >
+            <select id="s-hon" value={f.honorific_policy} onChange={select("honorific_policy")}>
+              <option value="translate">Chuyển sang cách gọi đích</option>
+              <option value="keep">Giữ nguyên (phiên âm)</option>
+            </select>
+          </SettingsRow>
+          <SettingsRow
+            label="Xưng hô"
+            stack
+            tip={`Người nói → người nghe: cách xưng / gọi. VD: Minjun → Seoyeon: ${addressPlaceholder(f.target_lang)}.`}
+            tipLabel="Giải thích Xưng hô"
+          >
+            <PronounRulesTable
+              rules={f.pronoun_rules}
+              targetLang={f.target_lang}
               invalid={rulesInvalid}
-              open={open.pronouns}
-              onOpen={setGroup("pronouns")}
-            >
-              <div className="field-head">
-                <span>Cách xưng hô / gọi nhau</span>
-                <InfoTip label="Giải thích Xưng hô">
-                  Người nói → người nghe: cách xưng / gọi. VD: Minjun → Seoyeon: {addressPlaceholder(f.target_lang)}.
-                </InfoTip>
-              </div>
-              {f.pronoun_rules.length > 0 && (
-                <table className="data">
-                  <thead>
-                    <tr>
-                      <th>Người nói</th>
-                      <th>Người nghe</th>
-                      <th>Xưng / gọi</th>
-                      <th>Ghi chú</th>
-                      <th />
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {f.pronoun_rules.map((r, i) => (
-                      // biome-ignore lint/suspicious/noArrayIndexKey: hàng chưa có id; thứ tự chỉ đổi khi xoá.
-                      <tr key={i}>
-                        <td>
-                          <input
-                            aria-label="Người nói"
-                            aria-invalid={invalidRule(i, "speaker")}
-                            value={r.speaker}
-                            onChange={(e) => setRule(i, { speaker: e.target.value })}
-                          />
-                        </td>
-                        <td>
-                          <input
-                            aria-label="Người nghe"
-                            aria-invalid={invalidRule(i, "listener")}
-                            value={r.listener}
-                            onChange={(e) => setRule(i, { listener: e.target.value })}
-                          />
-                        </td>
-                        <td>
-                          <input
-                            aria-label="Xưng / gọi"
-                            aria-invalid={invalidRule(i, "address")}
-                            placeholder={addressPlaceholder(f.target_lang)}
-                            value={r.address}
-                            onChange={(e) => setRule(i, { address: e.target.value })}
-                          />
-                        </td>
-                        <td>
-                          <input
-                            aria-label="Ghi chú"
-                            value={r.note}
-                            onChange={(e) => setRule(i, { note: e.target.value })}
-                          />
-                        </td>
-                        <td className="rule-actions">
-                          {r.origin === "ai" && <AiTag />}
-                          <button
-                            type="button"
-                            className="btn-ghost btn-danger"
-                            onClick={() =>
-                              set(
-                                "pronoun_rules",
-                                f.pronoun_rules.filter((_, j) => j !== i),
-                              )
-                            }
-                          >
-                            Xoá
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-              <div className="add-rule">
-                <button
-                  type="button"
-                  onClick={() =>
-                    set("pronoun_rules", [
-                      ...f.pronoun_rules,
-                      { speaker: "", listener: "", address: "", note: "", origin: "user" },
-                    ])
-                  }
-                >
-                  + Thêm quy tắc
-                </button>
-              </div>
-            </Fold>
+              onEdit={editRule}
+              onRemove={(i) =>
+                set(
+                  "pronoun_rules",
+                  f.pronoun_rules.filter((_, j) => j !== i),
+                  "now",
+                )
+              }
+              onAdd={() => {
+                setRulesChecked(false);
+                set(
+                  "pronoun_rules",
+                  [...f.pronoun_rules, { speaker: "", listener: "", address: "", note: "", origin: "user" }],
+                  "later",
+                );
+              }}
+              onRowLeave={() => commit("pronoun_rules")}
+              onLeave={() => leave("pronoun_rules")}
+            />
+          </SettingsRow>
+          <SettingsRow label="Glossary">
+            <span className="glossary-line">
+              {terms === undefined ? "…" : `${terms} thuật ngữ`} ·{" "}
+              <Link to="/s/$seriesId" params={{ seriesId: series.id }} search={{ tab: "glossary" }}>
+                Mở
+              </Link>
+            </span>
+          </SettingsRow>
+        </SetGroup>
 
-            <Fold title="Font khác" summary={fontsSummary} open={open.fonts} onOpen={setGroup("fonts")}>
-              <div className="settings-grid">
-                {OTHER_FONT_SLOTS.map(({ slot, label, empty }) => (
-                  <div key={slot}>
-                    <FieldLabel
-                      htmlFor={`s-font-${slot}`}
-                      tipLabel={`Giải thích font ${label}`}
-                      tip={
-                        slot === "narration"
-                          ? "Áp dụng cho chữ ngoài bóng."
-                          : slot === "thought"
-                            ? "Chữ trong ngoặc, độc thoại, nói thầm."
-                            : "Chữ viết tay, chú thích nhỏ."
-                      }
-                    >
-                      {label}
-                    </FieldLabel>
-                    {fontSelect(slot, `s-font-${slot}`, empty)}
-                  </div>
-                ))}
-              </div>
-            </Fold>
+        <SetGroup title="Font chữ">
+          <SeriesFontFields
+            fonts={f.default_fonts}
+            targetLang={f.target_lang}
+            onChange={(next) => set("default_fonts", next, "now")}
+          />
+        </SetGroup>
 
-            <Fold
-              title="Chữ bỏ qua"
-              summary={ignore.error ? "Có lỗi" : countSummary(ignore.list.length, "mục")}
-              invalid={!!ignore.error}
-              open={open.ignore}
-              onOpen={setGroup("ignore")}
-            >
-              <FieldLabel
-                htmlFor="s-ignore"
-                tipLabel="Giải thích Chữ bỏ qua"
-                tip={
-                  <>
-                    Mỗi dòng 1 mục. Vùng chữ chứa mục nào thì không dịch, không chèn chữ (chương đã dịch không đổi).
-                    Dùng URL hoặc tên nhóm cụ thể — mục chung chung dễ bỏ nhầm thoại. Bỏ qua dấu cách khi so khớp; bọc
-                    mục trong dấu / {"(vd /discord\\s*\\.\\s*gg/)"} để dùng regex, không phân biệt hoa/thường.
-                  </>
+        <SetGroup title="Bỏ qua khi dịch">
+          <SettingsRow
+            label="Chữ bỏ qua (watermark)"
+            htmlFor="s-ignore"
+            stack
+            tipLabel="Giải thích Chữ bỏ qua"
+            tip={
+              <>
+                Mỗi dòng 1 mục. Vùng chữ chứa mục nào thì không dịch, không chèn chữ (chương đã dịch không đổi). Dùng
+                URL hoặc tên nhóm cụ thể — mục chung chung dễ bỏ nhầm thoại. Bỏ qua dấu cách khi so khớp; bọc mục trong
+                dấu / {"(vd /discord\\s*\\.\\s*gg/)"} để dùng regex, không phân biệt hoa/thường.
+              </>
+            }
+          >
+            <textarea
+              id="s-ignore"
+              data-field="ignore_text"
+              placeholder={"VD:\ndiscord.gg/nhomdich\nTên nhóm dịch"}
+              value={f.ignore_text}
+              aria-invalid={ignore.error ? true : undefined}
+              onChange={(e) => set("ignore_text", e.target.value, "later")}
+              onBlur={() => leave("ignore_text")}
+            />
+            {ignore.error && <span className="small error">{ignore.error}</span>}
+            {series.ignore_text.length > 0 && (
+              <IgnoreApplySection
+                seriesId={series.id}
+                disabledReason={
+                  ignore.list.join("\n") === series.ignore_text.join("\n") ? null : "Chờ lưu danh sách mới."
                 }
-              >
-                Chữ bỏ qua (watermark)
-              </FieldLabel>
-              <textarea
-                id="s-ignore"
-                placeholder={"VD:\ndiscord.gg/nhomdich\nTên nhóm dịch"}
-                value={ignoreRaw}
-                aria-invalid={ignore.error ? true : undefined}
-                onChange={(e) => setIgnoreRaw(e.target.value)}
               />
-              {ignore.error && <span className="small error">{ignore.error}</span>}
-              {series.ignore_text.length > 0 && (
-                <IgnoreApplySection
-                  seriesId={series.id}
-                  disabledReason={
-                    ignoreRaw !== series.ignore_text.join("\n") ? "Lưu rồi mở lại mục này để áp danh sách mới." : null
-                  }
-                />
-              )}
-            </Fold>
-          </div>
-        </form>
-
-        <Fold
-          title="Ảnh tự bỏ"
-          summary={`${skipImages.data ? countSummary(skipImages.data.images.length, "ảnh") : "…"} · tự lưu, không cần bấm Lưu`}
-          open={open.skip}
-          onOpen={setGroup("skip")}
-        >
-          <SkipImagesSection seriesId={series.id} />
-        </Fold>
+            )}
+          </SettingsRow>
+          <SettingsRow
+            label="Ảnh tự bỏ"
+            stack
+            tipLabel="Giải thích Ảnh tự bỏ"
+            tip='Ảnh credit đã chọn "Luôn bỏ ở series này". Chương upload sau có ảnh giống sẽ được bỏ qua sẵn.'
+          >
+            <SkipImagesSection seriesId={series.id} />
+          </SettingsRow>
+        </SetGroup>
       </div>
     </Drawer>
   );

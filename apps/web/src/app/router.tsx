@@ -2,7 +2,7 @@
  * Cây route (TanStack Router, code-based, params type-safe). Component trong `features/*` nhận params qua
  * props — không import ngược router.
  *
- * Đích: `/` (home), `/s/$seriesId[?tab]`, `/s/$seriesId/c/$chapterId[?page&drawer]`, `/glossary[?src&tgt]`,
+ * Đích: `/` (home), `/s/$seriesId[?tab]`, `/s/$seriesId/c/$chapterId[?page&drawer]`,
  * `/settings[?section]` (admin), `/fonts`, `/login`. Mỗi người một tài khoản → không có id tài khoản trên URL.
  *
  * Màn chương (= editor gộp, `chapterRoute`) nằm dưới `authedRoute` nhưng NGOÀI `shellRoute` → chiếm toàn màn hình,
@@ -12,9 +12,7 @@ import { QueryClient } from "@tanstack/react-query";
 import { createRootRouteWithContext, createRoute, createRouter, Link, Outlet, redirect } from "@tanstack/react-router";
 import { lazy, Suspense } from "react";
 import { type AdminSection, parseSection, validSection, visibleSections } from "../features/admin/admin-sections.ts";
-import { GlossaryPage } from "../features/glossary/glossary-editor.tsx";
 import { HomePage } from "../features/home/home-page.tsx";
-import { SOURCE_LANGS, type SourceLang, TARGET_LANGS, type TargetLang } from "../features/series/lang-labels.ts";
 import { SeriesPage } from "../features/series/series-page.tsx";
 import { appConfigQuery, useLocalMode } from "../lib/api.ts";
 import { FontsPage } from "../routes/fonts.tsx";
@@ -109,26 +107,6 @@ export const chapterRoute = createRoute({
   },
 });
 
-/** Glossary chung theo cặp `?src=&tgt=`; thiếu/sai → Hàn → Việt. */
-const glossaryRoute = createRoute({
-  getParentRoute: () => shellRoute,
-  path: "glossary",
-  validateSearch: (search: Record<string, unknown>): { src?: SourceLang; tgt?: TargetLang } => ({
-    ...(SOURCE_LANGS.includes(search.src as SourceLang) ? { src: search.src as SourceLang } : {}),
-    ...(TARGET_LANGS.includes(search.tgt as TargetLang) ? { tgt: search.tgt as TargetLang } : {}),
-  }),
-  component: function GlossaryRoute() {
-    const { src = "ko", tgt = "vi" } = glossaryRoute.useSearch();
-    const navigate = glossaryRoute.useNavigate();
-    return (
-      <GlossaryPage
-        pair={{ source_lang: src, target_lang: tgt }}
-        onPairChange={(p) => void navigate({ search: { src: p.source_lang, tgt: p.target_lang }, replace: true })}
-      />
-    );
-  },
-});
-
 export const settingsRoute = createRoute({
   getParentRoute: () => shellRoute,
   path: "settings",
@@ -149,10 +127,7 @@ const fontsRoute = createRoute({ getParentRoute: () => shellRoute, path: "fonts"
 
 export const routeTree = rootRoute.addChildren([
   loginRoute,
-  authedRoute.addChildren([
-    shellRoute.addChildren([homeRoute, seriesRoute, glossaryRoute, settingsRoute, fontsRoute]),
-    chapterRoute,
-  ]),
+  authedRoute.addChildren([shellRoute.addChildren([homeRoute, seriesRoute, settingsRoute, fontsRoute]), chapterRoute]),
 ]);
 
 export const router = createRouter({ routeTree, context: { queryClient }, defaultPreload: "intent" });

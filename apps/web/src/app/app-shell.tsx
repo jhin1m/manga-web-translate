@@ -159,7 +159,6 @@ function AccountMenu() {
         {/* biome-ignore lint/a11y/useKeyWithClickEvents: phím Enter trên link cũng phát click */}
         <div className="shell-menu-list" onClick={() => closeMenu(ref.current)}>
           <span className="shell-menu-email muted small">{me.email}</span>
-          <Link to="/glossary">Glossary chung</Link>
           <Link to="/fonts">Font</Link>
           {me.is_admin && <Link to="/settings">Cài đặt</Link>}
           {me.quota.limit_usd !== null && (

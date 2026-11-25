@@ -1,10 +1,13 @@
 #!/usr/bin/env bash
 # Deploy từ commit sạch (git archive — không file lạ trong release) theo thư mục release + symlink `current`.
 #   infra/deploy.sh <git-ref>     # build release mới, migrate, đổi symlink, restart, smoke; smoke hỏng → tự rollback
+#                                 # (trừ khi release có migration mới: chỉ báo động + in file down cần chạy)
 #   infra/deploy.sh rollback      # về release trước (≤ 2'): đổi symlink + restart + smoke, không build/migrate
 # Bố cục: $MTL_ROOT/{repo (git clone), releases/<utc>-<sha12>, current -> releases/…, previous -> releases/…,
 #         shared/.env (600)}
-# Migration chỉ thêm (additive) → rollback app không cần down DB; down thủ công ở packages/db/migrations-down/.
+# Phần lớn migration chỉ thêm (additive) → rollback app không cần down DB; down thủ công ở
+# packages/db/migrations-down/. Migration gỡ cột / bảng thì bản cũ chạy trên schema mới sẽ lỗi → xem
+# docs/deployment-guide.md trước khi `rollback` qua release có migration mới.
 set -euo pipefail
 INFRA=$(cd "$(dirname "$0")" && pwd)
 . "$INFRA/lib.sh"
@@ -38,6 +41,30 @@ restart() {
   $SYSTEMCTL reload caddy || log "caddy reload lỗi (bỏ qua nếu chưa cài)"
 }
 
+# Migration (tên file, bỏ .sql) có trong release $2 mà release $1 không có, mới nhất trước — tức các migration lần
+# deploy này vừa áp (bản đang chạy luôn đã migrate đủ migration của nó).
+migration_names() { find "$1/packages/db/migrations" -maxdepth 1 -name '*.sql' 2>/dev/null | sed 's#.*/##; s/\.sql$//' | sort; }
+new_migrations() { comm -13 <(migration_names "$1") <(migration_names "$2") | sort -r; }
+
+# Smoke hỏng sau khi đã áp migration mới: bản cũ có thể không chạy được trên schema mới (cột đã gỡ) mà smoke vẫn qua
+# → không tự quay về; giữ release mới (chứa file down) và in các bước cho người vận hành.
+refuse_auto_rollback() {
+  local rel=$1 before=$2 added=$3 m down
+  notify "Deploy hỏng" "${rel##*/}: smoke test lỗi, release có migration mới → KHÔNG tự rollback, cần xử lý tay" urgent
+  log "Bản ${rel##*/} vẫn chạy. Muốn quay về ${before##*/}: (1) đọc ghi chú từng migration trong" \
+    "docs/deployment-guide.md (vài migration ghi thứ tự khác); (2) chạy file down, mới nhất trước; (3) rồi mới" \
+    "\`$0 rollback\`. Lệnh down (DATABASE_URL trong $MTL_ROOT/shared/.env):"
+  while read -r m; do
+    down="$rel/packages/db/migrations-down/$m.down.sql"
+    if [ -f "$down" ]; then
+      log "  psql \"\$DATABASE_URL\" -v ON_ERROR_STOP=1 -f $down"
+    else
+      log "  ($m: không có file down)"
+    fi
+  done <<<"$added"
+  die "deploy ${rel##*/} hỏng, chưa quay về ${before##*/} vì đã áp migration: $(paste -sd ' ' - <<<"$added")"
+}
+
 # Nạp .env (API_PORT, WEB_ORIGIN) để smoke gọi đúng cổng + Origin hợp lệ.
 smoke() { (set -a && . "$MTL_ROOT/shared/.env" && set +a && "$MTL_ROOT/current/infra/smoke.sh"); }
 
@@ -52,7 +79,7 @@ rollback() {
 }
 
 deploy() {
-  local ref=$1 sha rel started before before_prev
+  local ref=$1 sha rel started before before_prev added
   started=$(date +%s)
   before=$(readlink -f "$MTL_ROOT/current" 2>/dev/null || true)
   before_prev=$(readlink -f "$MTL_ROOT/previous" 2>/dev/null || true)
@@ -75,8 +102,13 @@ deploy() {
   switch_to "$rel"
   restart
   if ! smoke; then
+    [ -n "$before" ] || {
+      notify "Deploy hỏng" "${rel##*/}: smoke test lỗi (deploy đầu tiên)" urgent
+      die "deploy đầu tiên hỏng, không có bản để quay về"
+    }
+    added=$(new_migrations "$before" "$rel")
+    [ -z "$added" ] || refuse_auto_rollback "$rel" "$before" "$added"
     notify "Deploy hỏng" "${rel##*/}: smoke test lỗi → rollback" urgent
-    [ -n "$before" ] || die "deploy đầu tiên hỏng, không có bản để quay về"
     # Quay về bản vừa chạy, khôi phục `previous` như trước deploy; xoá release hỏng.
     switch_to "$before" keep-previous
     [ -z "$before_prev" ] || swap_link "$before_prev" "$MTL_ROOT/previous"
@@ -94,6 +126,6 @@ deploy() {
 
 case "${1:-}" in
   rollback) rollback ;;
-  "" | -h | --help) sed -n '2,8p' "$0" && exit 2 ;;
+  "" | -h | --help) sed -n '2,10p' "$0" && exit 2 ;;
   *) deploy "$1" ;;
 esac

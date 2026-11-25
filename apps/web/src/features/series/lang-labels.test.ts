@@ -24,7 +24,7 @@ describe("lang-labels", () => {
     expect(addressPlaceholder("fr")).toBe("cách gọi");
   });
 
-  it("cảnh báo đổi ngôn ngữ chỉ khi cặp đổi và glossary riêng có từ", () => {
+  it("cảnh báo đổi ngôn ngữ chỉ khi cặp đổi và glossary của series có từ", () => {
     const koVi = { source_lang: "ko", target_lang: "vi" };
     const koEn = { source_lang: "ko", target_lang: "en" };
     expect(pairLabel(koEn)).toBe("Hàn → Anh");
@@ -35,8 +35,7 @@ describe("lang-labels", () => {
       "có 2 từ viết cho Hàn → Việt",
     );
     expect(langChangeWarning(koVi, koEn, 3)).toBe(
-      "Glossary riêng của series có 3 từ viết cho Hàn → Việt — kiểm lại sau khi đổi ngôn ngữ. " +
-        "Glossary chung sẽ chuyển sang cặp Hàn → Anh.",
+      "Glossary của series có 3 từ viết cho Hàn → Việt — kiểm lại sau khi đổi ngôn ngữ.",
     );
   });
 });

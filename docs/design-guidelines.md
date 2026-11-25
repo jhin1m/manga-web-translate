@@ -118,7 +118,7 @@ Khung 1280×800, không chọn gì: canvas rộng 1160px (1280 − rail 48 − c
   mặc định tiếng Việt; Enter = Tạo series, tạo xong mở màn series), thanh xem danh sách (xem dưới) và lưới thẻ series
   (ảnh bìa tự động hoặc bìa riêng, chưa có ảnh thì ô chữ cái đầu; tên dài cắt "…" + `title`, chấm + trạng thái, "N ch";
   bấm thẻ để mở, icon Sửa → modal Cài đặt dịch, icon Xoá hiện sẵn, xác nhận phủ ngay trên thẻ rồi xoá cả series). Không có tiêu đề "Series · N". Nút Hoạt động của app shell chỉ hiện
-  khi có chương đang tải ảnh; menu tài khoản giữ Glossary chung / Font / Cài đặt.
+  khi có chương đang tải ảnh; menu tài khoản giữ Font / Cài đặt.
 - **Series** (một cột): ‹ về home (không breadcrumb), tên, cặp ngôn ngữ, "Glossary · N" và icon Cài đặt (cả hai mở modal,
   `?tab=` giữ trạng thái modal); dải thả "Thả Ch.{next}" (series cố định, cũng tự tạo chương nháp); lưới thẻ chương
   (ảnh trang đầu, "Ch.N" + tên chương nếu có, chấm + trạng thái, thời gian, icon Xoá xác nhận tại chỗ; bấm cả thẻ để mở
@@ -129,9 +129,15 @@ Khung 1280×800, không chọn gì: canvas rộng 1160px (1280 − rail 48 − c
   Danh sách = cùng thẻ bỏ ảnh, một hàng (tên cắt "…", chấm + trạng thái, số chương / thời gian, icon), xác nhận xoá mở
   thành dòng dưới hàng, vạch tiến độ 3px dưới hàng chương đang chạy; ≤ 480px tên lên dòng riêng. Mỗi màn nhớ lựa chọn
   riêng trong localStorage; mặc định lưới + thứ tự cũ (series: hoạt động mới trước; chương: số tăng dần).
-  **Cài đặt dịch** (modal): luôn hiện Tên, Dịch từ, Sang, Định dạng (Cuộn dọc / Từng trang — áp cho chương upload sau
-  khi lưu), Font thoại; các nhóm thu gọn kèm tóm tắt: Giọng văn, Kính ngữ, Xưng hô, Font khác, Chữ bỏ qua, Ảnh tự bỏ (tự
-  lưu). Hint dưới trường nằm trong ⓘ; **Lưu** dính ở footer, tách khỏi "Xoá series" (link đỏ, bấm mới hiện ô gõ tên).
+  **Cài đặt dịch** (modal 620px): bốn nhóm luôn hiện, cùng khung `SetGroup` (tiêu đề + thẻ trắng) với trang Cài đặt, hàng
+  nhãn | ô (ô chữ dài và bảng xếp dọc; màn ≤ 640px xếp dọc hết): **Series** (Tên, Ảnh bìa, Ngôn ngữ "Dịch từ → Sang",
+  Định dạng — áp cho chương upload sau), **Hướng dẫn cho AI** (mô tả "AI đọc mục này mỗi lần dịch…"; Giọng văn, Kính ngữ,
+  bảng Xưng hô, dòng "Glossary: N thuật ngữ · Mở" mở modal glossary), **Font chữ** (thoại, dẫn truyện, suy nghĩ, ghi
+  chú), **Bỏ qua khi dịch** (Chữ bỏ qua, Ảnh tự bỏ). Mục AI ghi có chip "AI". Không có nút Lưu: ô chọn lưu khi đổi, ô
+  chữ (Tên, Giọng văn, Chữ bỏ qua) chỉ lưu khi rời ô, không lưu giữa lúc gõ (tên trống / "Chữ bỏ qua" sai không lưu);
+  xưng hô lưu các hàng đủ ô khi rời hàng, Xoá hàng lưu ngay; hàng thiếu ô báo đỏ tại hàng, ở lại trên form, không chặn
+  lưu và bị bỏ khi đóng modal. Đóng modal thì lưu nốt; mỗi lượt chỉ gửi trường vừa đổi. Footer: "Xoá series"
+  (link đỏ, bấm mới hiện ô gõ tên) trái, trạng thái "Đang lưu… / Đã lưu / lỗi" phải. Hint nằm trong ⓘ.
 
 ## Thành phần
 
@@ -182,5 +188,7 @@ Khung 1280×800, không chọn gì: canvas rộng 1160px (1280 − rail 48 − c
   về ảnh tự động); plan `plans/261116-1129-folder-drop-and-manga-grid/`.
 - Cập nhật 19/11/2026: thêm thanh xem danh sách (sắp xếp + Lưới / Danh sách) ở Home và màn series; plan
   `plans/261119-0804-list-sort-view-toggle/`.
+- Cập nhật 25/11/2026: bỏ glossary chung; Cài đặt series thành 4 nhóm luôn hiện (Giọng văn, Kính ngữ, Xưng hô gộp vào
+  "Hướng dẫn cho AI") và tự lưu, bỏ nút Lưu; plan `plans/261125-1730-remove-global-glossary-series-settings-redesign/`.
 - Ngoài phạm vi đợt này: dark mode / chọn theme; bỏ cột phải "Cài đặt dịch" + "Glossary" ở trang series.
 - Ngoài phạm vi: thumbnail do server sinh; sắp xếp tay thứ tự file khi upload (file tự xếp theo tên, natural sort).

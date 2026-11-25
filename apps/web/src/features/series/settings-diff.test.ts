@@ -81,4 +81,10 @@ describe("buildPatch", () => {
     const b: SettingsValues = { ...base, pronoun_rules: [] };
     expect(buildPatch(b, { ...b, style_prompt: "x" })).toEqual({ style_prompt: "x", pronoun_keys_seen: [] });
   });
+
+  it("limits the patch to the listed fields", () => {
+    const form: SettingsValues = { ...base, title: "Tên mới", style_prompt: "giọng trẻ" };
+    expect(buildPatch(base, form, ["style_prompt"])).toEqual({ style_prompt: "giọng trẻ", pronoun_keys_seen: seen });
+    expect(buildPatch(base, form, ["honorific_policy"])).toBeNull();
+  });
 });

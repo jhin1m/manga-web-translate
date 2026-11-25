@@ -63,7 +63,7 @@ export function SeriesPage(props: { seriesId: string; tab?: SeriesTab }) {
           {tab === "settings" && <SeriesSettingsDialog series={s} onClose={closeModal} />}
           {tab === "glossary" && (
             <Drawer variant="modal" title="Glossary của series" onClose={closeModal}>
-              <GlossaryEditor scope={{ seriesId }} inheritedLabel={`từ glossary chung (${pairLabel(s)})`} />
+              <GlossaryEditor scope={{ seriesId }} />
             </Drawer>
           )}
         </>

@@ -1,5 +1,5 @@
 /** Find/replace + áp glossary trong chương: preview bắt buộc, khoá chương, 1 transaction theo batch_id, hoàn tác. */
-import { chapters, glossaryEntries, pageStateHistory, pageStates, pages, scoped } from "@mtl/db";
+import { chapters, glossaryEntries, pageStateHistory, pageStates, pages, scoped, series } from "@mtl/db";
 import { emptyPageState, type PageState, pageId, type TextBox } from "@mtl/shared";
 import { eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
@@ -243,15 +243,8 @@ describe("find/replace", () => {
 });
 
 describe("apply glossary", () => {
-  it("uses the merged glossary (series overrides shared), scoped to regions whose source has the term", async () => {
+  it("uses the series glossary, scoped to regions whose source has the term", async () => {
     const sdb = scoped(db, A.userId);
-    await sdb.insert(glossaryEntries, {
-      seriesId: null,
-      sourceLang: "ko",
-      targetLang: "vi",
-      sourceTerm: "검",
-      targetTerm: "gươm",
-    });
     await sdb.insert(glossaryEntries, { seriesId: A.seriesId, sourceTerm: "검", targetTerm: "thanh kiếm" });
     const c = await newChapter(2, () => state("Rút Kiếm ra!", "kiếm khác"));
     const pv = await api("/glossary-apply/preview", { rules: [{ source_term: "검", from: "Kiếm" }] }, c.chapterId);
@@ -294,13 +287,10 @@ describe("apply glossary", () => {
     await unlock(c.chapterId);
   });
 
-  it("shared entries of another language pair are not part of the series glossary → 400 unknown_terms", async () => {
-    await scoped(db, A.userId).insert(glossaryEntries, {
-      sourceLang: "ko",
-      targetLang: "en",
-      sourceTerm: "회장",
-      targetTerm: "chairman",
-    });
+  it("entries of another series are not part of this series glossary → 400 unknown_terms", async () => {
+    const sdb = scoped(db, A.userId);
+    const other = await sdb.insert(series, { title: "Series khác" });
+    await sdb.insert(glossaryEntries, { seriesId: other.id, sourceTerm: "회장", targetTerm: "chairman" });
     const res = await api("/glossary-apply/preview", { rules: [{ source_term: "회장", from: "x" }] });
     expect(res.status).toBe(400);
     expect(await res.json()).toMatchObject({ error: "unknown_terms", terms: ["회장"] });

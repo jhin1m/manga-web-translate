@@ -1,7 +1,7 @@
 /**
  * AI tự ghi trí nhớ series khi dịch: thuật ngữ vào glossary, cặp xưng hô mới, Giọng văn (khi còn trống) — có chip
- * "AI", không còn gợi ý Nhận / Bỏ. Sửa mục AI thì chip mất; mục AI đã xoá không quay lại. Lưu Cài đặt dịch chỉ gửi
- * trường đã đổi nên không đè mục AI ghi trong lúc form đang mở.
+ * "AI", không còn gợi ý Nhận / Bỏ. Sửa mục AI thì chip mất; mục AI đã xoá không quay lại. Cài đặt dịch tự lưu từng
+ * trường vừa đổi: mục AI ghi trong lúc form mở hiện vào trường người dùng không đang sửa, và không bị lượt lưu đè.
  */
 import { expect, type Page, test } from "@playwright/test";
 import { WEB_URL } from "./env.ts";
@@ -39,12 +39,18 @@ async function apiSeries(page: Page, data: Record<string, unknown>) {
 const getSeries = async (page: Page, id: string) =>
   (await (await page.request.get(`/api/series/${id}`)).json()) as SeriesView;
 
-/** Nhóm thu gọn theo tên ở `<summary>` (tên có thể kèm chip AI). */
-const fold = (page: Page, title: string) =>
-  page
-    .getByRole("dialog", { name: "Cài đặt dịch" })
-    .locator("details.settings-fold")
-    .filter({ has: page.locator("summary .fold-title", { hasText: title }) });
+/** Nhóm "Hướng dẫn cho AI" của Cài đặt dịch: ô Giọng văn (+ chip ở nhãn), bảng xưng hô. */
+const aiGroup = (page: Page) => {
+  const group = page.getByRole("dialog", { name: "Cài đặt dịch" }).getByRole("region", { name: "Hướng dẫn cho AI" });
+  return {
+    style: group.getByLabel("Giọng văn", { exact: true }),
+    styleTag: group
+      .locator(".set-row", { has: page.locator("#s-style") })
+      .locator(".set-row-label")
+      .getByTitle(AI_TITLE),
+    rows: group.locator("tbody tr"),
+  };
+};
 
 test("terms, pronoun pairs and style written by AI show an AI tag; edited tags drop, deleted terms stay gone", async ({
   page,
@@ -83,21 +89,19 @@ test("terms, pronoun pairs and style written by AI show an AI tag; edited tags d
     await expect(kiem).toHaveCount(0);
     await glossary.getByRole("button", { name: "Đóng" }).click();
 
-    // Cài đặt dịch: cặp xưng hô + Giọng văn có chip; không còn gợi ý. Lưu ngay không đổi gì → đóng, không gọi PATCH.
-    await main.getByRole("link", { name: "Cài đặt dịch" }).click();
-    const settings = page.getByRole("dialog", { name: "Cài đặt dịch" });
-    const style = fold(page, "Giọng văn");
-    await expect(style.locator("summary").getByTitle(AI_TITLE)).toBeVisible();
-    await expect(style.locator("summary")).toContainText(STYLE);
-    const pronouns = fold(page, "Xưng hô");
-    await pronouns.locator("summary").click();
-    await expect(pronouns.locator("tbody tr")).toHaveCount(1);
-    await expect(pronouns.locator("tbody tr").first().getByTitle(AI_TITLE)).toBeVisible();
-    await expect(settings.getByText(/Gợi ý từ AI/)).toHaveCount(0);
-    await expect(settings.getByRole("button", { name: /^(Nhận|Bỏ) / })).toHaveCount(0);
+    // Cài đặt dịch: cặp xưng hô + Giọng văn có chip; không còn gợi ý. Mở rồi đóng không đổi gì → không gọi PATCH.
     let patched = 0;
     page.on("request", (r) => r.method() === "PATCH" && r.url().includes(`/api/series/${seriesId}`) && patched++);
-    await settings.getByRole("button", { name: "Lưu", exact: true }).click();
+    await main.getByRole("link", { name: "Cài đặt dịch" }).click();
+    const settings = page.getByRole("dialog", { name: "Cài đặt dịch" });
+    const ai = aiGroup(page);
+    await expect(ai.style).toHaveValue(STYLE);
+    await expect(ai.styleTag).toBeVisible();
+    await expect(ai.rows).toHaveCount(1);
+    await expect(ai.rows.first().getByTitle(AI_TITLE)).toBeVisible();
+    await expect(settings.getByText(/Gợi ý từ AI/)).toHaveCount(0);
+    await expect(settings.getByRole("button", { name: /^(Nhận|Bỏ) / })).toHaveCount(0);
+    await settings.getByRole("button", { name: "Đóng" }).click();
     await expect(settings).toHaveCount(0);
     expect(patched).toBe(0);
 
@@ -115,7 +119,9 @@ test("terms, pronoun pairs and style written by AI show an AI tag; edited tags d
   }
 });
 
-test("saving settings opened before AI added a pair and filled the style keeps both", async ({ page }) => {
+test("settings left open while AI writes: untouched fields show what AI wrote, the row being edited saves without dropping the new pair", async ({
+  page,
+}) => {
   await login(page);
   const seriesId = await apiSeries(page, {
     title: "Lưu form khi AI ghi e2e",
@@ -126,13 +132,13 @@ test("saving settings opened before AI added a pair and filled the style keeps b
     const chapterId = await apiCommitChapter(page, "1", seriesId);
     await page.goto(`/s/${seriesId}?tab=settings`);
     const settings = page.getByRole("dialog", { name: "Cài đặt dịch" });
-    const pronouns = fold(page, "Xưng hô");
-    const style = fold(page, "Giọng văn");
-    await expect(style.locator("summary")).toContainText("Chưa đặt");
-    await pronouns.locator("summary").click();
-    await expect(pronouns.locator("tbody tr")).toHaveCount(1);
+    const ai = aiGroup(page);
+    await expect(ai.style).toHaveValue("");
+    await expect(ai.rows).toHaveCount(1);
+    // Người dùng đang sửa hàng xưng hô (con trỏ còn trong hàng) thì AI ghi.
+    await ai.rows.first().getByLabel("Xưng / gọi").fill("tớ/cậu");
 
-    // Form đang mở: AI thêm cặp Seoyeon → Minjun và điền Giọng văn; chờ trang poll được bản đã ghi.
+    // AI thêm cặp Seoyeon → Minjun và điền Giọng văn; chờ trang poll được bản đã ghi.
     const polled = page.waitForResponse(
       async (r) =>
         r.request().method() === "GET" &&
@@ -148,27 +154,28 @@ test("saving settings opened before AI added a pair and filled the style keeps b
     expect(written.pronoun_rules).toHaveLength(2);
     expect([written.style_prompt, written.style_origin]).toEqual([STYLE, "ai"]);
 
-    // Người dùng sửa hàng xưng hô đang thấy + đổi Kính ngữ rồi Lưu.
-    await pronouns.locator("tbody tr").first().getByLabel("Xưng / gọi").fill("tớ/cậu");
-    await fold(page, "Kính ngữ").locator("summary").click();
-    await settings.getByLabel(/^Kính ngữ/).selectOption("keep");
-    await settings.getByRole("button", { name: "Lưu", exact: true }).click();
-    await expect(settings).toHaveCount(0);
+    // Giọng văn (không ai sửa) hiện bản AI kèm chip; bảng xưng hô đang sửa giữ nguyên.
+    await expect(ai.style).toHaveValue(STYLE);
+    await expect(ai.styleTag).toBeVisible();
+    await expect(ai.rows).toHaveCount(1);
+    await expect(ai.rows.first().getByLabel("Xưng / gọi")).toHaveValue("tớ/cậu");
+
+    // Rời hàng → lưu hàng đã sửa; cặp AI chưa thấy được server giữ rồi hiện ra. Kính ngữ lưu ngay khi đổi.
+    await settings.getByLabel("Kính ngữ", { exact: true }).focus();
+    await expect(ai.rows).toHaveCount(2);
+    await settings.getByLabel("Kính ngữ", { exact: true }).selectOption("keep");
+    await expect.poll(async () => (await getSeries(page, seriesId)).honorific_policy).toBe("keep");
 
     const saved = await getSeries(page, seriesId);
-    expect(saved.honorific_policy).toBe("keep");
     expect([saved.style_prompt, saved.style_origin]).toEqual([STYLE, "ai"]);
     expect(saved.pronoun_rules).toMatchObject([
       { speaker: "Minjun", listener: "Seoyeon", address: "tớ/cậu", origin: "user" },
       { speaker: "Seoyeon", listener: "Minjun", address: "em/anh", origin: "ai" },
     ]);
 
-    // Mở lại: cặp AI và Giọng văn AI có chip; sửa hàng AI thì chip mất ngay trên form.
-    await page.getByRole("main").getByRole("link", { name: "Cài đặt dịch" }).click();
-    await expect(style.locator("summary").getByTitle(AI_TITLE)).toBeVisible();
-    await pronouns.locator("summary").click();
-    const aiRow = pronouns.locator("tbody tr").nth(1);
-    await expect(pronouns.locator("tbody tr").first().getByTitle(AI_TITLE)).toHaveCount(0);
+    // Cặp AI có chip, cặp người dùng sửa thì không; sửa hàng AI thì chip mất ngay trên form.
+    const aiRow = ai.rows.nth(1);
+    await expect(ai.rows.first().getByTitle(AI_TITLE)).toHaveCount(0);
     await expect(aiRow.getByTitle(AI_TITLE)).toBeVisible();
     await aiRow.getByLabel("Ghi chú").fill("thân thiết");
     await expect(aiRow.getByTitle(AI_TITLE)).toHaveCount(0);

@@ -69,7 +69,6 @@ Mọi test tự động hiện dùng worker giả lập; chưa có số đo vớ
 - [ ] OCR local chưa nhận SFX (mọi vùng coi là chữ thường → bị xoá + dịch). OCR local giờ là mặc định nên SFX bị xoá
       + dịch theo mặc định; cần giữ SFX thì đổi ngôn ngữ đó về AI LLM.
 - [x] Thumbnail do server sinh — xong trong 0.4.0 (chưa phát hành): `GET /api/thumbs/:fileId` (sharp, cache storage); thứ tự ảnh trước khi cắt trang đã sắp tay được (kéo-thả / menu / Alt+↑↓).
-- [ ] Glossary: chuyển / sao chép entry giữa các cặp ngôn ngữ, cột cặp ngôn ngữ trong CSV.
 - [ ] Chống phát lại dispatch Modal triệt để (lưu `dispatch_id` đã nhận).
 - [ ] _(Ưu tiên sau cùng)_ AI phân loại ảnh credit / quảng cáo (hiện chỉ học theo dHash + gợi ý theo khổ ảnh; banner dính
       ở mép trên / dưới ảnh đã cắt được và học theo series); credit nằm giữa ảnh hoặc đã bị ghép vào trang lớn lúc cắt

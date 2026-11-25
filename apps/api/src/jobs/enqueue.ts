@@ -41,7 +41,7 @@ import { and, asc, eq, inArray, isNull, ne, sql } from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
 import { llmFor, slotRefs } from "../ai/llm-refs.ts";
 import { db } from "../db.ts";
-import { mergeBySourceTerm, seriesGlossaryWhere } from "../lib/glossary-scope.ts";
+import { seriesGlossaryWhere } from "../lib/glossary-scope.ts";
 import { withoutOrigin } from "../lib/pronoun-rules.ts";
 import { readSystemSettings, systemPipeline } from "../lib/system-settings.ts";
 import { exportKey, ingestKey, type JobKey, pageOpKey, prepareKey, proofreadKey, translateKey } from "./idempotency.ts";
@@ -263,11 +263,11 @@ export async function enqueuePrepare(
   });
 }
 
-/** Snapshot cài đặt dịch: glossary (entry series đè entry chung đúng cặp), quy tắc xưng hô, font. */
+/** Snapshot cài đặt dịch: glossary của series, quy tắc xưng hô, font. */
 export async function translateSettings(tx: DbLike, s: Series): Promise<TranslateSettings> {
   const entries = await tx.select().from(glossaryEntries).where(seriesGlossaryWhere(s));
   const glossary: Record<string, string> = {};
-  for (const [term, e] of mergeBySourceTerm(entries)) glossary[term] = e.targetTerm;
+  for (const e of entries) glossary[e.sourceTerm] = e.targetTerm;
   const font = s.defaultFonts.dialogue ?? DEFAULT_DIALOGUE_FONT;
   return {
     glossary,
