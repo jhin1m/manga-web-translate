@@ -47,7 +47,7 @@ Cần Docker Compose ≥ 2.17, RAM cho Docker ≥ 10 GB, nên 12 GB (2 worker m�
 | | Tự host (Docker) | Production (VPS) |
 |---|---|---|
 | Người dùng | 1, không đăng nhập | Nhiều tài khoản, admin, hạn mức chi phí |
-| Lưu file | Đĩa (`./data`) | S3 / MinIO, presigned URL |
+| Lưu file | Đĩa (`./data/files`) | Đĩa VPS (`FILES_DIR`) |
 | Worker AI | Container CPU | Mac local hoặc Modal GPU |
 | Hướng dẫn | [self-host.md](./docs/self-host.md) | [deployment-guide.md](./docs/deployment-guide.md) |
 
