@@ -14,6 +14,8 @@ import {
   type LearnedPronoun,
   type LearnedTerm,
   type OcrResult,
+  ORIGINS,
+  type Origin,
   PAGE_FORMATS,
   PAGE_STATUSES,
   type PageFormat,
@@ -81,6 +83,8 @@ export const series = pgTable(
     honorificPolicy: text("honorific_policy").notNull().default("translate"),
     pronounRules: jsonb("pronoun_rules").$type<Record<string, unknown>[]>().notNull().default([]),
     stylePrompt: text("style_prompt").notNull().default(""),
+    /** Ai đặt Giọng văn (style_prompt): null = chưa ai đặt; AI chỉ điền khi trống và khác 'user'. */
+    styleOrigin: text("style_origin").$type<Origin>(),
     defaultFonts: jsonb("default_fonts").$type<Record<string, string>>().notNull().default({}),
     /** Cách commit chương: strip (manhwa/manhua) hoặc pages (manga) — xem PAGE_FORMATS. */
     pageFormat: text("page_format").$type<PageFormat>().notNull().default("strip"),
@@ -98,6 +102,7 @@ export const series = pgTable(
     unique("series_user_id_uq").on(t.userId, t.id),
     index("series_user_idx").on(t.userId),
     check("series_page_format_chk", inList(sql`${t.pageFormat}`, PAGE_FORMATS)),
+    check("series_style_origin_chk", inList(sql`${t.styleOrigin}`, ORIGINS)),
   ],
 );
 
@@ -344,11 +349,14 @@ export const glossaryEntries = pgTable(
     targetTerm: text("target_term").notNull(),
     note: text("note").notNull().default(""),
     caseSensitive: boolean("case_sensitive").notNull().default(false),
+    /** Ai tạo entry: người dùng hay AI ghi từ kết quả dịch (nhãn "AI"). */
+    origin: text("origin").$type<Origin>().notNull().default("user"),
     ...timestamps,
   },
   (t) => [
     foreignKey({ columns: [t.userId, t.seriesId], foreignColumns: [series.userId, series.id] }).onDelete("cascade"),
     index("glossary_user_series_idx").on(t.userId, t.seriesId),
+    check("glossary_entries_origin_chk", inList(sql`${t.origin}`, ORIGINS)),
     // Một term mỗi phạm vi (series, hoặc cặp ngôn ngữ của người dùng khi series_id null) — chặn tạo trùng khi
     // request đua nhau.
     unique("glossary_entries_scope_term_uq")
@@ -468,10 +476,10 @@ export const proofreadSuggestions = pgTable(
 );
 
 /**
- * Gợi ý glossary/xưng hô do AI học được khi dịch (result chapter.translate: new_terms, pronoun_pairs). Chưa vào
- * glossary/pronoun_rules cho tới khi người dùng Nhận. `key` = khoá chuẩn hoá (termKey/pronounKey) để một mục chỉ có
- * một dòng mỗi series; khi đọc, API ẩn gợi ý đã có trong glossary hoặc quy tắc xưng hô. `dismissed_at` = "Bỏ".
- * `chapter_id` không có FK: xoá chương chỉ mất nhãn nguồn, gợi ý vẫn giữ.
+ * Sổ khoá AI đã gặp: mỗi thuật ngữ/cặp xưng hô AI học được khi dịch (result chapter.translate: new_terms,
+ * pronoun_pairs) có một dòng mỗi series. `key` = ledgerKey(cặp ngôn ngữ, termKey/pronounKey). Khoá đã có trong sổ
+ * thì AI không ghi lại vào glossary/pronoun_rules, nên mục AI mà người dùng xoá không quay lại. `dismissed_at` chỉ
+ * còn ý nghĩa lịch sử (luồng Nhận/Bỏ cũ). `chapter_id` không có FK: xoá chương chỉ mất nhãn nguồn, dòng vẫn giữ.
  */
 export const seriesSuggestions = pgTable(
   "series_suggestions",

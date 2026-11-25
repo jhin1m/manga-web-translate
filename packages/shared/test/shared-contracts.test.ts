@@ -11,6 +11,7 @@ import {
   JobResult,
   keyBelongsToUser,
   LlmConfig,
+  MAX_STYLE_NOTE,
   PageState,
   pageId,
   prepareInputRev,
@@ -278,6 +279,30 @@ describe("chapter.translate result: series memory", () => {
     expect(bad({ pronoun_pairs: [{ ...pair, address: "x".repeat(121) }] })).toBe(false);
     expect(bad({ pronoun_pairs: [{ ...pair, listener: "" }] })).toBe(false);
     expect(bad({ pronoun_pairs: Array.from({ length: 31 }, () => pair) })).toBe(false);
+  });
+
+  it("accepts an optional style_note up to MAX_STYLE_NOTE characters", () => {
+    const ok = (style_note: unknown) => JobResult.safeParse({ ...base, style_note }).success;
+    expect(ok("")).toBe(true);
+    expect(ok("x".repeat(MAX_STYLE_NOTE))).toBe(true);
+    // 151 đơn vị UTF-16 (ASCII: cũng 151 code point) → bị từ chối.
+    expect(ok("x".repeat(MAX_STYLE_NOTE + 1))).toBe(false);
+    expect(ok(1)).toBe(false);
+  });
+
+  it("counts style_note in code points, so a UTF-16 cut to the limit always passes", () => {
+    const ok = (style_note: string) => JobResult.safeParse({ ...base, style_note }).success;
+    // Emoji ngoài BMP = 2 đơn vị UTF-16 nhưng 1 code point (khớp JSON Schema maxLength và len() của Python).
+    expect(ok("😀".repeat(MAX_STYLE_NOTE))).toBe(true);
+    expect(ok("😀".repeat(MAX_STYLE_NOTE + 1))).toBe(false);
+    const cutUtf16 = `${"😀".repeat(MAX_STYLE_NOTE)}a`.slice(0, MAX_STYLE_NOTE);
+    expect(cutUtf16.length).toBe(MAX_STYLE_NOTE);
+    expect(ok(cutUtf16)).toBe(true);
+  });
+
+  it("lists style_note in the committed result JSON Schema", () => {
+    const file = join(import.meta.dirname, "..", "json-schema", "job-result.schema.json");
+    expect(readFileSync(file, "utf8")).toContain('"style_note"');
   });
 });
 

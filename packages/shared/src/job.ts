@@ -158,7 +158,7 @@ export type TranslateCarry = z.infer<typeof TranslateCarry>;
 export const TERM_KINDS = ["person", "place", "term"] as const;
 export type TermKind = (typeof TERM_KINDS)[number];
 
-/** Thuật ngữ/tên riêng AI gặp trong lô mà glossary của job chưa có — API lưu thành gợi ý chờ duyệt. */
+/** Thuật ngữ/tên riêng AI gặp trong lô mà glossary của job chưa có — API ghi thẳng vào glossary series (nhãn AI). */
 export const LearnedTerm = z.object({
   source: z.string().min(1).max(200),
   target: z.string().min(1).max(200),
@@ -166,7 +166,10 @@ export const LearnedTerm = z.object({
 });
 export type LearnedTerm = z.infer<typeof LearnedTerm>;
 
-/** Cặp xưng hô AI đã dùng mà pronoun_rules chưa có (giới hạn khớp PronounRule của series). */
+/**
+ * Cặp xưng hô AI đã dùng mà pronoun_rules chưa có — API ghi thẳng vào pronoun_rules của series (nhãn AI).
+ * Giới hạn khớp PronounRule của series.
+ */
 export const LearnedPronoun = z.object({
   speaker: z.string().min(1).max(80),
   listener: z.string().min(1).max(80),
@@ -176,6 +179,16 @@ export type LearnedPronoun = z.infer<typeof LearnedPronoun>;
 
 export const MAX_LEARNED_TERMS = 50;
 export const MAX_LEARNED_PRONOUNS = 30;
+
+/**
+ * Giọng văn AI đề xuất cho series. zod `max` và JSON Schema `maxLength` đều đếm theo code point; cắt theo đơn vị UTF-16
+ * (≥ số code point) về ≤ giới hạn này thì luôn qua.
+ */
+export const MAX_STYLE_NOTE = 150;
+
+/** Ai đặt một mục trí nhớ series: người dùng hay AI (nhãn "AI" trên web). */
+export const ORIGINS = ["user", "ai"] as const;
+export type Origin = (typeof ORIGINS)[number];
 
 /** carry cuối lượt dịch cả chương + cặp ngôn ngữ lúc dịch — trí nhớ series (chapters.translate_memory). */
 export const TranslateMemory = TranslateCarry.extend({
@@ -312,6 +325,8 @@ export const JobResult = z.discriminatedUnion("type", [
     carry: TranslateCarry.optional(),
     new_terms: z.array(LearnedTerm).max(MAX_LEARNED_TERMS).optional(),
     pronoun_pairs: z.array(LearnedPronoun).max(MAX_LEARNED_PRONOUNS).optional(),
+    /** Giọng văn AI đề xuất; API chỉ ghi khi Giọng văn của series còn trống. Worker cũ không gửi. */
+    style_note: z.string().max(MAX_STYLE_NOTE).optional(),
   }),
   z.object({ type: z.literal("page.reinpaint"), clean_rev: Rev }),
   z.object({ type: z.literal("page.ocr_region"), region: Region }),

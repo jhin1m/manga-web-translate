@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { normKey, pronounKey, termKey } from "../src/index.ts";
+import { ledgerKey, normKey, pronounKey, termKey } from "../src/index.ts";
 
 describe("series suggestion keys", () => {
   it("treats NFD and NFC Hangul as the same key", () => {
@@ -18,5 +18,12 @@ describe("series suggestion keys", () => {
     expect(pronounKey("A", "B")).toBe("a→b");
     expect(pronounKey("A", "B")).not.toBe(pronounKey("B", "A"));
     expect(pronounKey(" A ", "b")).toBe(pronounKey("a", "B"));
+  });
+
+  it("prefixes ledger keys with the language pair", () => {
+    expect(ledgerKey("ko", "vi", termKey(" Min  Jun "))).toBe("ko>vi|min jun");
+    expect(ledgerKey("ko", "vi", pronounKey("A", "B"))).toBe("ko>vi|a→b");
+    expect(ledgerKey("ja", "vi", "min jun")).not.toBe(ledgerKey("ko", "vi", "min jun"));
+    expect(ledgerKey("ko", "vi", "min jun")).not.toBe(ledgerKey("ko", "en", "min jun"));
   });
 });

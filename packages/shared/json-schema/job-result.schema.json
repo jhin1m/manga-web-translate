@@ -710,6 +710,10 @@
             ],
             "additionalProperties": false
           }
+        },
+        "style_note": {
+          "type": "string",
+          "maxLength": 150
         }
       },
       "required": [

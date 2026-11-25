@@ -19,3 +19,11 @@ export function termKey(source: string): string {
 export function pronounKey(speaker: string, listener: string): string {
   return `${normKey(speaker)}→${normKey(listener)}`;
 }
+
+/**
+ * Khoá trong sổ khoá AI đã gặp (series_suggestions.key) = cặp ngôn ngữ + khoá chuẩn hoá: `"{src}>{tgt}|{key}"`.
+ * Đổi cặp ngôn ngữ series thì AI được ghi lại các mục cùng tên nguồn.
+ */
+export function ledgerKey(sourceLang: string, targetLang: string, key: string): string {
+  return `${sourceLang}>${targetLang}|${key}`;
+}
