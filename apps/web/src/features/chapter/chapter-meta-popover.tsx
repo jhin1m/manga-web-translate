@@ -6,6 +6,7 @@
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type FormEvent, type ReactNode, useEffect, useRef, useState } from "react";
+import { useT } from "../../i18n/t.ts";
 import { errorMessage } from "../../lib/api.ts";
 import { fetchSeriesList, patchSeries, type Series, seriesKeys } from "../series/api.ts";
 import { pairLabel } from "../series/lang-labels.ts";
@@ -24,6 +25,7 @@ export function ChapterMetaPopover(props: {
   /** Series đổi → điều hướng sang URL mới. */
   onMoved(seriesId: string): void;
 }) {
+  const { t } = useT();
   const { detail, series } = props;
   const [open, setOpen] = useState<PopKind | null>(null);
   const ref = useRef<HTMLDivElement>(null);
@@ -49,8 +51,8 @@ export function ChapterMetaPopover(props: {
           className="cw-meta-toggle"
           aria-expanded={open === "meta"}
           aria-haspopup="dialog"
-          aria-label={`Chương ${name}`}
-          title={`Chương ${name} — đổi series / số / tên chương`}
+          aria-label={t("chapter.metaPopover.chapterAria", { name })}
+          title={t("chapter.metaPopover.chapterTitle", { name })}
           disabled={!detail}
           onClick={() => toggle("meta")}
         >
@@ -63,8 +65,8 @@ export function ChapterMetaPopover(props: {
           className="cw-lang-chip"
           aria-expanded={open === "lang"}
           aria-haspopup="dialog"
-          aria-label={`Ngôn ngữ ${pairLabel(series)} — đổi ngôn ngữ`}
-          title="Ngôn ngữ gốc (chữ trên ảnh) → ngôn ngữ dịch của series — bấm để đổi"
+          aria-label={t("chapter.metaPopover.langAria", { pair: pairLabel(series) })}
+          title={t("chapter.metaPopover.langTitle")}
           onClick={() => toggle("lang")}
         >
           <GlobeIcon size={14} />
@@ -86,6 +88,7 @@ function PopForm(props: {
   onClose(): void;
   children: ReactNode;
 }) {
+  const { t } = useT();
   const submit = (e: FormEvent) => {
     e.preventDefault();
     if (props.canSave) props.onSubmit();
@@ -107,10 +110,10 @@ function PopForm(props: {
       {props.error ? <span className="small error">{errorMessage(props.error)}</span> : null}
       <div className="row">
         <button type="button" onClick={props.onClose}>
-          Huỷ
+          {t("common.cancel")}
         </button>
         <button type="submit" className="btn-primary" disabled={!props.canSave}>
-          Lưu
+          {t("common.save")}
         </button>
       </div>
     </form>
@@ -118,6 +121,7 @@ function PopForm(props: {
 }
 
 function MetaForm(props: { detail: ChapterDetail; onClose(): void; onMoved(seriesId: string): void }) {
+  const { t } = useT();
   const { detail } = props;
   const qc = useQueryClient();
   const listQ = useQuery({ queryKey: seriesKeys.list(), queryFn: () => fetchSeriesList() });
@@ -151,7 +155,7 @@ function MetaForm(props: { detail: ChapterDetail; onClose(): void; onMoved(serie
 
   return (
     <PopForm
-      label="Đổi series / số chương / tên chương"
+      label={t("chapter.metaPopover.metaLabel")}
       canSave={valid && changed && !save.isPending}
       error={save.error}
       onSubmit={() => save.mutate()}
@@ -168,7 +172,7 @@ function MetaForm(props: { detail: ChapterDetail; onClose(): void; onMoved(serie
         </select>
       </label>
       <label>
-        Chương số
+        {t("chapter.metaPopover.number")}
         <input
           className="num"
           inputMode="decimal"
@@ -178,16 +182,22 @@ function MetaForm(props: { detail: ChapterDetail; onClose(): void; onMoved(serie
           onChange={(e) => setNumber(e.target.value.trim())}
         />
       </label>
-      {!valid && <span className="small error">Số chương phải là số, VD 13 hoặc 13.5.</span>}
+      {!valid && <span className="small error">{t("chapter.metaPopover.numberInvalid")}</span>}
       <label>
-        Tên chương
-        <input maxLength={200} placeholder="Không bắt buộc" value={title} onChange={(e) => setTitle(e.target.value)} />
+        {t("chapter.metaPopover.title")}
+        <input
+          maxLength={200}
+          placeholder={t("chapter.metaPopover.titlePlaceholder")}
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+        />
       </label>
     </PopForm>
   );
 }
 
 function LangForm(props: { series: Series; onClose(): void }) {
+  const { t } = useT();
   const { series } = props;
   const qc = useQueryClient();
   const [src, setSrc] = useState(series.source_lang);
@@ -205,7 +215,7 @@ function LangForm(props: { series: Series; onClose(): void }) {
 
   return (
     <PopForm
-      label="Đổi ngôn ngữ"
+      label={t("chapter.metaPopover.langLabel")}
       canSave={changed && !save.isPending}
       error={save.error}
       onSubmit={() => save.mutate()}

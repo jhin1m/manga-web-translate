@@ -9,6 +9,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { useT } from "../../i18n/t.ts";
 import { errorMessage } from "../../lib/api.ts";
 import { fmtBytes } from "../../lib/format.ts";
 import type { Series, SeriesListItem } from "../series/api.ts";
@@ -57,6 +58,7 @@ export function NewChapterConfirmRow(props: {
 }) {
   const { files } = props;
   const qc = useQueryClient();
+  const { t, tp } = useT();
   const navigate = useNavigate();
   const ref = useRef<HTMLFormElement>(null);
   const numberRef = useRef<HTMLInputElement>(null);
@@ -165,20 +167,25 @@ export function NewChapterConfirmRow(props: {
     if (canCreate) create.mutate();
   };
 
-  const fileLabel = files.length === 1 ? files[0]?.name : files.length === 0 ? "folder rỗng" : `${files.length} file`;
+  const fileLabel =
+    files.length === 1
+      ? files[0]?.name
+      : files.length === 0
+        ? t("home.newChapterConfirm.emptyFolder")
+        : tp("home.newChapterConfirm.files", files.length);
   const noImages = !!d && groups.length === 0;
   const sizeLabel = !d
-    ? "đang đọc file…"
+    ? t("home.newChapterConfirm.reading")
     : pages.length === 1 && imageSize
-      ? `1 ảnh ${imageSize}`
-      : `${pages.length} ảnh · ${fmtBytes(pages.reduce((n, p) => n + p.size, 0))}`;
+      ? t("home.newChapterConfirm.oneImage", { size: imageSize })
+      : tp("home.newChapterConfirm.images", pages.length, { size: fmtBytes(pages.reduce((n, p) => n + p.size, 0)) });
   const lastNumber = String(Number(chapterNumber) + groups.length - 1);
 
   return (
     <>
       <form
         ref={ref}
-        aria-label="Sau khi thả file"
+        aria-label={t("home.newChapterConfirm.formAria")}
         className="confirm-row"
         onSubmit={submit}
         onKeyDown={(e) => {
@@ -190,24 +197,25 @@ export function NewChapterConfirmRow(props: {
       >
         <div className="confirm-fields">
           <span className="confirm-file" title={`${fileLabel} · ${sizeLabel}`}>
-            <span className="small muted">Vừa thả</span> <b>{fileLabel}</b> · {sizeLabel}
+            <span className="small muted">{t("home.newChapterConfirm.justDropped")}</span> <b>{fileLabel}</b> ·{" "}
+            {sizeLabel}
           </span>
           {!props.fixedSeriesId && options.length === 0 && (
             <button type="button" onClick={() => setAddingSeries(true)}>
-              + Series mới…
+              {t("home.newChapterConfirm.newSeries")}
             </button>
           )}
           {!props.fixedSeriesId && options.length > 0 && (
             // "+ Series mới…" không phải giá trị chọn: mở modal, ô chọn giữ series cũ tới khi tạo xong.
             <select
               aria-label="Series"
-              title="Series (đoán từ tên file)"
+              title={t("home.newChapterConfirm.seriesTitle")}
               value={seriesId}
               onChange={(e) => (e.target.value === NEW_SERIES ? setAddingSeries(true) : setSeriesId(e.target.value))}
             >
               {!seriesId && (
                 <option value="" disabled>
-                  Chọn series
+                  {t("home.newChapterConfirm.pickSeries")}
                 </option>
               )}
               {options.map((s) => (
@@ -215,49 +223,64 @@ export function NewChapterConfirmRow(props: {
                   {s.title}
                 </option>
               ))}
-              <option value={NEW_SERIES}>+ Series mới…</option>
+              <option value={NEW_SERIES}>{t("home.newChapterConfirm.newSeries")}</option>
             </select>
           )}
           <label className="confirm-number">
-            {groups.length > 1 ? "Từ ch." : "Ch."}
+            {groups.length > 1 ? t("home.newChapterConfirm.fromCh") : t("home.newChapterConfirm.ch")}
             <input
               ref={numberRef}
               className="num"
               inputMode="decimal"
-              aria-label={groups.length > 1 ? "Từ chương số" : "Chương số"}
+              aria-label={
+                groups.length > 1 ? t("home.newChapterConfirm.fromNumberAria") : t("home.newChapterConfirm.numberAria")
+              }
               value={chapterNumber}
               onChange={(e) => setNumber(e.target.value.trim())}
             />
           </label>
           <button type="submit" className="btn-primary" disabled={!canCreate}>
-            {groups.length > 1 ? `Tạo ${groups.length} chương` : "Tạo và mở chương"}
+            {groups.length > 1
+              ? tp("home.newChapterConfirm.createMany", groups.length)
+              : t("home.newChapterConfirm.createOne")}
           </button>
-          <button type="button" className="icon-btn" aria-label="Bỏ" title="Bỏ" onClick={props.onCancel}>
+          <button
+            type="button"
+            className="icon-btn"
+            aria-label={t("home.newChapterConfirm.dismiss")}
+            title={t("home.newChapterConfirm.dismiss")}
+            onClick={props.onCancel}
+          >
             <CloseIcon />
           </button>
         </div>
         {askMode && d && (
-          <div className="confirm-modes" role="radiogroup" aria-label="Cách chia chương">
+          <div className="confirm-modes" role="radiogroup" aria-label={t("home.newChapterConfirm.modeAria")}>
             <label>
-              <input type="radio" name="mode" checked={!each} onChange={() => setEach(false)} />1 chương gồm{" "}
-              {d.loose.length} ảnh
+              <input type="radio" name="mode" checked={!each} onChange={() => setEach(false)} />
+              {tp("home.newChapterConfirm.modeOne", d.loose.length)}
             </label>
             <label>
               <input type="radio" name="mode" checked={each} onChange={() => setEach(true)} />
-              {d.loose.length} chương, mỗi ảnh 1 chương
+              {tp("home.newChapterConfirm.modeEach", d.loose.length)}
             </label>
           </div>
         )}
         {groups.length > 1 && NUMBER_RE.test(chapterNumber) && (
           <span className="small muted">
-            Tạo chương {chapterNumber}–{lastNumber}, đánh số liên tiếp
-            {d && d.zips.length + d.folders.length > 1 ? " (mỗi ZIP / folder 1 chương)" : ""}.
+            {t("home.newChapterConfirm.rangeNote", {
+              from: chapterNumber,
+              to: lastNumber,
+              each: d && d.zips.length + d.folders.length > 1 ? t("home.newChapterConfirm.rangeEach") : "",
+            })}
           </span>
         )}
-        {!NUMBER_RE.test(chapterNumber) && <span className="small error">Số chương phải là số, VD 13 hoặc 13.5.</span>}
+        {!NUMBER_RE.test(chapterNumber) && (
+          <span className="small error">{t("home.newChapterConfirm.numberInvalid")}</span>
+        )}
         {noImages && (
           <span className="small error" role="alert">
-            Không có ảnh nào trong folder.
+            {t("home.newChapterConfirm.noImages")}
           </span>
         )}
         {problems.map((p) => (

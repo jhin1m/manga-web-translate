@@ -3,6 +3,7 @@
  * Phím đơn tắt khi focus trong ô nhập (input/textarea/select/contenteditable); chỉ Ctrl/Cmd+S và Ctrl/Cmd+F chạy
  * cả trong ô. `O` giữ = tạm xem ảnh gốc (OCR vùng dùng `R`).
  */
+import { type MessageKey, t } from "../../i18n/t.ts";
 import type { Tool } from "./store.ts";
 
 export type KeyInput = {
@@ -43,22 +44,32 @@ export type ShortcutAction =
 const TOOLS: Record<string, Tool> = { v: "select", t: "text", b: "brush", e: "eraser", r: "ocr" };
 const PAGE: Record<string, -1 | 1> = { a: -1, d: 1, pageup: -1, pagedown: 1, arrowleft: -1, arrowright: 1 };
 
+/** Một dòng bảng phím: chữ đọc theo ngôn ngữ lúc dùng (getter), không lúc import. `keys` là chuỗi phím thô hoặc key dịch. */
+const row = (keys: string | { label: MessageKey }, action: MessageKey): { keys: string; action: string } => ({
+  get keys() {
+    return typeof keys === "string" ? keys : t(keys.label);
+  },
+  get action() {
+    return t(action);
+  },
+});
+
 /** Bảng tra phím trong UI (`?`). */
 export const SHORTCUT_HELP: { keys: string; action: string }[] = [
-  { keys: "V · T · B · E · R", action: "Chọn · Chữ · Tẩy chữ · Tẩy nét · Quét chữ" },
-  { keys: "Giữ O", action: "Tạm xem ảnh gốc (nhả = về chế độ trước)" },
-  { keys: "\\", action: "Đổi Gốc ↔ Dịch (nút Xem gốc)" },
-  { keys: "A / D · PageUp / PageDown · ← / →", action: "Trang trước / sau" },
-  { keys: "Alt+↑ / Alt+↓", action: "Khối trước / sau (xuyên trang)" },
-  { keys: "Ctrl/Cmd+Z · Ctrl/Cmd+Shift+Z · Ctrl+Y", action: "Hoàn tác · Làm lại (trang đang sửa)" },
-  { keys: "Ctrl/Cmd+S", action: "Lưu ngay (cả khi đang gõ)" },
-  { keys: "Ctrl/Cmd+F", action: "Mở panel Tìm / Thay (cả khi đang gõ)" },
-  { keys: "Enter · Delete", action: "Sửa chữ box đang chọn · Xoá box" },
-  { keys: "Esc", action: "Bỏ chọn khối" },
-  { keys: "Space giữ + kéo", action: "Kéo canvas (hoặc chuột giữa)" },
-  { keys: "Ctrl/Cmd+cuộn", action: "Phóng to / thu nhỏ" },
-  { keys: "Cuộn quá mép trang", action: "Sang trang sau / trước" },
-  { keys: "?", action: "Bảng phím tắt này" },
+  row("V · T · B · E · R", "editor.shortcuts.tools"),
+  row({ label: "editor.shortcuts.holdOriginalKeys" }, "editor.shortcuts.holdOriginal"),
+  row("\\", "editor.shortcuts.toggleOriginal"),
+  row("A / D · PageUp / PageDown · ← / →", "editor.shortcuts.page"),
+  row("Alt+↑ / Alt+↓", "editor.shortcuts.block"),
+  row("Ctrl/Cmd+Z · Ctrl/Cmd+Shift+Z · Ctrl+Y", "editor.shortcuts.undoRedo"),
+  row("Ctrl/Cmd+S", "editor.shortcuts.save"),
+  row("Ctrl/Cmd+F", "editor.shortcuts.find"),
+  row("Enter · Delete", "editor.shortcuts.editDelete"),
+  row("Esc", "editor.shortcuts.escape"),
+  row({ label: "editor.shortcuts.panKeys" }, "editor.shortcuts.pan"),
+  row({ label: "editor.shortcuts.zoomKeys" }, "editor.shortcuts.zoom"),
+  row({ label: "editor.shortcuts.wheelFlipKeys" }, "editor.shortcuts.wheelFlip"),
+  row("?", "editor.shortcuts.help"),
 ];
 
 export function resolveKey(e: KeyInput, ctx: KeyContext): ShortcutAction | null {

@@ -7,6 +7,7 @@
  */
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Fragment, useEffect, useRef, useState } from "react";
+import { t, tp, useT } from "../../i18n/t.ts";
 import { ApiError, errorMessage } from "../../lib/api.ts";
 import {
   type ApplyResult,
@@ -78,7 +79,7 @@ export function useBatchFlow<I>(
       if (g !== gen.current) return;
       setPreview({ result, input });
       setApplied(null);
-      setMessage(result.total === 0 ? { tone: "info", text: "Không có chỗ nào khớp." } : null);
+      setMessage(result.total === 0 ? { tone: "info", text: t("chapter.findReplace.noMatch") } : null);
     },
     onError: (e, v) => {
       if (v.gen === gen.current) setMessage({ tone: "danger", text: writeError(e).text });
@@ -91,7 +92,13 @@ export function useBatchFlow<I>(
     },
     onSuccess: (r) => {
       setApplied(r);
-      setMessage({ tone: "info", text: `Đã thay ${r.replaced} chỗ trên ${r.pages} trang.` });
+      setMessage({
+        tone: "info",
+        text: t("chapter.findReplace.replaced", {
+          matches: tp("chapter.findReplace.matchCount", r.replaced),
+          pages: tp("common.pages", r.pages),
+        }),
+      });
       fns.hooks?.applied(r);
       refresh();
     },
@@ -110,7 +117,7 @@ export function useBatchFlow<I>(
     onSuccess: (r, batchId) => {
       setApplied(null);
       setPreview(null);
-      setMessage({ tone: "info", text: `Đã hoàn tác trên ${r.pages} trang.` });
+      setMessage({ tone: "info", text: t("chapter.findReplace.undone", { pages: tp("common.pages", r.pages) }) });
       fns.hooks?.undone(batchId, r);
       refresh();
     },
@@ -167,13 +174,14 @@ export function FlowPanel({
   highlight(m: FindMatch): { before: string; after: string; caseSensitive: boolean };
   showRule?: boolean;
 }) {
+  const { t, tp } = useT();
   const held = lock.status === "held";
   const { preview, applied } = flow;
   return (
     <>
       <div className="row" style={{ marginTop: 12 }}>
         <button type="button" disabled={!canPreview || flow.busy} onClick={flow.runPreview}>
-          Xem trước
+          {t("chapter.findReplace.preview")}
         </button>
         <button
           type="button"
@@ -181,15 +189,15 @@ export function FlowPanel({
           // Bản xem trước đã áp rồi thì phải xem trước lại (server cũng từ chối `preview_stale`).
           disabled={!preview || preview.total === 0 || !!applied || !held || flow.busy}
           title={
-            held ? (applied ? "Đã áp dụng — bấm Xem trước để tìm lại" : undefined) : "Cần giữ khoá chương để áp dụng"
+            held ? (applied ? t("chapter.findReplace.appliedTitle") : undefined) : t("chapter.findReplace.needLock")
           }
           onClick={flow.runApply}
         >
-          Áp dụng
+          {t("chapter.findReplace.apply")}
         </button>
         {applied && (
           <button type="button" className="btn-danger" disabled={!held || flow.busy} onClick={flow.runUndo}>
-            Hoàn tác
+            {t("chapter.findReplace.undo")}
           </button>
         )}
       </div>
@@ -201,9 +209,9 @@ export function FlowPanel({
       {preview && preview.total > 0 && (
         <>
           <p className="muted small">
-            {preview.total} chỗ khớp
-            {preview.truncated ? ` (chỉ hiện ${preview.matches.length} đầu tiên — vẫn áp dụng cho tất cả)` : ""}
-            {applied ? " · đã áp dụng" : ""}
+            {tp("chapter.findReplace.totalMatches", preview.total)}
+            {preview.truncated ? t("chapter.findReplace.truncated", { shown: preview.matches.length }) : ""}
+            {applied ? t("chapter.findReplace.appliedSuffix") : ""}
           </p>
           <MatchList onJump={onJump} matches={preview.matches} highlight={highlight} showRule={showRule} />
         </>
@@ -242,15 +250,16 @@ export function MatchList({
   highlight(m: FindMatch): { before: string; after: string; caseSensitive: boolean };
   showRule?: boolean;
 }) {
+  const { t } = useT();
   return (
     <div className="cw-tool-list">
       <table className="data">
         <thead>
           <tr>
-            <th className="num">Trang</th>
-            <th>Vị trí</th>
-            <th>Trước → sau</th>
-            <th className="num">Số chỗ</th>
+            <th className="num">{t("chapter.findReplace.colPage")}</th>
+            <th>{t("chapter.findReplace.colTarget")}</th>
+            <th>{t("chapter.findReplace.colChange")}</th>
+            <th className="num">{t("chapter.findReplace.colCount")}</th>
             <th />
           </tr>
         </thead>
@@ -261,9 +270,9 @@ export function MatchList({
               <tr key={`${m.page_id}:${m.target}:${m.id}:${m.rule ?? ""}`}>
                 <td className="num">{m.ord + 1}</td>
                 <td className="small">
-                  {m.target === "box" ? "Box chữ" : "Vùng"}
-                  {showRule && m.rule != null ? ` · quy tắc ${m.rule + 1}` : ""}
-                  {m.target === "box" && showRule ? " (box đổi — ngắt dòng lại khi vẽ)" : ""}
+                  {m.target === "box" ? t("chapter.findReplace.targetBox") : t("chapter.findReplace.targetRegion")}
+                  {showRule && m.rule != null ? t("chapter.findReplace.rule", { rule: m.rule + 1 }) : ""}
+                  {m.target === "box" && showRule ? t("chapter.findReplace.boxReflow") : ""}
                 </td>
                 <td>
                   <div>
@@ -276,7 +285,7 @@ export function MatchList({
                 <td className="num">{m.count}</td>
                 <td>
                   <button type="button" className="btn-ghost" onClick={() => onJump(m)}>
-                    Tới khối
+                    {t("chapter.findReplace.jump")}
                   </button>
                 </td>
               </tr>
@@ -301,6 +310,7 @@ export type ToolPanelProps = Ids & {
 };
 
 export function FindReplacePanel({ chapterId, lock, beforeWrite, onJump, batch }: ToolPanelProps) {
+  const { t } = useT();
   const [find, setFind] = useState("");
   const [replace, setReplace] = useState("");
   const [cs, setCs] = useState(false);
@@ -327,11 +337,11 @@ export function FindReplacePanel({ chapterId, lock, beforeWrite, onJump, batch }
       <LockBanner state={lock.state} onRetry={() => void lock.retry()} />
       <div className="cw-tool-form">
         <div>
-          <label htmlFor="fr-find">Tìm</label>
+          <label htmlFor="fr-find">{t("chapter.findReplace.find")}</label>
           <input id="fr-find" value={find} maxLength={200} onChange={(e) => edit(() => setFind(e.target.value))} />
         </div>
         <div>
-          <label htmlFor="fr-replace">Thay bằng</label>
+          <label htmlFor="fr-replace">{t("chapter.findReplace.replaceWith")}</label>
           <input
             id="fr-replace"
             value={replace}
@@ -341,11 +351,11 @@ export function FindReplacePanel({ chapterId, lock, beforeWrite, onJump, batch }
         </div>
         <label className="row cw-tool-check">
           <input type="checkbox" checked={cs} onChange={(e) => edit(() => setCs(e.target.checked))} />
-          Phân biệt hoa thường
+          {t("chapter.findReplace.caseSensitive")}
         </label>
       </div>
       <p className="muted small" style={{ margin: "4px 0 0" }}>
-        Khớp chữ thường (không regex), trong cả chương: bản dịch ở box chữ và vùng.
+        {t("chapter.findReplace.hint")}
       </p>
       <FlowPanel
         onJump={onJump}

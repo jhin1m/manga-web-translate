@@ -5,14 +5,16 @@
  * Page đang chạy AI (`processing`): cột Dịch hiện ảnh gốc + lớp mờ và nhãn trạng thái thay vì ảnh sạch (bóng thoại
  * trống trông như lỗi); ảnh sạch vẫn tải ngầm để đổi ngay khi page xong.
  */
+
 import { Group, Rect, Text } from "react-konva";
+import { type MessageKey, useT } from "../../../i18n/t.ts";
 import { TileLayer } from "./TileLayer.tsx";
 
 export type SlotImages = { original: string; clean: string | null; cleanRev: number | null };
 /** Page đang chạy AI (bước 1 hoặc 2): cột Dịch hiện ảnh gốc + lớp mờ + nhãn. Page chờ dịch hiện ảnh sạch như thường. */
 export type SlotProcessing = "busy";
 
-const PROCESSING_LABEL: Record<SlotProcessing, string> = { busy: "Đang xử lý…" };
+const PROCESSING_LABEL: Record<SlotProcessing, MessageKey> = { busy: "editor.pageSlot.busy" };
 /** Cỡ nhãn trạng thái (px màn hình). */
 const LABEL_PX = 15;
 type Rect4 = { x: number; y: number; w: number; h: number };
@@ -72,11 +74,12 @@ function ProcessingVeil(props: {
   viewport: Rect4;
   scale: number;
 }) {
+  const { t } = useT();
   const { size, viewport } = props;
   const fs = LABEL_PX / props.scale;
   const mid = viewport.y + viewport.h / 2;
   const y = Math.min(Math.max(mid, fs), Math.max(fs, size.h - 2 * fs)) - fs / 2;
-  const text = PROCESSING_LABEL[props.kind];
+  const text = t(PROCESSING_LABEL[props.kind]);
   // Nền nhãn: bề ngang ước theo số ký tự (font hệ thống đậm ≈ 0.6em/ký tự) — đủ để chữ không lẫn vào ảnh.
   const padX = fs * 0.8;
   const pillW = Math.min(size.w, text.length * fs * 0.6 + 2 * padX);

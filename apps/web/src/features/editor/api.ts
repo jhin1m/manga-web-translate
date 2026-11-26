@@ -1,5 +1,6 @@
 /** Kiểu + gọi API editor (khớp apps/api/src/routes/page-state.ts và routes/jobs.ts). */
 import type { PageState, Region } from "@mtl/shared";
+import { t } from "../../i18n/t.ts";
 import { api } from "../../lib/api.ts";
 import type { JobView } from "../chapter/api.ts";
 
@@ -85,10 +86,10 @@ export async function waitJob(
       // Signal đã huỷ trước khi gắn listener thì sự kiện "abort" không bắn nữa → từ chối ngay.
       if (signal?.aborted) return reject(new DOMException("aborted", "AbortError"));
       const onAbort = () => {
-        clearTimeout(t);
+        clearTimeout(timer);
         reject(new DOMException("aborted", "AbortError"));
       };
-      const t = setTimeout(() => {
+      const timer = setTimeout(() => {
         signal?.removeEventListener("abort", onAbort);
         resolve();
       }, everyMs);
@@ -103,7 +104,7 @@ export async function uploadMask(post: { url: string; fields: Record<string, str
   for (const [k, v] of Object.entries(post.fields)) form.append(k, v);
   form.append("file", png);
   const res = await fetch(post.url, { method: "POST", body: form });
-  if (!res.ok) throw new Error(`upload mask thất bại (${res.status})`);
+  if (!res.ok) throw new Error(t("editor.api.maskUploadFailed", { status: res.status }));
 }
 
 export type OcrRegionResult = { type: "page.ocr_region"; region: Region };

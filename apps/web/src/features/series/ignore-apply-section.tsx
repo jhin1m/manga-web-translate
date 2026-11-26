@@ -5,6 +5,7 @@
  */
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
+import { t, tp, useT } from "../../i18n/t.ts";
 import { errorMessage } from "../../lib/api.ts";
 import {
   applyIgnoreApply,
@@ -18,6 +19,7 @@ import { appliedSummary, describeSkipped, previewSummary, undoneSummary } from "
 type Notice = { tone: "info" | "danger"; text: string; skipped?: string; undo?: string };
 
 export function IgnoreApplySection({ seriesId, disabledReason }: { seriesId: string; disabledReason: string | null }) {
+  useT();
   const qc = useQueryClient();
   const [preview, setPreview] = useState<IgnorePreview | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
@@ -62,10 +64,10 @@ export function IgnoreApplySection({ seriesId, disabledReason }: { seriesId: str
   const busy = previewM.isPending || applyM.isPending || undoM.isPending;
 
   return (
-    <section className="ignore-apply" aria-label="Ẩn chữ khớp trong chương đã dịch">
+    <section className="ignore-apply" aria-label={t("series.ignoreApplySection.title")}>
       <div className="row">
         <button type="button" disabled={busy || !!disabledReason} onClick={() => previewM.mutate()}>
-          Ẩn chữ khớp trong chương đã dịch…
+          {t("series.ignoreApplySection.open")}
         </button>
         {disabledReason && <span className="hint">{disabledReason}</span>}
       </div>
@@ -78,7 +80,8 @@ export function IgnoreApplySection({ seriesId, disabledReason }: { seriesId: str
             <ul className="small" style={{ margin: "0 0 4px", paddingLeft: 18 }}>
               {preview.chapters.map((c) => (
                 <li key={c.chapter_id}>
-                  <strong>Chương {c.number}</strong>: {c.boxes} box
+                  <strong>{t("series.ignoreApplySection.chapter", { number: c.number })}</strong>:{" "}
+                  {tp("series.ignoreApplyModel.boxes", c.boxes)}
                   {c.samples.length > 0 && (
                     <span className="muted"> · {c.samples.map((s) => `“${s}”`).join(", ")}</span>
                   )}
@@ -88,17 +91,19 @@ export function IgnoreApplySection({ seriesId, disabledReason }: { seriesId: str
           )}
           {preview.skipped.length > 0 && (
             <p className="small muted" style={{ margin: "0 0 4px" }}>
-              Bỏ qua: {describeSkipped(preview.skipped)}.
+              {t("series.ignoreApplySection.skipped", { list: describeSkipped(preview.skipped) })}
             </p>
           )}
           <div className="row">
             {preview.total_boxes > 0 && (
               <button type="button" disabled={busy} onClick={() => applyM.mutate(preview)}>
-                Ẩn {preview.total_boxes} box
+                {t("series.ignoreApplySection.hide", {
+                  boxes: tp("series.ignoreApplyModel.boxes", preview.total_boxes),
+                })}
               </button>
             )}
             <button type="button" disabled={busy} onClick={() => setPreview(null)}>
-              Huỷ
+              {t("common.cancel")}
             </button>
           </div>
         </div>
@@ -110,11 +115,13 @@ export function IgnoreApplySection({ seriesId, disabledReason }: { seriesId: str
             <>
               {" · "}
               <button type="button" disabled={busy} onClick={() => undoM.mutate(notice.undo as string)}>
-                Hoàn tác
+                {t("series.ignoreApplySection.undo")}
               </button>
             </>
           )}
-          {notice.skipped ? <span className="muted"> Bỏ qua: {notice.skipped}.</span> : null}
+          {notice.skipped ? (
+            <span className="muted"> {t("series.ignoreApplySection.skipped", { list: notice.skipped })}</span>
+          ) : null}
         </p>
       )}
     </section>

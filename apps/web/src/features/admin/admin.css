@@ -107,6 +107,21 @@
   .admin-nav a[aria-current="page"] {
     border-color: var(--c-accent-weak);
   }
+  /* Ô ngôn ngữ giao diện (nhóm nằm ngoài thanh mục): nhãn + ô chọn gọn trên một hàng thay vì ô chọn rộng hết hàng. */
+  .admin-side > .admin-nav-group {
+    display: flex;
+    flex-flow: row wrap;
+    align-items: center;
+    gap: var(--sp-2);
+  }
+  .admin-side > .admin-nav-group > .admin-nav-title {
+    display: block;
+    padding: 0;
+  }
+  .admin-side > .admin-nav-group > select {
+    width: auto;
+    min-width: 160px;
+  }
 }
 
 /* Khung chung các mục (trang Cài đặt + modal Cài đặt dịch): đầu mục, nhóm = thẻ có đầu thẻ, hàng (nhãn ⓘ | ô). */

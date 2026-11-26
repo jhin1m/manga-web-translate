@@ -5,6 +5,7 @@
  * ảnh thật, Shift = 10 px (Enter / Esc do viewer bắt ở mức cửa sổ).
  */
 import { type KeyboardEvent, type PointerEvent, type RefObject, useEffect, useRef } from "react";
+import { useT } from "../../i18n/t.ts";
 
 export type TrimEdge = "top" | "bottom";
 
@@ -63,6 +64,7 @@ function TrimHandle(props: {
   focusOnMount: RefObject<boolean>;
   onChange(edge: TrimEdge, value: number): void;
 }) {
+  const { t } = useT();
   const { edge, at, height } = props;
   const ref = useRef<HTMLDivElement>(null);
   /** Đang kéo: khoảng lệch (px ảnh thật) từ đường cắt tới con trỏ lúc bấm, để đường không nhảy theo con trỏ. */
@@ -119,12 +121,12 @@ function TrimHandle(props: {
       style={{ top: pct(at, height) }}
       role="slider"
       tabIndex={0}
-      aria-label={edge === "top" ? "Mép trên" : "Mép dưới"}
+      aria-label={t(edge === "top" ? "chapter.sourceTrimOverlay.top" : "chapter.sourceTrimOverlay.bottom")}
       aria-orientation="vertical"
       aria-valuemin={0}
       aria-valuemax={height}
       aria-valuenow={at}
-      aria-valuetext={`${edge === "top" ? at : height - at} px bị cắt`}
+      aria-valuetext={t("chapter.sourceTrimOverlay.trimmed", { px: edge === "top" ? at : height - at })}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={endDrag}

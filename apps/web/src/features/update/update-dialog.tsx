@@ -7,6 +7,7 @@ import type { UpdateRun, UpdateStatus } from "@mtl/shared/update";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { Drawer } from "../../app/drawer.tsx";
+import { t, tNode, useT } from "../../i18n/t.ts";
 import { ApiError } from "../../lib/api.ts";
 import { pollStatus, pollVersion, startUpdate, UPDATE_STATUS_KEY } from "./api.ts";
 import { ManualUpdate } from "./manual-update.tsx";
@@ -48,6 +49,7 @@ export function UpdateDialog(props: {
   version: string;
   onClose(): void;
 }) {
+  useT();
   const { status, version } = props;
   const run = status.updater.run;
   const qc = useQueryClient();
@@ -138,10 +140,12 @@ export function UpdateDialog(props: {
 
   if (running || done) {
     return (
-      <Drawer variant="modal" title={`Cập nhật lên v${version}`} onClose={noop}>
+      <Drawer variant="modal" title={t("update.updateDialog.updateTo", { version })} onClose={noop}>
         <div className="update-running">
           {/* Vùng live chỉ chứa câu theo bước; đồng hồ nằm ngoài để trình đọc màn hình không đọc lại mỗi giây. */}
-          <p role="status">{done || !tracking ? `Đã cập nhật lên v${version}` : progressText(tracking)}</p>
+          <p role="status">
+            {done || !tracking ? t("update.updateDialog.updatedTo", { version }) : progressText(tracking)}
+          </p>
           {!done && <p className="muted small">{formatElapsed(now - startedAt)}</p>}
         </div>
       </Drawer>
@@ -153,25 +157,26 @@ export function UpdateDialog(props: {
     return (
       <Drawer
         variant="modal"
-        title={failure.landed ? `Đã lên v${version}, bước cuối lỗi` : `Cập nhật v${version} lỗi`}
+        title={
+          failure.landed
+            ? t("update.updateDialog.landedFailedTitle", { version })
+            : t("update.updateDialog.failedTitle", { version })
+        }
         // App đã chạy bản mới: đóng hộp thì tải lại để web dùng bundle mới, không để trang cũ chạy tiếp.
         onClose={failure.landed ? () => location.reload() : props.onClose}
       >
-        {failure.landed && (
-          <p className="notice danger">
-            App đã chạy bản v{version}, nhưng cập nhật kết thúc với lỗi ở bước cuối (worker hoặc dữ liệu có thể chưa
-            đúng).
-          </p>
-        )}
+        {failure.landed && <p className="notice danger">{t("update.updateDialog.landedNotice", { version })}</p>}
         <p className={failure.landed ? "small" : "notice danger"}>
           {failure.landed ? landedReasonText(failure.reason) : reasonText(failure.reason)}
         </p>
         <p className="small">
-          Xem log: <code>docker logs {runnerLogName(status.updater.project)}</code>
+          {tNode("update.updateDialog.viewLog", {
+            command: <code>docker logs {runnerLogName(status.updater.project)}</code>,
+          })}
         </p>
         {tail.length > 0 && (
           <details className="update-detail">
-            <summary>Chi tiết kỹ thuật</summary>
+            <summary>{t("update.updateDialog.techDetails")}</summary>
             <pre>{tail.join("\n")}</pre>
           </details>
         )}
@@ -182,8 +187,8 @@ export function UpdateDialog(props: {
 
   if (mode === "stale") {
     return (
-      <Drawer variant="modal" title="Cập nhật" onClose={props.onClose}>
-        <p className="notice info">Đã có bản khác, mở lại menu.</p>
+      <Drawer variant="modal" title={t("update.updateDialog.update")} onClose={props.onClose}>
+        <p className="notice info">{t("update.updateDialog.stale")}</p>
       </Drawer>
     );
   }
@@ -191,7 +196,7 @@ export function UpdateDialog(props: {
   if (mode === "manual") {
     const reason = manualReason(status);
     return (
-      <Drawer variant="modal" title="Cách cập nhật" onClose={props.onClose}>
+      <Drawer variant="modal" title={t("update.updateDialog.manualTitle")} onClose={props.onClose}>
         {reason && <p className="notice info">{reasonText(reason)}</p>}
         <ManualUpdate pinned={pinned} />
       </Drawer>
@@ -201,28 +206,28 @@ export function UpdateDialog(props: {
   return (
     <Drawer
       variant="modal"
-      title={`Cập nhật lên v${version}`}
+      title={t("update.updateDialog.updateTo", { version })}
       onClose={pending ? noop : props.onClose}
       footer={
         <>
           <button type="button" className="btn-ghost" onClick={props.onClose} disabled={pending}>
-            Huỷ
+            {t("common.cancel")}
           </button>
           <button type="button" className="btn-primary" onClick={() => void submit()} disabled={pending}>
-            {pending ? "Đang gửi…" : "Cập nhật"}
+            {pending ? t("update.updateDialog.sending") : t("update.updateDialog.update")}
           </button>
         </>
       }
     >
       {pending && (
         <p className="update-pending muted small" role="status">
-          Đang gửi yêu cầu cập nhật…
+          {t("update.updateDialog.sendingRequest")}
         </p>
       )}
       <ul className="update-lines">
-        <li>App dừng vài phút để sao lưu dữ liệu rồi cập nhật.</li>
-        <li>Việc đang chạy sẽ dừng (chờ tối đa 90 giây), trang đang xử lý có thể phải chạy lại.</li>
-        <li>Sau khi cập nhật không quay lại bản cũ được.</li>
+        <li>{t("update.updateDialog.noteDowntime")}</li>
+        <li>{t("update.updateDialog.noteJobs")}</li>
+        <li>{t("update.updateDialog.noteNoRollback")}</li>
       </ul>
     </Drawer>
   );

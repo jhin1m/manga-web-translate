@@ -2,6 +2,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { type ReactNode, useState } from "react";
 import { PlugIcon } from "../../app/settings-icons.tsx";
+import { useT } from "../../i18n/t.ts";
 import { api } from "../../lib/api.ts";
 import { PencilIcon, TrashIcon } from "../home/row-icons.tsx";
 import { adminSettingsKey, type ProbeResult, probeText, providerError, providersKey, useProviders } from "./api.ts";
@@ -11,6 +12,7 @@ import { SectionHead } from "./settings-ui.tsx";
 
 function ProviderRow(props: { p: SavedProvider; editing: boolean; onEdit(): void; children?: ReactNode }) {
   const { p } = props;
+  const { t, tp } = useT();
   const qc = useQueryClient();
   const [confirming, setConfirming] = useState(false);
   // Kết quả gắn với bản provider lúc kiểm tra: sửa key / base URL (updated_at đổi) hoặc đang mở form sửa → bỏ kết quả cũ.
@@ -38,10 +40,11 @@ function ProviderRow(props: { p: SavedProvider; editing: boolean; onEdit(): void
             <strong>{p.name}</strong> <span className="prov-type">{providerTypeLabel(p)}</span>
           </div>
           <p className="set-desc">
-            Key <span className="mono">••••{p.key_last4}</span> · {p.models.length} model
+            Key <span className="mono">••••{p.key_last4}</span> ·{" "}
+            {tp("admin.providersSection.modelCount", p.models.length)}
           </p>
           {p.models.length > 0 && (
-            <ul className="prov-chips" aria-label={`Model của ${p.name}`}>
+            <ul className="prov-chips" aria-label={t("admin.providersSection.modelsAria", { name: p.name })}>
               {p.models.map((m) => (
                 <li key={m.id}>
                   {m.model_id}
@@ -56,15 +59,15 @@ function ProviderRow(props: { p: SavedProvider; editing: boolean; onEdit(): void
             type="button"
             disabled={test.isPending}
             onClick={() => test.mutate()}
-            aria-label={`Kiểm tra ${p.name}`}
+            aria-label={t("admin.providersSection.testAria", { name: p.name })}
           >
-            {test.isPending ? "Đang kiểm tra…" : "Kiểm tra"}
+            {test.isPending ? t("admin.providersSection.testing") : t("admin.providersSection.test")}
           </button>
           <button
             type="button"
             className="icon-btn"
-            aria-label={`Sửa ${p.name}`}
-            title="Sửa"
+            aria-label={t("admin.providersSection.editAria", { name: p.name })}
+            title={t("common.edit")}
             aria-expanded={props.editing}
             onClick={props.onEdit}
           >
@@ -76,13 +79,13 @@ function ProviderRow(props: { p: SavedProvider; editing: boolean; onEdit(): void
                 type="button"
                 className="btn-danger"
                 disabled={del.isPending}
-                aria-label={`Xác nhận xoá ${p.name}`}
+                aria-label={t("admin.providersSection.confirmDeleteAria", { name: p.name })}
                 onClick={() => del.mutate()}
               >
-                Xoá?
+                {t("admin.providersSection.confirmDelete")}
               </button>
               <button type="button" onClick={() => setConfirming(false)}>
-                Huỷ
+                {t("common.cancel")}
               </button>
             </>
           ) : (
@@ -90,8 +93,8 @@ function ProviderRow(props: { p: SavedProvider; editing: boolean; onEdit(): void
               type="button"
               className="icon-btn"
               data-danger
-              aria-label={`Xoá ${p.name}`}
-              title="Xoá"
+              aria-label={t("admin.providersSection.deleteAria", { name: p.name })}
+              title={t("common.delete")}
               onClick={() => setConfirming(true)}
             >
               <TrashIcon />
@@ -120,30 +123,31 @@ function ProviderRow(props: { p: SavedProvider; editing: boolean; onEdit(): void
 }
 
 export function ProvidersSection() {
+  const { t } = useT();
   const q = useProviders();
   const [editing, setEditing] = useState<"new" | string | null>(null);
   if (q.error) return <p className="error">{providerError(q.error)}</p>;
-  if (!q.data) return <p className="muted">Đang tải…</p>;
+  if (!q.data) return <p className="muted">{t("common.loading")}</p>;
   const { providers, secrets_configured } = q.data;
 
   return (
     <div className="set-section">
       <SectionHead
-        title="Nhà cung cấp AI"
+        title={t("admin.providersSection.title")}
         icon={<PlugIcon />}
-        desc="Kết nối model AI, rồi chọn model cho từng bước ở mục Pipeline."
-        tip="Key được mã hoá trong DB và không bao giờ hiện lại. Bước nào chưa chọn model thì worker dùng key trong .env của nó."
+        desc={t("admin.providersSection.desc")}
+        tip={t("admin.providersSection.tip")}
         aside={
           editing !== "new" && (
             <button type="button" className="btn-primary" onClick={() => setEditing("new")}>
-              Thêm nhà cung cấp
+              {t("admin.providersSection.addProvider")}
             </button>
           )
         }
       />
       {!secrets_configured && (
         <p className="notice" role="alert">
-          API chưa có SECRETS_KEY nên chưa lưu được key mới (xem docs/deployment-guide.md, mục biến môi trường).
+          {t("admin.providersSection.secretsMissing")}
         </p>
       )}
       {editing === "new" && (
@@ -153,11 +157,11 @@ export function ProvidersSection() {
       )}
       {providers.length === 0 && editing !== "new" && (
         <div className="set-card set-empty">
-          <p className="muted">Chưa có nhà cung cấp nào.</p>
+          <p className="muted">{t("admin.providersSection.empty")}</p>
         </div>
       )}
       {providers.length > 0 && (
-        <ul className="set-card prov-list" aria-label="Danh sách nhà cung cấp">
+        <ul className="set-card prov-list" aria-label={t("admin.providersSection.listAria")}>
           {providers.map((p) => (
             <ProviderRow
               key={p.id}

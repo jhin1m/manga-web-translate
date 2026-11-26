@@ -1,4 +1,5 @@
 /** Nhãn + tông màu trạng thái chương/page (CSS .status[data-tone]). */
+import { type MessageKey, t, tp } from "../../i18n/t.ts";
 import type { ChapterStatus } from "../series/api.ts";
 import type { ChapterQueue, ChapterRun } from "./api.ts";
 import type { UploadView } from "./next-action.ts";
@@ -7,14 +8,22 @@ export type Tone = "ok" | "busy" | "warn" | "danger" | "idle";
 /** Chip trạng thái chương; `title` = giải thích thêm khi rê chuột (nguyên nhân lỗi, vì sao đang chờ). */
 export type Chip = { label: string; tone: Tone; title?: string };
 
+/** `label` là getter: đọc ngôn ngữ lúc dùng, không lúc import. */
+const statusEntry = (key: MessageKey, tone: Tone) => ({
+  get label() {
+    return t(key);
+  },
+  tone,
+});
+
 export const CHAPTER_STATUS: Record<ChapterStatus, { label: string; tone: Tone }> = {
-  draft: { label: "Nháp (chưa commit)", tone: "idle" },
-  ingesting: { label: "Đang cắt trang", tone: "busy" },
-  processing: { label: "Đang xử lý", tone: "busy" },
-  prepared: { label: "Chờ dịch", tone: "idle" },
-  review: { label: "Chờ duyệt", tone: "ok" },
-  partial_failed: { label: "Có trang lỗi", tone: "danger" },
-  done: { label: "Xong", tone: "ok" },
+  draft: statusEntry("chapter.status.draftUncommitted", "idle"),
+  ingesting: statusEntry("chapter.status.ingesting", "busy"),
+  processing: statusEntry("chapter.status.processing", "busy"),
+  prepared: statusEntry("chapter.status.prepared", "idle"),
+  review: statusEntry("chapter.status.review", "ok"),
+  partial_failed: statusEntry("chapter.status.partialFailed", "danger"),
+  done: statusEntry("chapter.status.done", "ok"),
 };
 
 export type PageStatus = "pending" | "preparing" | "prepared" | "translating" | "ready" | "failed";
@@ -39,20 +48,17 @@ type ChipInput = {
   queue?: ChapterQueue | null;
 };
 
-const WAITING_TITLE = "Mỗi worker làm một chương một lúc. Chương này tự bắt đầu khi có worker rảnh — không cần bấm gì.";
-const NO_WORKER_TITLE =
-  "Chưa thấy worker nào chạy. Lần đầu worker tải model mất vài phút; xem: docker compose logs -f worker";
-
 /** Chip của chương đang chờ worker; giữ số trang đã xong khi chương bị chờ giữa chừng. */
 function queueChip(input: ChipInput, queue: ChapterQueue): Chip {
-  if (queue.state === "no_worker") return { label: "Đang chờ worker", tone: "warn", title: NO_WORKER_TITLE };
-  const parts = ["Đang chờ lượt"];
-  if (queue.running_chapters > 0) parts.push(`${queue.running_chapters} chương đang chạy`);
+  if (queue.state === "no_worker")
+    return { label: t("chapter.status.waitingWorker"), tone: "warn", title: t("chapter.status.noWorkerTitle") };
+  const parts = [t("chapter.status.waitingTurn")];
+  if (queue.running_chapters > 0) parts.push(tp("chapter.status.runningChapters", queue.running_chapters));
   if (input.status === "processing") {
     const view = processingView(input);
     if (view.fraction) parts.push(view.label);
   }
-  return { label: parts.join(" · "), tone: "idle", title: WAITING_TITLE };
+  return { label: parts.join(" · "), tone: "idle", title: t("chapter.status.waitingTitle") };
 }
 
 /** Nhãn + tiến độ (0..1) của chương đang xử lý; xem chapterChip. */
@@ -60,20 +66,25 @@ function processingView(input: ChipInput): { label: string; fraction: number | n
   const { pages, run } = input;
   const ratio = (done: number, total: number) => (total > 0 ? Math.min(1, Math.max(0, done / total)) : null);
   const prep = {
-    label: `Xoá chữ + OCR ${pages - input.preparing}/${pages}`,
+    label: t("chapter.status.prepareProgress", { done: pages - input.preparing, total: pages }),
     fraction: ratio(pages - input.preparing, pages),
   };
   // Lượt "Chỉ xoá chữ + OCR" không dịch gì.
   if (run?.target === "prepared") return prep;
   // Lô dịch đầu chạy khi trang sau còn xoá chữ → nói về lượt dịch; chưa có lô nào → còn đang xoá chữ.
   if (run && (run.batch > 0 || input.preparing === 0)) {
-    const lot = run.batches > 1 ? ` · lô ${run.batch}/${run.batches}` : "";
     const done = run.total - run.remaining;
-    return { label: `Đang dịch · ${done}/${run.total} trang${lot}`, fraction: ratio(done, run.total) };
+    const label =
+      run.batches > 1
+        ? t("chapter.status.translatingRunBatch", { done, total: run.total, batch: run.batch, batches: run.batches })
+        : t("chapter.status.translatingRun", { done, total: run.total });
+    return { label, fraction: ratio(done, run.total) };
   }
   if (input.preparing > 0) return prep;
   return {
-    label: pages ? `Đang dịch ${input.ready}/${pages}` : "Đang dịch",
+    label: pages
+      ? t("chapter.status.translatingCount", { done: input.ready, total: pages })
+      : t("chapter.status.translating"),
     fraction: ratio(input.ready, pages),
   };
 }
@@ -97,7 +108,10 @@ export function chapterProgress(input: ChipInput): number | null | undefined {
  * đang tải ảnh thì chip đã nói rồi). Chương yên thì chip chuyển sang "đang chạy".
  */
 export function chipWithActivity(chip: Chip, extra: { exports: number; uploads: number }): Chip {
-  const parts = [extra.exports > 0 && "đang xuất", extra.uploads > 0 && "chương khác đang tải ảnh"].filter(Boolean);
+  const parts = [
+    extra.exports > 0 && t("chapter.status.exporting"),
+    extra.uploads > 0 && t("chapter.status.otherUploading"),
+  ].filter(Boolean);
   if (!parts.length) return chip;
   return {
     ...chip,
@@ -130,31 +144,39 @@ export function nextReviewPage(
  */
 export function chapterChip(input: ChipInput): Chip {
   const { status, pages, upload } = input;
-  const review = input.review ? ` · ${input.review} cần xem` : "";
+  const review = !!input.review;
+  const withReview = (label: string) =>
+    review ? `${label} · ${t("chapter.status.needsReviewCount", { count: input.review })}` : label;
   switch (status) {
     case "draft":
-      if (upload?.phase === "uploading") return { label: `Đang tải ảnh ${upload.done}/${upload.total}`, tone: "busy" };
+      if (upload?.phase === "uploading")
+        return { label: t("chapter.status.uploading", { done: upload.done, total: upload.total }), tone: "busy" };
       if (upload?.phase === "failed" || upload?.phase === "incomplete")
-        return { label: `Tải dở ${upload.done}/${upload.total} ảnh`, tone: "warn" };
-      return { label: "Nháp", tone: "idle" };
+        return {
+          label: t("chapter.status.uploadIncomplete", { done: upload.done, total: upload.total }),
+          tone: "warn",
+        };
+      return { label: t("chapter.status.draft"), tone: "idle" };
     case "ingesting":
       if (input.queue) return queueChip(input, input.queue);
-      return { label: "Đang cắt trang", tone: "busy" };
+      return { label: t("chapter.status.ingesting"), tone: "busy" };
     case "processing":
       if (input.queue) return queueChip(input, input.queue);
       return { label: processingView(input).label, tone: "busy" };
     case "prepared":
       return {
-        label: `Chờ dịch${input.failed ? ` · lỗi ${input.failed} trang` : ""}`,
+        label: input.failed
+          ? `${t("chapter.status.prepared")} · ${tp("chapter.status.preparedFailed", input.failed)}`
+          : t("chapter.status.prepared"),
         tone: input.failed ? "warn" : "idle",
       };
     case "partial_failed":
       return pages
-        ? { label: `Lỗi ${input.failed} trang${review}`, tone: "danger" }
-        : { label: "Cắt trang lỗi", tone: "danger" };
+        ? { label: withReview(tp("chapter.status.failedPages", input.failed)), tone: "danger" }
+        : { label: t("chapter.status.ingestFailed"), tone: "danger" };
     case "review":
-      return { label: `Chờ duyệt${review}`, tone: review ? "warn" : "ok" };
+      return { label: withReview(t("chapter.status.review")), tone: review ? "warn" : "ok" };
     case "done":
-      return { label: `Xong${review}`, tone: review ? "warn" : "ok" };
+      return { label: withReview(t("chapter.status.done")), tone: review ? "warn" : "ok" };
   }
 }

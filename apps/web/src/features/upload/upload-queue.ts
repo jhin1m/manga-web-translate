@@ -2,6 +2,8 @@
  * Hàng đợi upload: chạy song song `concurrency` file, mỗi file thử lại tối đa `maxAttempts` lần với backoff.
  * File lỗi sau cùng giữ trạng thái `failed` → gọi lại `run` với đúng các file đó (không upload lại file đã xong).
  */
+import { t } from "../../i18n/t.ts";
+
 export type ItemStatus = "queued" | "uploading" | "done" | "failed";
 export type ItemState = { status: ItemStatus; loaded: number; attempts: number; error: string | null };
 
@@ -50,7 +52,12 @@ export async function runUploadQueue<T>(items: T[], o: QueueOptions<T>): Promise
       }
       if (lastError || o.signal?.aborted) {
         failed.push(item);
-        o.onChange(item, { status: "failed", loaded: 0, attempts: attempt, error: lastError || "đã huỷ" });
+        o.onChange(item, {
+          status: "failed",
+          loaded: 0,
+          attempts: attempt,
+          error: lastError || t("upload.queue.canceled"),
+        });
       }
     }
   };
@@ -85,8 +92,8 @@ export function postToPresigned(
       xhr.status >= 200 && xhr.status < 300
         ? resolve()
         : reject(new UploadHttpError(xhr.status, `storage ${xhr.status}`));
-    xhr.onerror = () => reject(new UploadHttpError(0, "mất kết nối"));
-    xhr.onabort = () => reject(new UploadHttpError(0, "đã huỷ"));
+    xhr.onerror = () => reject(new UploadHttpError(0, t("upload.queue.offline")));
+    xhr.onabort = () => reject(new UploadHttpError(0, t("upload.queue.canceled")));
     signal?.addEventListener("abort", () => xhr.abort());
     xhr.send(form);
   });

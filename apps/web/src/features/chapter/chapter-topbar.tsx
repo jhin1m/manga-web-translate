@@ -8,6 +8,8 @@
  */
 import { Link } from "@tanstack/react-router";
 import type { ReactNode } from "react";
+import { fmtDate } from "../../i18n/format.ts";
+import { type MessageKey, useT } from "../../i18n/t.ts";
 import type { LockState } from "../chapter/use-chapter-lock.ts";
 import { PAGE_BUSY_SAVE_TEXT } from "../editor/save.ts";
 import { type SaveStatus, useEditor } from "../editor/store.ts";
@@ -21,11 +23,20 @@ import type { ChapterCommand, PrimaryAction } from "./primary-action.ts";
 import type { Chip, Tone } from "./status.ts";
 import { RedoIcon, UndoIcon } from "./tool-icons.tsx";
 
-const SAVE_LABEL: Record<SaveStatus, string> = {
-  saved: "Đã lưu",
-  dirty: "Chưa lưu",
-  saving: "Đang lưu…",
-  error: "Lỗi lưu",
+const SAVE_LABEL: Record<SaveStatus, MessageKey> = {
+  saved: "common.saved",
+  dirty: "chapter.topbar.save.dirty",
+  saving: "common.saving",
+  error: "chapter.topbar.save.error",
+};
+/** Như `Date#toLocaleString()`: ngày + giờ đầy đủ. */
+const DATE_TIME: Intl.DateTimeFormatOptions = {
+  year: "numeric",
+  month: "numeric",
+  day: "numeric",
+  hour: "numeric",
+  minute: "numeric",
+  second: "numeric",
 };
 const SAVE_TONE = { saved: "ok", dirty: "idle", saving: "busy", error: "danger" } as const;
 
@@ -62,6 +73,7 @@ export function ChapterTopbar(props: {
   onUndo(): void;
   onRedo(): void;
 }) {
+  const { t } = useT();
   const { detail, primary, chip } = props;
 
   return (
@@ -93,13 +105,18 @@ export function ChapterTopbar(props: {
       <ChapterMetaPopover detail={detail} series={props.series} onMoved={props.onMoved} />
       <span className="cw-state">
         {/* Luôn render vùng live (rỗng khi chưa tải) để trình đọc màn hình báo được lần đổi đầu tiên. */}
-        <span className="cw-chip" role="status" aria-live="polite" aria-label="Trạng thái chương">
+        <span className="cw-chip" role="status" aria-live="polite" aria-label={t("chapter.topbar.chipAria")}>
           {chip && (
             <button
               type="button"
               className="cw-chip-btn"
-              aria-label={`${chip.label} — ${props.chipJumps ? "nhảy tới trang cần xem" : "mở Hoạt động"}`}
-              title={[chip.title, props.chipJumps ? "Bấm: nhảy tới trang cần xem tiếp theo" : "Bấm: mở Hoạt động"]
+              aria-label={t(props.chipJumps ? "chapter.topbar.chipJumpAria" : "chapter.topbar.chipActivityAria", {
+                label: chip.label,
+              })}
+              title={[
+                chip.title,
+                t(props.chipJumps ? "chapter.topbar.chipJumpTitle" : "chapter.topbar.chipActivityTitle"),
+              ]
                 .filter(Boolean)
                 .join("\n")}
               onClick={props.onChip}
@@ -154,6 +171,7 @@ export function ChapterTopbar(props: {
 
 /** Hoàn tác / Làm lại (Ctrl/Cmd+Z, Ctrl/Cmd+Shift+Z) — tắt khi hết lịch sử hoặc đang chỉ xem. */
 function UndoRedo({ onUndo, onRedo }: { onUndo(): void; onRedo(): void }) {
+  const { t } = useT();
   const canUndo = useEditor((s) => s.history.past.length > 0);
   const canRedo = useEditor((s) => s.history.future.length > 0);
   const readOnly = useEditor((s) => !!s.readOnly);
@@ -162,8 +180,8 @@ function UndoRedo({ onUndo, onRedo }: { onUndo(): void; onRedo(): void }) {
       <button
         type="button"
         className="icon-btn"
-        aria-label="Hoàn tác (Ctrl+Z)"
-        title="Hoàn tác (Ctrl+Z)"
+        aria-label={t("chapter.topbar.undo")}
+        title={t("chapter.topbar.undo")}
         disabled={!canUndo || readOnly}
         onClick={onUndo}
       >
@@ -172,8 +190,8 @@ function UndoRedo({ onUndo, onRedo }: { onUndo(): void; onRedo(): void }) {
       <button
         type="button"
         className="icon-btn"
-        aria-label="Làm lại (Ctrl+Shift+Z)"
-        title="Làm lại (Ctrl+Shift+Z)"
+        aria-label={t("chapter.topbar.redo")}
+        title={t("chapter.topbar.redo")}
         disabled={!canRedo || readOnly}
         onClick={onRedo}
       >
@@ -196,45 +214,48 @@ const LockIcon = () => (
  * chỉ còn chữ cho trình đọc màn hình) để lần đổi sau vẫn được đọc; chữ đầy đủ nằm ở title + phần chỉ trình đọc.
  */
 function EditState(props: EditAccess) {
+  const { t } = useT();
   const readOnly = useEditor((s) => s.readOnly);
   const save = useEditor((s) => s.save);
-  if (!props.hasPages) return <span className="cw-edit-live" role="status" aria-label="Khoá chương" />;
+  const lockAria = t("chapter.topbar.lockAria");
+  if (!props.hasPages) return <span className="cw-edit-live" role="status" aria-label={lockAria} />;
+  const viewOnly = t("chapter.topbar.readOnly");
   let view: { short: ReactNode; long: string; tone: Tone } | null = null;
-  if (!props.lockEnabled) view = { short: "Chỉ xem", long: "Đang cắt trang — sửa được khi xong", tone: "idle" };
+  if (!props.lockEnabled) view = { short: viewOnly, long: t("chapter.topbar.slicingLong"), tone: "idle" };
   else if (props.lock.status === "acquiring")
-    view = { short: "Đang lấy khoá…", long: "Đang lấy khoá chương…", tone: "busy" };
+    view = { short: t("chapter.topbar.acquiringShort"), long: t("chapter.topbar.acquiringLong"), tone: "busy" };
   else if (props.lock.status === "denied")
-    view = { short: "Chỉ xem", long: "Chương đang mở ở tab khác — chỉ xem ở tab này", tone: "warn" };
+    view = { short: viewOnly, long: t("chapter.topbar.deniedLong"), tone: "warn" };
   else if (props.lock.status === "error")
-    view = { short: "Chỉ xem", long: "Không lấy được khoá chương", tone: "danger" };
+    view = { short: viewOnly, long: t("chapter.topbar.lockErrorLong"), tone: "danger" };
   else if (readOnly === "lock_lost")
-    view = { short: "Mất khoá", long: "Mất khoá chương — đang chỉ xem", tone: "danger" };
+    view = { short: t("chapter.topbar.lockLostShort"), long: t("chapter.topbar.lockLostLong"), tone: "danger" };
   else if (readOnly === "recovery")
-    view = { short: "Chờ khôi phục", long: "Có thay đổi chưa lưu từ phiên trước", tone: "warn" };
+    view = { short: t("chapter.topbar.recoveryShort"), long: t("chapter.topbar.recoveryLong"), tone: "warn" };
   else if (readOnly === "page_busy")
     view =
       save.status === "saved"
-        ? { short: "Chỉ xem", long: "Trang này đang dịch — sửa được khi xong", tone: "idle" }
-        : { short: "Chờ lưu", long: PAGE_BUSY_SAVE_TEXT, tone: "warn" };
+        ? { short: viewOnly, long: t("chapter.topbar.pageBusyLong"), tone: "idle" }
+        : { short: t("chapter.topbar.waitSaveShort"), long: PAGE_BUSY_SAVE_TEXT, tone: "warn" };
   else if (save.status !== "saved")
     view = {
       short: (
         <>
           <LockIcon />
-          {SAVE_LABEL[save.status]}
+          {t(SAVE_LABEL[save.status])}
         </>
       ),
-      long: "Bạn đang giữ khoá chương",
+      long: t("chapter.topbar.holdingLock"),
       tone: SAVE_TONE[save.status],
     };
   if (!view)
     return (
-      <span className="cw-edit-live" role="status" aria-label="Khoá chương">
-        <span className="sr-only">Bạn đang giữ khoá chương · {SAVE_LABEL[save.status]}</span>
+      <span className="cw-edit-live" role="status" aria-label={lockAria}>
+        <span className="sr-only">{t("chapter.topbar.holdingLockStatus", { status: t(SAVE_LABEL[save.status]) })}</span>
       </span>
     );
   return (
-    <span className="cw-edit-live" role="status" aria-label="Khoá chương">
+    <span className="cw-edit-live" role="status" aria-label={lockAria}>
       <span
         className="status cw-edit"
         data-tone={view.tone}
@@ -246,11 +267,6 @@ function EditState(props: EditAccess) {
     </span>
   );
 }
-
-/** Lý do dài của băng cảnh báo — nằm trong tooltip; băng chỉ hiện câu ngắn + nút. */
-const LOCK_LOST_WHY =
-  "Mất khoá chương (hết hạn hoặc tab khác đã mở) — thay đổi chưa lưu vẫn giữ trên máy này; đang chỉ xem";
-const LOCK_DENIED_WHY = "Tab khác đang giữ khoá chương nên tab này chỉ xem được. Đóng tab kia rồi bấm Thử lại.";
 
 /**
  * Băng cảnh báo dưới thanh trên: chỉ render khi có việc người dùng phải biết/làm — tab khác giữ khoá, lỗi khoá,
@@ -272,54 +288,63 @@ export function LockBand(props: {
   /** Đưa về panel khối, nơi có xung đột / kết quả AI mới. */
   onShowHidden(): void;
 }) {
+  const { t, tp, tNode } = useT();
   const readOnly = useEditor((s) => s.readOnly);
   const save = useEditor((s) => s.save);
   const { lock, lockEnabled, hasPages } = props.access;
   const items: { key: string; tone: "warn" | "danger"; body: ReactNode; why?: string }[] = [];
   const retry = (
     <button type="button" className="btn-ghost" onClick={props.onRetryLock}>
-      Thử lại
+      {t("common.retry")}
     </button>
   );
+  // Lý do dài nằm trong tooltip (`why`); băng chỉ hiện câu ngắn + nút.
   if (hasPages && lockEnabled && lock.status === "denied") {
     items.push({
       key: "lock",
       tone: "warn",
-      body: <>Chương đang mở ở tab khác {retry}</>,
-      why: LOCK_DENIED_WHY,
+      body: tNode("chapter.topbar.band.lockDenied", { retry }),
+      why: t("chapter.topbar.band.lockDeniedWhy"),
     });
   } else if (hasPages && lockEnabled && lock.status === "error") {
     items.push({
       key: "lock",
       tone: "danger",
-      body: <>Không lấy được khoá chương {retry}</>,
+      body: tNode("chapter.topbar.band.lockError", { retry }),
       why: lock.message,
     });
   } else if (hasPages && readOnly === "lock_lost") {
-    items.push({ key: "lock", tone: "danger", body: "Mất khoá chương, đang chỉ xem", why: LOCK_LOST_WHY });
+    items.push({
+      key: "lock",
+      tone: "danger",
+      body: t("chapter.topbar.band.lockLost"),
+      why: t("chapter.topbar.band.lockLostWhy"),
+    });
   } else if (hasPages && readOnly === "page_busy" && save.status !== "saved") {
-    items.push({ key: "lock", tone: "warn", body: "Trang đang dịch, bản sửa chờ lưu", why: PAGE_BUSY_SAVE_TEXT });
+    items.push({ key: "lock", tone: "warn", body: t("chapter.topbar.band.pageBusy"), why: PAGE_BUSY_SAVE_TEXT });
   }
   const rec = props.recovery;
   if (rec && rec.length > 0) {
     items.push({
       key: "recovery",
       tone: "warn",
-      why: `Thay đổi chưa lưu từ phiên trước, lúc ${new Date(Math.max(...rec.map((r) => r.updatedAt))).toLocaleString("vi-VN")}.`,
+      why: t("chapter.topbar.band.recoveryWhy", {
+        time: fmtDate(Math.max(...rec.map((r) => r.updatedAt)), DATE_TIME),
+      }),
       body: (
         <>
-          Thay đổi chưa lưu ở trang {rec.map((r) => r.ord + 1).join(", ")}{" "}
+          {t("chapter.topbar.band.recovery", { pages: rec.map((r) => r.ord + 1).join(", ") })}{" "}
           <button
             type="button"
             className="btn-primary"
             disabled={!props.canRestore}
-            title={props.canRestore ? undefined : "Cần giữ khoá chương để khôi phục"}
+            title={props.canRestore ? undefined : t("chapter.topbar.band.restoreNeedsLock")}
             onClick={() => props.onRecovery(true)}
           >
-            Khôi phục
+            {t("chapter.topbar.band.restore")}
           </button>{" "}
           <button type="button" className="btn-ghost" onClick={() => props.onRecovery(false)}>
-            Bỏ
+            {t("chapter.topbar.band.discard")}
           </button>
         </>
       ),
@@ -327,19 +352,24 @@ export function LockBand(props: {
   }
   // Mất khoá đã giải thích vì sao không lưu được.
   if (hasPages && save.status === "error" && readOnly !== "lock_lost") {
-    items.push({ key: "save", tone: "danger", body: "Lỗi lưu, chưa ghi được", why: save.error ?? "Không lưu được" });
+    items.push({
+      key: "save",
+      tone: "danger",
+      body: t("chapter.topbar.band.saveError"),
+      why: save.error ?? t("chapter.topbar.band.saveErrorFallback"),
+    });
   }
   if (props.aiWait) items.push({ key: "ai", tone: "warn", body: props.aiWait.short, why: props.aiWait.long });
   if (props.hiddenConflicts > 0) {
     items.push({
       key: "conflicts",
       tone: "danger",
-      why: "Các thay đổi này xung đột với bản đã lưu trên máy chủ. Đổi trang sẽ mất danh sách.",
+      why: t("chapter.topbar.band.conflictsWhy"),
       body: (
         <>
-          {props.hiddenConflicts} thay đổi chưa áp được{" "}
+          {tp("chapter.topbar.band.conflicts", props.hiddenConflicts)}{" "}
           <button type="button" className="btn-ghost" onClick={props.onShowHidden}>
-            Xem
+            {t("chapter.topbar.band.view")}
           </button>
         </>
       ),
@@ -349,12 +379,12 @@ export function LockBand(props: {
     items.push({
       key: "ai-update",
       tone: "warn",
-      why: "Trang này đã có bản dịch AI mới, bản sửa tay của bạn được giữ nguyên cho tới khi bạn áp hoặc bỏ qua.",
+      why: t("chapter.topbar.band.aiUpdateWhy"),
       body: (
         <>
-          AI có bản mới cho trang này{" "}
+          {t("chapter.topbar.band.aiUpdate")}{" "}
           <button type="button" className="btn-ghost" onClick={props.onShowHidden}>
-            Xem
+            {t("chapter.topbar.band.view")}
           </button>
         </>
       ),
@@ -362,7 +392,7 @@ export function LockBand(props: {
   }
   if (!items.length) return null;
   return (
-    <div className="cw-band" role="alert" aria-label="Cảnh báo chương">
+    <div className="cw-band" role="alert" aria-label={t("chapter.topbar.band.aria")}>
       {items.map((it) => (
         <span key={it.key} className="status" data-tone={it.tone} title={it.why}>
           {it.body}

@@ -4,6 +4,7 @@
  */
 import { type DragEvent, type ReactNode, useEffect, useRef, useState } from "react";
 import "../home/home.css";
+import { useT } from "../../i18n/t.ts";
 import { filesFromDataTransfer } from "./dropped-paths.ts";
 
 export const ACCEPT_UPLOAD = "image/png,image/jpeg,image/webp,.zip,application/zip";
@@ -123,6 +124,7 @@ export function DropZone(props: {
   onFiles: (files: File[]) => void;
   size?: "lg" | "md" | "strip";
 }) {
+  const { t } = useT();
   const size = props.size ?? "strip";
   const drop = useDropTarget(props.onFiles);
   return (
@@ -135,19 +137,19 @@ export function DropZone(props: {
       {size === "strip" ? (
         <>
           <FilePickButton className="link" onFiles={props.onFiles}>
-            chọn file
+            {t("upload.dropZone.pickFiles")}
           </FilePickButton>
           <FilePickButton className="link" directory onFiles={props.onFiles}>
-            chọn folder
+            {t("upload.dropZone.pickFolder")}
           </FilePickButton>
         </>
       ) : (
         <>
           <FilePickButton className={`btn-primary ${size === "lg" ? "lg" : ""}`} onFiles={props.onFiles}>
-            Chọn file…
+            {t("upload.dropZone.chooseFiles")}
           </FilePickButton>
           <FilePickButton className={size === "lg" ? "lg" : ""} directory onFiles={props.onFiles}>
-            Chọn folder…
+            {t("upload.dropZone.chooseFolder")}
           </FilePickButton>
         </>
       )}

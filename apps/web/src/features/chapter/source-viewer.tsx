@@ -15,6 +15,7 @@
  * nhập / menu / hộp thoại: các phần tử đó tự xử lý phím).
  */
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useT } from "../../i18n/t.ts";
 import { type FlipState, initialFlip, stepFlip } from "../editor/wheel-page-flip.ts";
 import { useChapterUpload } from "../upload/upload-manager.ts";
 import { ZoomControls } from "./canvas-controls.tsx";
@@ -49,6 +50,7 @@ export function SourceViewer(props: {
   onTrimSave(): void;
   onTrimCancel(): void;
 }) {
+  const { t } = useT();
   const { item, index, total, trimming, natural, edges } = props;
   const retryKey = useChapterUpload(props.chapterId)?.done ?? 0;
   const [missing, setMissing] = useState(false);
@@ -270,15 +272,15 @@ export function SourceViewer(props: {
       {/* key: đổi ảnh → khung cuộn mới, về đầu ảnh (ảnh webtoon cao). */}
       <div className="cw-source-view" key={item?.id} ref={scroller} data-zoomed={sized || undefined}>
         {!item ? (
-          <p className="muted">Chưa có ảnh.</p>
+          <p className="muted">{t("chapter.sourceViewer.noImage")}</p>
         ) : missing ? (
-          <div className="source-missing small muted">Chưa tải</div>
+          <div className="source-missing small muted">{t("chapter.sourceViewer.notUploaded")}</div>
         ) : (
           <figure data-skipped={item.skip ? "" : undefined}>
             <div className="cw-source-frame" ref={frame}>
               <img
                 src={item.url}
-                alt={`Ảnh gốc ${item.n}`}
+                alt={t("chapter.sourceViewer.alt", { n: item.n })}
                 // Đang zoom mà ảnh mới chưa đo: ẩn tới khi biết cỡ, không nháy ở cỡ vừa khung rồi mới nhảy.
                 style={zoom === null ? undefined : natural ? { width: natural.width * zoom } : { visibility: "hidden" }}
                 onLoad={(e) => {
@@ -301,10 +303,12 @@ export function SourceViewer(props: {
               )}
             </div>
             {item.skip && (
-              <figcaption className="small">{SKIP_LABEL[item.skip]} — bỏ qua ảnh này khi cắt trang</figcaption>
+              <figcaption className="small">
+                {t("chapter.sourceViewer.skippedCaption", { reason: SKIP_LABEL[item.skip] })}
+              </figcaption>
             )}
             {!item.skip && !trimming && item.trim && (
-              <figcaption className="small">Phần mờ bị bỏ khi cắt trang</figcaption>
+              <figcaption className="small">{t("chapter.sourceViewer.trimCaption")}</figcaption>
             )}
           </figure>
         )}
@@ -315,20 +319,18 @@ export function SourceViewer(props: {
             type="button"
             disabled={index <= 0}
             onClick={() => props.onStep(-1)}
-            aria-label="Ảnh trước"
-            title="Ảnh trước (←)"
+            aria-label={t("chapter.sourceViewer.prev")}
+            title={t("chapter.sourceViewer.prevTitle")}
           >
             ‹
           </button>
-          <span>
-            Ảnh {index >= 0 ? index + 1 : "–"}/{total || "–"}
-          </span>
+          <span>{t("chapter.sourceViewer.position", { n: index >= 0 ? index + 1 : "–", total: total || "–" })}</span>
           <button
             type="button"
             disabled={index < 0 || index >= total - 1}
             onClick={() => props.onStep(1)}
-            aria-label="Ảnh sau"
-            title="Ảnh sau (→)"
+            aria-label={t("chapter.sourceViewer.next")}
+            title={t("chapter.sourceViewer.nextTitle")}
           >
             ›
           </button>

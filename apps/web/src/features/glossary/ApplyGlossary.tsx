@@ -6,6 +6,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { useState } from "react";
+import { useT } from "../../i18n/t.ts";
 import { errorMessage } from "../../lib/api.ts";
 import { applyGlossaryRules, type GlossaryRule, previewGlossaryApply } from "../chapter/api.ts";
 import { FlowPanel, type ToolPanelProps, useBatchFlow } from "../chapter/FindReplace.tsx";
@@ -16,6 +17,7 @@ const NO_ENTRIES: GlossaryEntry[] = [];
 
 export function ApplyGlossaryPanel(props: ToolPanelProps) {
   const { seriesId, chapterId, lock, beforeWrite, onJump, batch } = props;
+  const { t, tNode } = useT();
   const scope = { seriesId };
   const q = useQuery({ queryKey: glossaryKey(scope), queryFn: () => fetchGlossary(scope) });
   const entries = q.data?.entries ?? NO_ENTRIES;
@@ -45,25 +47,27 @@ export function ApplyGlossaryPanel(props: ToolPanelProps) {
     <div className="cw-tool">
       <LockBanner state={lock.state} onRetry={() => void lock.retry()} />
       <p className="muted small" style={{ marginTop: 0 }}>
-        Thay “cụm cũ” bằng bản dịch trong glossary, chỉ ở vùng có chữ gốc chứa từ gốc. Không gọi AI. Muốn dịch lại theo
-        glossary mới: dùng “Dịch lại cả chương”.{" "}
-        <Link to="/s/$seriesId" params={{ seriesId }} search={{ tab: "glossary" }}>
-          Sửa glossary series
-        </Link>
+        {tNode("glossary.apply.intro", {
+          link: (
+            <Link to="/s/$seriesId" params={{ seriesId }} search={{ tab: "glossary" }}>
+              {t("glossary.apply.editLink")}
+            </Link>
+          ),
+        })}
       </p>
       {q.isError && <p className="notice danger">{errorMessage(q.error)}</p>}
-      {q.isLoading && <p className="muted small">Đang tải glossary…</p>}
-      {q.data && entries.length === 0 && <p className="muted">Series chưa có thuật ngữ nào.</p>}
+      {q.isLoading && <p className="muted small">{t("glossary.apply.loading")}</p>}
+      {q.data && entries.length === 0 && <p className="muted">{t("glossary.apply.empty")}</p>}
       {entries.length > 0 && (
         <div className="cw-tool-list">
           <table className="data">
             <thead>
               <tr>
                 <th />
-                <th>Từ gốc</th>
-                <th>Bản dịch (glossary)</th>
-                <th>Cụm cũ trong bản dịch</th>
-                <th>Nguồn</th>
+                <th>{t("glossary.apply.colSource")}</th>
+                <th>{t("glossary.apply.colTarget")}</th>
+                <th>{t("glossary.apply.colOld")}</th>
+                <th>{t("glossary.apply.colScope")}</th>
               </tr>
             </thead>
             <tbody>
@@ -72,7 +76,7 @@ export function ApplyGlossaryPanel(props: ToolPanelProps) {
                   <td>
                     <input
                       type="checkbox"
-                      aria-label={`Chọn ${e.source_term}`}
+                      aria-label={t("glossary.apply.pickAria", { term: e.source_term })}
                       checked={picked.has(e.id)}
                       onChange={() => {
                         const n = new Set(picked);
@@ -87,7 +91,7 @@ export function ApplyGlossaryPanel(props: ToolPanelProps) {
                   <td>{e.target_term}</td>
                   <td>
                     <input
-                      aria-label={`Cụm cũ của ${e.source_term}`}
+                      aria-label={t("glossary.apply.oldAria", { term: e.source_term })}
                       value={from[e.id] ?? e.source_term}
                       maxLength={200}
                       onChange={(ev) => {
@@ -96,7 +100,9 @@ export function ApplyGlossaryPanel(props: ToolPanelProps) {
                       }}
                     />
                   </td>
-                  <td className="small muted">{e.series_id ? "Series" : "Chung"}</td>
+                  <td className="small muted">
+                    {e.series_id ? t("glossary.apply.scopeSeries") : t("glossary.apply.scopeGlobal")}
+                  </td>
                 </tr>
               ))}
             </tbody>

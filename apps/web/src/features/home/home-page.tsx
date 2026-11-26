@@ -7,6 +7,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { useState } from "react";
+import { useT } from "../../i18n/t.ts";
 import { ApiError, errorMessage } from "../../lib/api.ts";
 import { needsWork, nextAction } from "../chapter/next-action.ts";
 import { deleteSeries, fetchSeriesList, type SeriesListItem, seriesKeys } from "../series/api.ts";
@@ -24,6 +25,7 @@ import "./home.css";
 type Pending = { files: File[]; seriesId?: string; seq: number };
 
 export function HomePage() {
+  const { t } = useT();
   const seriesQ = useQuery({ queryKey: seriesKeys.list(), queryFn: () => fetchSeriesList() });
   const [pending, setPending] = useState<Pending | null>(null);
   const auto = useDropToTranslate((files, seriesId) =>
@@ -39,19 +41,15 @@ export function HomePage() {
   return (
     <main className="home">
       <DropZone
-        label="Tạo chương mới"
+        label={t("home.page.dropLabel")}
         size={series?.length === 0 ? "lg" : "strip"}
-        title={
-          series?.length === 0
-            ? "Thả strip, ZIP hoặc folder của chương mới vào đây"
-            : "Thả ảnh / ZIP / folder — nhiều cái = nhiều chương"
-        }
-        hint="Thả nhiều ZIP / folder cùng lúc: mỗi cái thành 1 chương. Series và số chương đoán từ tên file (sửa được trên màn chương). Tải ảnh xong, bấm “Dịch chương” để bắt đầu dịch."
+        title={series?.length === 0 ? t("home.page.dropTitleEmpty") : t("home.page.dropTitle")}
+        hint={t("home.page.dropHint")}
         onFiles={(f) => drop(f)}
       />
       {auto.isPending && (
         <p className="small muted" role="status">
-          Đang tạo chương…
+          {t("home.page.creating")}
         </p>
       )}
       {auto.error && <p className="notice danger">{errorMessage(auto.error)}</p>}
@@ -71,6 +69,7 @@ export function HomePage() {
 }
 
 function SeriesGrid(props: { series: SeriesListItem[] | undefined; error: unknown }) {
+  const { t } = useT();
   const [search, setSearch] = useState("");
   const [adding, setAdding] = useState(false);
   const prefs = useListPrefs(SERIES_PREFS_KEY, SERIES_SORTS);
@@ -87,8 +86,8 @@ function SeriesGrid(props: { series: SeriesListItem[] | undefined; error: unknow
       <div className="block-head">
         <input
           type="search"
-          aria-label="Tìm series"
-          placeholder="Tìm series"
+          aria-label={t("home.page.search")}
+          placeholder={t("home.page.search")}
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
@@ -100,11 +99,7 @@ function SeriesGrid(props: { series: SeriesListItem[] | undefined; error: unknow
       {adding && <NewSeriesDialog onClose={() => setAdding(false)} />}
       {!!props.error && <p className="notice danger">{errorMessage(props.error)}</p>}
       {props.series && list.length === 0 && (
-        <div className="rows-empty">
-          {search
-            ? "Không có series nào khớp."
-            : "Chưa có series nào — bấm “+ Series”, hoặc thả ảnh ở trên rồi chọn series."}
-        </div>
+        <div className="rows-empty">{search ? t("home.page.noMatch") : t("home.page.empty")}</div>
       )}
       {list.length > 0 && (
         <div className={view === "list" ? "card-list" : "card-grid"}>
@@ -118,12 +113,17 @@ function SeriesGrid(props: { series: SeriesListItem[] | undefined; error: unknow
 }
 
 function SeriesCard({ s, layout }: { s: SeriesListItem; layout: ListView }) {
+  const { t, tp } = useT();
   const [confirming, setConfirming] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const latest = s.latest_chapter;
   const a = latest ? nextAction(latest) : null;
   const state =
-    !latest || !a ? "Chưa có chương" : needsWork(latest) ? `Ch.${latest.number} · ${a.state}` : "Đã xuất hết";
+    !latest || !a
+      ? t("home.page.noChapters")
+      : needsWork(latest)
+        ? `Ch.${latest.number} · ${a.state}`
+        : t("home.page.allExported");
   const tone = !latest || !a ? "idle" : needsWork(latest) ? a.tone : "ok";
   // Bìa tự động 404 khi series vừa tạo bằng thao tác thả (ảnh đang lên): src đổi theo số chương / trạng thái chương
   // mới nhất để thử tải lại đúng lúc; không đổi giữa các lượt polling. Bìa riêng luôn có sẵn nên giữ nguyên.
@@ -143,7 +143,7 @@ function SeriesCard({ s, layout }: { s: SeriesListItem; layout: ListView }) {
             <span className="dot" data-tone={tone} />
             <span className="card-state-text">{state}</span>
           </span>
-          <span className="small muted" title={`${s.chapter_count} chương`}>
+          <span className="small muted" title={tp("home.page.chapterCount", s.chapter_count)}>
             {s.chapter_count} ch
           </span>
         </span>
@@ -154,8 +154,8 @@ function SeriesCard({ s, layout }: { s: SeriesListItem; layout: ListView }) {
           to="/s/$seriesId"
           params={{ seriesId: s.id }}
           search={{ tab: "settings" }}
-          aria-label={`Sửa series ${s.title}`}
-          title="Sửa series"
+          aria-label={t("home.page.editAria", { title: s.title })}
+          title={t("home.page.edit")}
         >
           <PencilIcon />
         </Link>
@@ -163,8 +163,8 @@ function SeriesCard({ s, layout }: { s: SeriesListItem; layout: ListView }) {
           type="button"
           className="icon-btn"
           data-danger
-          aria-label={`Xoá series ${s.title}`}
-          title="Xoá series"
+          aria-label={t("home.page.deleteAria", { title: s.title })}
+          title={t("home.page.delete")}
           onClick={() => {
             setMsg(null);
             setConfirming(true);
@@ -191,6 +191,7 @@ function SeriesCard({ s, layout }: { s: SeriesListItem; layout: ListView }) {
 /** Xác nhận tại chỗ: xoá series cùng mọi chương + glossary riêng (không hoàn tác). */
 function DeleteSeriesConfirm(props: { s: SeriesListItem; onDone: () => void; onError: (text: string) => void }) {
   const { s } = props;
+  const { t, tp, tNode } = useT();
   const qc = useQueryClient();
   const del = useMutation({
     mutationFn: () => deleteSeries(s.id),
@@ -200,17 +201,15 @@ function DeleteSeriesConfirm(props: { s: SeriesListItem; onDone: () => void; onE
       void qc.invalidateQueries({ queryKey: seriesKeys.list() });
     },
     onError: (e) =>
-      props.onError(
-        e instanceof ApiError && e.status === 423
-          ? "Một chương của series này đang mở để sửa ở một tab — đóng tab đó rồi xoá."
-          : errorMessage(e),
-      ),
+      props.onError(e instanceof ApiError && e.status === 423 ? t("home.page.deleteLocked") : errorMessage(e)),
   });
   return (
-    <div className="card-confirm" role="alertdialog" aria-label={`Xác nhận xoá series ${s.title}`}>
+    <div className="card-confirm" role="alertdialog" aria-label={t("home.page.deleteConfirmAria", { title: s.title })}>
       <span className="small">
-        Xoá hẳn series <b>{s.title}</b>
-        {s.chapter_count > 0 ? ` cùng ${s.chapter_count} chương (ảnh, bản dịch, lịch sử)` : ""} và glossary riêng?
+        {tNode("home.page.deleteConfirm", {
+          title: <b>{s.title}</b>,
+          chapters: s.chapter_count > 0 ? tp("home.page.deleteChapters", s.chapter_count) : "",
+        })}
       </span>
       <button
         type="button"
@@ -220,10 +219,10 @@ function DeleteSeriesConfirm(props: { s: SeriesListItem; onDone: () => void; onE
         autoFocus
         onClick={() => del.mutate()}
       >
-        {del.isPending ? "Đang xoá…" : "Xoá series"}
+        {del.isPending ? t("home.page.deleting") : t("home.page.delete")}
       </button>
       <button type="button" disabled={del.isPending} onClick={props.onDone}>
-        Huỷ
+        {t("common.cancel")}
       </button>
     </div>
   );

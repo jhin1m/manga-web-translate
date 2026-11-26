@@ -10,10 +10,11 @@ import {
   ApiKey,
   isModelUnsupported,
   MAX_PRICE_PER_MTOK,
-  MODEL_UNSUPPORTED_MESSAGE,
   normalizeBaseUrl,
+  RECOMMENDED_ANTHROPIC_MODEL,
   type StructuredOutput,
 } from "@mtl/shared";
+import { t } from "../../i18n/t.ts";
 import {
   DEEPSEEK_BASE_URL,
   isDeepSeek,
@@ -22,11 +23,14 @@ import {
   suggestionsFor,
 } from "./price-suggestions.ts";
 
+/** Nhãn có chữ theo ngôn ngữ là getter (đọc lúc dùng); không spread các bảng này — spread chốt chữ lúc nạp module. */
 export const TYPE_LABEL: Record<AiProviderType, string> = {
   anthropic: "Anthropic",
   gemini: "Google Gemini",
   openai: "OpenAI",
-  openai_compatible: "OpenAI-compatible (base URL tuỳ chỉnh)",
+  get openai_compatible() {
+    return t("admin.providerFormModel.type.openai_compatible");
+  },
 };
 export { AI_PROVIDER_TYPES };
 
@@ -36,7 +40,15 @@ export { AI_PROVIDER_TYPES };
  */
 export const TYPE_CHOICES = [...AI_PROVIDER_TYPES, "deepseek"] as const;
 export type TypeChoice = (typeof TYPE_CHOICES)[number];
-export const CHOICE_LABEL: Record<TypeChoice, string> = { ...TYPE_LABEL, deepseek: "DeepSeek" };
+export const CHOICE_LABEL: Record<TypeChoice, string> = {
+  anthropic: TYPE_LABEL.anthropic,
+  gemini: TYPE_LABEL.gemini,
+  openai: TYPE_LABEL.openai,
+  get openai_compatible() {
+    return TYPE_LABEL.openai_compatible;
+  },
+  deepseek: "DeepSeek",
+};
 
 export const choiceOf = (d: { type: AiProviderType; base_url: string | null }): TypeChoice =>
   d.type === "openai_compatible" && isDeepSeek(d.base_url) ? "deepseek" : d.type;
@@ -68,8 +80,13 @@ export function applyChoice(d: ProviderDraft, choice: TypeChoice): ProviderDraft
 /** Ô chọn nhà cung cấp của form Thêm: loại quen thuộc trước, endpoint tuỳ chỉnh cuối. */
 export const PICKER_CHOICES: readonly TypeChoice[] = ["anthropic", "openai", "gemini", "deepseek", "openai_compatible"];
 export const PICKER_LABEL: Record<TypeChoice, string> = {
-  ...CHOICE_LABEL,
-  openai_compatible: "Khác (tương thích OpenAI)",
+  anthropic: CHOICE_LABEL.anthropic,
+  gemini: CHOICE_LABEL.gemini,
+  openai: CHOICE_LABEL.openai,
+  get openai_compatible() {
+    return t("admin.providerFormModel.picker.openai_compatible");
+  },
+  deepseek: CHOICE_LABEL.deepseek,
 };
 export const DEFAULT_CHOICE: TypeChoice = "anthropic";
 
@@ -208,31 +225,32 @@ export type DraftErrors = {
  */
 export function validateDraft(d: ProviderDraft, saved?: SavedProvider): DraftErrors | null {
   const e: DraftErrors = { models: {} };
-  if (!d.name.trim()) e.name = "Nhập tên nhà cung cấp.";
+  if (!d.name.trim()) e.name = t("admin.providerFormModel.nameRequired");
   let normalized: string | null = null;
   if (d.type === "openai_compatible") {
     normalized = normalizeBaseUrl(d.base_url);
-    if (!d.base_url.trim()) e.base_url = "Nhập base URL.";
-    else if (!normalized) e.base_url = "Base URL phải bắt đầu bằng https:// (không kèm user / mật khẩu).";
+    if (!d.base_url.trim()) e.base_url = t("admin.providerFormModel.baseUrlRequired");
+    else if (!normalized) e.base_url = t("admin.providerFormModel.baseUrlInvalid");
   }
   const key = d.api_key.trim();
-  if (!saved && !key) e.api_key = "Nhập API key.";
-  else if (key && !ApiKey.safeParse(key).success)
-    e.api_key = "API key không hợp lệ (8–512 ký tự in được, không khoảng trắng).";
+  if (!saved && !key) e.api_key = t("admin.providerFormModel.apiKeyRequired");
+  else if (key && !ApiKey.safeParse(key).success) e.api_key = t("admin.providerFormModel.apiKeyInvalid");
   else if (saved && !key && normalized && normalized !== saved.base_url) {
-    e.api_key = "Đổi base URL phải nhập lại API key (key cũ không được gửi tới host mới).";
+    e.api_key = t("admin.providerFormModel.apiKeyReenter");
   }
-  if (!saved && d.models.length === 0) e.no_models = "Thêm ít nhất một model.";
+  if (!saved && d.models.length === 0) e.no_models = t("admin.providerFormModel.noModels");
   const seen = new Set<string>();
   d.models.forEach((m, i) => {
     const id = m.model_id.trim();
-    if (!id) e.models[i] = "Nhập model id.";
-    else if (seen.has(id)) e.models[i] = "Trùng model id.";
-    else if (!m.id && isModelUnsupported(d.type, id)) e.models[i] = MODEL_UNSUPPORTED_MESSAGE;
-    else if (tooBig(m.price_in) || tooBig(m.price_out)) {
-      e.models[i] = `Giá tối đa ${MAX_PRICE_PER_MTOK.toLocaleString("en-US")} USD / 1M token (kiểm tra lại số vừa gõ).`;
+    if (!id) e.models[i] = t("admin.providerFormModel.modelIdRequired");
+    else if (seen.has(id)) e.models[i] = t("admin.providerFormModel.modelIdDuplicate");
+    else if (!m.id && isModelUnsupported(d.type, id)) {
+      e.models[i] = t("errors.modelUnsupported", { model: RECOMMENDED_ANTHROPIC_MODEL });
+    } else if (tooBig(m.price_in) || tooBig(m.price_out)) {
+      // Số tối đa giữ dạng en-US ("100,000") ở mọi ngôn ngữ: khớp cách gõ giá (dấu chấm thập phân).
+      e.models[i] = t("admin.providerFormModel.priceTooHigh", { max: MAX_PRICE_PER_MTOK.toLocaleString("en-US") });
     } else if (parsePrice(m.price_in) === null || parsePrice(m.price_out) === null) {
-      e.models[i] = "Nhập đủ giá vào / ra (USD / 1M token, ≥ 0).";
+      e.models[i] = t("admin.providerFormModel.pricesRequired");
     }
     seen.add(id);
   });

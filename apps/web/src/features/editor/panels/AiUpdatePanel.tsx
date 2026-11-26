@@ -4,14 +4,20 @@
  * ở server (ack theo ai_rev). Chỉnh sửa tay không bị ghi đè nếu không bấm áp.
  */
 import { useState } from "react";
+import { type MessageKey, useT } from "../../../i18n/t.ts";
 import { errorMessage } from "../../../lib/api.ts";
 import { applyRegionTranslation, diffRegions } from "../actions.ts";
 import { ackAiUpdate } from "../api.ts";
 import { editorStore, useEditor } from "../store.ts";
 
-const KIND = { changed: "đổi", added: "mới", removed: "AI bỏ" } as const;
+const KIND: Record<"changed" | "added" | "removed", MessageKey> = {
+  changed: "editor.aiUpdate.kind.changed",
+  added: "editor.aiUpdate.kind.added",
+  removed: "editor.aiUpdate.kind.removed",
+};
 
 export function AiUpdatePanel() {
+  const { t, tp } = useT();
   const ai = useEditor((s) => s.ai);
   const doc = useEditor((s) => s.doc);
   const pageId = useEditor((s) => s.pageId);
@@ -35,7 +41,7 @@ export function AiUpdatePanel() {
     try {
       const r = await ackAiUpdate(pageId, ai.rev);
       st.setAi({ available: r.ai_update_available, rev: r.ai_rev });
-      if (r.ai_update_available) setError("Đã có kết quả AI mới hơn — xem lại danh sách.");
+      if (r.ai_update_available) setError(t("editor.aiUpdate.newer"));
     } catch (e) {
       setError(errorMessage(e));
     }
@@ -45,10 +51,10 @@ export function AiUpdatePanel() {
   return (
     <section className="notice info ed-ai">
       <div className="ed-ai-head">
-        <strong>Có kết quả AI mới</strong>
-        <span className="muted small">{diff.length} vùng khác bản hiện tại · chỉnh sửa tay được giữ nguyên</span>
+        <strong>{t("editor.aiUpdate.title")}</strong>
+        <span className="muted small">{tp("editor.aiUpdate.diffSummary", diff.length)}</span>
         <button type="button" className="btn-ghost" onClick={() => setOpen(!open)} aria-expanded={open}>
-          {open ? "Thu gọn" : "Xem khác biệt"}
+          {open ? t("editor.aiUpdate.collapse") : t("editor.aiUpdate.showDiff")}
         </button>
       </div>
       {open && (
@@ -56,7 +62,7 @@ export function AiUpdatePanel() {
           {diff.map((d) => (
             <li key={d.id}>
               <span className="status" data-tone="idle">
-                {KIND[d.kind]}
+                {t(KIND[d.kind])}
               </span>
               <div className="ed-diff-body">
                 {d.current && <div className="ed-old">{d.current.translation || "—"}</div>}
@@ -64,7 +70,7 @@ export function AiUpdatePanel() {
               </div>
               {d.kind !== "removed" && (
                 <button type="button" disabled={readOnly} onClick={() => apply([d.id])}>
-                  Áp
+                  {t("editor.aiUpdate.apply")}
                 </button>
               )}
             </li>
@@ -73,10 +79,10 @@ export function AiUpdatePanel() {
       )}
       <div className="ed-actions">
         <button type="button" disabled={readOnly || applicable.length === 0} onClick={() => apply(applicable)}>
-          Áp tất cả ({applicable.length})
+          {t("editor.aiUpdate.applyAll", { count: applicable.length })}
         </button>
         <button type="button" className="btn-ghost" onClick={() => void ack()}>
-          Đã xem, ẩn thông báo
+          {t("editor.aiUpdate.dismiss")}
         </button>
       </div>
       {error && <p className="error small">{error}</p>}

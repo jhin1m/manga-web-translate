@@ -9,14 +9,13 @@
  * ẩn để lại lỗ số, khớp bảng văn bản và Tìm/Thay.
  */
 import { memo, useEffect, useMemo, useRef, useState } from "react";
+import { useT } from "../../i18n/t.ts";
 import type { PageImage, ProgressPage } from "./api.ts";
 import { ContextMenu, isMenuKey, type MenuAt, type MenuItem, menuAtElement } from "./context-menu.tsx";
 import { selectablePage } from "./page-selection.ts";
 import { thumbAria, thumbFlag, thumbMark, thumbTitle } from "./page-status.ts";
 import { ThumbFlagBadge } from "./thumb-flag.tsx";
 import { MoreIcon } from "./tool-icons.tsx";
-
-const LOCK_HINT = "Cần giữ khoá chương (chương không đang chạy)";
 
 /** memo: màn chương render lại mỗi lần gõ (bảng văn bản) — cột chỉ đổi khi page/ảnh/active/cờ đổi. */
 export const PageRail = memo(function PageRail(props: {
@@ -47,6 +46,7 @@ export const PageRail = memo(function PageRail(props: {
   canResetEdits(page: ProgressPage): boolean;
   onResetEdits(page: ProgressPage): void;
 }) {
+  const { t, tp } = useT();
   const [menu, setMenu] = useState<{ page: ProgressPage; at: MenuAt; anchor: HTMLElement } | null>(null);
   const all = useMemo(
     () => [...props.pages, ...props.hidden].sort((a, b) => a.ord - b.ord),
@@ -63,74 +63,76 @@ export const PageRail = memo(function PageRail(props: {
 
   const menuItems = (p: ProgressPage) => {
     const n = p.ord + 1;
+    const lockHint = t("chapter.pageRail.lockHint");
     if (p.skipped)
       return [
         {
-          label: `Khôi phục trang ${n}`,
+          label: t("chapter.pageRail.restore", { page: n }),
           disabled: !props.editable,
-          title: props.editable ? undefined : LOCK_HINT,
+          title: props.editable ? undefined : lockHint,
           run: () => props.onSkip(p, false),
         },
       ];
     // Trang cuối còn hiện không ẩn được (API 409 last_page).
-    const reason = !props.editable ? LOCK_HINT : props.pages.length <= 1 ? "Không ẩn được trang cuối cùng" : undefined;
+    const reason = !props.editable ? lockHint : props.pages.length <= 1 ? t("chapter.pageRail.lastPage") : undefined;
     const items: MenuItem[] = [];
     // Dịch / bỏ sửa tay chỉ có ở trang đang mở (state AI nằm trong phiên sửa của nó); trang khác chỉ ẩn được.
     if (p.id === props.activeId && selectablePage(p)) {
       const first = p.status === "prepared";
       items.push({
-        label: first ? `Dịch trang ${n}` : `Dịch lại trang ${n}`,
+        label: first ? t("chapter.pageRail.translate", { page: n }) : t("chapter.pageRail.retranslate", { page: n }),
         disabled: !!props.retranslateOff,
         title:
           props.retranslateOff ??
-          (first
-            ? "Dịch + chèn chữ riêng trang này bằng AI"
-            : "Dịch lại riêng trang này bằng AI (chỉnh sửa tay được giữ, bản AI mới hiện để chọn áp)"),
+          (first ? t("chapter.pageRail.translateTitle") : t("chapter.pageRail.retranslateTitle")),
         run: () => props.onRetranslate(p),
       });
       items.push({
-        label: `Quét lại trang ${n}`,
+        label: t("chapter.pageRail.rescan", { page: n }),
         disabled: !!props.retranslateOff,
-        title:
-          props.retranslateOff ??
-          "Sót chữ hoặc chữ chưa dịch: xoá chữ + nhận dạng lại từ ảnh gốc rồi dịch (chỉnh sửa chữ tay được giữ, bản AI mới hiện để chọn áp)",
+        title: props.retranslateOff ?? t("chapter.pageRail.rescanTitle"),
         run: () => props.onRescan(p),
       });
     }
     if (props.canResetEdits(p)) {
       items.push({
-        label: `Bỏ chỉnh sửa tay trang ${n}`,
-        title: "Thay chỉnh sửa tay (bản dịch, khung, kiểu chữ) của trang này bằng bản AI dịch — hoàn tác được",
+        label: t("chapter.pageRail.resetEdits", { page: n }),
+        title: t("chapter.pageRail.resetEditsTitle"),
         run: () => props.onResetEdits(p),
       });
     }
     return [
       ...items,
       {
-        label: `Ẩn trang ${n}`,
+        label: t("chapter.pageRail.hide", { page: n }),
         danger: true,
         disabled: !!reason,
-        title: reason ?? "Không dịch, không xuất — khôi phục được",
+        title: reason ?? t("chapter.pageRail.hideTitle"),
         run: () => props.onSkip(p, true),
       },
     ];
   };
 
   return (
-    <aside className="cw-thumbs" aria-label="Danh sách trang">
+    <aside className="cw-thumbs" aria-label={t("chapter.pageRail.listAria")}>
       {props.selected.size > 0 && (
-        <div className="cw-thumbs-sel" role="toolbar" aria-label="Trang đã chọn">
+        <div className="cw-thumbs-sel" role="toolbar" aria-label={t("chapter.pageRail.selectedAria")}>
           <button
             type="button"
             className="btn-primary"
             disabled={props.translating}
-            title="Dịch + chèn chữ riêng các trang đã chọn (chỉnh sửa tay được giữ)"
+            title={t("chapter.pageRail.translateSelectedTitle")}
             onClick={props.onTranslateSelected}
           >
-            Dịch {props.selected.size} trang
+            {tp("chapter.pageRail.translateSelected", props.selected.size)}
           </button>
-          <button type="button" className="btn-link" title="Bỏ chọn (Esc)" onClick={props.onClearSelection}>
-            Bỏ chọn
+          <button
+            type="button"
+            className="btn-link"
+            title={t("chapter.pageRail.clearSelectionTitle")}
+            onClick={props.onClearSelection}
+          >
+            {t("chapter.pageRail.clearSelection")}
           </button>
         </div>
       )}
@@ -151,7 +153,11 @@ export const PageRail = memo(function PageRail(props: {
                 data-tone={mark?.tone}
                 aria-current={on ? "page" : undefined}
                 data-selected={picked || undefined}
-                aria-label={`${thumbAria(p, overflow)}${picked ? " · đã chọn" : ""}`}
+                aria-label={
+                  picked
+                    ? t("chapter.pageRail.thumbSelected", { name: thumbAria(p, overflow) })
+                    : thumbAria(p, overflow)
+                }
                 aria-haspopup={p.skipped ? "menu" : undefined}
                 title={thumbTitle(p, overflow, undefined, on)}
                 // Trang ẩn không mở trên canvas (canvas chỉ có trang còn hiện) → bấm mở menu khôi phục.
@@ -194,10 +200,10 @@ export const PageRail = memo(function PageRail(props: {
                   type="button"
                   className="cw-thumb-act"
                   data-always
-                  aria-label={`Thao tác trang ${p.ord + 1}`}
+                  aria-label={t("chapter.pageRail.actionsAria", { page: p.ord + 1 })}
                   aria-haspopup="menu"
                   aria-expanded={menu?.page.id === p.id}
-                  title="Thao tác trang (chuột phải cũng mở)"
+                  title={t("chapter.pageRail.actionsTitle")}
                   onClick={(e) => {
                     const anchor = e.currentTarget;
                     // Bấm lại nút khi menu của nó đang mở = đóng.
@@ -215,7 +221,7 @@ export const PageRail = memo(function PageRail(props: {
         <ContextMenu
           at={menu.at}
           anchor={menu.anchor}
-          label={`Trang ${menu.page.ord + 1}`}
+          label={t("chapter.pageRail.menuLabel", { page: menu.page.ord + 1 })}
           items={menuItems(menu.page)}
           onClose={() => setMenu(null)}
         />

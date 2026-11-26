@@ -4,6 +4,7 @@
  * Mặc định gợi ý model KHÔNG reasoning (chi phí / trần token dự đoán được); model reasoning có cờ + cảnh báo.
  */
 import { RECOMMENDED_ANTHROPIC_MODEL } from "@mtl/shared";
+import { t } from "../../i18n/t.ts";
 
 export type PriceSuggestion = {
   model_id: string;
@@ -67,11 +68,10 @@ export const suggestionFor = (type: string, modelId: string, baseUrl?: string | 
   suggestionsFor(type, baseUrl).find((s) => s.model_id === modelId.trim());
 
 /** Cảnh báo hiện cạnh model có cờ reasoning (trần token ra của worker gồm cả token suy luận). */
-export const REASONING_WARNING =
-  "Trần token ra (OCR 2048 / Dịch 4096 / Hiệu đính 3072) gồm cả token suy luận — dễ fail do thiếu token, tốn tiền mà không ra kết quả. Nên dùng model không reasoning.";
+export const reasoningWarning = (): string => t("admin.priceSuggestions.reasoningWarning");
 
 /** Ghi chú dưới danh sách model, theo loại provider. */
 export const unsupportedModelsNote = (type: string): string =>
   type === "anthropic"
-    ? `Chưa chạy được Sonnet 5.5, Opus 5.5, Fable, Mythos. Nên dùng ${RECOMMENDED_ANTHROPIC_MODEL}.`
-    : "Không hỗ trợ model -pro / -codex (chỉ có Responses API).";
+    ? t("admin.priceSuggestions.unsupportedAnthropic", { model: RECOMMENDED_ANTHROPIC_MODEL })
+    : t("admin.priceSuggestions.unsupportedOpenai");

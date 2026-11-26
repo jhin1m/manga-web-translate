@@ -9,6 +9,7 @@
  * theo trang (dịch lại, ẩn, bỏ chỉnh sửa tay) ở menu chuột phải của cột trang.
  */
 import type { TextBox } from "@mtl/shared";
+import { t, useT } from "../../i18n/t.ts";
 import { deleteBox, duplicateBox } from "../editor/actions.ts";
 import { type FontKit, fontForStyle } from "../editor/fonts.ts";
 import { boxOverflow, MIN_SIZE } from "../editor/measure.ts";
@@ -49,9 +50,9 @@ export type SelectPanelProps = {
 
 /** Lý do "Dịch lại khối" bị tắt (undefined = bấm được). */
 export function reocrDisabled(row: Pick<Row, "regionId">, readOnly: boolean, ocrBusy: boolean) {
-  if (!row.regionId) return "Khối tự thêm không có vùng quét chữ để dịch lại";
-  if (readOnly) return "Đang chỉ xem";
-  if (ocrBusy) return "Đang quét chữ…";
+  if (!row.regionId) return t("chapter.selectPanel.reocrManual");
+  if (readOnly) return t("chapter.selectPanel.readOnly");
+  if (ocrBusy) return t("chapter.selectPanel.scanning");
   return undefined;
 }
 
@@ -60,25 +61,28 @@ export function overflowWarning(box: TextBox, kit: FontKit | null) {
   if (!kit || box.hidden) return null;
   const px = boxOverflow(box, kit.metrics(box.font_family), kit.measure);
   if (px <= 0) return null;
-  const min = box.auto_fit && box.font_size <= MIN_SIZE ? " ở cỡ tối thiểu" : "";
-  const n = Math.ceil(px);
-  return { text: `Tràn ${n}px${min}`, hint: `Tràn khung ${n}px${min} — nới khung hoặc rút gọn câu.` };
+  const atMin = box.auto_fit && box.font_size <= MIN_SIZE;
+  const params = { px: Math.ceil(px) };
+  return atMin
+    ? { text: t("chapter.selectPanel.overflowAtMin", params), hint: t("chapter.selectPanel.overflowHintAtMin", params) }
+    : { text: t("chapter.selectPanel.overflow", params), hint: t("chapter.selectPanel.overflowHint", params) };
 }
 
 /** 3 icon đầu panel: Dịch lại khối (nhận dạng + dịch lại vùng OCR) · Nhân đôi · Xoá. */
 export function BlockActions(props: { row: Row; ocrBusy: boolean; onReocr(row: Row): void }) {
+  const { t } = useT();
   const { row } = props;
   const readOnly = useEditor((s) => !!s.readOnly);
   const box = useEditor((s) => (row.boxId ? s.doc?.text_boxes.find((b) => b.id === row.boxId) : undefined));
   const reocrOff = reocrDisabled(row, readOnly, props.ocrBusy);
-  const editOff = readOnly ? "Đang chỉ xem" : undefined;
+  const editOff = readOnly ? t("chapter.selectPanel.readOnly") : undefined;
   return (
     <>
       <button
         type="button"
         className="icon-btn"
-        aria-label="Dịch lại khối"
-        title={reocrOff ?? "Dịch lại khối (nhận dạng + dịch lại vùng này, thay chữ gốc và bản dịch)"}
+        aria-label={t("chapter.selectPanel.reocr")}
+        title={reocrOff ?? t("chapter.selectPanel.reocrTitle")}
         disabled={!!reocrOff}
         onClick={() => props.onReocr(row)}
       >
@@ -89,8 +93,8 @@ export function BlockActions(props: { row: Row; ocrBusy: boolean; onReocr(row: R
           <button
             type="button"
             className="icon-btn"
-            aria-label="Nhân đôi khối"
-            title={editOff ?? "Nhân đôi khối"}
+            aria-label={t("chapter.selectPanel.duplicate")}
+            title={editOff ?? t("chapter.selectPanel.duplicate")}
             disabled={!!editOff}
             onClick={() => {
               const id = `tb-${crypto.randomUUID().slice(0, 8)}`;
@@ -105,8 +109,8 @@ export function BlockActions(props: { row: Row; ocrBusy: boolean; onReocr(row: R
             type="button"
             className="icon-btn"
             data-danger
-            aria-label="Xoá khối"
-            title={editOff ?? "Xoá khối (Delete)"}
+            aria-label={t("chapter.selectPanel.delete")}
+            title={editOff ?? t("chapter.selectPanel.deleteTitle")}
             disabled={!!editOff}
             onClick={() => editorStore.getState().apply(deleteBox(box.id))}
           >
@@ -119,21 +123,23 @@ export function BlockActions(props: { row: Row; ocrBusy: boolean; onReocr(row: R
 }
 
 export function SelectPanel(props: SelectPanelProps) {
+  const { t } = useT();
   const { page, row } = props;
-  if (!page) return <p className="muted small cw-pad">Chưa có trang để sửa.</p>;
+  if (!page) return <p className="muted small cw-pad">{t("chapter.selectPanel.noPage")}</p>;
   return (
     <>
       <AiUpdatePanel />
       {row ? (
         <BlockView {...props} row={row} />
       ) : (
-        <p className="muted small cw-pad">Bấm một khối chữ trên ảnh để sửa.</p>
+        <p className="muted small cw-pad">{t("chapter.selectPanel.pickHint")}</p>
       )}
     </>
   );
 }
 
 function BlockView(props: SelectPanelProps & { row: Row }) {
+  const { t } = useT();
   const { row } = props;
   const readOnly = useEditor((s) => !!s.readOnly);
   const box = useEditor((s) => (row.boxId ? s.doc?.text_boxes.find((b) => b.id === row.boxId) : undefined));
@@ -143,12 +149,12 @@ function BlockView(props: SelectPanelProps & { row: Row }) {
   return (
     <section className="cw-block">
       <div className="cw-field">
-        <span className="cw-field-head">Gốc</span>
+        <span className="cw-field-head">{t("chapter.selectPanel.source")}</span>
         <div className="cw-src-box">{row.source || <span className="muted">—</span>}</div>
       </div>
       <div className="cw-field">
         <label className="cw-field-head" htmlFor="cw-translation">
-          Dịch
+          {t("chapter.selectPanel.translation")}
         </label>
         <TextField
           id="cw-translation"
@@ -167,7 +173,7 @@ function BlockView(props: SelectPanelProps & { row: Row }) {
       {props.busy.ocr && (
         <div className="cw-field">
           <span className="status" data-tone="busy">
-            Đang quét chữ…
+            {t("chapter.selectPanel.scanning")}
           </span>
           <OcrWait retry={props.ocrRetry} onCancel={props.onCancelOcr} />
         </div>
@@ -180,22 +186,24 @@ function BlockView(props: SelectPanelProps & { row: Row }) {
             knows={props.kit?.knows}
           />
           <details className="cw-adv">
-            <summary>Kiểu chữ</summary>
+            <summary>{t("chapter.selectPanel.style")}</summary>
             <AdvancedStyle textStyle={textStyleConfig(props.kit, props.defaultFonts)}>
               <button
                 type="button"
                 className="cw-wide"
                 disabled={readOnly || props.busy.applyKind}
-                title={`Áp font, cỡ, căn lề, màu, viền của khối này cho mọi khối ${kind} trong chương (hoàn tác được)`}
+                title={t("chapter.selectPanel.applyKindTitle", { kind })}
                 onClick={() => props.onApplyKind(row)}
               >
-                {props.busy.applyKind ? "Đang áp dụng…" : `Áp dụng cho mọi khối ${kind}`}
+                {props.busy.applyKind
+                  ? t("chapter.selectPanel.applying")
+                  : t("chapter.selectPanel.applyKind", { kind })}
               </button>
             </AdvancedStyle>
           </details>
         </>
       ) : (
-        <p className="muted small">Vùng này chưa có khung chữ — dùng công cụ Chữ (T) để thêm.</p>
+        <p className="muted small">{t("chapter.selectPanel.noBox")}</p>
       )}
     </section>
   );

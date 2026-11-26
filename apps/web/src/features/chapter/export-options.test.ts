@@ -18,6 +18,7 @@ const view = (over: Partial<ExportView>): ExportView => ({
   status: "queued",
   progress: 0,
   stage: null,
+  error_class: null,
   error: null,
   format: "png_zip",
   layout: "original_slices",
@@ -76,9 +77,27 @@ describe("export options", () => {
         now,
       ),
     ).toEqual({ kind: "expired" });
-    expect(exportPhase([view({ status: "failed", error: "hết dung lượng" })], "x1", now)).toEqual({
+    // Lỗi: câu chính theo `error_class`, lỗi thô của worker (tiếng Anh) chỉ làm chi tiết.
+    expect(
+      exportPhase(
+        [view({ status: "failed", error_class: "invalid_input", error: "image side exceeds 16384px: 20000x100" })],
+        "x1",
+        now,
+      ),
+    ).toEqual({
       kind: "failed",
-      error: "hết dung lượng",
+      error: "Xuất không thành công: ảnh lỗi hoặc vượt giới hạn.",
+      detail: "image side exceeds 16384px: 20000x100",
+    });
+    expect(exportPhase([view({ status: "failed", error: "disk full" })], "x1", now)).toEqual({
+      kind: "failed",
+      error: "Xuất không thành công: lỗi hệ thống.",
+      detail: "disk full",
+    });
+    expect(exportPhase([view({ status: "failed" })], "x1", now)).toEqual({
+      kind: "failed",
+      error: "Xuất không thành công.",
+      detail: null,
     });
     // Hết ngân sách: hàng đợi tự chạy tiếp → vẫn đang chờ, không phải lỗi.
     expect(exportPhase([view({ status: "paused_budget", progress: 0.4 })], "x1", now)).toEqual({

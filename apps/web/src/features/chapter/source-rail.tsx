@@ -9,6 +9,7 @@
  * bước + đếm ("Đang tải ảnh 3/10"), ảnh được ghép có viền "đang xử lý" và cờ Đã tải / Đang tải / Chờ / Đang xử lý.
  */
 import { memo, useEffect, useRef, useState } from "react";
+import { useT } from "../../i18n/t.ts";
 import { ContextMenu, isMenuKey, type MenuAt, type MenuItem, menuAtElement } from "./context-menu.tsx";
 import {
   type IngestView,
@@ -42,6 +43,7 @@ export const SourceRail = memo(function SourceRail(props: {
   /** Đưa ảnh `id` tới vị trí `to` (0-based). */
   onMove(id: string, to: number): void;
 }) {
+  const { t, tp } = useT();
   const { total, skipped } = sourceCounts(props.items);
   const ingest = props.ingest;
   // Vị trí trong các ảnh không bỏ qua = thứ tự worker tải khi cắt trang.
@@ -81,7 +83,12 @@ export const SourceRail = memo(function SourceRail(props: {
       const target = Math.max(0, Math.min(last, to));
       return { label, disabled: i < 0 || i === target, run: () => moveTo(id, target) };
     };
-    return [at("Đưa lên đầu", 0), at("Lên 1", i - 1), at("Xuống 1", i + 1), at("Đưa xuống cuối", last)];
+    return [
+      at(t("chapter.sourceRail.moveFirst"), 0),
+      at(t("chapter.sourceRail.moveUp"), i - 1),
+      at(t("chapter.sourceRail.moveDown"), i + 1),
+      at(t("chapter.sourceRail.moveLast"), last),
+    ];
   };
 
   // Ảnh đang xem đổi (←/→, nút ‹ ›) → đưa vào tầm nhìn của cột.
@@ -92,10 +99,12 @@ export const SourceRail = memo(function SourceRail(props: {
   }, [props.activeId]);
 
   return (
-    <aside className="cw-thumbs" aria-label="Danh sách ảnh gốc">
+    <aside className="cw-thumbs" aria-label={t("chapter.sourceRail.list")}>
       <div className="cw-thumbs-head">
         <span>
-          {total} ảnh{skipped > 0 ? ` · đã bỏ ${skipped}` : ""}
+          {skipped > 0
+            ? tp("chapter.sourceRail.countSkipped", total, { skipped })
+            : tp("chapter.sourceRail.count", total)}
         </span>
         {ingest && (
           <>
@@ -157,11 +166,17 @@ export const SourceRail = memo(function SourceRail(props: {
                 className="cw-thumb"
                 data-tone={it.skip ? "hidden" : ingest ? "busy" : tag?.tone}
                 aria-current={on ? "page" : undefined}
-                aria-label={`Ảnh ${it.n}${tag ? ` · ${tag.label}` : ""}`}
+                aria-label={
+                  tag
+                    ? t("chapter.sourceRail.imageTagged", { n: it.n, tag: tag.label })
+                    : t("chapter.sourceRail.image", { n: it.n })
+                }
                 title={
                   [
                     tag?.label,
-                    props.editable ? `Kéo để đổi thứ tự · chuột phải: ${it.skip ? "khôi phục" : "xoá"} ảnh` : null,
+                    props.editable
+                      ? t(it.skip ? "chapter.sourceRail.dragHintRestore" : "chapter.sourceRail.dragHintDelete")
+                      : null,
                   ]
                     .filter(Boolean)
                     .join("\n") || undefined
@@ -194,8 +209,8 @@ export const SourceRail = memo(function SourceRail(props: {
                   type="button"
                   className="cw-thumb-act"
                   data-danger={!it.skip || undefined}
-                  aria-label={it.skip ? `Khôi phục ảnh ${it.n}` : `Xoá ảnh ${it.n}`}
-                  title={it.skip ? "Khôi phục ảnh" : "Xoá ảnh — bỏ qua ảnh này khi cắt trang"}
+                  aria-label={t(it.skip ? "chapter.sourceRail.restoreN" : "chapter.sourceRail.deleteN", { n: it.n })}
+                  title={t(it.skip ? "chapter.sourceRail.restore" : "chapter.sourceRail.deleteTitle")}
                   onClick={() => props.onSkip(it, it.skip ? null : "user")}
                 >
                   {it.skip ? <UndoIcon size={14} /> : <TrashIcon size={14} />}
@@ -210,15 +225,18 @@ export const SourceRail = memo(function SourceRail(props: {
         <ContextMenu
           at={menu.at}
           anchor={menu.anchor}
-          label={`Ảnh ${menu.item.n}`}
+          label={t("chapter.sourceRail.image", { n: menu.item.n })}
           items={[
             ...moveItems(menu.item.id),
             menu.item.skip
-              ? { label: `Khôi phục ảnh ${menu.item.n}`, run: () => props.onSkip(menu.item, null) }
+              ? {
+                  label: t("chapter.sourceRail.restoreN", { n: menu.item.n }),
+                  run: () => props.onSkip(menu.item, null),
+                }
               : {
-                  label: `Xoá ảnh ${menu.item.n}`,
+                  label: t("chapter.sourceRail.deleteN", { n: menu.item.n }),
                   danger: true,
-                  title: "Bỏ qua ảnh này khi cắt trang",
+                  title: t("chapter.sourceRail.skipTitle"),
                   run: () => props.onSkip(menu.item, "user"),
                 },
           ]}

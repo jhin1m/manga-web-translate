@@ -2,13 +2,15 @@
  * Chọn loại truyện khi tạo series: Manga / Manhwa / Manhua chỉ quyết định định dạng trang (COMIC_KIND_SETTINGS).
  * Modal "+ Series" có thêm ô ngôn ngữ; dòng "Vừa thả" dùng nguồn tiếng Anh (đổi ở Cài đặt series nếu là raw).
  */
+import { useT } from "../../i18n/t.ts";
 import { COMIC_KIND_LABELS, COMIC_KINDS, type ComicKind } from "./lang-labels.ts";
 
 export function ComicKindPicker(props: { id?: string; value: ComicKind; onChange: (v: ComicKind) => void }) {
+  const { t } = useT();
   return (
     <select
       id={props.id}
-      aria-label="Loại truyện"
+      aria-label={t("series.comicKindPicker.label")}
       value={props.value}
       onChange={(e) => props.onChange(e.target.value as ComicKind)}
     >

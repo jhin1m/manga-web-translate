@@ -3,21 +3,24 @@
  * `aria-selected`; ←/→/Home/End chuyển tab. Tab chưa dùng được (chương chưa dịch xong) bị tắt kèm lý do.
  */
 import type { KeyboardEvent } from "react";
+import { type MessageKey, t, useT } from "../../i18n/t.ts";
 import { DOC_TABS, type DocTab } from "./tool-rail-model.ts";
 
-export const DOC_TAB_LABEL: Record<DocTab, string> = {
-  table: "Bản dịch",
-  find: "Tìm / Thay",
-  glossary: "Glossary",
-  proofread: "Hiệu đính",
+export const DOC_TAB_LABEL: Record<DocTab, MessageKey> = {
+  table: "chapter.docTabs.table",
+  find: "chapter.docTabs.find",
+  glossary: "chapter.docTabs.glossary",
+  proofread: "chapter.docTabs.proofread",
 };
 
 export const docTabId = (t: DocTab) => `cw-doc-tab-${t}`;
 export const docPanelId = (t: DocTab) => `cw-doc-panel-${t}`;
 
 /** Nhãn hiển thị của tab; Hiệu đính kèm số gợi ý chờ duyệt khi có. */
-export const docTabLabel = (t: DocTab, pendingProofread: number) =>
-  t === "proofread" && pendingProofread > 0 ? `${DOC_TAB_LABEL[t]} · ${pendingProofread}` : DOC_TAB_LABEL[t];
+export const docTabLabel = (tab: DocTab, pendingProofread: number) =>
+  tab === "proofread" && pendingProofread > 0
+    ? t("chapter.docTabs.withCount", { label: t(DOC_TAB_LABEL[tab]), count: pendingProofread })
+    : t(DOC_TAB_LABEL[tab]);
 
 export function DocTabs(props: {
   tab: DocTab;
@@ -26,7 +29,8 @@ export function DocTabs(props: {
   pendingProofread: number;
   onSelect(t: DocTab): void;
 }) {
-  const enabled = DOC_TABS.filter((t) => !props.disabled[t]);
+  useT();
+  const enabled = DOC_TABS.filter((tab) => !props.disabled[tab]);
   const onKey = (e: KeyboardEvent<HTMLDivElement>) => {
     const i = enabled.indexOf(props.tab);
     const next =
@@ -45,23 +49,23 @@ export function DocTabs(props: {
     document.getElementById(docTabId(next))?.focus();
   };
   return (
-    <div className="cw-doctabs" role="tablist" aria-label="Văn bản" onKeyDown={onKey}>
-      {DOC_TABS.map((t) => {
-        const reason = props.disabled[t];
+    <div className="cw-doctabs" role="tablist" aria-label={t("chapter.docTabs.tablist")} onKeyDown={onKey}>
+      {DOC_TABS.map((tab) => {
+        const reason = props.disabled[tab];
         return (
           <button
-            key={t}
-            id={docTabId(t)}
+            key={tab}
+            id={docTabId(tab)}
             type="button"
             role="tab"
-            aria-selected={props.tab === t}
-            aria-controls={docPanelId(t)}
-            tabIndex={props.tab === t ? 0 : -1}
+            aria-selected={props.tab === tab}
+            aria-controls={docPanelId(tab)}
+            tabIndex={props.tab === tab ? 0 : -1}
             disabled={!!reason}
             title={reason}
-            onClick={() => props.onSelect(t)}
+            onClick={() => props.onSelect(tab)}
           >
-            {docTabLabel(t, props.pendingProofread)}
+            {docTabLabel(tab, props.pendingProofread)}
           </button>
         );
       })}

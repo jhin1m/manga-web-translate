@@ -6,6 +6,7 @@
  * (rộng hơn — cài đặt dịch / glossary của series).
  */
 import { type KeyboardEvent as ReactKeyboardEvent, type ReactNode, useEffect, useId, useRef } from "react";
+import { useT } from "../i18n/t.ts";
 import "./drawer.css";
 
 const FOCUSABLE =
@@ -18,6 +19,7 @@ export function Drawer(props: {
   footer?: ReactNode;
   variant?: "drawer" | "modal";
 }) {
+  const { t } = useT();
   const titleId = useId();
   const ref = useRef<HTMLDivElement>(null);
   const close = useRef(props.onClose);
@@ -72,7 +74,7 @@ export function Drawer(props: {
         <div className="drawer-head">
           <h2 id={titleId}>{props.title}</h2>
           <button type="button" className="btn-ghost" onClick={props.onClose}>
-            Đóng
+            {t("common.close")}
           </button>
         </div>
         <div className="drawer-body">{props.children}</div>

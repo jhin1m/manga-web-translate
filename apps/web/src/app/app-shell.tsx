@@ -23,6 +23,7 @@ import {
   offeredVersion,
   showDot,
 } from "../features/update/update-model.ts";
+import { useT } from "../i18n/t.ts";
 import { api, authClient, errorMessage, type Me, usd, useAppConfig } from "../lib/api.ts";
 import { markDevSignedOut } from "../lib/dev-login.ts";
 import "./app-shell.css";
@@ -46,6 +47,7 @@ export function useMe(): Me {
 
 /** `children` cho trang gắn trực tiếp; không có → `<Outlet />`. */
 export function AppShell({ right, children }: { right?: ReactNode; children?: ReactNode }) {
+  const { t } = useT();
   const q = useQuery(meQuery);
 
   // Lỗi hỏi lại nền (vd app đang khởi động lại giữa lúc cập nhật) không được gỡ shell: còn data thì giữ nguyên.
@@ -53,7 +55,7 @@ export function AppShell({ right, children }: { right?: ReactNode; children?: Re
   if (q.error && !q.data) {
     return (
       <main className="auth">
-        <h1>Không tải được tài khoản</h1>
+        <h1>{t("app.appShell.meLoadFailed")}</h1>
         <p className="error">{errorMessage(q.error)}</p>
       </main>
     );
@@ -87,6 +89,7 @@ const initials = (name: string) =>
     .join("");
 
 function AccountMenu() {
+  const { t, tNode } = useT();
   const me = useMe();
   const config = useAppConfig().data;
   const local = config?.local_mode === true;
@@ -128,7 +131,7 @@ function AccountMenu() {
       qc.setQueryData(UPDATE_STATUS_KEY, s);
       setCheckNote(checkNowText(s));
     },
-    onError: () => setCheckNote("Không hỏi được GitHub. Kiểm tra mạng rồi thử lại sau."),
+    onError: () => setCheckNote(t("app.appShell.checkFailed")),
   });
 
   const onToggle = (open: boolean) => {
@@ -149,7 +152,9 @@ function AccountMenu() {
     <>
       <details ref={ref} className="shell-menu" onToggle={(e) => onToggle(e.currentTarget.open)}>
         <summary
-          aria-label={dot && offered ? `Tài khoản · có bản mới v${offered}` : "Tài khoản"}
+          aria-label={
+            dot && offered ? t("app.appShell.accountNewVersion", { version: offered }) : t("app.appShell.account")
+          }
           className="shell-avatar"
         >
           {initials(me.name || me.email || "?")}
@@ -160,27 +165,31 @@ function AccountMenu() {
         <div className="shell-menu-list" onClick={() => closeMenu(ref.current)}>
           <span className="shell-menu-email muted small">{me.email}</span>
           {/* Mọi người dùng: Cài đặt có mục Font; mục AI / Hệ thống chỉ hiện với admin. */}
-          <Link to="/settings">Cài đặt</Link>
+          <Link to="/settings">{t("app.appShell.settings")}</Link>
           {me.quota.limit_usd !== null && (
             <span className="shell-menu-quota muted small" data-testid="quota-line">
-              Hạn mức AI hôm nay: {usd(me.quota.spent_usd)} / {usd(me.quota.limit_usd)}
+              {t("app.appShell.quota", { spent: usd(me.quota.spent_usd), limit: usd(me.quota.limit_usd) })}
             </span>
           )}
           {status && failed && (
             <button type="button" className="shell-menu-failed" onClick={() => setDialog("error")}>
-              Cập nhật v{failed.target} lỗi
+              {t("app.appShell.updateFailed", { version: failed.target })}
             </button>
           )}
           {status && offered && status.latest && (
             <>
               <span className="shell-menu-update small">
-                Có bản mới <strong>v{offered}</strong> ·{" "}
-                <a href={status.latest.url} target="_blank" rel="noopener noreferrer">
-                  Xem thay đổi
-                </a>
+                {tNode("app.appShell.newVersion", {
+                  version: <strong>v{offered}</strong>,
+                  changes: (
+                    <a href={status.latest.url} target="_blank" rel="noopener noreferrer">
+                      {t("app.appShell.viewChanges")}
+                    </a>
+                  ),
+                })}
               </span>
               <button type="button" onClick={() => setDialog(canUpdateInApp(status) ? "confirm" : "manual")}>
-                {canUpdateInApp(status) ? "Cập nhật ngay" : "Cách cập nhật"}
+                {canUpdateInApp(status) ? t("app.appShell.updateNow") : t("app.appShell.howToUpdate")}
               </button>
             </>
           )}
@@ -194,7 +203,7 @@ function AccountMenu() {
                 checkNow.mutate();
               }}
             >
-              {checkNow.isPending ? "Đang kiểm tra…" : "Kiểm tra bản mới"}
+              {checkNow.isPending ? t("app.appShell.checking") : t("app.appShell.checkNow")}
             </button>
           )}
           {checkNote && (
@@ -211,7 +220,7 @@ function AccountMenu() {
           {/* Chế độ local không có tài khoản → không có đăng xuất. */}
           {!local && (
             <button type="button" onClick={() => void signOut()}>
-              Đăng xuất
+              {t("app.appShell.signOut")}
             </button>
           )}
         </div>

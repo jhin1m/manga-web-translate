@@ -6,21 +6,25 @@
  * Hành vi bấm: tool-rail-model.ts `railClick`.
  */
 import type { ReactNode } from "react";
+import { t, useT } from "../../i18n/t.ts";
 import type { Tool } from "../editor/store.ts";
 import { MaskIcon, OcrIcon, ScissorsIcon, SelectIcon, TableIcon, TextIcon } from "./tool-icons.tsx";
 import { isPanelOnly, type PanelId, type RailTarget, railTool } from "./tool-rail-model.ts";
 
 type Item = { id: RailTarget; name: string; key?: string; icon: ReactNode };
 
-const TOOLS: Item[] = [
-  { id: "select", name: "Chọn", key: "V", icon: <SelectIcon /> },
-  { id: "text", name: "Chữ", key: "T", icon: <TextIcon /> },
-  { id: "brush", name: "Tẩy chữ", key: "B", icon: <MaskIcon /> },
-  { id: "ocr", name: "Quét chữ", key: "R", icon: <OcrIcon /> },
+/** Hàm (không phải hằng) để tên / phím đọc ngôn ngữ đang dùng mỗi lần vẽ. */
+const tools = (): Item[] => [
+  { id: "select", name: t("chapter.toolRail.select"), key: "V", icon: <SelectIcon /> },
+  { id: "text", name: t("chapter.toolRail.text"), key: "T", icon: <TextIcon /> },
+  { id: "brush", name: t("chapter.toolRail.brush"), key: "B", icon: <MaskIcon /> },
+  { id: "ocr", name: t("chapter.toolRail.ocr"), key: "R", icon: <OcrIcon /> },
 ];
 /** Chỉ ở chương chưa có page (nháp): cắt mép ảnh gốc, không có phím tắt. */
-const TRIM: Item = { id: "trim", name: "Cắt mép", icon: <ScissorsIcon /> };
-const PANELS: Item[] = [{ id: "doc", name: "Văn bản", key: "Ctrl+F tìm", icon: <TableIcon /> }];
+const trim = (): Item => ({ id: "trim", name: t("chapter.toolRail.trim"), icon: <ScissorsIcon /> });
+const panels = (): Item[] => [
+  { id: "doc", name: t("chapter.toolRail.doc"), key: t("chapter.toolRail.docKey"), icon: <TableIcon /> },
+];
 
 /** Tên truy cập của nút: "Chọn (V)". */
 export const railLabel = (it: Pick<Item, "name" | "key">) => (it.key ? `${it.name} (${it.key})` : it.name);
@@ -34,6 +38,7 @@ export function ToolRail(props: {
   showTrim?: boolean;
   onClick(t: RailTarget): void;
 }) {
+  useT();
   const { panel } = props;
   const tool = railTool(props.tool);
   const button = (it: Item) => {
@@ -75,11 +80,11 @@ export function ToolRail(props: {
     );
   };
   return (
-    <nav className="cw-toolrail" aria-label="Công cụ">
-      {TOOLS.map(button)}
-      {props.showTrim && button(TRIM)}
+    <nav className="cw-toolrail" aria-label={t("chapter.toolRail.nav")}>
+      {tools().map(button)}
+      {props.showTrim && button(trim())}
       <span className="cw-toolrail-sep" />
-      {PANELS.map(button)}
+      {panels().map(button)}
     </nav>
   );
 }

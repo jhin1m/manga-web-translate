@@ -1,4 +1,5 @@
 /** Hàm thuần cho UI chương: định dạng dung lượng, tách đoạn khớp để highlight. */
+import { t } from "../../i18n/t.ts";
 
 export function formatBytes(n: number | null | undefined): string {
   if (n == null || !Number.isFinite(n) || n < 0) return "—";
@@ -36,9 +37,9 @@ export function splitHighlight(text: string, needle: string, caseSensitive: bool
 
 /** Thông điệp lỗi apply/undo theo hợp đồng API (409 preview_stale/undo_conflict, 423 chapter_locked). */
 export function describeWriteError(status: number, code: string | undefined, fallback: string): string {
-  if (status === 423 || code === "chapter_locked") return "Chương đang mở ở tab khác — chỉ xem trước được.";
-  if (code === "preview_stale") return "Có trang vừa bị sửa sau lúc xem trước. Hãy bấm “Xem trước” lại rồi áp dụng.";
-  if (code === "undo_conflict") return "Không hoàn tác được: một số trang đã được sửa tiếp sau lần áp dụng.";
-  if (status === 404) return "Lần áp dụng này không còn để hoàn tác.";
+  if (status === 423 || code === "chapter_locked") return t("chapter.textUtils.chapterLocked");
+  if (code === "preview_stale") return t("chapter.textUtils.previewStale");
+  if (code === "undo_conflict") return t("chapter.textUtils.undoConflict");
+  if (status === 404) return t("chapter.textUtils.undoGone");
   return fallback;
 }

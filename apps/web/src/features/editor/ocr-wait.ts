@@ -1,5 +1,15 @@
+import { QUOTA_EXCEEDED } from "@mtl/shared";
+import { t, tp } from "../../i18n/t.ts";
 import type { JobView } from "../chapter/api.ts";
-import { clock, ERROR_CLASS, providerText, waitingOnProvider } from "../chapter/job-error.ts";
+import {
+  clock,
+  describeJobError,
+  ERROR_CLASS,
+  jobErrorLabel,
+  needsTaskSetup,
+  providerText,
+  waitingOnProvider,
+} from "../chapter/job-error.ts";
 
 type RetryJob = Pick<JobView, "status" | "error" | "error_class" | "provider_retries" | "run_after">;
 
@@ -10,11 +20,14 @@ type RetryJob = Pick<JobView, "status" | "error" | "error_class" | "provider_ret
 export function ocrRetryNote(j: RetryJob, now = Date.now()): string | null {
   if (j.status !== "queued" || !j.error) return null;
   const cls = j.error_class ?? "internal";
-  const why = waitingOnProvider(j) ? providerText(cls) : (ERROR_CLASS[cls] ?? ERROR_CLASS.internal);
-  const retries = j.provider_retries > 0 ? ` (lần ${j.provider_retries})` : "";
+  const why = waitingOnProvider(j) ? providerText(cls) : (ERROR_CLASS[cls] ?? ERROR_CLASS.internal ?? "");
+  const retries = j.provider_retries > 0 ? t("editor.ocrWait.attempt", { count: j.provider_retries }) : "";
   // run_after đã qua = job đang chờ worker rảnh, không có giờ cụ thể để hứa.
-  const when = new Date(j.run_after).getTime() > now ? `lúc ${clock(j.run_after)}` : "sắp tới";
-  return `Lần quét chữ vừa rồi lỗi (${why}) — tự thử lại ${when}${retries}. Có thể huỷ nếu không muốn chờ.`;
+  const when =
+    new Date(j.run_after).getTime() > now
+      ? t("editor.ocrWait.retryAt", { time: clock(j.run_after) })
+      : t("editor.ocrWait.retrySoon");
+  return t("editor.ocrWait.retryNote", { why, when, retries });
 }
 
 /** Job OCR nằm `queued` (chưa ai nhận, chưa lỗi) lâu hơn mức này → báo người dùng thay vì "Đang quét chữ…" im lặng. */
@@ -27,7 +40,7 @@ export const OCR_STALL_MS = 30_000;
 export function ocrStallNote(j: Pick<JobView, "status" | "error">, waitedMs: number): string | null {
   if (j.status !== "queued" || j.error || waitedMs < OCR_STALL_MS) return null;
   const s = Math.floor(waitedMs / 1000);
-  return `Chưa có máy xử lý nhận lệnh quét chữ sau ${s} giây — hàng đợi đang bận hoặc máy xử lý đang tắt. Vẫn đang chờ; có thể huỷ.`;
+  return tp("editor.ocrWait.stall", s);
 }
 
 /**
@@ -47,4 +60,18 @@ export async function cancelJobBestEffort(
   }
   await new Promise((r) => setTimeout(r, retryDelayMs));
   await cancel(jobId).catch(() => undefined);
+}
+
+/**
+ * Câu chính khi OCR vùng hỏng: thiếu model / hết hạn mức AI → câu bảo cần làm gì; còn lại → nguyên nhân theo
+ * `error_class`. Lỗi thô của worker không làm câu chính.
+ */
+export function ocrFailureText(done: RetryJob & Partial<Pick<JobView, "type">>): string {
+  const special = done.status === "failed" && (needsTaskSetup(done) || done.error?.startsWith(QUOTA_EXCEEDED));
+  if (special) {
+    const d = describeJobError(done);
+    if (d) return d.text;
+  }
+  if (!done.error && !done.error_class) return t("editor.ocrSelect.failed");
+  return t("editor.ocrSelect.failedCause", { label: jobErrorLabel(done) });
 }

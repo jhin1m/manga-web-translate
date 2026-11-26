@@ -3,6 +3,7 @@
  * dịch, thao tác phụ theo trạng thái chương — Xuất, Dịch lại cả chương, Chạy lại trang lỗi —, Hoạt động, Phím tắt).
  */
 import { useRef, useState } from "react";
+import { useT } from "../../i18n/t.ts";
 import { chapterStore, effectiveMode, useChapterStore } from "../editor/chapter-store.ts";
 import { useEditor } from "../editor/store.ts";
 import { ContextMenu, type MenuAt, type MenuItem } from "./context-menu.tsx";
@@ -14,6 +15,7 @@ import { EyeIcon, MoreIcon } from "./tool-icons.tsx";
  * Trang chưa có bản dịch thì Gốc và Dịch như nhau nên không hiện nút, trừ khi đang bật Gốc (vẫn phải có lối tắt ra).
  */
 export function OriginalToggle() {
+  const { t } = useT();
   const mode = useChapterStore(effectiveMode);
   const on = mode === "original";
   const translated = useEditor((s) => !!s.doc?.regions.some((r) => r.translation.trim()));
@@ -24,15 +26,15 @@ export function OriginalToggle() {
       type="button"
       className="cw-orig"
       aria-pressed={on}
-      aria-label="Xem gốc"
-      title="Xem ảnh gốc (giữ O · \ đổi Gốc/Dịch)"
+      aria-label={t("chapter.moreMenu.originalAria")}
+      title={t("chapter.moreMenu.originalTitle")}
       onClick={() => {
         const s = chapterStore.getState();
         s.setViewMode(s.viewMode === "original" ? "translated" : "original");
       }}
     >
       <EyeIcon size={16} />
-      Gốc
+      {t("chapter.moreMenu.original")}
     </button>
   );
 }
@@ -48,14 +50,15 @@ export function MoreMenu(props: {
   activityCount: number;
   onHelp(): void;
 }) {
+  const { t } = useT();
   const split = useChapterStore((s) => s.viewMode === "split");
   const btn = useRef<HTMLButtonElement>(null);
   const [at, setAt] = useState<MenuAt | null>(null);
   const items: MenuItem[] = [
     {
-      label: "Chia đôi gốc / dịch",
+      label: t("chapter.moreMenu.split"),
       checked: split,
-      title: "Gốc bên trái, Dịch bên phải — cuộn/zoom cùng nhau, sửa ở cột Dịch",
+      title: t("chapter.moreMenu.splitTitle"),
       run: () => chapterStore.getState().setViewMode(split ? "translated" : "split"),
     },
     ...props.commands.map((m) => ({
@@ -65,10 +68,13 @@ export function MoreMenu(props: {
       run: () => props.onCommand(m.command, btn.current ?? undefined),
     })),
     {
-      label: props.activityCount > 0 ? `Hoạt động (${props.activityCount} đang chạy)` : "Hoạt động",
+      label:
+        props.activityCount > 0
+          ? t("chapter.moreMenu.activityRunning", { count: props.activityCount })
+          : t("chapter.moreMenu.activity"),
       run: props.onActivity,
     },
-    { label: "Phím tắt (?)", run: props.onHelp },
+    { label: t("chapter.moreMenu.shortcuts"), run: props.onHelp },
   ];
   return (
     <>
@@ -76,8 +82,8 @@ export function MoreMenu(props: {
         ref={btn}
         type="button"
         className="icon-btn"
-        aria-label="Thêm thao tác"
-        title="Thêm thao tác"
+        aria-label={t("chapter.moreMenu.more")}
+        title={t("chapter.moreMenu.more")}
         aria-haspopup="menu"
         aria-expanded={!!at}
         onClick={(e) => {
@@ -93,7 +99,7 @@ export function MoreMenu(props: {
           at={at}
           alignRight
           anchor={btn.current}
-          label="Thêm thao tác"
+          label={t("chapter.moreMenu.more")}
           items={items}
           onClose={() => setAt(null)}
         />

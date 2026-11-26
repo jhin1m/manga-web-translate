@@ -4,6 +4,8 @@
  * trình duyệt; không đọc/ghi được (chế độ riêng tư) hoặc giá trị lạ → mặc định (lưới, thứ tự như API trả trước đây).
  */
 import { useState } from "react";
+import { collator } from "../../i18n/format.ts";
+import { type MessageKey, t } from "../../i18n/t.ts";
 import type { ChapterRow, SeriesListItem } from "../series/api.ts";
 
 export type ListView = "grid" | "list";
@@ -15,29 +17,68 @@ export type SortOption<K extends string> = { key: K; label: string; dir: SortDir
 export type SeriesSort = "activity" | "title" | "created" | "chapters";
 export type ChapterSort = "number" | "updated" | "created";
 
+/** Tuỳ chọn sắp xếp; nhãn đọc theo ngôn ngữ giao diện lúc truy cập (getter). */
+function sortOption<K extends string>(
+  key: K,
+  dir: SortDir,
+  label: MessageKey,
+  asc: () => string,
+  desc: () => string,
+): SortOption<K> {
+  return {
+    key,
+    dir,
+    get label() {
+      return t(label);
+    },
+    get asc() {
+      return asc();
+    },
+    get desc() {
+      return desc();
+    },
+  };
+}
+
+const oldFirst = () => t("home.listPrefs.dir.oldFirst");
+const newFirst = () => t("home.listPrefs.dir.newFirst");
+const aToZ = () => "A→Z";
+const zToA = () => "Z→A";
+
 export const SERIES_SORTS: readonly SortOption<SeriesSort>[] = [
-  { key: "activity", label: "Hoạt động gần nhất", dir: "desc", asc: "Cũ trước", desc: "Mới trước" },
-  { key: "title", label: "Tên", dir: "asc", asc: "A→Z", desc: "Z→A" },
-  { key: "created", label: "Ngày tạo", dir: "desc", asc: "Cũ trước", desc: "Mới trước" },
-  { key: "chapters", label: "Số chương", dir: "desc", asc: "Ít trước", desc: "Nhiều trước" },
+  sortOption("activity", "desc", "home.listPrefs.sort.activity", oldFirst, newFirst),
+  sortOption("title", "asc", "home.listPrefs.sort.title", aToZ, zToA),
+  sortOption("created", "desc", "home.listPrefs.sort.created", oldFirst, newFirst),
+  sortOption(
+    "chapters",
+    "desc",
+    "home.listPrefs.sort.chapters",
+    () => t("home.listPrefs.dir.fewFirst"),
+    () => t("home.listPrefs.dir.manyFirst"),
+  ),
 ];
 
 export const CHAPTER_SORTS: readonly SortOption<ChapterSort>[] = [
-  { key: "number", label: "Số chương", dir: "asc", asc: "Tăng dần", desc: "Giảm dần" },
-  { key: "updated", label: "Cập nhật", dir: "desc", asc: "Cũ trước", desc: "Mới trước" },
-  { key: "created", label: "Ngày tạo", dir: "desc", asc: "Cũ trước", desc: "Mới trước" },
+  sortOption(
+    "number",
+    "asc",
+    "home.listPrefs.sort.number",
+    () => t("home.listPrefs.dir.ascending"),
+    () => t("home.listPrefs.dir.descending"),
+  ),
+  sortOption("updated", "desc", "home.listPrefs.sort.updated", oldFirst, newFirst),
+  sortOption("created", "desc", "home.listPrefs.sort.created", oldFirst, newFirst),
 ];
 
 export const SERIES_PREFS_KEY = "mtl.list.series";
 export const CHAPTER_PREFS_KEY = "mtl.list.chapters";
 
-const collator = new Intl.Collator("vi", { numeric: true, sensitivity: "base" });
 const time = (iso: string) => Date.parse(iso) || 0;
 /** Số chương là chuỗi ("10.5"): so như số, không phải số thì so chuỗi có số. */
 const compareNumber = (a: string, b: string) => {
   const na = Number(a);
   const nb = Number(b);
-  return Number.isFinite(na) && Number.isFinite(nb) ? na - nb : collator.compare(a, b);
+  return Number.isFinite(na) && Number.isFinite(nb) ? na - nb : collator().compare(a, b);
 };
 
 /** Sắp theo `cmp` (chiều tăng) rồi đảo nếu `desc`; hoà → `id` tăng để thứ tự không nhảy giữa các lượt polling. */
@@ -48,7 +89,7 @@ function sorted<T extends { id: string }>(list: readonly T[], cmp: (a: T, b: T) 
 
 const SERIES_CMP: Record<SeriesSort, (a: SeriesListItem, b: SeriesListItem) => number> = {
   activity: (a, b) => time(a.last_activity_at) - time(b.last_activity_at),
-  title: (a, b) => collator.compare(a.title, b.title),
+  title: (a, b) => collator().compare(a.title, b.title),
   created: (a, b) => time(a.created_at) - time(b.created_at),
   chapters: (a, b) => a.chapter_count - b.chapter_count,
 };

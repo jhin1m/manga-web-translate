@@ -11,6 +11,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Draft } from "immer";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { InfoTip } from "../../app/info-tip.tsx";
+import { t, useT } from "../../i18n/t.ts";
 import { errorMessage } from "../../lib/api.ts";
 import { setRegionTranslation } from "../editor/actions.ts";
 import { editorStore, useEditor } from "../editor/store.ts";
@@ -26,12 +27,12 @@ import { describeJobError, jobErrorLabel, needsTaskSetup } from "./job-error.ts"
 import {
   estimateLines,
   estimateSummary,
-  PROOFREAD_DATA_NOTICE,
   pendingCount,
-  STATE_LABEL,
+  proofreadDataNotice,
   type Suggestion,
   type SuggestionState,
   sortSuggestions,
+  stateLabel,
   suggestionState,
 } from "./proofread-model.ts";
 import type { Row } from "./text-table/rows.ts";
@@ -50,17 +51,17 @@ const focusHead = (id: string) => requestAnimationFrame(() => document.getElemen
 function jobNotice(job: JobView | null): { text: string; tone: "info" | "danger"; raw: string | null } | null {
   if (!job) return null;
   if (job.status === "paused_budget")
-    return { text: "Tạm dừng vì vượt ngân sách AI — tự chạy tiếp khi ngân sách mở lại.", tone: "info", raw: null };
+    return { text: t("chapter.proofreadPanel.pausedBudget"), tone: "info", raw: null };
   const d = describeJobError(job);
   if (d?.waiting) return { text: d.text, tone: "info", raw: null };
   if (job.status === "failed" && needsTaskSetup(job) && d) return { text: d.text, tone: "danger", raw: null };
   if (job.status === "failed")
     return {
-      text: `Lần hiệu đính gần nhất lỗi: ${jobErrorLabel(job)}. Bấm "Hiệu đính lại cả chương" để chạy lại.`,
+      text: t("chapter.proofreadPanel.lastFailed", { error: jobErrorLabel(job) }),
       tone: "danger",
       raw: job.error,
     };
-  if (job.status === "cancelled") return { text: "Lần hiệu đính gần nhất đã huỷ.", tone: "info", raw: null };
+  if (job.status === "cancelled") return { text: t("chapter.proofreadPanel.lastCancelled"), tone: "info", raw: null };
   return null;
 }
 
@@ -94,6 +95,7 @@ export function ProofreadPanel(props: {
   active: boolean;
 }) {
   const { chapterId, rows, activeId, active } = props;
+  const { t } = useT();
   const qc = useQueryClient();
   const readOnly = useEditor((s) => !!s.readOnly);
   const q = useProofread(chapterId);
@@ -157,9 +159,7 @@ export function ProofreadPanel(props: {
     await props.onPick(it.row);
     const s = editorStore.getState();
     if (s.pageId !== it.page_id || !s.layout || s.readOnly) {
-      setAcceptError(
-        s.readOnly ? "Trang đang chỉ xem — chưa nhận được gợi ý." : "Chưa mở được trang của khối — thử lại.",
-      );
+      setAcceptError(s.readOnly ? t("chapter.proofreadPanel.readOnlyAccept") : t("chapter.proofreadPanel.pageNotOpen"));
       return;
     }
     s.apply(setRegionTranslation(it.row.regionId, it.suggestion, s.layout));
@@ -183,18 +183,26 @@ export function ProofreadPanel(props: {
           type="button"
           className={items.length ? undefined : "btn-primary"}
           disabled={!canRun || run.isPending || confirming}
-          title={TRANSLATED.has(props.status ?? "") ? undefined : "Dùng được khi chương đã dịch"}
+          title={TRANSLATED.has(props.status ?? "") ? undefined : t("chapter.proofreadPanel.needsTranslated")}
           onClick={openConfirm}
         >
-          {running ? "Đang hiệu đính…" : items.length || job ? "Hiệu đính lại cả chương" : "Chạy AI hiệu đính"}
+          {running
+            ? t("chapter.proofreadPanel.running")
+            : items.length || job
+              ? t("chapter.proofreadPanel.rerun")
+              : t("chapter.proofreadPanel.run")}
         </button>
         {pendingHere.length > 0 && (
           <button type="button" disabled={readOnly} onClick={acceptAllHere}>
-            Nhận tất cả ở trang này ({pendingHere.length})
+            {t("chapter.proofreadPanel.acceptAllHere", { count: pendingHere.length })}
           </button>
         )}
         <span className="muted small" role="status">
-          {running ? "AI đang đọc bản dịch…" : items.length ? `${pendingTotal} gợi ý chờ duyệt / ${items.length}` : ""}
+          {running
+            ? t("chapter.proofreadPanel.aiReading")
+            : items.length
+              ? t("chapter.proofreadPanel.pendingOf", { pending: pendingTotal, total: items.length })
+              : ""}
         </span>
         {running && job?.status === "running" && (
           <span className="muted small" aria-hidden="true">
@@ -207,12 +215,14 @@ export function ProofreadPanel(props: {
           ref={confirmRef}
           tabIndex={-1}
           className="notice info cw-pad cw-proofread-confirm"
-          aria-label="Xác nhận chạy AI hiệu đính"
+          aria-label={t("chapter.proofreadPanel.confirmLabel")}
         >
           {estimate.isPending ? (
-            <p className="muted small">Đang ước tính…</p>
+            <p className="muted small">{t("chapter.proofreadPanel.estimating")}</p>
           ) : estimate.isError ? (
-            <p className="small">Chưa ước tính được ({errorMessage(estimate.error)}). Vẫn có thể chạy.</p>
+            <p className="small">
+              {t("chapter.proofreadPanel.estimateFailed", { error: errorMessage(estimate.error) })}
+            </p>
           ) : (
             <p className="small" title={estimateLines(estimate.data).join("\n")}>
               {estimateSummary(estimate.data)}
@@ -228,11 +238,11 @@ export function ProofreadPanel(props: {
                 run.mutate();
               }}
             >
-              Chạy hiệu đính
+              {t("chapter.proofreadPanel.runConfirm")}
             </button>
-            <InfoTip label="Dữ liệu gửi lên AI">{PROOFREAD_DATA_NOTICE}</InfoTip>
+            <InfoTip label={t("chapter.proofreadPanel.dataTip")}>{proofreadDataNotice()}</InfoTip>
             <button type="button" className="btn-ghost" onClick={() => setConfirming(false)}>
-              Huỷ
+              {t("common.cancel")}
             </button>
           </div>
         </section>
@@ -252,16 +262,16 @@ export function ProofreadPanel(props: {
           {notice.text}
           {notice.raw && (
             <details className="cw-error-raw">
-              <summary>Chi tiết kỹ thuật</summary>
+              <summary>{t("chapter.proofreadPanel.techDetails")}</summary>
               <pre>{notice.raw}</pre>
             </details>
           )}
         </div>
       )}
       {!items.length && !running && !q.isError && job?.status === "succeeded" && (
-        <p className="muted small cw-pad">AI không thấy khối nào cần sửa (hoặc mọi gợi ý đã được bỏ).</p>
+        <p className="muted small cw-pad">{t("chapter.proofreadPanel.nothingToFix")}</p>
       )}
-      <ol className="cw-proofread-list" aria-label="Gợi ý hiệu đính">
+      <ol className="cw-proofread-list" aria-label={t("chapter.proofreadPanel.listLabel")}>
         {items.map((it) => (
           <li
             key={it.id}
@@ -275,23 +285,23 @@ export function ProofreadPanel(props: {
               className="cw-proofread-head btn-ghost"
               disabled={!it.row}
               onClick={() => it.row && void props.onPick(it.row)}
-              title="Mở khối này trên ảnh"
+              title={t("chapter.proofreadPanel.openBlock")}
             >
-              Trang {it.pageNo ?? "?"} · Khối {it.row?.index ?? "?"}
+              {t("chapter.proofreadPanel.itemHead", { page: it.pageNo ?? "?", block: it.row?.index ?? "?" })}
               <span
                 className="status"
                 data-tone={it.state === "pending" ? "warn" : it.state === "applied" ? "ok" : "idle"}
               >
-                {STATE_LABEL[it.state]}
+                {stateLabel(it.state)}
               </span>
             </button>
             <div className="cw-proofread-diff">
               <del>
-                <span className="sr-only">Bản hiện tại: </span>
+                <span className="sr-only">{t("chapter.proofreadPanel.current")}</span>
                 {it.state === "stale" ? (it.row?.translation ?? it.old) : it.old}
               </del>
               <ins>
-                <span className="sr-only">Đề xuất: </span>
+                <span className="sr-only">{t("chapter.proofreadPanel.suggested")}</span>
                 {it.suggestion}
               </ins>
             </div>
@@ -299,7 +309,7 @@ export function ProofreadPanel(props: {
             <div className="row">
               {it.state === "pending" && (
                 <button type="button" disabled={readOnly || !it.row?.regionId} onClick={() => void accept(it)}>
-                  Nhận
+                  {t("chapter.proofreadPanel.accept")}
                 </button>
               )}
               {it.state !== "applied" && (
@@ -313,7 +323,7 @@ export function ProofreadPanel(props: {
                     dismiss.mutate(it.id, { onSuccess: () => next && focusHead(next.id) });
                   }}
                 >
-                  Bỏ
+                  {t("chapter.proofreadPanel.dismiss")}
                 </button>
               )}
             </div>

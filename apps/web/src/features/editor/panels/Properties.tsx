@@ -7,20 +7,21 @@
  */
 import type { Region, TextBox, TextStyle } from "@mtl/shared";
 import { type ReactNode, useState } from "react";
+import { type MessageKey, t, useT } from "../../../i18n/t.ts";
 import { type BoxStyle, setStyle, setTextStyle } from "../actions.ts";
 import { fontPreview } from "../fonts.ts";
 import { editorStore, useEditor } from "../store.ts";
 import { committedNumber, liveNumber } from "./number-input.ts";
 
-const ALIGN: { id: TextBox["align"]; label: string }[] = [
-  { id: "left", label: "Trái" },
-  { id: "center", label: "Giữa" },
-  { id: "right", label: "Phải" },
+const ALIGN: { id: TextBox["align"]; label: MessageKey }[] = [
+  { id: "left", label: "editor.properties.align.left" },
+  { id: "center", label: "editor.properties.align.center" },
+  { id: "right", label: "editor.properties.align.right" },
 ];
 
-const VALIGN: { id: NonNullable<TextBox["valign"]>; label: string; aria: string }[] = [
-  { id: "top", label: "Trên", aria: "Căn dọc: sát mép trên" },
-  { id: "middle", label: "Giữa", aria: "Căn dọc: giữa khung" },
+const VALIGN: { id: NonNullable<TextBox["valign"]>; label: MessageKey; aria: MessageKey }[] = [
+  { id: "top", label: "editor.properties.valign.top", aria: "editor.properties.valign.topAria" },
+  { id: "middle", label: "editor.properties.valign.middle", aria: "editor.properties.valign.middleAria" },
 ];
 
 /**
@@ -81,7 +82,11 @@ function useBoxStyle() {
   return { box, readOnly, style };
 }
 
-const STYLE_LABEL: Record<TextStyle, string> = { normal: "Thường", thought: "Suy nghĩ", note: "Ghi chú" };
+const STYLE_LABEL: Record<TextStyle, MessageKey> = {
+  normal: "editor.properties.textStyle.normal",
+  thought: "editor.properties.textStyle.thought",
+  note: "editor.properties.textStyle.note",
+};
 
 /** Loại chữ có slot font ở series + hàm chọn font cho (loại chữ, kind vùng) — cùng quy tắc worker. */
 export type TextStyleConfig = {
@@ -107,7 +112,7 @@ function TextStyleSelect({ box, config }: { box: TextBox; config: TextStyleConfi
   const options = textStyleOptions(config.slots, current);
   return (
     <div>
-      <label htmlFor="ed-text-style">Loại chữ</label>
+      <label htmlFor="ed-text-style">{t("editor.properties.textStyle")}</label>
       <select
         id="ed-text-style"
         value={current}
@@ -119,7 +124,7 @@ function TextStyleSelect({ box, config }: { box: TextBox; config: TextStyleConfi
       >
         {options.map((o) => (
           <option key={o} value={o}>
-            {STYLE_LABEL[o]}
+            {t(STYLE_LABEL[o])}
           </option>
         ))}
       </select>
@@ -132,8 +137,8 @@ function CustomFontGroups({ fonts }: { fonts: { id: string; name: string; system
   return (
     <>
       {[
-        { label: "Font dùng chung", list: fonts.filter((f) => f.system) },
-        { label: "Font của bạn", list: fonts.filter((f) => !f.system) },
+        { label: t("editor.properties.sharedFonts"), list: fonts.filter((f) => f.system) },
+        { label: t("editor.properties.yourFonts"), list: fonts.filter((f) => !f.system) },
       ].map(
         ({ label, list }) =>
           list.length > 0 && (
@@ -161,6 +166,7 @@ export function BasicStyle({
   /** Font có thật nhưng không nằm trong `fonts` (đã lọc theo ngôn ngữ đích) → ghi "không hợp ngôn ngữ", không phải "thiếu". */
   knows?: (id: string) => boolean;
 }) {
+  useT();
   const { box, readOnly, style } = useBoxStyle();
   if (!box) return null;
   const listed = fonts.includes(box.font_family) || customFonts.some((f) => f.id === box.font_family);
@@ -178,7 +184,9 @@ export function BasicStyle({
           >
             {!listed && (
               <option value={box.font_family}>
-                {box.font_family} ({knows(box.font_family) ? "thiếu chữ ngôn ngữ này" : "thiếu"})
+                {knows(box.font_family)
+                  ? t("editor.properties.fontMissingGlyphs", { font: box.font_family })
+                  : t("editor.properties.fontMissing", { font: box.font_family })}
               </option>
             )}
             {fonts.map((f) => (
@@ -190,8 +198,8 @@ export function BasicStyle({
           </select>
         </div>
         <div>
-          <label htmlFor="ed-size" title="Cỡ chữ (px)">
-            Cỡ
+          <label htmlFor="ed-size" title={t("editor.properties.sizeTitle")}>
+            {t("editor.properties.size")}
           </label>
           <NumberInput
             key={box.id}
@@ -201,7 +209,7 @@ export function BasicStyle({
             step={1}
             value={box.font_size}
             disabled={box.auto_fit}
-            title={box.auto_fit ? "Đang tự khớp cỡ chữ vào khung" : undefined}
+            title={box.auto_fit ? t("editor.properties.autoFitOn") : undefined}
             onValue={(v) => style("font_size", { font_size: v })}
           />
         </div>
@@ -215,6 +223,7 @@ export function BasicStyle({
  * "Áp kiểu này cho khối cùng loại").
  */
 export function AdvancedStyle({ children, textStyle }: { children?: ReactNode; textStyle?: TextStyleConfig }) {
+  useT();
   const { box, readOnly, style } = useBoxStyle();
   if (!box) return null;
   return (
@@ -226,11 +235,11 @@ export function AdvancedStyle({ children, textStyle }: { children?: ReactNode; t
           checked={box.auto_fit}
           onChange={(e) => style("auto_fit", { auto_fit: e.target.checked })}
         />
-        Tự khớp cỡ chữ vào khung
+        {t("editor.properties.autoFit")}
       </label>
       <div className="ed-row">
         <div>
-          <label htmlFor="ed-lh">Giãn dòng</label>
+          <label htmlFor="ed-lh">{t("editor.properties.lineHeight")}</label>
           <NumberInput
             key={box.id}
             id="ed-lh"
@@ -242,7 +251,7 @@ export function AdvancedStyle({ children, textStyle }: { children?: ReactNode; t
           />
         </div>
         <div>
-          <label htmlFor="ed-pad">Lề</label>
+          <label htmlFor="ed-pad">{t("editor.properties.padding")}</label>
           <NumberInput
             key={box.id}
             id="ed-pad"
@@ -253,7 +262,7 @@ export function AdvancedStyle({ children, textStyle }: { children?: ReactNode; t
           />
         </div>
       </div>
-      <span className="label">Căn lề</span>
+      <span className="label">{t("editor.properties.align")}</span>
       <div className="ed-seg">
         {ALIGN.map((a) => (
           <button
@@ -263,28 +272,28 @@ export function AdvancedStyle({ children, textStyle }: { children?: ReactNode; t
             className={box.align === a.id ? "on" : undefined}
             onClick={() => style("align", { align: a.id })}
           >
-            {a.label}
+            {t(a.label)}
           </button>
         ))}
       </div>
-      <span className="label">Căn dọc</span>
+      <span className="label">{t("editor.properties.valign")}</span>
       <div className="ed-seg">
         {VALIGN.map((a) => (
           <button
             key={a.id}
             type="button"
-            aria-label={a.aria}
+            aria-label={t(a.aria)}
             aria-pressed={(box.valign ?? "top") === a.id}
             className={(box.valign ?? "top") === a.id ? "on" : undefined}
             onClick={() => style("valign", { valign: a.id })}
           >
-            {a.label}
+            {t(a.label)}
           </button>
         ))}
       </div>
       <div className="ed-row">
         <div>
-          <label htmlFor="ed-fill">Màu chữ</label>
+          <label htmlFor="ed-fill">{t("editor.properties.fill")}</label>
           <input
             id="ed-fill"
             type="color"
@@ -293,7 +302,7 @@ export function AdvancedStyle({ children, textStyle }: { children?: ReactNode; t
           />
         </div>
         <div>
-          <label htmlFor="ed-stroke-c">Màu viền</label>
+          <label htmlFor="ed-stroke-c">{t("editor.properties.strokeColor")}</label>
           <input
             id="ed-stroke-c"
             type="color"
@@ -302,7 +311,7 @@ export function AdvancedStyle({ children, textStyle }: { children?: ReactNode; t
           />
         </div>
         <div>
-          <label htmlFor="ed-stroke-w">Viền ngoài (px)</label>
+          <label htmlFor="ed-stroke-w">{t("editor.properties.strokeWidth")}</label>
           <NumberInput
             key={box.id}
             id="ed-stroke-w"
@@ -319,7 +328,7 @@ export function AdvancedStyle({ children, textStyle }: { children?: ReactNode; t
       </div>
       <label className="ed-check">
         <input type="checkbox" checked={box.hidden} onChange={(e) => style("hidden", { hidden: e.target.checked })} />
-        Ẩn khi xuất
+        {t("editor.properties.hideOnExport")}
       </label>
       {children}
     </fieldset>

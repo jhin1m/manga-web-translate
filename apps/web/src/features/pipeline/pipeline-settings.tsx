@@ -8,11 +8,11 @@
 import {
   type AiSlots,
   type AiTaskSlot,
+  autoSlotModel,
   DEFAULT_PIPELINE_SETTINGS,
   DETECTION_THRESHOLD,
   INPAINT_SIZE,
   INPAINTERS,
-  LANG_NAMES,
   MASK_DILATION,
   OCR_ENGINES,
   type OcrEngine,
@@ -20,6 +20,7 @@ import {
   type PipelineSettings,
   SOURCE_LANGS,
   TEXT_DETECTORS,
+  VISION_SLOTS,
 } from "@mtl/shared";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
@@ -32,23 +33,25 @@ import {
   SpellCheckIcon,
   WorkflowIcon,
 } from "../../app/settings-icons.tsx";
+import { type MessageKey, t, useT } from "../../i18n/t.ts";
 import { api } from "../../lib/api.ts";
 import { adminSettingsKey, providerError, useAdminSettings, useProviders } from "../admin/api.ts";
 import type { SavedProvider } from "../admin/provider-form-model.ts";
 import { descId, SaveStatus, SectionHead, SetGroup, SetRow } from "../admin/settings-ui.tsx";
+import { langName } from "../series/lang-labels.ts";
 
-const DETECTOR_LABEL: Record<(typeof TEXT_DETECTORS)[number], string> = {
-  rtdetr_v2_comic: "RT-DETR v2 comic (mặc định)",
-  comic_text_detector: "Comic Text Detector (CTD)",
+const DETECTOR_LABEL: Readonly<Record<(typeof TEXT_DETECTORS)[number], MessageKey>> = {
+  rtdetr_v2_comic: "pipeline.pipelineSettings.detector.rtdetr_v2_comic",
+  comic_text_detector: "pipeline.pipelineSettings.detector.comic_text_detector",
 };
-const OCR_LABEL: Record<OcrEngine, string> = {
-  llm: "AI (LLM vision) — tính token",
-  manga_ocr: "MangaOCR — local",
-  paddle_ocr: "PaddleOCR — local",
+const OCR_LABEL: Readonly<Record<OcrEngine, MessageKey>> = {
+  llm: "pipeline.pipelineSettings.ocr.llm",
+  manga_ocr: "pipeline.pipelineSettings.ocr.manga_ocr",
+  paddle_ocr: "pipeline.pipelineSettings.ocr.paddle_ocr",
 };
-const INPAINTER_LABEL: Record<(typeof INPAINTERS)[number], string> = {
-  big_lama: "Big LaMa (mặc định)",
-  lama_manga: "LaMa manga",
+const INPAINTER_LABEL: Readonly<Record<(typeof INPAINTERS)[number], MessageKey>> = {
+  big_lama: "pipeline.pipelineSettings.inpainter.big_lama",
+  lama_manga: "pipeline.pipelineSettings.inpainter.lama_manga",
 };
 
 type Save = { kind: "pipeline"; pipeline: PipelineSettings } | { kind: "slots"; slots: AiSlots };
@@ -125,14 +128,19 @@ function NumField(props: {
   );
 }
 
-/** Chọn model AI cho một bước: gom theo nhà cung cấp; bước cần đọc ảnh chỉ hiện model có vision. */
+/**
+ * Chọn model AI cho một bước: "Tự động" (mặc định) kèm model hệ thống đang chọn, rồi các model gom theo nhà cung cấp;
+ * bước cần đọc ảnh chỉ hiện model có vision.
+ */
 function ModelSelect(props: {
   id: string;
+  slot: AiTaskSlot;
   value: string | null;
-  vision: boolean;
   providers: SavedProvider[];
   onChange(v: string | null): void;
 }) {
+  const vision = VISION_SLOTS.includes(props.slot);
+  const auto = autoSlotModel(props.providers, props.slot)?.model.model_id;
   return (
     <select
       id={props.id}
@@ -140,9 +148,11 @@ function ModelSelect(props: {
       value={props.value ?? ""}
       onChange={(e) => props.onChange(e.target.value || null)}
     >
-      <option value="">Theo worker (.env)</option>
+      <option value="">
+        {auto ? t("pipeline.pipelineSettings.autoWithModel", { model: auto }) : t("pipeline.pipelineSettings.auto")}
+      </option>
       {props.providers.map((p) => {
-        const models = p.models.filter((m) => !props.vision || m.vision);
+        const models = p.models.filter((m) => !vision || m.vision);
         if (!models.length) return null;
         return (
           <optgroup key={p.id} label={p.name}>
@@ -158,9 +168,16 @@ function ModelSelect(props: {
   );
 }
 
-const ENV_HINT = "“Theo worker” = dùng model và key đặt trong .env của worker.";
+/** Gợi ý dưới ô model: "Tự động" làm gì, và cần thêm gì khi chưa có model hợp. */
+function autoHint(providers: SavedProvider[], slot: AiTaskSlot): string {
+  if (autoSlotModel(providers, slot)) return t("pipeline.pipelineSettings.autoHint");
+  return VISION_SLOTS.includes(slot) && providers.length > 0
+    ? t("pipeline.pipelineSettings.noVisionModel")
+    : t("pipeline.pipelineSettings.noModel");
+}
 
 function PipelineForm(props: { pipeline: PipelineSettings; slots: AiSlots; providers: SavedProvider[] }) {
+  useT();
   const qc = useQueryClient();
   const [f, setF, pipeBase] = useSynced(props.pipeline);
   const [slots, setSlots, slotsBase] = useSynced(props.slots);
@@ -193,12 +210,16 @@ function PipelineForm(props: { pipeline: PipelineSettings; slots: AiSlots; provi
 
   return (
     // Không có nút Lưu: chặn submit (Enter trong ô) — ô số tự lưu khi Enter / rời ô.
-    <form className="set-section" aria-label="Cài đặt pipeline" onSubmit={(e) => e.preventDefault()}>
+    <form
+      className="set-section"
+      aria-label={t("pipeline.pipelineSettings.formLabel")}
+      onSubmit={(e) => e.preventDefault()}
+    >
       <SectionHead
         title="Pipeline"
         icon={<WorkflowIcon />}
-        desc="Model và tuỳ chọn xử lý từng trang, cho mọi người dùng."
-        tip="Áp dụng từ lần chạy sau; chương đã xử lý không tự chạy lại."
+        desc={t("pipeline.pipelineSettings.sectionDesc")}
+        tip={t("pipeline.pipelineSettings.sectionTip")}
         aside={
           <>
             <SaveStatus
@@ -216,21 +237,21 @@ function PipelineForm(props: { pipeline: PipelineSettings; slots: AiSlots; provi
                     setPipe(structuredClone(DEFAULT_PIPELINE_SETTINGS));
                   }}
                 >
-                  Về mặc định?
+                  {t("pipeline.pipelineSettings.resetConfirm")}
                 </button>
                 <button type="button" onClick={() => setConfirmReset(false)}>
-                  Huỷ
+                  {t("common.cancel")}
                 </button>
               </>
             ) : (
               <button
                 type="button"
                 className="btn-ghost"
-                title="Đặt lại phát hiện, đọc và xoá chữ về mặc định (giữ model AI)"
+                title={t("pipeline.pipelineSettings.resetTitle")}
                 disabled={isDefault}
                 onClick={() => setConfirmReset(true)}
               >
-                Về mặc định
+                {t("pipeline.pipelineSettings.reset")}
               </button>
             )}
           </>
@@ -239,19 +260,20 @@ function PipelineForm(props: { pipeline: PipelineSettings; slots: AiSlots; provi
 
       {props.providers.length === 0 && (
         <p className="notice info">
-          Chưa có nhà cung cấp AI nào nên các bước AI đang dùng cấu hình .env của worker.{" "}
+          {t("pipeline.pipelineSettings.noProviders")}{" "}
           <Link to="/settings" search={{ section: "providers" }}>
-            Thêm nhà cung cấp
+            {t("pipeline.pipelineSettings.addProvider")}
           </Link>
         </p>
       )}
 
-      <SetGroup title="Phát hiện chữ" icon={<ScanIcon />} step={1} desc="Tìm chữ và bóng thoại trên trang.">
-        <SetRow
-          label="Model"
-          htmlFor="p-detector"
-          desc="RT-DETR tìm cả bóng thoại lẫn chữ. CTD bám sát khối chữ nhỏ / chữ dọc hơn, bóng thoại vẫn lấy từ RT-DETR."
-        >
+      <SetGroup
+        title={t("pipeline.pipelineSettings.detect.title")}
+        icon={<ScanIcon />}
+        step={1}
+        desc={t("pipeline.pipelineSettings.detect.desc")}
+      >
+        <SetRow label="Model" htmlFor="p-detector" desc={t("pipeline.pipelineSettings.detect.modelDesc")}>
           <select
             id="p-detector"
             aria-describedby={descId("p-detector")}
@@ -260,15 +282,19 @@ function PipelineForm(props: { pipeline: PipelineSettings; slots: AiSlots; provi
           >
             {TEXT_DETECTORS.map((d) => (
               <option key={d} value={d}>
-                {DETECTOR_LABEL[d]}
+                {t(DETECTOR_LABEL[d])}
               </option>
             ))}
           </select>
         </SetRow>
         <SetRow
-          label="Ngưỡng tin cậy"
+          label={t("pipeline.pipelineSettings.detect.threshold")}
           htmlFor="p-threshold"
-          desc={`${DETECTION_THRESHOLD.min}–${DETECTION_THRESHOLD.max}, mặc định ${DETECTION_THRESHOLD.default}. Thấp hơn bắt thêm chữ nhỏ nhưng dễ nhận nhầm; cao hơn dễ bỏ sót.`}
+          desc={t("pipeline.pipelineSettings.detect.thresholdDesc", {
+            min: DETECTION_THRESHOLD.min,
+            max: DETECTION_THRESHOLD.max,
+            default: DETECTION_THRESHOLD.default,
+          })}
         >
           <NumField
             id="p-threshold"
@@ -282,14 +308,14 @@ function PipelineForm(props: { pipeline: PipelineSettings; slots: AiSlots; provi
       </SetGroup>
 
       <SetGroup
-        title="Đọc chữ (OCR)"
+        title={t("pipeline.pipelineSettings.ocrStep.title")}
         icon={<ScanTextIcon />}
         step={2}
-        desc="Đọc chữ gốc trong vùng đã phát hiện, theo ngôn ngữ gốc của series."
-        tip="OCR local miễn phí và ảnh không rời máy; AI đọc tốt mọi ngôn ngữ, nhận cả SFX nhưng tính token."
+        desc={t("pipeline.pipelineSettings.ocrStep.desc")}
+        tip={t("pipeline.pipelineSettings.ocrStep.tip")}
       >
         {SOURCE_LANGS.map((lang) => (
-          <SetRow key={lang} label={LANG_NAMES[lang]} htmlFor={`p-ocr-${lang}`}>
+          <SetRow key={lang} label={langName(lang)} htmlFor={`p-ocr-${lang}`}>
             <select
               id={`p-ocr-${lang}`}
               value={f.ocr_engines[lang]}
@@ -297,25 +323,25 @@ function PipelineForm(props: { pipeline: PipelineSettings; slots: AiSlots; provi
             >
               {OCR_ENGINES.filter((o) => ocrEngineSupports(o, lang)).map((o) => (
                 <option key={o} value={o}>
-                  {OCR_LABEL[o]}
+                  {t(OCR_LABEL[o])}
                 </option>
               ))}
             </select>
           </SetRow>
         ))}
         <SetRow
-          label="Model AI đọc chữ"
+          label={t("pipeline.pipelineSettings.ocrStep.model")}
           htmlFor="slot-ocr"
           desc={
             usesAiOcr
-              ? `Dùng cho ngôn ngữ chọn AI ở trên. Chỉ hiện model có vision. ${ENV_HINT}`
-              : "Chưa ngôn ngữ nào chọn AI nên model này chưa được dùng. Chỉ hiện model có vision."
+              ? t("pipeline.pipelineSettings.ocrStep.modelDesc", { hint: autoHint(props.providers, "ocr") })
+              : t("pipeline.pipelineSettings.ocrStep.modelUnused")
           }
         >
           <ModelSelect
             id="slot-ocr"
+            slot="ocr"
             value={slots.ocr}
-            vision
             providers={props.providers}
             onChange={(v) => setSlot("ocr", v)}
           />
@@ -323,17 +349,13 @@ function PipelineForm(props: { pipeline: PipelineSettings; slots: AiSlots; provi
       </SetGroup>
 
       <SetGroup
-        title="Xoá chữ"
+        title={t("pipeline.pipelineSettings.clean.title")}
         icon={<EraserIcon />}
         step={3}
-        desc="Vẽ lại nền sau khi xoá chữ."
-        tip="Nền phẳng luôn được tô màu trực tiếp trước."
+        desc={t("pipeline.pipelineSettings.clean.desc")}
+        tip={t("pipeline.pipelineSettings.clean.tip")}
       >
-        <SetRow
-          label="Model"
-          htmlFor="p-inpainter"
-          desc="LaMa manga giữ screentone và nét vẽ manga tốt hơn; Big LaMa hợp ảnh màu, nền nhiều chi tiết."
-        >
+        <SetRow label="Model" htmlFor="p-inpainter" desc={t("pipeline.pipelineSettings.clean.modelDesc")}>
           <select
             id="p-inpainter"
             aria-describedby={descId("p-inpainter")}
@@ -342,15 +364,15 @@ function PipelineForm(props: { pipeline: PipelineSettings; slots: AiSlots; provi
           >
             {INPAINTERS.map((m) => (
               <option key={m} value={m}>
-                {INPAINTER_LABEL[m]}
+                {t(INPAINTER_LABEL[m])}
               </option>
             ))}
           </select>
         </SetRow>
         <SetRow
-          label="Nới vùng xoá (px)"
+          label={t("pipeline.pipelineSettings.clean.dilation")}
           htmlFor="p-dilation"
-          desc={`${MASK_DILATION.min}–${MASK_DILATION.max}. Để trống = tự động 2–6px theo cỡ chữ. Tăng khi còn sót viền chữ.`}
+          desc={t("pipeline.pipelineSettings.clean.dilationDesc", { min: MASK_DILATION.min, max: MASK_DILATION.max })}
         >
           <NumField
             id="p-dilation"
@@ -359,14 +381,18 @@ function PipelineForm(props: { pipeline: PipelineSettings; slots: AiSlots; provi
             max={MASK_DILATION.max}
             step={1}
             allowEmpty
-            placeholder="Tự động"
+            placeholder={t("pipeline.pipelineSettings.auto")}
             onCommit={(v) => set("mask_dilation", v)}
           />
         </SetRow>
         <SetRow
-          label="Cỡ vùng xử lý (px)"
+          label={t("pipeline.pipelineSettings.clean.size")}
           htmlFor="p-size"
-          desc={`${INPAINT_SIZE.min}–${INPAINT_SIZE.max}, mặc định ${INPAINT_SIZE.default}. Lớn hơn: ít lượt chạy, thấy nhiều nền xung quanh nhưng mờ hơn.`}
+          desc={t("pipeline.pipelineSettings.clean.sizeDesc", {
+            min: INPAINT_SIZE.min,
+            max: INPAINT_SIZE.max,
+            default: INPAINT_SIZE.default,
+          })}
         >
           <NumField
             id="p-size"
@@ -379,12 +405,21 @@ function PipelineForm(props: { pipeline: PipelineSettings; slots: AiSlots; provi
         </SetRow>
       </SetGroup>
 
-      <SetGroup title="Dịch" icon={<LanguagesIcon />} step={4} desc="Dịch chữ gốc sang ngôn ngữ đích của series.">
-        <SetRow label="Model AI" htmlFor="slot-translate" desc={ENV_HINT}>
+      <SetGroup
+        title={t("pipeline.pipelineSettings.translate.title")}
+        icon={<LanguagesIcon />}
+        step={4}
+        desc={t("pipeline.pipelineSettings.translate.desc")}
+      >
+        <SetRow
+          label={t("pipeline.pipelineSettings.aiModel")}
+          htmlFor="slot-translate"
+          desc={autoHint(props.providers, "translate")}
+        >
           <ModelSelect
             id="slot-translate"
+            slot="translate"
             value={slots.translate}
-            vision={false}
             providers={props.providers}
             onChange={(v) => setSlot("translate", v)}
           />
@@ -392,16 +427,20 @@ function PipelineForm(props: { pipeline: PipelineSettings; slots: AiSlots; provi
       </SetGroup>
 
       <SetGroup
-        title="Hiệu đính"
+        title={t("pipeline.pipelineSettings.proofread.title")}
         icon={<SpellCheckIcon />}
         step={5}
-        desc="AI đối chiếu bản dịch với ảnh trang để sửa lỗi đọc / dịch."
+        desc={t("pipeline.pipelineSettings.proofread.desc")}
       >
-        <SetRow label="Model AI" htmlFor="slot-proofread" desc={`Chỉ hiện model có vision. ${ENV_HINT}`}>
+        <SetRow
+          label={t("pipeline.pipelineSettings.aiModel")}
+          htmlFor="slot-proofread"
+          desc={autoHint(props.providers, "proofread")}
+        >
           <ModelSelect
             id="slot-proofread"
+            slot="proofread"
             value={slots.proofread}
-            vision
             providers={props.providers}
             onChange={(v) => setSlot("proofread", v)}
           />
@@ -412,11 +451,12 @@ function PipelineForm(props: { pipeline: PipelineSettings; slots: AiSlots; provi
 }
 
 export function PipelineSection() {
+  useT();
   const settings = useAdminSettings();
   const providers = useProviders();
   const error = settings.error ?? providers.error;
   if (error) return <p className="error">{providerError(error)}</p>;
-  if (!settings.data || !providers.data) return <p className="muted">Đang tải…</p>;
+  if (!settings.data || !providers.data) return <p className="muted">{t("common.loading")}</p>;
   return (
     <PipelineForm pipeline={settings.data.pipeline} slots={settings.data.slots} providers={providers.data.providers} />
   );

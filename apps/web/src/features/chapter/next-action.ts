@@ -2,6 +2,7 @@
  * Trạng thái chương → đúng 1 bước tiếp theo (nhãn nút + mô tả bằng lời + tông chấm). Dùng chung cho "Việc cần
  * làm" ở home và danh sách chương của series. Thuần: không gọi API, không đọc store.
  */
+import { t, tp } from "../../i18n/t.ts";
 import type { ChapterRow } from "../series/api.ts";
 import type { Tone } from "./status.ts";
 
@@ -29,6 +30,16 @@ export type NextAction = {
 
 const ratio = (a: number, b: number) => (b > 0 ? Math.min(1, a / b) : 0);
 
+/** Chương đã xuất / xong: mở để xem. */
+const opened = (pages: number): NextAction => ({
+  kind: "open",
+  action: t("chapter.nextAction.action.open"),
+  state: t("chapter.nextAction.state.exported"),
+  detail: tp("common.pages", pages),
+  tone: "ok",
+  progress: 1,
+});
+
 export function nextAction(
   ch: Pick<ChapterRow, "status" | "page_counts" | "exported" | "reexport" | "queue_state">,
   upload?: UploadView | null,
@@ -40,9 +51,9 @@ export function nextAction(
     if (upload.phase === "uploading") {
       return a({
         kind: "progress",
-        action: "Xem tiến độ",
-        state: "Đang tải ảnh",
-        detail: `Đang tải ${upload.done}/${upload.total} ảnh`,
+        action: t("chapter.nextAction.action.viewProgress"),
+        state: t("chapter.nextAction.state.uploading"),
+        detail: t("chapter.nextAction.detail.uploading", { done: upload.done, total: upload.total }),
         tone: "busy",
         progress: ratio(upload.done, upload.total),
       });
@@ -50,12 +61,16 @@ export function nextAction(
     if (upload.phase === "failed" || upload.phase === "incomplete") {
       return a({
         kind: "resume",
-        action: "Tải tiếp ảnh",
-        state: "Upload dở",
+        action: t("chapter.nextAction.action.resumeUpload"),
+        state: t("chapter.nextAction.state.uploadIncomplete"),
         detail:
           upload.phase === "failed"
-            ? `${upload.total - upload.done} ảnh tải lỗi · đã tải ${upload.done}/${upload.total}`
-            : `Đã tải ${upload.done}/${upload.total} ảnh · thả lại file để tải tiếp`,
+            ? t("chapter.nextAction.detail.uploadFailed", {
+                failed: upload.total - upload.done,
+                done: upload.done,
+                total: upload.total,
+              })
+            : t("chapter.nextAction.detail.uploadIncomplete", { done: upload.done, total: upload.total }),
         tone: "warn",
         progress: ratio(upload.done, upload.total),
       });
@@ -65,28 +80,26 @@ export function nextAction(
   if (ch.reexport && (ch.status === "review" || ch.status === "done")) {
     return a({
       kind: "reexport",
-      action: "Xuất lại",
-      state: "Sửa sau lần xuất",
-      detail: `Có thay đổi sau lần xuất cuối · ${pc.total} trang`,
+      action: t("chapter.nextAction.action.reexport"),
+      state: t("chapter.nextAction.state.editedAfterExport"),
+      detail: tp("chapter.nextAction.detail.changedAfterExport", pc.total),
       tone: "warn",
       progress: 1,
     });
   }
-  if (ch.exported && (ch.status === "review" || ch.status === "done")) {
-    return a({ kind: "open", action: "Mở", state: "Đã xuất", detail: `${pc.total} trang`, tone: "ok", progress: 1 });
-  }
+  if (ch.exported && (ch.status === "review" || ch.status === "done")) return opened(pc.total);
   // Chương bận chưa có job nào chạy: nói rõ đang xếp hàng, không để giống "Đang xử lý" (người dùng tưởng treo).
   if ((ch.status === "ingesting" || ch.status === "processing") && ch.queue_state) {
     const noWorker = ch.queue_state === "no_worker";
     return a({
       kind: "progress",
-      action: "Xem tiến độ",
-      state: noWorker ? "Đang chờ worker" : "Đang chờ lượt",
+      action: t("chapter.nextAction.action.viewProgress"),
+      state: t(noWorker ? "chapter.nextAction.state.waitingWorker" : "chapter.nextAction.state.waitingTurn"),
       detail: noWorker
-        ? "Chưa thấy worker nào chạy"
+        ? t("chapter.nextAction.detail.noWorker")
         : pc.ready
-          ? `${pc.ready}/${pc.total} trang xong · tự chạy tiếp khi worker rảnh`
-          : "Tự bắt đầu khi worker rảnh",
+          ? t("chapter.nextAction.detail.waitingProgress", { ready: pc.ready, total: pc.total })
+          : t("chapter.nextAction.detail.waitingStart"),
       tone: noWorker ? "warn" : "idle",
       progress: ratio(pc.ready, pc.total),
     });
@@ -95,33 +108,37 @@ export function nextAction(
     case "draft":
       return a({
         kind: "translate",
-        action: "Dịch chương",
-        state: "Chưa xử lý",
-        detail: upload?.total ? `Đã tải ${upload.total} ảnh · chưa xử lý` : "Đã tải ảnh · chưa xử lý",
+        action: t("chapter.nextAction.action.translate"),
+        state: t("chapter.nextAction.state.notProcessed"),
+        detail: upload?.total
+          ? tp("chapter.nextAction.detail.draftUploadedCount", upload.total)
+          : t("chapter.nextAction.detail.draftUploaded"),
         tone: "idle",
       });
     case "ingesting":
       return a({
         kind: "progress",
-        action: "Xem tiến độ",
-        state: "Đang cắt trang",
-        detail: "Đang ghép strip và cắt thành trang",
+        action: t("chapter.nextAction.action.viewProgress"),
+        state: t("chapter.nextAction.state.slicing"),
+        detail: t("chapter.nextAction.detail.slicing"),
         tone: "busy",
       });
     case "prepared":
       return a({
         kind: "translate",
-        action: "Dịch chương",
-        state: "Chờ dịch",
-        detail: `${pc.total} trang đã xoá chữ + OCR${pc.failed ? ` · ${pc.failed} lỗi` : ""}`,
+        action: t("chapter.nextAction.action.translate"),
+        state: t("chapter.nextAction.state.awaitingTranslation"),
+        detail: pc.failed
+          ? tp("chapter.nextAction.detail.preparedWithFailed", pc.total, { failed: pc.failed })
+          : tp("chapter.nextAction.detail.prepared", pc.total),
         tone: "idle",
       });
     case "processing":
       return a({
         kind: "progress",
-        action: "Xem tiến độ",
-        state: "Đang xử lý",
-        detail: `${pc.ready}/${pc.total} trang xong`,
+        action: t("chapter.nextAction.action.viewProgress"),
+        state: t("chapter.nextAction.state.processing"),
+        detail: t("chapter.nextAction.detail.processing", { ready: pc.ready, total: pc.total }),
         tone: "busy",
         progress: ratio(pc.ready, pc.total),
       });
@@ -129,31 +146,31 @@ export function nextAction(
       if (pc.total === 0) {
         return a({
           kind: "translate",
-          action: "Cắt lại trang",
-          state: "Cắt trang lỗi",
-          detail: "Chưa cắt được trang · cắt lại từ ảnh đã tải",
+          action: t("chapter.nextAction.action.reslice"),
+          state: t("chapter.nextAction.state.sliceFailed"),
+          detail: t("chapter.nextAction.detail.sliceFailed"),
           tone: "danger",
         });
       }
       return a({
         kind: "retry",
-        action: "Chạy lại trang lỗi",
-        state: `Lỗi ${pc.failed} trang`,
-        detail: `${pc.failed} trang lỗi · ${pc.ready}/${pc.total} trang xong`,
+        action: t("chapter.nextAction.action.retryFailed"),
+        state: tp("chapter.nextAction.state.failedPages", pc.failed),
+        detail: t("chapter.nextAction.detail.partialFailed", { failed: pc.failed, ready: pc.ready, total: pc.total }),
         tone: "danger",
         progress: ratio(pc.ready, pc.total),
       });
     case "review":
       return a({
         kind: "edit",
-        action: "Tiếp tục sửa",
-        state: "Chờ sửa",
-        detail: `AI xong ${pc.total} trang · mở để xem và sửa`,
+        action: t("chapter.nextAction.action.continueEdit"),
+        state: t("chapter.nextAction.state.awaitingReview"),
+        detail: tp("chapter.nextAction.detail.review", pc.total),
         tone: "warn",
         progress: 1,
       });
     case "done":
-      return a({ kind: "open", action: "Mở", state: "Đã xuất", detail: `${pc.total} trang`, tone: "ok", progress: 1 });
+      return opened(pc.total);
   }
 }
 

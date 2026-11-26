@@ -12,6 +12,7 @@ import { useRef, useState } from "react";
 import { AiTag } from "../../app/ai-tag.tsx";
 import { Drawer } from "../../app/drawer.tsx";
 import { BookIcon, EyeOffIcon, SparklesIcon, TypeIcon } from "../../app/settings-icons.tsx";
+import { t, tNode, tp, useT } from "../../i18n/t.ts";
 import { errorMessage } from "../../lib/api.ts";
 import { SaveStatus, SetGroup } from "../admin/settings-ui.tsx";
 import { fetchGlossary, glossaryKey } from "../glossary/api.ts";
@@ -44,6 +45,7 @@ export function SeriesSettingsDialog({
   series: Series & { chapters?: unknown[] };
   onClose(): void;
 }) {
+  useT();
   const { draft: f, set, commit, leave, rulesChecked, setRulesChecked, status } = useSettingsAutosave(series);
   const glossaryScope = { seriesId: series.id };
   const glossary = useQuery({ queryKey: glossaryKey(glossaryScope), queryFn: () => fetchGlossary(glossaryScope) });
@@ -70,7 +72,7 @@ export function SeriesSettingsDialog({
   return (
     <Drawer
       variant="modal"
-      title="Cài đặt dịch"
+      title={t("series.settingsForm.title")}
       onClose={onClose}
       footer={
         <div className="settings-foot">
@@ -82,7 +84,7 @@ export function SeriesSettingsDialog({
               aria-expanded={deleting}
               onClick={() => setDeleting((d) => !d)}
             >
-              Xoá series
+              {t("series.settingsForm.deleteSeries")}
             </button>
             <span className="spacer" />
             <SaveStatus {...status} />
@@ -92,7 +94,7 @@ export function SeriesSettingsDialog({
     >
       <div className="settings-dialog">
         <SetGroup title="Series" icon={<BookIcon />}>
-          <SettingsRow label="Tên series" htmlFor="s-title">
+          <SettingsRow label={t("series.settingsForm.name")} htmlFor="s-title">
             <input
               id="s-title"
               data-field="title"
@@ -102,14 +104,18 @@ export function SeriesSettingsDialog({
               onChange={(e) => set("title", e.target.value, "later")}
               onBlur={() => leave("title")}
             />
-            {!f.title.trim() && <span className="small error">Nhập tên series.</span>}
+            {!f.title.trim() && <span className="small error">{t("series.settingsForm.nameRequired")}</span>}
           </SettingsRow>
-          <SettingsRow label="Ảnh bìa">
+          <SettingsRow label={t("series.settingsForm.cover")}>
             <CoverSection series={series} />
           </SettingsRow>
-          <SettingsRow label="Ngôn ngữ">
+          <SettingsRow label={t("series.settingsForm.languages")}>
             <div className="lang-pair">
-              <select aria-label="Dịch từ" value={f.source_lang} onChange={select("source_lang")}>
+              <select
+                aria-label={t("series.settingsForm.source")}
+                value={f.source_lang}
+                onChange={select("source_lang")}
+              >
                 {SOURCE_LANGS.map((l) => (
                   <option key={l} value={l}>
                     {LANG_NAMES[l]}
@@ -117,7 +123,11 @@ export function SeriesSettingsDialog({
                 ))}
               </select>
               <span aria-hidden="true">→</span>
-              <select aria-label="Sang" value={f.target_lang} onChange={select("target_lang")}>
+              <select
+                aria-label={t("series.settingsForm.target")}
+                value={f.target_lang}
+                onChange={select("target_lang")}
+              >
                 {TARGET_LANGS.map((l) => (
                   <option key={l} value={l}>
                     {LANG_NAMES[l]}
@@ -132,10 +142,10 @@ export function SeriesSettingsDialog({
             )}
           </SettingsRow>
           <SettingsRow
-            label="Định dạng"
+            label={t("series.settingsForm.format")}
             htmlFor="s-fmt"
-            tip="Áp dụng cho chương upload sau."
-            tipLabel="Giải thích Định dạng"
+            tip={t("series.settingsForm.formatTip")}
+            tipLabel={t("series.settingsForm.formatTipLabel")}
           >
             <select id="s-fmt" value={f.page_format} onChange={select("page_format")}>
               {PAGE_FORMATS.map((p) => (
@@ -148,47 +158,47 @@ export function SeriesSettingsDialog({
         </SetGroup>
 
         <SetGroup
-          title="Hướng dẫn cho AI"
+          title={t("series.settingsForm.aiGuide")}
           icon={<SparklesIcon />}
           collapsible
           summary={aiGuideSummary(f, terms)}
-          tip="AI đọc mục này mỗi lần dịch và tự bổ sung khi dịch (nhãn AI)."
+          tip={t("series.settingsForm.aiGuideTip")}
         >
           <SettingsRow
-            label="Giọng văn"
+            label={t("series.settingsForm.style")}
             htmlFor="s-style"
             stack
             // Chip khi Giọng văn đang hiện đúng là bản AI ghi (chưa sửa).
             tag={series.style_origin === "ai" && f.style_prompt === series.style_prompt && <AiTag />}
-            tip="Mô tả ngắn gửi kèm cho AI ở mọi lần dịch."
-            tipLabel="Giải thích Giọng văn"
+            tip={t("series.settingsForm.styleTip")}
+            tipLabel={t("series.settingsForm.styleTipLabel")}
           >
             <textarea
               id="s-style"
               data-field="style_prompt"
               maxLength={1000}
-              placeholder="VD: giọng trẻ, đời thường; giữ tên riêng phiên âm"
+              placeholder={t("series.settingsForm.stylePlaceholder")}
               value={f.style_prompt}
               onChange={(e) => set("style_prompt", e.target.value, "later")}
               onBlur={() => leave("style_prompt")}
             />
           </SettingsRow>
           <SettingsRow
-            label="Kính ngữ"
+            label={t("series.settingsForm.honorifics")}
             htmlFor="s-hon"
-            tip={`Kính ngữ như ${HONORIFIC_EXAMPLES[f.source_lang]}.`}
-            tipLabel="Giải thích Kính ngữ"
+            tip={t("series.settingsForm.honorificsTip", { examples: HONORIFIC_EXAMPLES[f.source_lang] })}
+            tipLabel={t("series.settingsForm.honorificsTipLabel")}
           >
             <select id="s-hon" value={f.honorific_policy} onChange={select("honorific_policy")}>
-              <option value="translate">Chuyển sang cách gọi đích</option>
-              <option value="keep">Giữ nguyên (phiên âm)</option>
+              <option value="translate">{t("series.settingsForm.honorificsTranslate")}</option>
+              <option value="keep">{t("series.settingsForm.honorificsKeep")}</option>
             </select>
           </SettingsRow>
           <SettingsRow
-            label="Xưng hô"
+            label={t("series.settingsForm.address")}
             stack
-            tip={`Người nói → người nghe: cách xưng / gọi. VD: Minjun → Seoyeon: ${addressPlaceholder(f.target_lang)}.`}
-            tipLabel="Giải thích Xưng hô"
+            tip={t("series.settingsForm.addressTip", { example: addressPlaceholder(f.target_lang) })}
+            tipLabel={t("series.settingsForm.addressTipLabel")}
           >
             <PronounRulesTable
               rules={f.pronoun_rules}
@@ -216,15 +226,15 @@ export function SeriesSettingsDialog({
           </SettingsRow>
           <SettingsRow label="Glossary">
             <span className="glossary-line">
-              {terms === undefined ? "…" : `${terms} thuật ngữ`} ·{" "}
+              {terms === undefined ? "…" : tp("series.settingsDraft.terms", terms)} ·{" "}
               <Link to="/s/$seriesId" params={{ seriesId: series.id }} search={{ tab: "glossary" }}>
-                Mở
+                {t("series.settingsForm.openGlossary")}
               </Link>
             </span>
           </SettingsRow>
         </SetGroup>
 
-        <SetGroup title="Font chữ" icon={<TypeIcon />}>
+        <SetGroup title={t("series.settingsForm.fonts")} icon={<TypeIcon />}>
           <SeriesFontFields
             fonts={f.default_fonts}
             targetLang={f.target_lang}
@@ -232,24 +242,18 @@ export function SeriesSettingsDialog({
           />
         </SetGroup>
 
-        <SetGroup title="Bỏ qua khi dịch" icon={<EyeOffIcon />}>
+        <SetGroup title={t("series.settingsForm.skip")} icon={<EyeOffIcon />}>
           <SettingsRow
-            label="Chữ bỏ qua (watermark)"
+            label={t("series.settingsForm.ignore")}
             htmlFor="s-ignore"
             stack
-            tipLabel="Giải thích Chữ bỏ qua"
-            tip={
-              <>
-                Mỗi dòng 1 mục. Vùng chữ chứa mục nào thì không dịch, không chèn chữ (chương đã dịch không đổi). Dùng
-                URL hoặc tên nhóm cụ thể — mục chung chung dễ bỏ nhầm thoại. Bỏ qua dấu cách khi so khớp; bọc mục trong
-                dấu / {"(vd /discord\\s*\\.\\s*gg/)"} để dùng regex, không phân biệt hoa/thường.
-              </>
-            }
+            tipLabel={t("series.settingsForm.ignoreTipLabel")}
+            tip={t("series.settingsForm.ignoreTip", { example: "/discord\\s*\\.\\s*gg/" })}
           >
             <textarea
               id="s-ignore"
               data-field="ignore_text"
-              placeholder={"VD:\ndiscord.gg/nhomdich\nTên nhóm dịch"}
+              placeholder={t("series.settingsForm.ignorePlaceholder")}
               value={f.ignore_text}
               aria-invalid={ignore.error ? true : undefined}
               onChange={(e) => set("ignore_text", e.target.value, "later")}
@@ -260,16 +264,16 @@ export function SeriesSettingsDialog({
               <IgnoreApplySection
                 seriesId={series.id}
                 disabledReason={
-                  ignore.list.join("\n") === series.ignore_text.join("\n") ? null : "Chờ lưu danh sách mới."
+                  ignore.list.join("\n") === series.ignore_text.join("\n") ? null : t("series.settingsForm.waitSave")
                 }
               />
             )}
           </SettingsRow>
           <SettingsRow
-            label="Ảnh tự bỏ"
+            label={t("series.settingsForm.skipImages")}
             stack
-            tipLabel="Giải thích Ảnh tự bỏ"
-            tip='Ảnh credit đã chọn "Luôn bỏ ở series này". Chương upload sau có ảnh giống sẽ được bỏ qua sẵn.'
+            tipLabel={t("series.settingsForm.skipImagesTipLabel")}
+            tip={t("series.settingsForm.skipImagesTip")}
           >
             <SkipImagesSection seriesId={series.id} />
           </SettingsRow>
@@ -281,6 +285,7 @@ export function SeriesSettingsDialog({
 
 /** Ô xác nhận xoá series (chỉ hiện sau khi bấm "Xoá series"): gõ đúng tên để mở khoá nút, không hoàn tác. */
 function DeleteSeriesBox({ series, onCancel }: { series: Series & { chapters?: unknown[] }; onCancel(): void }) {
+  useT();
   const qc = useQueryClient();
   const navigate = useNavigate();
   const [typed, setTyped] = useState("");
@@ -294,12 +299,16 @@ function DeleteSeriesBox({ series, onCancel }: { series: Series & { chapters?: u
   });
   const n = series.chapters?.length ?? 0;
   return (
-    <section className="danger-zone" aria-label="Xác nhận xoá series">
+    <section className="danger-zone" aria-label={t("series.settingsForm.confirmDelete")}>
       <p className="small">
-        Xoá vĩnh viễn <b>{series.title}</b>
-        {n > 0 ? ` cùng ${n} chương (ảnh, bản dịch, lịch sử)` : ""} và glossary riêng của series. Không hoàn tác được.
+        {n > 0
+          ? tNode("series.settingsForm.deleteWarn", {
+              title: <b>{series.title}</b>,
+              chapters: tp("series.ignoreApplyModel.chapters", n),
+            })
+          : tNode("series.settingsForm.deleteWarnEmpty", { title: <b>{series.title}</b> })}
       </p>
-      <label htmlFor="s-delete">Gõ tên series để xác nhận</label>
+      <label htmlFor="s-delete">{t("series.settingsForm.typeName")}</label>
       <div className="row">
         <input
           id="s-delete"
@@ -316,10 +325,10 @@ function DeleteSeriesBox({ series, onCancel }: { series: Series & { chapters?: u
           disabled={typed.trim() !== series.title.trim() || del.isPending}
           onClick={() => del.mutate()}
         >
-          {del.isPending ? "Đang xoá…" : "Xoá vĩnh viễn"}
+          {del.isPending ? t("series.settingsForm.deleting") : t("series.settingsForm.deleteForever")}
         </button>
         <button type="button" disabled={del.isPending} onClick={onCancel}>
-          Huỷ
+          {t("common.cancel")}
         </button>
       </div>
       {del.error && <span className="small error">{errorMessage(del.error)}</span>}

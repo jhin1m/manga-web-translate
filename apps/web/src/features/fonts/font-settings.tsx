@@ -11,6 +11,7 @@ import { useRef, useState } from "react";
 import { useMe } from "../../app/app-shell.tsx";
 import { InfoTip } from "../../app/info-tip.tsx";
 import { PackageIcon, TypeIcon, UploadIcon } from "../../app/settings-icons.tsx";
+import { t, tp, useT } from "../../i18n/t.ts";
 import { ApiError, api, errorMessage, useLocalMode } from "../../lib/api.ts";
 import { SectionHead, SetGroup } from "../admin/settings-ui.tsx";
 import { fontPreview, loadFonts } from "../editor/fonts.ts";
@@ -40,10 +41,9 @@ const sizeLabel = (bytes: number) =>
 /** Lỗi xoá: font đang là mặc định của series nào thì nêu tên (font riêng) hoặc số series (font dùng chung). */
 function deleteError(e: unknown): string {
   if (e instanceof ApiError && e.body.error === "in_use") {
-    if (Array.isArray(e.body.series))
-      return `Font đang là mặc định của series: ${e.body.series.join(", ")}. Đổi font mặc định của series trước.`;
+    if (Array.isArray(e.body.series)) return t("fonts.fontSettings.inUseSeries", { series: e.body.series.join(", ") });
     if (e.body.series_count !== undefined)
-      return `${String(e.body.series_count)} series đang dùng font này làm mặc định. Chỉ xoá được khi không còn series nào dùng.`;
+      return tp("fonts.fontSettings.inUseCount", Number(e.body.series_count), { count: String(e.body.series_count) });
   }
   return errorMessage(e);
 }
@@ -53,6 +53,7 @@ type AddItem = { name: string; file: () => Promise<File> };
 type AddResult = { added: string[]; failed: { name: string; message: string }[] };
 
 export function FontLibrary() {
+  useT();
   const me = useMe();
   const local = useLocalMode();
   const limit = useFontLimit();
@@ -112,7 +113,7 @@ export function FontLibrary() {
     } catch (e) {
       setPickError(
         e instanceof DOMException && (e.name === "NotAllowedError" || e.name === "SecurityError")
-          ? "Trình duyệt chưa cho phép đọc font trong máy. Bấm lại và chọn Cho phép (hoặc bật trong cài đặt trang)."
+          ? t("fonts.fontSettings.permissionDenied")
           : errorMessage(e),
       );
     }
@@ -122,22 +123,26 @@ export function FontLibrary() {
 
   return (
     <div className="set-section">
-      <SectionHead title="Font" icon={<TypeIcon />} desc="Font dùng trong editor và làm font mặc định của series." />
+      <SectionHead
+        title={t("admin.adminSections.label.fonts")}
+        icon={<TypeIcon />}
+        desc={t("fonts.fontSettings.sectionDesc")}
+      />
       <SetGroup
-        title="Thêm font"
+        title={t("fonts.fontSettings.addTitle")}
         icon={<UploadIcon />}
-        desc="File .ttf hoặc .otf, mỗi file tối đa 10MB."
-        tip="Bạn tự chịu trách nhiệm về bản quyền font."
+        desc={t("fonts.fontSettings.addDesc")}
+        tip={t("fonts.fontSettings.addTip")}
       >
         <div className="font-add-row">
           {localFontsSupported() ? (
             <button
               type="button"
-              title="Chọn từ các font đã cài trên máy này. Lần đầu trình duyệt sẽ hỏi quyền đọc font."
+              title={t("fonts.fontSettings.pickLocalTitle")}
               onClick={() => void openPicker()}
               disabled={add.isPending}
             >
-              Chọn font trong máy
+              {t("fonts.fontSettings.pickLocal")}
             </button>
           ) : null}
           <button
@@ -146,7 +151,7 @@ export function FontLibrary() {
             disabled={add.isPending}
             onClick={() => fileInput.current?.click()}
           >
-            Tải file .ttf/.otf…
+            {t("fonts.fontSettings.uploadFile")}
           </button>
           <input
             ref={fileInput}
@@ -154,7 +159,7 @@ export function FontLibrary() {
             hidden
             multiple
             accept={FONT_ACCEPT}
-            aria-label="Chọn file font"
+            aria-label={t("fonts.fontSettings.fileInputLabel")}
             disabled={add.isPending}
             onChange={(e) => {
               const files = [...(e.target.files ?? [])];
@@ -162,7 +167,7 @@ export function FontLibrary() {
               if (files.length) add.mutate(files.map((f) => ({ name: f.name, file: async () => f })));
             }}
           />
-          {add.isPending && <span className="muted small">Đang thêm font…</span>}
+          {add.isPending && <span className="muted small">{t("fonts.fontSettings.adding")}</span>}
           {canShare && (
             <span className="font-share">
               <label className="set-switch-label">
@@ -174,18 +179,14 @@ export function FontLibrary() {
                   checked={toShared}
                   onChange={(e) => setToShared(e.target.checked)}
                 />
-                Cho mọi người dùng
+                {t("fonts.fontSettings.shareSwitch")}
               </label>
-              <InfoTip label="Giải thích font dùng chung">
-                Bật: font thêm vào thành font dùng chung, mọi tài khoản đều thấy (chỉ admin).
-              </InfoTip>
+              <InfoTip label={t("fonts.fontSettings.shareTipLabel")}>{t("fonts.fontSettings.shareTip")}</InfoTip>
             </span>
           )}
         </div>
         {!localFontsSupported() && (
-          <p className="muted small set-card-note">
-            Trình duyệt này không đọc được font trong máy (cần Chrome hoặc Edge trên máy tính) — dùng nút tải file.
-          </p>
+          <p className="muted small set-card-note">{t("fonts.fontSettings.localUnsupported")}</p>
         )}
       </SetGroup>
 
@@ -212,20 +213,24 @@ export function FontLibrary() {
       )}
 
       <SetGroup
-        title="Font đã thêm"
+        title={t("fonts.fontSettings.addedTitle")}
         icon={<TypeIcon />}
-        desc={`${own.length} / ${limit} font riêng${shared.length ? ` · ${shared.length} font dùng chung` : ""}.`}
+        desc={
+          shared.length
+            ? tp("fonts.fontSettings.addedDescShared", shared.length, { own: own.length, limit })
+            : t("fonts.fontSettings.addedDesc", { own: own.length, limit })
+        }
       >
         {q.error && <p className="error">{errorMessage(q.error)}</p>}
-        {!q.data && !q.error && <p className="muted set-empty">Đang tải…</p>}
-        {q.data && all.length === 0 && <p className="muted set-empty">Chưa thêm font nào.</p>}
+        {!q.data && !q.error && <p className="muted set-empty">{t("common.loading")}</p>}
+        {q.data && all.length === 0 && <p className="muted set-empty">{t("fonts.fontSettings.empty")}</p>}
         {all.length > 0 && (
-          <table className="data set-table" aria-label="Danh sách font">
+          <table className="data set-table" aria-label={t("fonts.fontSettings.tableLabel")}>
             <thead>
               <tr>
-                <th>Tên font</th>
-                <th>Dung lượng</th>
-                <th>Tiếng Việt</th>
+                <th>{t("fonts.fontSettings.colName")}</th>
+                <th>{t("fonts.fontSettings.colSize")}</th>
+                <th>{t("fonts.fontSettings.colVietnamese")}</th>
                 <th />
               </tr>
             </thead>
@@ -234,7 +239,7 @@ export function FontLibrary() {
                 <FontRow
                   key={f.id}
                   font={f}
-                  tag="Dùng chung"
+                  tag={t("fonts.fontSettings.sharedTag")}
                   busy={delShared.isPending}
                   confirm
                   onDelete={me.is_admin ? () => delShared.mutate(f.id) : undefined}
@@ -259,16 +264,17 @@ export function FontLibrary() {
 }
 
 function AddReport({ result }: { result: AddResult }) {
+  useT();
   return (
     <>
       {result.added.length > 0 && (
         <p className="notice info" role="status">
-          Đã thêm {result.added.length} font: {result.added.join(", ")}.
+          {tp("fonts.fontSettings.added", result.added.length, { names: result.added.join(", ") })}
         </p>
       )}
       {result.failed.length > 0 && (
         <div className="notice danger" role="alert">
-          Không thêm được {result.failed.length} font:
+          {tp("fonts.fontSettings.failed", result.failed.length)}
           <ul className="font-fail-list">
             {result.failed.map((f) => (
               <li key={f.name}>
@@ -284,6 +290,7 @@ function AddReport({ result }: { result: AddResult }) {
 
 /** Font gói sẵn của app (đã có trong editor, không cần thêm), xem trước bằng chính font đó. */
 function BundledFonts() {
+  useT();
   const kit = useQuery({
     queryKey: ["fonts", "faces"],
     queryFn: () => loadFonts(),
@@ -292,22 +299,28 @@ function BundledFonts() {
   const ids = kit.data?.ids ?? [];
   return (
     <SetGroup
-      title={`Font có sẵn${ids.length ? ` (${ids.length})` : ""}`}
-      label="Font có sẵn"
+      title={
+        ids.length
+          ? t("fonts.fontSettings.bundledTitleCount", { count: ids.length })
+          : t("fonts.fontSettings.bundledTitle")
+      }
+      label={t("fonts.fontSettings.bundledTitle")}
       icon={<PackageIcon />}
-      desc="Đi kèm ứng dụng, chọn được ngay trong editor."
+      desc={t("fonts.fontSettings.bundledDesc")}
     >
       {kit.error && <p className="error set-empty">{errorMessage(kit.error)}</p>}
-      {!kit.data && !kit.error && <p className="muted set-empty">Đang tải…</p>}
+      {!kit.data && !kit.error && <p className="muted set-empty">{t("common.loading")}</p>}
       {ids.length > 0 && (
-        <ul className="font-grid" aria-label="Danh sách font có sẵn">
+        <ul className="font-grid" aria-label={t("fonts.fontSettings.bundledListLabel")}>
           {ids.map((id) => {
             const entry = kit.data?.manifest.fonts[id];
             return (
               <li key={id}>
                 <span className="font-grid-name">
                   {fontDisplayName(id)}
-                  {entry && !entry.viComplete && <span className="warn-text"> · thiếu dấu</span>}
+                  {entry && !entry.viComplete && (
+                    <span className="warn-text"> · {t("fonts.fontSettings.missingMarksShort")}</span>
+                  )}
                 </span>
                 <span className="font-grid-preview" style={fontPreview(id)}>
                   {PREVIEW_TEXT}
@@ -338,6 +351,7 @@ export function FontRow({
   confirm?: boolean;
   tag?: string;
 }) {
+  useT();
   const [confirming, setConfirming] = useState(false);
   const shown = font.missing.slice(0, MISSING_SHOWN).join(" ");
   const more = font.missing.length - MISSING_SHOWN;
@@ -350,10 +364,10 @@ export function FontRow({
       <td className="muted">{sizeLabel(font.bytes)}</td>
       <td>
         {font.vi_complete ? (
-          <span className="muted">Đủ dấu</span>
+          <span className="muted">{t("fonts.fontSettings.viComplete")}</span>
         ) : (
-          <span className="warn-text" title="Font thiếu glyph tiếng Việt: chữ thiếu dấu sẽ hiện sai/rơi về font khác">
-            Thiếu dấu: {shown}
+          <span className="warn-text" title={t("fonts.fontSettings.missingTitle")}>
+            {t("fonts.fontSettings.missing", { chars: shown })}
             {more > 0 ? ` … (+${more})` : ""}
           </span>
         )}
@@ -365,16 +379,16 @@ export function FontRow({
               type="button"
               className="btn-danger"
               disabled={busy}
-              aria-label={`Xác nhận xoá font ${font.name}`}
+              aria-label={t("fonts.fontSettings.confirmDeleteLabel", { name: font.name })}
               onClick={() => {
                 setConfirming(false);
                 onDelete();
               }}
             >
-              Xoá?
+              {t("fonts.fontSettings.confirmDelete")}
             </button>
             <button type="button" onClick={() => setConfirming(false)}>
-              Huỷ
+              {t("common.cancel")}
             </button>
           </>
         ) : (
@@ -382,8 +396,8 @@ export function FontRow({
             type="button"
             className="icon-btn"
             data-danger
-            aria-label={`Xoá font ${font.name}`}
-            title="Xoá font"
+            aria-label={t("fonts.fontSettings.deleteLabel", { name: font.name })}
+            title={t("fonts.fontSettings.deleteTitle")}
             disabled={busy}
             onClick={confirm ? () => setConfirming(true) : onDelete}
           >

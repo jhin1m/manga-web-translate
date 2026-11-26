@@ -1,54 +1,77 @@
 /**
- * Mã bước worker báo qua heartbeat (`job.stage`) → nhãn tiếng Việt cho thumbnail trang, cột ảnh gốc, drawer Hoạt
- * động. Kèm " i/n" (+ đơn vị) khi bước có đếm (`progress_done/progress_total`). Mã lạ → "Đang xử lý": không bao giờ
- * lộ mã tiếng Anh. Thuần.
+ * Mã bước worker báo qua heartbeat (`job.stage`) → nhãn theo ngôn ngữ giao diện cho thumbnail trang, cột ảnh gốc,
+ * drawer Hoạt động. Kèm " i/n" (+ đơn vị) khi bước có đếm (`progress_done/progress_total`). Mã lạ → "Đang xử lý":
+ * không bao giờ lộ mã bước thô. Thuần.
  */
+import { type MessageKey, t } from "../../i18n/t.ts";
 import type { JobView } from "./api.ts";
 
 type StageEntry = { label: string; unit?: string };
 
-const CUT: StageEntry = { label: "Đang cắt trang", unit: "đoạn" };
+/** Nhãn đọc ngôn ngữ lúc dùng (getter), không lúc import. */
+const entry = (label: MessageKey, unit?: MessageKey): StageEntry =>
+  unit
+    ? {
+        get label() {
+          return t(label);
+        },
+        get unit() {
+          return t(unit);
+        },
+      }
+    : {
+        get label() {
+          return t(label);
+        },
+      };
+
+const CUT = entry("chapter.stage.chapterIngest.cut", "chapter.stage.unit.segment");
 
 /** Bảng nhãn theo loại job → mã bước (nguồn duy nhất; docs trỏ về đây). */
 export const STAGE_LABELS: Record<string, Record<string, StageEntry>> = {
   "chapter.ingest": {
-    download: { label: "Đang tải ảnh" },
+    download: entry("chapter.stage.chapterIngest.download"),
     cut: CUT,
     // Worker cũ báo bước cắt trang là `detect`.
     detect: CUT,
-    upload: { label: "Đang lưu trang" },
+    upload: entry("chapter.stage.chapterIngest.upload"),
   },
   "page.prepare": {
-    detect: { label: "Nhận diện chữ" },
-    inpaint: { label: "Xoá chữ" },
-    ocr: { label: "Đọc chữ (OCR)" },
-    upload: { label: "Lưu ảnh" },
-    reuse_partial: { label: "Dùng lại ảnh đã xoá chữ" },
+    detect: entry("chapter.stage.pagePrepare.detect"),
+    inpaint: entry("chapter.stage.pagePrepare.inpaint"),
+    ocr: entry("chapter.stage.pagePrepare.ocr"),
+    upload: entry("chapter.stage.pagePrepare.upload"),
+    reuse_partial: entry("chapter.stage.pagePrepare.reuse_partial"),
   },
   "chapter.translate": {
-    translate: { label: "Đang dịch" },
-    typeset: { label: "Đang đặt chữ" },
+    translate: entry("chapter.stage.chapterTranslate.translate"),
+    typeset: entry("chapter.stage.chapterTranslate.typeset"),
   },
   "chapter.export": {
-    download: { label: "Tải ảnh" },
-    render: { label: "Vẽ chữ" },
-    upload: { label: "Đóng gói" },
+    download: entry("chapter.stage.chapterExport.download"),
+    render: entry("chapter.stage.chapterExport.render"),
+    upload: entry("chapter.stage.chapterExport.upload"),
   },
-  "page.reinpaint": { detect: { label: "Tìm nét chữ" }, inpaint: { label: "Xoá chữ lại" } },
-  "page.ocr_region": { ocr: { label: "Đọc chữ" }, translate: { label: "Dịch" } },
-  "chapter.proofread": { proofread: { label: "Hiệu đính" } },
+  "page.reinpaint": {
+    detect: entry("chapter.stage.pageReinpaint.detect"),
+    inpaint: entry("chapter.stage.pageReinpaint.inpaint"),
+  },
+  "page.ocr_region": {
+    ocr: entry("chapter.stage.pageOcrRegion.ocr"),
+    translate: entry("chapter.stage.pageOcrRegion.translate"),
+  },
+  "chapter.proofread": { proofread: entry("chapter.stage.chapterProofread.proofread") },
 };
-
-const UNKNOWN = "Đang xử lý";
 
 type StageJob = Pick<JobView, "type" | "stage" | "progress_done" | "progress_total">;
 
 /** null khi job chưa báo bước nào; `short` bỏ " i/n" (thumbnail 112px). */
 export function stageLabel(job: StageJob | null | undefined, opts: { short?: boolean } = {}): string | null {
   if (!job?.stage) return null;
-  const entry = STAGE_LABELS[job.type]?.[job.stage];
-  if (!entry) return UNKNOWN;
+  const found = STAGE_LABELS[job.type]?.[job.stage];
+  if (!found) return t("chapter.stage.unknown");
   const { progress_done: done, progress_total: total } = job;
-  if (opts.short || done == null || !total) return entry.label;
-  return `${entry.label} ${done}/${total}${entry.unit ? ` ${entry.unit}` : ""}`;
+  if (opts.short || done == null || !total) return found.label;
+  const unit = found.unit;
+  return `${found.label} ${done}/${total}${unit ? ` ${unit}` : ""}`;
 }

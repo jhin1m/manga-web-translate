@@ -6,6 +6,8 @@
 import { useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { Group, Image as KImage } from "react-konva";
 
+import { t } from "../../../i18n/t.ts";
+
 export const TILE = 2048;
 
 function closeAll(map: Map<string, ImageBitmap | "pending">) {
@@ -45,7 +47,7 @@ function useBitmap(url: string | null, revKey: string) {
     setError(null);
     (async () => {
       const res = await fetch(url);
-      if (!res.ok) throw new Error(`tải ảnh lỗi (${res.status})`);
+      if (!res.ok) throw new Error(t("editor.tileLayer.loadFailed", { status: res.status }));
       bmp = await createImageBitmap(await res.blob());
       if (live) setBitmap(bmp);
       else bmp.close();

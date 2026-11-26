@@ -3,6 +3,7 @@
  * localhost, người dùng bấm cho phép). Font chọn được upload như font riêng: worker vẽ ảnh xuất bằng đúng file font nên
  * không dùng thẳng font của máy được. Chỉ TTF / OTF (API từ chối TTC / WOFF), tối đa 10MB.
  */
+import { t } from "../../i18n/t.ts";
 import { MAX_FONT_BYTES } from "./api.ts";
 
 export type LocalFont = {
@@ -21,7 +22,7 @@ export const localFontsSupported = (): boolean =>
 /** Danh sách font trong máy, bỏ trùng (cùng postscriptName), xếp theo họ rồi kiểu. Trình duyệt hỏi quyền lần đầu. */
 export async function queryLocalFonts(): Promise<LocalFont[]> {
   const query = (window as WithLocalFonts).queryLocalFonts;
-  if (!query) throw new Error("Trình duyệt này không đọc được font trong máy. Dùng Chrome hoặc Edge trên máy tính.");
+  if (!query) throw new Error(t("fonts.localFonts.unsupported"));
   return uniqueFonts(await query.call(window));
 }
 
@@ -53,9 +54,9 @@ export function sfntKind(head: Uint8Array): "ttf" | "otf" | "ttc" | null {
 /** File font sẵn để upload; lỗi = câu nói rõ vì sao font này không thêm được. */
 export async function localFontFile(f: LocalFont): Promise<File> {
   const blob = await f.blob();
-  if (blob.size > MAX_FONT_BYTES) throw new Error("Font lớn hơn 10MB.");
+  if (blob.size > MAX_FONT_BYTES) throw new Error(t("fonts.localFonts.tooLarge"));
   const kind = sfntKind(new Uint8Array(await blob.slice(0, 4).arrayBuffer()));
-  if (kind === "ttc") throw new Error("Font nằm trong bộ TTC (nhiều font chung một file), chưa hỗ trợ.");
-  if (!kind) throw new Error("Không phải font TTF / OTF.");
+  if (kind === "ttc") throw new Error(t("fonts.localFonts.ttc"));
+  if (!kind) throw new Error(t("fonts.localFonts.notSfnt"));
   return new File([blob], `${f.postscriptName}.${kind}`, { type: `font/${kind}` });
 }

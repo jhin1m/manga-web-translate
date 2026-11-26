@@ -4,6 +4,7 @@
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRef } from "react";
+import { t, useT } from "../../i18n/t.ts";
 import { errorMessage } from "../../lib/api.ts";
 import { CoverImage, initialOf } from "../home/cover-image.tsx";
 import { fetchSeriesList, resetSeriesCover, type Series, seriesKeys, uploadSeriesCover } from "./api.ts";
@@ -14,12 +15,13 @@ const MAX_COVER_BYTES = 10 * 1024 * 1024;
 /** Lỗi trước khi gửi (định dạng khi trình duyệt biết kiểu / dung lượng); server vẫn kiểm lại bằng nội dung ảnh. */
 const coverFileError = (file: File) =>
   file.type && !COVER_ACCEPT.split(",").includes(file.type)
-    ? "Chỉ nhận ảnh PNG, JPG hoặc WebP."
+    ? t("series.coverSection.badType")
     : file.size > MAX_COVER_BYTES
-      ? "Ảnh bìa tối đa 10 MB."
+      ? t("series.coverSection.tooLarge")
       : null;
 
 export function CoverSection({ series }: { series: Pick<Series, "id" | "title" | "cover_custom"> }) {
+  useT();
   const qc = useQueryClient();
   const input = useRef<HTMLInputElement>(null);
   const list = useQuery({ queryKey: seriesKeys.list(), queryFn: () => fetchSeriesList() });
@@ -42,17 +44,17 @@ export function CoverSection({ series }: { series: Pick<Series, "id" | "title" |
   const error = upload.error ?? reset.error;
 
   return (
-    <fieldset className="cover-section" aria-label="Ảnh bìa">
+    <fieldset className="cover-section" aria-label={t("series.coverSection.label")}>
       <div className="cover-section-preview">
         <CoverImage src={src} fallback={initialOf(series.title)} />
       </div>
       <div className="cover-section-body">
         <span className="small muted">
-          {series.cover_custom ? "Đang dùng ảnh bìa riêng." : "Đang dùng ảnh đầu của chương (tự động)."}
+          {series.cover_custom ? t("series.coverSection.usingCustom") : t("series.coverSection.usingAuto")}
         </span>
         <div className="cover-section-actions">
           <button type="button" disabled={busy} onClick={() => input.current?.click()}>
-            {upload.isPending ? "Đang tải lên…" : "Tải ảnh bìa…"}
+            {upload.isPending ? t("series.coverSection.uploading") : t("series.coverSection.upload")}
           </button>
           {series.cover_custom && (
             <button
@@ -63,7 +65,7 @@ export function CoverSection({ series }: { series: Pick<Series, "id" | "title" |
                 reset.mutate();
               }}
             >
-              {reset.isPending ? "Đang đổi…" : "Dùng ảnh tự động"}
+              {reset.isPending ? t("series.coverSection.resetting") : t("series.coverSection.useAuto")}
             </button>
           )}
         </div>
@@ -72,7 +74,7 @@ export function CoverSection({ series }: { series: Pick<Series, "id" | "title" |
           type="file"
           hidden
           accept={COVER_ACCEPT}
-          aria-label="Chọn ảnh bìa"
+          aria-label={t("series.coverSection.pick")}
           onChange={(e) => {
             const file = e.target.files?.[0];
             e.target.value = "";

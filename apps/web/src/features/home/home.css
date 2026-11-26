@@ -308,14 +308,14 @@ label.file-pick input {
 }
 .card-state {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 6px;
   min-width: 0;
 }
+/* Xuống dòng thay vì cắt "…": nhãn trạng thái ở bản tiếng Anh dài hơn thẻ ở 1280 px. */
 .card-state-text {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 /* Khung ảnh 3:4: ảnh cắt theo đỉnh (trang đầu truyện dọc); chưa có ảnh → ô màu + chữ cái đầu. */
 .cover {
@@ -539,6 +539,10 @@ label.file-pick input {
 .dot[data-tone="danger"] {
   background: var(--c-danger);
 }
+/* Chấm canh giữa dòng đầu khi chữ trạng thái xuống dòng. */
+.card-state > .dot {
+  margin-top: calc((1lh - 10px) / 2);
+}
 
 /* ---- Series: một cột ---- */
 .series-main {
@@ -563,7 +567,7 @@ label.file-pick input {
   border: 1px solid var(--c-line-strong);
   color: var(--c-fg);
 }
-.series-head > a[aria-label="Về trang chủ"] {
+.series-head > a.series-home-link {
   border-color: transparent;
 }
 /* Tên series dài cắt "…" trên 1 dòng; tên đầy đủ ở `title`. */

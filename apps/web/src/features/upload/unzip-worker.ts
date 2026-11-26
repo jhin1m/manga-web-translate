@@ -5,7 +5,7 @@
  * cả file mà không gửi trùng entry.
  */
 import { Unzip, UnzipInflate, unzip } from "fflate";
-import { isJunkEntry, mimeOf, type UnzipMessage } from "./files.ts";
+import { isJunkEntry, mimeOf, type UnzipMessage } from "./zip-entry.ts";
 
 const post = (m: UnzipMessage) => (self as unknown as DedicatedWorkerGlobalScope).postMessage(m);
 const wanted = (name: string) => !isJunkEntry(name) && mimeOf(name) !== null;

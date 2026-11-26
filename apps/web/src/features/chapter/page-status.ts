@@ -3,6 +3,7 @@
  * Thuần: chỉ đọc `ProgressPage`.
  */
 import { ACTIVE_JOB_STATUSES } from "@mtl/shared";
+import { type MessageKey, t, tp } from "../../i18n/t.ts";
 import type { ProgressPage } from "./api.ts";
 import { describeJobError, waitingOnProvider } from "./job-error.ts";
 import { stageLabel } from "./stage-labels.ts";
@@ -10,11 +11,19 @@ import type { PageStatus, Tone } from "./status.ts";
 
 export type PageLevel = "todo" | "busy" | "done" | "error";
 
+/** `label` là getter: đọc ngôn ngữ lúc dùng, không lúc import. */
+const levelEntry = (key: MessageKey, tone: Tone) => ({
+  get label() {
+    return t(key);
+  },
+  tone,
+});
+
 export const PAGE_LEVEL: Record<PageLevel, { label: string; tone: Tone }> = {
-  todo: { label: "Chờ dịch", tone: "idle" },
-  busy: { label: "Đang xử lý", tone: "busy" },
-  done: { label: "Xong", tone: "ok" },
-  error: { label: "Lỗi", tone: "danger" },
+  todo: levelEntry("chapter.pageStatus.level.todo", "idle"),
+  busy: levelEntry("chapter.pageStatus.level.busy", "busy"),
+  done: levelEntry("chapter.pageStatus.level.done", "ok"),
+  error: levelEntry("chapter.pageStatus.level.error", "danger"),
 };
 
 const LEVEL: Record<PageStatus, PageLevel> = {
@@ -61,15 +70,15 @@ type ThumbPage = Pick<ProgressPage, "ord" | "status" | "skipped" | "ai_update_av
  * (0..1, null khi job còn xếp hàng) để vẽ thanh tiến độ trong thumbnail.
  */
 export type ThumbMark =
-  | { tone: "hidden" | "danger" | "warn"; label: "Đã ẩn" | "Lỗi" | "Chờ AI" | "Cần xem" }
+  | { tone: "hidden" | "danger" | "warn"; label: string }
   | { tone: "busy"; label: string; progress: number | null }
   | null;
 
 /** Nhãn bước khi job chưa báo bước nào (vừa claim / worker cũ). */
-const BUSY_STEP: Partial<Record<PageStatus, string>> = {
-  pending: "Xoá chữ",
-  preparing: "Xoá chữ",
-  translating: "Đang dịch",
+const BUSY_STEP: Partial<Record<PageStatus, MessageKey>> = {
+  pending: "chapter.pageStatus.busyStep.prepare",
+  preparing: "chapter.pageStatus.busyStep.prepare",
+  translating: "chapter.pageStatus.busyStep.translate",
 };
 
 /**
@@ -77,44 +86,56 @@ const BUSY_STEP: Partial<Record<PageStatus, string>> = {
  * khung) > bình thường.
  */
 export function thumbMark(p: ThumbPage, overflow: boolean): ThumbMark {
-  if (p.skipped) return { tone: "hidden", label: "Đã ẩn" };
-  if (p.status === "failed" && !p.translate_queued) return { tone: "danger", label: "Lỗi" };
-  if (waitingOnProvider(p.job)) return { tone: "warn", label: "Chờ AI" };
+  if (p.skipped) return { tone: "hidden", label: t("chapter.pageStatus.mark.hidden") };
+  if (p.status === "failed" && !p.translate_queued)
+    return { tone: "danger", label: t("chapter.pageStatus.mark.error") };
+  if (waitingOnProvider(p.job)) return { tone: "warn", label: t("chapter.pageStatus.mark.waitingAi") };
   // Trang còn xoá chữ hiện bước xoá chữ; trang của lô đang chạy hiện bước dịch.
   if (p.translate_queued && !BUSY_STEP[p.status] && !inTranslateJob(p)) {
-    return { tone: "busy", label: p.run_batch ? `Chờ lượt · lô ${p.run_batch}` : "Chờ lượt", progress: null };
+    const label = p.run_batch
+      ? t("chapter.pageStatus.queuedBatch", { batch: p.run_batch })
+      : t("chapter.pageStatus.queued");
+    return { tone: "busy", label, progress: null };
   }
-  const fallback = BUSY_STEP[p.status] ?? (inTranslateJob(p) ? "Đang dịch" : undefined);
-  if (fallback) {
+  const fallbackKey = BUSY_STEP[p.status] ?? (inTranslateJob(p) ? "chapter.pageStatus.busyStep.translate" : undefined);
+  if (fallbackKey) {
+    const fallback = t(fallbackKey);
     const running = p.job?.status === "running";
     const progress = running ? Math.min(1, Math.max(0, p.job?.progress ?? 0)) : null;
     if (progress === null) {
-      const label = p.status === "pending" || p.status === "preparing" ? "Chờ xoá chữ" : `${fallback} · chờ`;
+      const label =
+        p.status === "pending" || p.status === "preparing"
+          ? t("chapter.pageStatus.waitClean")
+          : t("chapter.pageStatus.stepWaiting", { step: fallback });
       return { tone: "busy", label, progress };
     }
     const step = stageLabel(p.job, { short: true }) ?? fallback;
     return { tone: "busy", label: `${step} · ${Math.round(progress * 100)}%`, progress };
   }
-  if (needsReview(p, overflow)) return { tone: "warn", label: "Cần xem" };
+  if (needsReview(p, overflow)) return { tone: "warn", label: t("chapter.pageStatus.mark.review") };
   return null;
 }
 
 /** Cờ chi tiết của trang (title thumbnail, tên truy cập). */
 export function thumbFlags(p: ThumbPage, overflow: boolean): string[] {
   return [
-    p.ai_update_available && "AI có bản mới",
-    overflow && "tràn khung",
-    p.cut_flag && "cắt ở trần chiều cao",
-    waitingOnProvider(p.job) && "chờ AI thử lại",
+    p.ai_update_available && t("chapter.pageStatus.flag.aiUpdate"),
+    overflow && t("chapter.pageStatus.flag.overflow"),
+    p.cut_flag && t("chapter.pageStatus.flag.cutAtMaxHeight"),
+    waitingOnProvider(p.job) && t("chapter.pageStatus.flag.waitingRetry"),
   ].filter((f): f is string => !!f);
 }
 
 /** Tên truy cập luôn đủ trạng thái: "Trang 3 · Xong", "Trang 2 · Cần xem: tràn khung", "Trang 7 · Lỗi". */
 export function thumbAria(p: ThumbPage, overflow: boolean): string {
   const mark = thumbMark(p, overflow);
-  const head = `Trang ${p.ord + 1} · ${mark?.label ?? PAGE_LEVEL[pageLevelOf(p)].label}`;
-  if (mark?.label !== "Cần xem") return head;
-  const flags = thumbFlags(p, overflow).filter((f) => f !== "chờ AI thử lại");
+  const head = t("chapter.pageStatus.aria", {
+    page: p.ord + 1,
+    state: mark?.label ?? PAGE_LEVEL[pageLevelOf(p)].label,
+  });
+  if (mark?.label !== t("chapter.pageStatus.mark.review")) return head;
+  const waitingRetry = t("chapter.pageStatus.flag.waitingRetry");
+  const flags = thumbFlags(p, overflow).filter((f) => f !== waitingRetry);
   return flags.length ? `${head}: ${flags.join(", ")}` : head;
 }
 
@@ -130,7 +151,7 @@ const IS_MAC =
   );
 
 /** Gợi ý chọn trang ở cột trang: macOS Ctrl-click là chuột phải (mở menu Ẩn trang) → chỉ ⌘ chọn được. */
-export const selectHint = (mac = IS_MAC) => `${mac ? "⌘" : "Ctrl"}-click hoặc Shift-click: chọn để dịch riêng`;
+export const selectHint = (mac = IS_MAC) => t("chapter.pageStatus.selectHint", { key: mac ? "⌘" : "Ctrl" });
 
 /** Cờ góc thumbnail: "!" cần xem / chờ AI, "×" lỗi. `text` = tên truy cập + tooltip ("Lỗi: <câu lỗi job>"). */
 export type ThumbFlag = { glyph: "!" | "×"; tone: "warn" | "danger"; text: string };
@@ -156,15 +177,20 @@ export function thumbTitle(p: ThumbPage, overflow: boolean, mac = IS_MAC, active
   const step = mark?.tone === "busy" ? mark.label : null;
   const detail = describeJobError(p.job)?.text ?? thumbFlags(p, overflow).join(" · ");
   const hint = p.skipped
-    ? "Bấm hoặc chuột phải: khôi phục trang"
-    : `${active ? "Chuột phải hoặc nút ⋯: thao tác trang" : "Chuột phải: ẩn trang"} · ${selectHint(mac)}`;
+    ? t("chapter.pageStatus.hint.restore")
+    : `${active ? t("chapter.pageStatus.hint.activeMenu") : t("chapter.pageStatus.hint.hide")} · ${selectHint(mac)}`;
   return [step, detail, hint].filter(Boolean).join("\n");
 }
 
 /** Một dòng tóm tắt trang của chương: "35 trang · 30 xong · 5 lỗi"; bỏ số 0. */
 export function pageSummary(total: number, busy: number, failed: number) {
   const done = total - busy - failed;
-  return [`${total} trang`, done > 0 && `${done} xong`, busy > 0 && `${busy} đang xử lý`, failed > 0 && `${failed} lỗi`]
+  return [
+    tp("common.pages", total),
+    done > 0 && t("chapter.pageStatus.summary.done", { count: done }),
+    busy > 0 && t("chapter.pageStatus.summary.busy", { count: busy }),
+    failed > 0 && t("chapter.pageStatus.summary.failed", { count: failed }),
+  ]
     .filter(Boolean)
     .join(" · ");
 }
