@@ -14,12 +14,15 @@ import {
   pages,
   series,
   sourceFiles,
+  user,
 } from "@mtl/db";
 import {
   ACTIVE_JOB_STATUSES,
+  DEFAULT_UI_LOCALE,
   emptyPageState,
   HONORIFIC_EXAMPLES,
   inpaintOptions,
+  isUiLocale,
   type JobPayload,
   type JobType,
   LANG_NAMES,
@@ -35,12 +38,13 @@ import {
   type TargetLang,
   type TranslateCarry,
   type TranslateSettings,
+  type UiLocale,
   userPrefix,
 } from "@mtl/shared";
 import { and, asc, eq, inArray, isNull, ne, sql } from "drizzle-orm";
-import { HTTPException } from "hono/http-exception";
 import { llmFor, slotRefs } from "../ai/llm-refs.ts";
 import { db } from "../db.ts";
+import { apiError } from "../lib/api-error.ts";
 import { seriesGlossaryWhere } from "../lib/glossary-scope.ts";
 import { withoutOrigin } from "../lib/pronoun-rules.ts";
 import { readSystemSettings, systemPipeline } from "../lib/system-settings.ts";
@@ -70,9 +74,6 @@ export function honorificText(policy: string, src: string, tgt: string): string 
 
 export const inJobTx = <R>(fn: (tx: DbLike) => Promise<R>): Promise<R> =>
   db.transaction((tx) => fn(tx as unknown as DbLike));
-
-export const conflict = (code: string, message = code) =>
-  new HTTPException(409, { res: Response.json({ error: code, message }, { status: 409 }) });
 
 const activeStatus = sql`${jobs.status} in (${sql.join(
   ACTIVE_JOB_STATUSES.map((s) => sql`${s}`),
@@ -187,9 +188,9 @@ export async function enqueueIngest(
     .from(jobs)
     .where(and(eq(jobs.chapterId, ch.id), activeStatus, notReadOnlyJob))
     .limit(1);
-  if (busy) throw conflict("chapter_busy", "chương còn job đang chạy — huỷ hoặc chờ xong rồi ingest lại");
+  if (busy) throw apiError(409, "chapter_busy.ingest");
   if (await chapterHasUserEdits(tx, ch.id)) {
-    throw conflict("chapter_has_user_edits", "chương đã có chỉnh sửa tay — tạo chương mới để ingest lại");
+    throw apiError(409, "chapter_has_user_edits");
   }
   // Khoá idempotency theo đúng bộ ảnh sẽ ghép (bỏ ảnh bỏ qua) → bỏ/dùng lại ảnh rồi cắt lại là lượt ingest mới.
   const sources = await tx
@@ -197,7 +198,7 @@ export async function enqueueIngest(
     .from(sourceFiles)
     .where(and(eq(sourceFiles.chapterId, ch.id), isNull(sourceFiles.skip)))
     .orderBy(asc(sourceFiles.ord));
-  if (sources.length === 0) throw new HTTPException(400, { message: "chapter has no source files" });
+  if (sources.length === 0) throw apiError(400, "no_source_files");
   const ingestMode = mode ?? (await seriesOf(tx, ch)).pageFormat;
   const ingestRev = ch.ingestRev + 1;
   await tx
@@ -287,6 +288,15 @@ export async function translateSettings(tx: DbLike, s: Series): Promise<Translat
 }
 
 /**
+ * Ngôn ngữ giao diện của chủ series (web đồng bộ lên `user.ui_locale`) — ghi chú AI cho người đọc viết bằng nó. Đọc lúc
+ * enqueue nên job tự xếp hàng phía server (tự dịch sau bước 1, lô kế tiếp) cũng có. Chưa đồng bộ / mã lạ → `vi`.
+ */
+export async function uiLangOf(tx: DbLike, ownerId: string): Promise<UiLocale> {
+  const [row] = await tx.select({ uiLocale: user.uiLocale }).from(user).where(eq(user.id, ownerId));
+  return isUiLocale(row?.uiLocale) ? row.uiLocale : DEFAULT_UI_LOCALE;
+}
+
+/**
  * Giai đoạn 2 cho các page đã prepare (theo ord). `context`: rolling = không có trang hiện nào trước lô;
  * neighbors = dùng ngữ cảnh trang n−1/n+1 (inputs dựng lúc claim). `carry`: ngữ cảnh lô trước cùng lượt.
  */
@@ -306,9 +316,9 @@ export async function enqueueTranslate(
     .where(and(eq(pages.chapterId, ch.id), inArray(pages.id, pageIds)))
     .orderBy(asc(pages.ord));
   if (rows.length !== new Set(pageIds).size) throw new NotFoundError("page");
-  if (rows.some((p) => p.skipped)) throw conflict("page_skipped", "trang đã xoá — khôi phục trước khi dịch");
+  if (rows.some((p) => p.skipped)) throw apiError(409, "page_skipped.translate");
   const unprepared = rows.filter((p) => !p.ocrResult || !p.prepareInputRev);
-  if (unprepared.length) throw conflict("page_not_prepared", `${unprepared.length} page chưa qua giai đoạn 1`);
+  if (unprepared.length) throw apiError(409, "page_not_prepared.count", { count: unprepared.length });
   await tx.update(chapters).set({ status: "processing" }).where(eq(chapters.id, ch.id));
   const { llm } = llmFor(await slotRefs(tx), ["translate"]);
   return insertJob(tx, {
@@ -323,6 +333,7 @@ export async function enqueueTranslate(
       settings: await translateSettings(tx, s),
       ...(opts.carry ? { carry: opts.carry } : {}),
       ...(llm ? { llm } : {}),
+      ui_lang: await uiLangOf(tx, s.userId),
     },
     key: translateKey(
       ch.id,
@@ -348,10 +359,10 @@ export async function enqueueReinpaint(
   const key = payload.user_mask_key;
   // Đúng một nguồn mask (cùng luật zod refine của JobPayload — insert không parse lại payload).
   if ((payload.auto_text_bbox === undefined) === (key === undefined || payload.offset === undefined)) {
-    throw new HTTPException(400, { message: "page.reinpaint cần user_mask_key + offset, hoặc auto_text_bbox" });
+    throw apiError(400, "invalid_mask_source");
   }
   if (key !== undefined && (!key.startsWith(`${userPrefix(userId)}pg/${page.id}/user-mask/`) || key.includes(".."))) {
-    throw new HTTPException(400, { message: "user_mask_key không thuộc page này" });
+    throw apiError(400, "invalid_mask_key");
   }
   return insertJob(tx, {
     userId: userId,
@@ -414,7 +425,7 @@ export async function enqueueExport(
     .where(and(eq(chapters.userId, userId), eq(chapters.id, payload.chapter_id)));
   if (!ch) throw new NotFoundError("chapter");
   if (ch.status === "ingesting" || ch.status === "processing") {
-    throw conflict("chapter_busy", "chương đang xử lý — chờ xong rồi xuất");
+    throw apiError(409, "chapter_busy.export");
   }
   const rows = await tx
     .select({ id: pages.id, cleanRev: pages.cleanRev, status: pages.status, version: pageStates.version })
@@ -422,7 +433,7 @@ export async function enqueueExport(
     .leftJoin(pageStates, eq(pageStates.pageId, pages.id))
     // Trang ẩn không xuất → ẩn/khôi phục đổi khoá (file xuất khác).
     .where(and(eq(pages.chapterId, ch.id), eq(pages.skipped, false)));
-  if (rows.length === 0) throw conflict("no_pages", "chương chưa có trang để xuất");
+  if (rows.length === 0) throw apiError(409, "no_pages.export");
   return insertJob(tx, {
     userId: userId,
     payload,
@@ -445,7 +456,7 @@ const PROOFREAD_STATUSES = new Set(["review", "done", "partial_failed"]);
 export async function enqueueProofread(tx: DbLike, userId: string, chapterId: string) {
   const ch = await lockChapter(tx, userId, chapterId);
   if (!PROOFREAD_STATUSES.has(ch.status)) {
-    throw conflict("chapter_not_translated", "chương chưa dịch xong hoặc đang chạy — dịch xong rồi hiệu đính");
+    throw apiError(409, "chapter_not_translated");
   }
   const s = await seriesOf(tx, ch);
   const rows = await tx
@@ -454,7 +465,7 @@ export async function enqueueProofread(tx: DbLike, userId: string, chapterId: st
     .innerJoin(pageStates, eq(pageStates.pageId, pages.id))
     .where(and(eq(pages.chapterId, ch.id), eq(pages.skipped, false), eq(pages.status, "ready")))
     .orderBy(asc(pages.ord));
-  if (rows.length === 0) throw conflict("no_translated_pages", "chương chưa có trang đã dịch");
+  if (rows.length === 0) throw apiError(409, "no_translated_pages");
   const { llm } = llmFor(await slotRefs(tx), ["proofread"]);
   // Chưa gán slot Hiệu đính: giữ cấp model cũ trong cài đặt chung (không hạ âm thầm người đang dùng premium).
   const tier = legacyProofreadTier((await readSystemSettings(tx))?.pipeline);
@@ -466,6 +477,7 @@ export async function enqueueProofread(tx: DbLike, userId: string, chapterId: st
       page_ids: rows.map((r) => r.id),
       ...(llm ? { llm } : { model_tier: tier }),
       settings: await translateSettings(tx, s),
+      ui_lang: await uiLangOf(tx, s.userId),
     },
     key: proofreadKey(ch.id, rows, s.glossaryRev, s.settingsRev, llm ? { llm } : { tier }),
     chapterId: ch.id,

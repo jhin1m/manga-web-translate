@@ -82,7 +82,8 @@ export function createApp({ devAutoLogin = envDevLogin() }: { devAutoLogin?: Dev
     if (err instanceof NotFoundError) return c.json({ error: "not_found", message: err.message }, 404);
     if (err instanceof HTTPException) {
       if (err.res) return err.res;
-      return c.json({ error: err.message }, err.status);
+      // Lỗi chỉ có câu (VD của Hono khi body JSON hỏng): mã theo HTTP status, câu gốc để xem chi tiết.
+      return c.json({ error: `http_${err.status}`, message: err.message }, err.status);
     }
     console.error(err);
     return c.json({ error: "internal" }, 500);

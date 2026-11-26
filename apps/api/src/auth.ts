@@ -68,7 +68,13 @@ export const createAuth = ({
       }),
     },
     // Cờ khoá tài khoản: `AuthSession["user"]` phải có field này để `requireUser` kiểm. `input: false` — client không tự đặt.
-    user: { additionalFields: { disabledAt: { type: "date", required: false, input: false } } },
+    // `uiLocale`: ngôn ngữ giao diện, chỉ ghi qua `PUT /api/me/locale` (validate theo `UI_LOCALES`), không qua update-user.
+    user: {
+      additionalFields: {
+        disabledAt: { type: "date", required: false, input: false },
+        uiLocale: { type: "string", required: false, input: false },
+      },
+    },
     databaseHooks: {
       session: {
         create: {

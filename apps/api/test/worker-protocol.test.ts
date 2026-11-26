@@ -49,6 +49,8 @@ describe("worker protocol end-to-end", () => {
   it("rejects missing/invalid worker tokens", async () => {
     const res = await call("/worker/v1/claim", { method: "POST", body: {}, headers: { authorization: "Bearer nope" } });
     expect(res.status).toBe(401);
+    // HTTPException chỉ có câu → mã theo HTTP status, câu gốc ở `message` (không đẩy câu vào `error`).
+    expect(await res.json()).toEqual({ error: "http_401", message: "invalid worker token" });
   });
 
   it(`processes a ${N}-slice chapter to review with 0 stuck jobs`, async () => {

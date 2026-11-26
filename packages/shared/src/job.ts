@@ -197,6 +197,16 @@ export const TranslateMemory = TranslateCarry.extend({
 });
 export type TranslateMemory = z.infer<typeof TranslateMemory>;
 
+/**
+ * Ngôn ngữ ghi chú AI viết cho người đọc. API chỉ gửi mã trong `UI_LOCALES`, nhưng hợp đồng job chỉ kiểm dạng mã
+ * ngôn ngữ (không đóng cứng danh sách): thêm locale giao diện mới thì worker đang chạy vẫn nhận job, mã lạ được
+ * đưa nguyên vào prompt.
+ */
+export const UiLang = z
+  .string()
+  .max(35)
+  .regex(/^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$/);
+
 export const JobPayload = z.discriminatedUnion("type", [
   z.object({ type: z.literal("chapter.ingest"), chapter_id: Uuid, ingest_rev: Rev, mode: IngestMode }),
   z.object({
@@ -221,6 +231,8 @@ export const JobPayload = z.discriminatedUnion("type", [
     carry: TranslateCarry.optional(),
     /** Model slot Dịch lúc enqueue. Thiếu → worker dùng env. */
     llm: LlmRefs.optional(),
+    /** Ngôn ngữ giao diện của chủ series lúc enqueue — `style_note` viết bằng nó. Thiếu (job cũ) → worker dùng `vi`. */
+    ui_lang: UiLang.optional(),
   }),
   z
     .object({
@@ -239,7 +251,7 @@ export const JobPayload = z.discriminatedUnion("type", [
       inpaint: InpaintOptions.optional(),
     })
     .refine((p) => (p.auto_text_bbox ? !p.user_mask_key && !p.offset : !!p.user_mask_key && !!p.offset), {
-      message: "page.reinpaint cần đúng một nguồn mask: user_mask_key + offset, hoặc auto_text_bbox",
+      message: "page.reinpaint needs exactly one mask source: user_mask_key + offset, or auto_text_bbox",
     }),
   z.object({
     type: z.literal("page.ocr_region"),
@@ -273,6 +285,8 @@ export const JobPayload = z.discriminatedUnion("type", [
     /** Model slot Hiệu đính lúc enqueue; có thì không có `model_tier`. */
     llm: LlmRefs.optional(),
     settings: TranslateSettings,
+    /** Ngôn ngữ giao diện của chủ series lúc enqueue — `reason` viết bằng nó. Thiếu (job cũ) → worker dùng `vi`. */
+    ui_lang: UiLang.optional(),
   }),
 ]);
 export type JobPayload = z.infer<typeof JobPayload>;

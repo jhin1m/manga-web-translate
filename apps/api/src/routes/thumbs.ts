@@ -5,7 +5,7 @@
 import { sourceFiles } from "@mtl/db";
 import { storageKeys } from "@mtl/shared";
 import { Hono } from "hono";
-import { HTTPException } from "hono/http-exception";
+import { apiError } from "../lib/api-error.ts";
 import { ImageError, renderThumb } from "../lib/thumbnails.ts";
 import type { AppEnv } from "../middleware/user.ts";
 import { head, MAX_GET_TTL_S, presignGet, putObject, readObject } from "../storage.ts";
@@ -25,18 +25,14 @@ thumbRoutes.get("/thumbs/:fileId", async (c) => {
     const src = await head(f.storageKey);
     // Chưa upload xong (hoặc đã bị dọn): web hiện placeholder.
     if (!src || src.bytes < 1 || src.bytes > MAX_FILE_BYTES) {
-      throw new HTTPException(404, {
-        res: Response.json({ error: "not_uploaded", message: "ảnh chưa có" }, { status: 404 }),
-      });
+      throw apiError(404, "not_uploaded.thumb");
     }
     try {
       const webp = await renderThumb(() => readObject(f.storageKey), trim);
       await putObject(key, webp, "image/webp");
     } catch (err) {
       if (err instanceof ImageError) {
-        throw new HTTPException(422, {
-          res: Response.json({ error: err.code, message: err.message }, { status: 422 }),
-        });
+        throw apiError(422, err.apiCode);
       }
       throw err;
     }

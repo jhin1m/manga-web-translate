@@ -17,11 +17,11 @@ import { chapters, type DbLike, jobs, NotFoundError, pages } from "@mtl/db";
 import { type OcrResult, prepareOptions, type TranslateCarry } from "@mtl/shared";
 import { and, asc, desc, eq, gte, inArray, sql } from "drizzle-orm";
 import { userQuotaStatus } from "../billing/user-quota.ts";
+import { apiError } from "../lib/api-error.ts";
 import { memoryCarry, rememberRunMemory } from "../lib/series-memory.ts";
 import { systemPipeline } from "../lib/system-settings.ts";
 import {
   activeJobOf,
-  conflict,
   enqueuePrepare,
   enqueueTranslate,
   lockChapter,
@@ -184,7 +184,7 @@ async function closeRun(tx: DbLike, userId: string, chapterId: string) {
  */
 async function assertNoRun(tx: DbLike, ch: Chapter) {
   if (ch.runTarget === "translated" || (await activeJobOf(tx, ch.id, "chapter.translate"))) {
-    throw conflict("translate_running", "chương đang dịch — chờ xong hoặc huỷ");
+    throw apiError(409, "translate_running");
   }
 }
 
@@ -257,7 +257,7 @@ export async function startTranslateRun(
   const ch = await lockChapter(tx, userId, chapterId);
   await assertNoRun(tx, ch);
   // Đang ingest: trang sắp bị thay toàn bộ — không mở lượt dịch lên bộ trang mới mà người dùng chưa chọn.
-  if (ch.status === "ingesting") throw conflict("chapter_busy", "chương đang tách trang — chờ xong rồi dịch");
+  if (ch.status === "ingesting") throw apiError(409, "chapter_busy.translate");
   const rows = await tx
     .select()
     .from(pages)
@@ -267,9 +267,9 @@ export async function startTranslateRun(
         : and(eq(pages.chapterId, ch.id), eq(pages.skipped, false)),
     );
   if (rows.length === 0 || (pageIds && rows.length !== new Set(pageIds).size)) throw new NotFoundError("page");
-  if (rows.some((p) => p.skipped)) throw conflict("page_skipped", "trang đã xoá — khôi phục trước khi dịch");
+  if (rows.some((p) => p.skipped)) throw apiError(409, "page_skipped.translate");
   const unprepared = rows.filter((p) => !p.ocrResult || !p.prepareInputRev);
-  if (unprepared.length) throw conflict("page_not_prepared", `${unprepared.length} page chưa qua giai đoạn 1`);
+  if (unprepared.length) throw apiError(409, "page_not_prepared.count", { count: unprepared.length });
   await openRun(
     tx,
     ch.id,
@@ -282,12 +282,12 @@ export async function startTranslateRun(
 /** Bước 2 "Dịch": chương `prepared` → lượt dịch mọi trang đã qua Bước 1 mà chưa dịch. */
 export async function translatePrepared(tx: DbLike, userId: string, chapterId: string) {
   const ch = await lockChapter(tx, userId, chapterId);
-  if (ch.status !== "prepared") throw conflict("chapter_not_prepared", "chương chưa xong bước 1 hoặc đang dịch");
+  if (ch.status !== "prepared") throw apiError(409, "chapter_not_prepared");
   const rows = await tx
     .select({ id: pages.id })
     .from(pages)
     .where(and(eq(pages.chapterId, ch.id), eq(pages.skipped, false), eq(pages.status, "prepared")));
-  if (rows.length === 0) throw conflict("page_not_prepared", "không có trang nào chờ dịch");
+  if (rows.length === 0) throw apiError(409, "page_not_prepared.none_waiting");
   return startTranslateRun(
     tx,
     userId,
@@ -310,19 +310,18 @@ export function retranslate(tx: DbLike, userId: string, chapterId: string, pageI
 export async function rescanPages(tx: DbLike, userId: string, chapterId: string, pageIds: string[]): Promise<Job[]> {
   const ch = await lockChapter(tx, userId, chapterId);
   await assertNoRun(tx, ch);
-  if (ch.status === "ingesting") throw conflict("chapter_busy", "chương đang tách trang — chờ xong rồi quét lại");
+  if (ch.status === "ingesting") throw apiError(409, "chapter_busy.rescan");
   const rows = await tx
     .select()
     .from(pages)
     .where(and(eq(pages.chapterId, ch.id), inArray(pages.id, pageIds)))
     .orderBy(asc(pages.ord));
   if (rows.length === 0 || rows.length !== new Set(pageIds).size) throw new NotFoundError("page");
-  if (rows.some((p) => p.skipped)) throw conflict("page_skipped", "trang đã xoá — khôi phục trước khi quét lại");
-  if (rows.some(inStep1)) throw conflict("page_busy", "trang đang xoá chữ + OCR — chờ xong");
-  if (rows.some((p) => !hasOcr(p)))
-    throw conflict("page_not_prepared", "trang chưa qua giai đoạn 1 — chạy lại trang lỗi");
+  if (rows.some((p) => p.skipped)) throw apiError(409, "page_skipped.rescan");
+  if (rows.some(inStep1)) throw apiError(409, "page_busy.rescan");
+  if (rows.some((p) => !hasOcr(p))) throw apiError(409, "page_not_prepared.rescan");
   if (rows.some((p) => p.cleanRev !== p.maskRev)) {
-    throw conflict("page_has_manual_cleanup", "trang đã tẩy / xoá chữ tay trên ảnh — quét lại sẽ mất phần đó");
+    throw apiError(409, "page_has_manual_cleanup");
   }
   const s = await seriesOf(tx, ch);
   const pipeline = await systemPipeline(tx);

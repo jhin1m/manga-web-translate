@@ -53,7 +53,7 @@ def comic_info_xml(chapter: dict[str, Any], page_count: int) -> str:
 def _unique_ords(items: Iterable[dict[str, Any]], what: str) -> None:
     ords = [it["ord"] for it in items]
     if len(set(ords)) != len(ords):
-        raise JobFailure("invalid_input", f"{what} trùng ord")
+        raise JobFailure("invalid_input", f"duplicate ord in {what}")
 
 
 def _render(pg: dict[str, Any], background: str) -> np.ndarray:
@@ -61,7 +61,7 @@ def _render(pg: dict[str, Any], background: str) -> np.ndarray:
     if base.shape[1] != pg["width"] or base.shape[0] != pg["height"]:
         raise JobFailure(
             "invalid_input",
-            f"nền page {pg['ord']} {base.shape[1]}x{base.shape[0]} lệch kích thước khai báo "
+            f"page {pg['ord']} background is {base.shape[1]}x{base.shape[0]}, declared size "
             f"{pg['width']}x{pg['height']}",
         )
     # Page chưa dịch: ảnh nền nguyên (không vẽ chữ dù state có box).
@@ -74,11 +74,11 @@ def _upload_export(ctx: JobContext, path: str, claimed_key: str) -> None:
         out = ctx.client.presign_outputs(ctx.job, ["export"])["export"]
         ctx.outputs["export"] = out
         if out["key"] != claimed_key:
-            raise JobFailure("internal", "presign export trả key khác key đã cấp lúc claim")
+            raise JobFailure("internal", "export presign returned a key other than the one granted at claim")
         ctx.check()
         if ctx.client.upload_file(out["put"], path, out.get("headers") or DEFAULT_PUT_HEADERS):
             return
-    raise JobFailure("internal", "upload export: presigned URL bị từ chối")
+    raise JobFailure("internal", "upload export: presigned URL rejected")
 
 
 def handle_export(ctx: JobContext, deps: Deps) -> dict[str, Any]:
@@ -89,7 +89,7 @@ def handle_export(ctx: JobContext, deps: Deps) -> dict[str, Any]:
     include = bool(p["include_untranslated"])
     claimed = ctx.outputs.get("export")
     if claimed is None:
-        raise JobFailure("internal", "claim không cấp output export")
+        raise JobFailure("internal", "claim did not grant the export output")
 
     pages = sorted(inp["pages"], key=lambda pg: pg["ord"])
     _unique_ords(pages, "page")
@@ -107,7 +107,9 @@ def handle_export(ctx: JobContext, deps: Deps) -> dict[str, Any]:
             raise JobFailure("invalid_input", str(e)) from e
         unknown = [s for s in assembler.kept if s not in source_ord]
         if unknown:
-            raise JobFailure("invalid_input", f"source_map trỏ slice không có trong sources: {unknown[0]}")
+            raise JobFailure(
+                "invalid_input", f"source_map points to a slice missing from sources: {unknown[0]}"
+            )
         work = [pg for pg in pages if assembler.needs_page(pg)]
         n_files = len(assembler.kept)
         max_ord = max((source_ord[s] for s in assembler.kept), default=0)
@@ -118,7 +120,7 @@ def handle_export(ctx: JobContext, deps: Deps) -> dict[str, Any]:
     # Tên file đủ chữ số để reader sắp đúng thứ tự (≥ 3, chương 1000+ ảnh → 4).
     digits = max(3, len(str(max_ord + 1)))
     if n_files == 0:
-        raise JobFailure("invalid_input", "không có ảnh nào để xuất (tất cả page chưa dịch?)")
+        raise JobFailure("invalid_input", "no images to export (all pages untranslated?)")
 
     with tempfile.TemporaryDirectory(prefix="mtl-export-") as tmp:
         # URL nền ký trần 15' (không xin lại được) → tải hết ra đĩa trước khi render (render chương dài có thể lâu hơn).
@@ -155,7 +157,9 @@ def handle_export(ctx: JobContext, deps: Deps) -> dict[str, Any]:
                 except SliceMapError as e:
                     raise JobFailure("invalid_input", str(e)) from e
         if written != n_files:
-            raise JobFailure("invalid_input", f"source_map thiếu đoạn: xuất {written}/{n_files} slice")
+            raise JobFailure(
+                "invalid_input", f"source_map is missing segments: exported {written}/{n_files} slices"
+            )
         size = os.path.getsize(path)
         ctx.report("upload", RENDER_SHARE)
         _upload_export(ctx, path, claimed["key"])

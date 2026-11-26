@@ -12,8 +12,8 @@ import { type DbLike, jobs, usageLedger } from "@mtl/db";
 import { QUOTA_EXCEEDED } from "@mtl/shared";
 import { and, eq, gte, not, type SQL, sql } from "drizzle-orm";
 import type { AnyPgColumn } from "drizzle-orm/pg-core";
-import { HTTPException } from "hono/http-exception";
 import { llmJobSql } from "../jobs/llm-job-filter.ts";
+import { codeError } from "../lib/api-error.ts";
 import { effectiveLimits, userDailyLimitSql } from "../lib/system-settings.ts";
 
 /** 00:00 UTC hôm nay — mốc chung cho hạn mức user, ngân sách toàn cục và bảng chi phí. */
@@ -86,12 +86,7 @@ export async function userQuotaStatus(t: DbLike, userId: string, limit?: number 
 export async function assertQuota(t: DbLike, userId: string): Promise<void> {
   const q = await userQuotaStatus(t, userId);
   if (!q.exceeded) return;
-  throw new HTTPException(402, {
-    res: Response.json(
-      { error: QUOTA_EXCEEDED, spent_usd: q.spent_usd, limit_usd: q.limit_usd, resets_at: q.resets_at },
-      { status: 402 },
-    ),
-  });
+  throw codeError(402, QUOTA_EXCEEDED, { spent_usd: q.spent_usd, limit_usd: q.limit_usd, resets_at: q.resets_at });
 }
 
 /** Lời nhắn lưu ở `jobs.error` khi job bị dừng vì hạn mức (web nhận ra qua tiền tố). */

@@ -3,6 +3,8 @@
  * box, không hiện ở bảng văn bản. Thuần, dùng chung api (lọc lúc claim, áp ngược) + web (bảng văn bản).
  */
 
+import { apiErrorMessageVi } from "./api-errors.ts";
+
 export const IGNORE_TEXT_MIN = 3;
 export const IGNORE_TEXT_MAX = 100;
 export const IGNORE_TEXT_ITEMS = 50;
@@ -90,7 +92,25 @@ function countOpenQuantifiers(src: string): number {
   return n;
 }
 
-const TEXT_ENTRY_ERROR = `mỗi mục ${IGNORE_TEXT_MIN}–${IGNORE_TEXT_MAX} ký tự (không tính http:// và dấu cách)`;
+/**
+ * Mã lý do một mục chữ bỏ qua không hợp lệ — cũng là mã lỗi API (`api-errors.ts`): web dịch theo mã, API ghép câu
+ * tiếng Việt (`ignoreEntryError`).
+ */
+export const IGNORE_ISSUE_CODES = [
+  "text_length",
+  "regex_too_long",
+  "regex_too_short",
+  "regex_nested_quantifier",
+  "regex_unsupported_syntax",
+  "regex_too_many_quantifiers",
+  "regex_invalid",
+  "regex_matches_empty",
+] as const;
+export type IgnoreIssueCode = (typeof IGNORE_ISSUE_CODES)[number];
+/** Lý do kèm tham số số cho câu hiển thị (`min` / `max`); mã không cần tham số có `params` rỗng. */
+export type IgnoreIssue = { code: IgnoreIssueCode; params: Readonly<Record<string, number>> };
+
+const issue = (code: IgnoreIssueCode, params: Readonly<Record<string, number>> = {}): IgnoreIssue => ({ code, params });
 
 /** Bộ lọc đã biên dịch từ danh sách chữ bỏ qua. */
 export type IgnoreMatcher = (text: string) => boolean;
@@ -106,7 +126,7 @@ const nativeRegex: MakeIgnoreRegex = (pattern, flags) => new RegExp(pattern, fla
 export type IgnoreEntry =
   | { kind: "text"; key: string }
   | { kind: "regex"; re: IgnoreRegex }
-  | { kind: "invalid"; error: string };
+  | { kind: "invalid"; issue: IgnoreIssue };
 
 /** Phân loại + biên dịch 1 mục: `/mẫu/` → regex (cờ `iu`), còn lại → chuỗi thường đã bỏ khoảng trắng. */
 export function parseIgnoreEntry(raw: string, { makeRegex }: IgnoreOptions = {}): IgnoreEntry {
@@ -116,42 +136,48 @@ export function parseIgnoreEntry(raw: string, { makeRegex }: IgnoreOptions = {})
     const key = [...stripSpaces(normalizeIgnoreText(entry))];
     return key.length >= IGNORE_TEXT_MIN && key.length <= IGNORE_TEXT_MAX
       ? { kind: "text", key: key.join("") }
-      : { kind: "invalid", error: TEXT_ENTRY_ERROR };
+      : { kind: "invalid", issue: issue("text_length", { min: IGNORE_TEXT_MIN, max: IGNORE_TEXT_MAX }) };
   }
   const pattern = m[1] as string;
   if ([...entry].length > IGNORE_TEXT_MAX) {
-    return { kind: "invalid", error: `regex dài tối đa ${IGNORE_TEXT_MAX} ký tự (cả hai dấu /)` };
+    return { kind: "invalid", issue: issue("regex_too_long", { max: IGNORE_TEXT_MAX }) };
   }
   if ([...pattern].length < IGNORE_TEXT_MIN) {
-    return { kind: "invalid", error: `regex tối thiểu ${IGNORE_TEXT_MIN} ký tự giữa hai dấu /` };
+    return { kind: "invalid", issue: issue("regex_too_short", { min: IGNORE_TEXT_MIN }) };
   }
   if (hasNestedQuantifier(pattern)) {
-    return { kind: "invalid", error: "regex có lượng từ lồng nhau (kiểu (a+)+) dễ làm treo, hãy viết lại" };
+    return { kind: "invalid", issue: issue("regex_nested_quantifier") };
   }
   if (hasUnsupportedSyntax(pattern)) {
-    return { kind: "invalid", error: "regex không hỗ trợ tham chiếu ngược (\\1, \\k<tên>) hay lookahead/lookbehind" };
+    return { kind: "invalid", issue: issue("regex_unsupported_syntax") };
   }
   if (countOpenQuantifiers(pattern) > MAX_OPEN_QUANTIFIERS) {
-    return { kind: "invalid", error: `regex tối đa ${MAX_OPEN_QUANTIFIERS} lượng từ *, +, {n,}` };
+    return { kind: "invalid", issue: issue("regex_too_many_quantifiers", { max: MAX_OPEN_QUANTIFIERS }) };
   }
   let re: IgnoreRegex;
   try {
     re = (makeRegex ?? nativeRegex)(pattern.normalize("NFC"), "iu");
   } catch {
-    return { kind: "invalid", error: "regex không hợp lệ" };
+    return { kind: "invalid", issue: issue("regex_invalid") };
   }
-  if (re.test("")) return { kind: "invalid", error: "regex khớp cả chuỗi rỗng, sẽ ẩn mọi chữ" };
+  if (re.test("")) return { kind: "invalid", issue: issue("regex_matches_empty") };
   return { kind: "regex", re };
 }
 
-/** Lý do mục không hợp lệ (tiếng Việt), null = hợp lệ. */
-export function ignoreEntryError(entry: string, opts?: IgnoreOptions): string | null {
+/** Lý do mục không hợp lệ (mã + tham số, web dịch theo mã), null = hợp lệ. */
+export function ignoreEntryIssue(entry: string, opts?: IgnoreOptions): IgnoreIssue | null {
   const e = parseIgnoreEntry(entry, opts);
-  return e.kind === "invalid" ? e.error : null;
+  return e.kind === "invalid" ? e.issue : null;
+}
+
+/** Lý do mục không hợp lệ bằng câu tiếng Việt (lời nhắn `issues` của API), null = hợp lệ. */
+export function ignoreEntryError(entry: string, opts?: IgnoreOptions): string | null {
+  const e = ignoreEntryIssue(entry, opts);
+  return e && apiErrorMessageVi(e.code, e.params);
 }
 
 export const isValidIgnoreEntry = (entry: string, opts?: IgnoreOptions): boolean =>
-  ignoreEntryError(entry, opts) === null;
+  ignoreEntryIssue(entry, opts) === null;
 
 /**
  * Biên dịch danh sách 1 lần → bộ lọc `(chữ) => có bị bỏ qua không`. Mục thường khớp khi chữ (chuẩn hoá, bỏ khoảng

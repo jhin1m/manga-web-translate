@@ -68,7 +68,7 @@ class RuntimeDeps:
 
         if not self.provider_name or not has_env_key(self.provider_name):
             raise JobFailure(
-                "auth", f"{LLM_NOT_CONFIGURED}: chưa cấu hình provider AI (slot DB hoặc env worker)"
+                "auth", f"{LLM_NOT_CONFIGURED}: no AI provider configured (DB slot or worker env)"
             )
         return make_provider(self.provider_name, tier)
 

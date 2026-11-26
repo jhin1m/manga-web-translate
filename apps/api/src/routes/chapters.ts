@@ -20,6 +20,7 @@ import {
   stopTranslateChain,
   translatePrepared,
 } from "../jobs/translate-chain.ts";
+import { apiError, codeError } from "../lib/api-error.ts";
 import {
   acquireChapterLock,
   activeLockHolder,
@@ -97,7 +98,7 @@ const ChapterPatch = z
     title: z.string().trim().max(200).optional(),
   })
   .refine((b) => b.number !== undefined || b.series_id !== undefined || b.title !== undefined, {
-    message: "number, series_id hoặc title",
+    message: "number, series_id or title",
   });
 
 /** Chỉ "user" từ API: "credit" do server gán khi khớp ảnh credit đã học của series. */
@@ -112,7 +113,7 @@ const SourcePatchBody = z
     /** Cao thật web đo được; chỉ dùng khi hàng chưa có `height` (ảnh quá lớn để trình duyệt tính dấu). */
     height: Px.positive().optional(),
   })
-  .refine((b) => b.skip !== undefined || b.trim !== undefined, { message: "skip hoặc trim" });
+  .refine((b) => b.skip !== undefined || b.trim !== undefined, { message: "skip or trim" });
 const SourceOrderBody = z.object({ ids: z.array(z.string().uuid()).min(1).max(MAX_FILES_PER_CHAPTER) });
 const PresignBody = z.object({ file_ids: z.array(z.string().uuid()).min(1).max(MAX_FILES_PER_CHAPTER) });
 /**
@@ -141,9 +142,6 @@ const sourceFileView = (f: SourceFile) => ({
   skip: f.skip,
   trim: f.trim,
 });
-
-const conflict = (error: string, message: string) =>
-  new HTTPException(409, { res: Response.json({ error, message }, { status: 409 }) });
 
 async function presignFile(f: SourceFile) {
   const post = await presignPost(f.storageKey, f.mime, f.bytes, MAX_POST_TTL_S);
@@ -270,10 +268,10 @@ chapterRoutes.patch("/chapters/:chapterId", async (c) => {
     if (seriesId === ch.seriesId && Number(number) === Number(ch.number) && title === ch.title) return ch;
     const siblings = await tx.select(chapters, eq(chapters.seriesId, seriesId));
     if (siblings.some((x) => x.id !== ch.id && Number(x.number) === Number(number))) {
-      throw conflict("chapter_number_taken", `series đã có chương ${number}`);
+      throw apiError(409, "chapter_number_taken", { number });
     }
     const [row] = await tx.update(chapters, eq(chapters.id, ch.id), { seriesId, number, title });
-    if (!row) throw new HTTPException(404, { message: "chapter not found" });
+    if (!row) throw new NotFoundError("chapter");
     return row;
   });
   return c.json(chapterSummary(updated));
@@ -284,12 +282,12 @@ chapterRoutes.post("/chapters/:chapterId/presign", async (c) => {
   const body = await parseJson(c, PresignBody);
   const sdb = c.get("sdb");
   const ch = await sdb.byId(chapters, c.req.param("chapterId"), "chapter");
-  if (ch.status !== "draft") throw conflict("chapter_not_draft", "chương đã commit — không upload thêm");
+  if (ch.status !== "draft") throw apiError(409, "chapter_not_draft.committed");
   const rows = await sdb.select(
     sourceFiles,
     and(eq(sourceFiles.chapterId, ch.id), inArray(sourceFiles.id, body.file_ids)),
   );
-  if (rows.length !== new Set(body.file_ids).size) throw new HTTPException(404, { message: "file not found" });
+  if (rows.length !== new Set(body.file_ids).size) throw new NotFoundError("file");
   return c.json({ files: await Promise.all(rows.map(presignFile)) });
 });
 
@@ -302,7 +300,7 @@ async function assertSourcesEditable(sdb: Scoped, ch: Chapter, holder: string) {
   if (current && current !== holder) throw chapterLockedError();
   const ingestFailed = ch.status === "partial_failed" && !(await sdb.find(pages, eq(pages.chapterId, ch.id)));
   if (ch.status !== "draft" && !ingestFailed) {
-    throw conflict("chapter_not_draft", "chương đã xử lý — tạo chương mới để upload lại");
+    throw apiError(409, "chapter_not_draft.processed");
   }
 }
 
@@ -321,13 +319,11 @@ chapterRoutes.post("/chapters/:chapterId/commit", async (c) => {
   const ch = await sdb.byId(chapters, c.req.param("chapterId"), "chapter");
   await assertSourcesEditable(sdb, ch, c.get("lockHolder"));
   const all = await sdb.select(sourceFiles, eq(sourceFiles.chapterId, ch.id));
-  if (all.length === 0) throw new HTTPException(400, { message: "chapter has no source files" });
+  if (all.length === 0) throw apiError(400, "no_source_files");
   // Ảnh bỏ qua không kiểm, không xoá (giữ để hoàn tác); ingest cũng chỉ lấy ảnh không bỏ qua.
   const files = all.filter((f) => f.skip === null).sort((a, b) => a.ord - b.ord);
   if (files.length === 0) {
-    throw new HTTPException(400, {
-      res: Response.json({ error: "no_valid_files", message: "Đã bỏ hết ảnh", rejected: [] }, { status: 400 }),
-    });
+    throw apiError(400, "no_valid_files.all_skipped", {}, { rejected: [] });
   }
 
   const checked = await mapLimit(files, 8, async (f) => {
@@ -340,9 +336,7 @@ chapterRoutes.post("/chapters/:chapterId/commit", async (c) => {
   const rejectedView = rejected.map((r) => ({ id: r.file.id, ord: r.file.ord, reason: r.reason }));
   if (valid.length === 0) {
     // Giữ nguyên source_files: chương vẫn nháp, người dùng upload lại file rồi commit tiếp.
-    throw new HTTPException(400, {
-      res: Response.json({ error: "no_valid_files", rejected: rejectedView }, { status: 400 }),
-    });
+    throw codeError(400, "no_valid_files", { rejected: rejectedView });
   }
   const { job, created } = await inJobTx(async (tx) => {
     await lockChapter(tx, userId, ch.id);
@@ -358,7 +352,7 @@ chapterRoutes.post("/chapters/:chapterId/commit", async (c) => {
     const now = await t.select(sourceFiles, and(eq(sourceFiles.chapterId, ch.id), isNull(sourceFiles.skip)) as SQL);
     const checkedIds = new Set(files.map((f) => f.id));
     if (now.length !== checkedIds.size || now.some((f) => !checkedIds.has(f.id))) {
-      throw conflict("sources_changed", "bộ ảnh vừa đổi — bấm lại Bước 1");
+      throw apiError(409, "sources_changed");
     }
     if (rejected.length) {
       await t.delete(
@@ -377,9 +371,6 @@ chapterRoutes.post("/chapters/:chapterId/commit", async (c) => {
   });
   return c.json({ job: jobView(job), created, accepted: valid.length, rejected: rejectedView }, 202);
 });
-
-const badRequest = (error: string, message: string) =>
-  new HTTPException(400, { res: Response.json({ error, message }, { status: 400 }) });
 
 /**
  * Bỏ qua / dùng lại 1 ảnh gốc, và/hoặc cắt mép trên-dưới của nó, trước Bước 1 (hoàn tác được; hàng vẫn giữ để tải
@@ -408,9 +399,9 @@ chapterRoutes.patch("/chapters/:chapterId/source-files/:fileId", async (c) => {
         set.trim = null;
       } else {
         const height = current.height ?? body.height;
-        if (!height) throw badRequest("no_size", "chưa biết chiều cao ảnh");
+        if (!height) throw apiError(400, "no_size");
         if (height - top - bottom < MIN_TRIM_KEEP_PX) {
-          throw badRequest("trim_too_large", `phải chừa lại ít nhất ${MIN_TRIM_KEEP_PX}px`);
+          throw apiError(400, "trim_too_large", { min: MIN_TRIM_KEEP_PX });
         }
         set.trim = { top, bottom, by: "user" };
         if (current.height === null) set.height = height;
@@ -437,12 +428,7 @@ chapterRoutes.put("/chapters/:chapterId/source-files/order", async (c) => {
     const current = await t.select(sourceFiles, eq(sourceFiles.chapterId, ch.id));
     const wanted = new Set(body.ids);
     if (wanted.size !== body.ids.length || wanted.size !== current.length || current.some((f) => !wanted.has(f.id))) {
-      throw new HTTPException(400, {
-        res: Response.json(
-          { error: "source_set_mismatch", message: "danh sách ảnh không khớp bộ ảnh của chương" },
-          { status: 400 },
-        ),
-      });
+      throw apiError(400, "source_set_mismatch");
     }
     const ord = new Map(body.ids.map((id, i) => [id, i]));
     const changed = current.filter((f) => ord.get(f.id) !== f.ord);
@@ -499,7 +485,7 @@ chapterRoutes.post("/chapters/:chapterId/translate", async (c) => {
   const sdb = c.get("sdb");
   const ch = await sdb.byId(chapters, c.req.param("chapterId"), "chapter");
   if (!(await sdb.find(pages, and(eq(pages.chapterId, ch.id), eq(pages.skipped, false)) as SQL))) {
-    throw conflict("no_pages", "chương chưa có trang để dịch");
+    throw apiError(409, "no_pages.translate");
   }
   const { job, created } = await inJobTx(async (tx) => {
     await assertQuota(tx, c.get("userId"));

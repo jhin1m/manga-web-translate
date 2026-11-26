@@ -17,6 +17,7 @@ from mtl_pipeline.pipeline import restore_sfx
 from mtl_pipeline.proofread import page_images, proofread_page
 from mtl_pipeline.providers.base import ProviderError
 from mtl_pipeline.schema import (
+    DEFAULT_UI_LANG,
     BBox,
     ContextLine,
     OcrItem,
@@ -90,7 +91,8 @@ def llm_provider(ctx: JobContext, deps: Deps, slot: str) -> Any:
     if slot in (ctx.payload.get("llm") or {}):
         # Payload nói job dùng slot DB nhưng claim không kèm cấu hình: không âm thầm chạy bằng key env.
         raise JobFailure(
-            "auth", f"{LLM_NOT_CONFIGURED}: thiếu cấu hình AI của job — admin kiểm tra Cài đặt › AI"
+            "auth",
+            f"{LLM_NOT_CONFIGURED}: the job has no AI configuration — admin should check Settings › AI",
         )
     if slot == "proofread":
         return deps.provider_for(ctx.payload.get("model_tier", "standard"))
@@ -174,6 +176,7 @@ def _settings(payload: dict[str, Any]) -> SeriesSettings:
         pronoun_rules=rules,
         honorific_policy=s["honorific_policy"],
         want_style=not style,
+        ui_lang=payload.get("ui_lang") or DEFAULT_UI_LANG,
     )
 
 
@@ -440,14 +443,12 @@ def _auto_text_mask(ctx: JobContext, deps: Deps, clean: np.ndarray) -> np.ndarra
     bx, by, bw, bh = (round(v) for v in ctx.payload["auto_text_bbox"])
     x0, y0, x1, y1 = max(0, bx), max(0, by), min(w, bx + bw), min(h, by + bh)
     if x1 - x0 < 4 or y1 - y0 < 4:
-        raise JobFailure("invalid_input", "khung xoá chữ nằm ngoài ảnh")
+        raise JobFailure("invalid_input", "erase box is outside the image")
     ctx.report("detect", 0.1)
     mask = bbox_text_mask(clean, deps.pipeline.masker, BBox(x=x0, y=y0, w=x1 - x0, h=y1 - y0))
     if not mask.any():
-        # Không tạo clean_rev thừa: báo rõ để editor hiển thị "không thấy chữ trong khung".
-        raise JobFailure(
-            "invalid_input", "Không thấy chữ trong khung để xoá — tô Mask (B) lên chữ để xoá tay."
-        )
+        # Không tạo clean_rev thừa. Mã đầu câu `no_text_in_box` → editor hiện câu hướng dẫn theo ngôn ngữ giao diện.
+        raise JobFailure("invalid_input", "no_text_in_box: no text found inside the erase box")
     return mask
 
 
@@ -479,7 +480,7 @@ def handle_ocr_region(ctx: JobContext, deps: Deps) -> dict[str, Any]:
     x0, y0 = max(0, int(bx)), max(0, int(by))
     x1, y1 = min(w, int(round(bx + bw))), min(h, int(round(by + bh)))
     if x1 <= x0 or y1 <= y0:
-        raise JobFailure("invalid_input", "bbox nằm ngoài page")
+        raise JobFailure("invalid_input", "bbox is outside the page")
     crop = cv2.cvtColor(img[y0:y1, x0:x1], cv2.COLOR_RGB2GRAY)
     region = Region(
         id="r-user",
@@ -561,6 +562,7 @@ def handle_proofread(ctx: JobContext, deps: Deps) -> dict[str, Any]:
             pronoun_rules=settings.pronoun_rules,
             honorific_policy=settings.honorific_policy,
             context=context,
+            ui_lang=settings.ui_lang,
         )
         try:
             res = proofread_page(provider, req)

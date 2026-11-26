@@ -1,4 +1,5 @@
 export * from "./ai-providers.ts";
+export * from "./api-errors.ts";
 export * from "./dhash.ts";
 export * from "./fonts.ts";
 export * from "./ignore-text.ts";
@@ -8,6 +9,7 @@ export * from "./pipeline-settings.ts";
 export * from "./series-lang.ts";
 export * from "./series-suggestions.ts";
 export * from "./storage-keys.ts";
+export * from "./ui-locale.ts";
 export * from "./update.ts";
 export * from "./vietnamese-chars.ts";
 export * from "./worker-protocol.ts";

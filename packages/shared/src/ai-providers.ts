@@ -22,7 +22,11 @@ export const VISION_SLOTS: readonly AiTaskSlot[] = ["ocr", "proofread"];
  */
 const ANTHROPIC_UNSUPPORTED_PREFIXES = ["claude-sonnet-5-5", "claude-opus-5-5", "claude-fable-", "claude-mythos-"];
 export const RECOMMENDED_ANTHROPIC_MODEL = "claude-haiku-5-5";
-export const MODEL_UNSUPPORTED_MESSAGE = `Worker chưa chạy được model này của Anthropic. Dùng ${RECOMMENDED_ANTHROPIC_MODEL}.`;
+/**
+ * Lời nhắn kỹ thuật trong `issues` của zod (API trả kèm `invalid_body`). Giao diện không hiện câu này: API trả mã
+ * `model_unsupported`, web dịch qua `errors.modelUnsupported` kèm tên model khuyên dùng.
+ */
+const MODEL_UNSUPPORTED_ISSUE = `Worker cannot run this Anthropic model yet. Use ${RECOMMENDED_ANTHROPIC_MODEL}.`;
 
 export const isModelUnsupported = (type: string, modelId: string): boolean =>
   type === "anthropic" && ANTHROPIC_UNSUPPORTED_PREFIXES.some((p) => modelId.trim().startsWith(p));
@@ -68,7 +72,7 @@ export function normalizeBaseUrl(raw: string): string | null {
 const BaseUrl = z
   .string()
   .max(512)
-  .refine((v) => normalizeBaseUrl(v) !== null, "base_url phải là URL https:// không kèm user/mật khẩu")
+  .refine((v) => normalizeBaseUrl(v) !== null, "base_url must be an https:// URL without user/password")
   .transform((v) => normalizeBaseUrl(v) ?? "");
 
 /** Trần giá nhập (USD / 1M token) — chặn gõ nhầm. */
@@ -107,15 +111,19 @@ export const AiProviderInput = z
   })
   .superRefine((v, ctx) => {
     if ((v.type === "openai_compatible") !== (v.base_url !== undefined)) {
-      ctx.addIssue({ code: "custom", path: ["base_url"], message: "chỉ openai_compatible có base_url (và bắt buộc)" });
+      ctx.addIssue({
+        code: "custom",
+        path: ["base_url"],
+        message: "base_url is required for openai_compatible and only allowed there",
+      });
     }
     const seen = new Set<string>();
     v.models.forEach((m, i) => {
       if (seen.has(m.model_id))
-        ctx.addIssue({ code: "custom", path: ["models", i, "model_id"], message: "trùng model" });
+        ctx.addIssue({ code: "custom", path: ["models", i, "model_id"], message: "duplicate model" });
       seen.add(m.model_id);
       if (isModelUnsupported(v.type, m.model_id))
-        ctx.addIssue({ code: "custom", path: ["models", i, "model_id"], message: MODEL_UNSUPPORTED_MESSAGE });
+        ctx.addIssue({ code: "custom", path: ["models", i, "model_id"], message: MODEL_UNSUPPORTED_ISSUE });
     });
   });
 export type AiProviderInput = z.infer<typeof AiProviderInput>;

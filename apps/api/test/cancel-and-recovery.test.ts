@@ -1,6 +1,8 @@
 /** Huỷ job / input hỏng / ingest lại khi còn job: chương không bao giờ kẹt `processing`/`ingesting`. */
 import { chapters, jobs, pages } from "@mtl/db";
+import { API_ERROR_MESSAGES_VI } from "@mtl/shared";
 import { eq } from "drizzle-orm";
+import { HTTPException } from "hono/http-exception";
 import { describe, expect, it } from "vitest";
 import { enqueueIngest, enqueueReinpaint, inJobTx } from "../src/jobs/enqueue.ts";
 import { cancelJob } from "../src/jobs/queue.ts";
@@ -120,19 +122,26 @@ describe("recovery", () => {
     expect(row.errorClass).toBe("invalid_input");
   });
 
-  it("enqueueReinpaint rejects a mask key outside the page", async () => {
+  it("enqueueReinpaint rejects a mask key outside the page and a missing mask source, with a readable message", async () => {
     const { S } = await ingested("cmask", 1);
     const [pg] = await pageRows(S.chapterId);
-    const err = await inJobTx((tx) =>
-      enqueueReinpaint(tx, S.userId, {
-        type: "page.reinpaint",
-        page_id: pg?.id as string,
-        base_clean_rev: 0,
-        user_mask_key: `u/${S.userId}/pg/other/user-mask/m.png`,
-        offset: { x: 0, y: 0 },
-      }),
-    ).catch((e: unknown) => e);
-    expect((err as { status?: number }).status).toBe(400);
+    const base = { type: "page.reinpaint", page_id: pg?.id as string, base_clean_rev: 0 } as const;
+    const reject = async (input: Parameters<typeof enqueueReinpaint>[2]) => {
+      const err = await inJobTx((tx) => enqueueReinpaint(tx, S.userId, input)).catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(HTTPException);
+      const res = (err as HTTPException).getResponse();
+      return { status: res.status, body: await res.json() };
+    };
+    expect(
+      await reject({ ...base, user_mask_key: `u/${S.userId}/pg/other/user-mask/m.png`, offset: { x: 0, y: 0 } }),
+    ).toEqual({
+      status: 400,
+      body: { error: "invalid_mask_key", message: API_ERROR_MESSAGES_VI.invalid_mask_key, params: {} },
+    });
+    expect(await reject(base)).toEqual({
+      status: 400,
+      body: { error: "invalid_mask_source", message: API_ERROR_MESSAGES_VI.invalid_mask_source, params: {} },
+    });
   });
 
   it("re-ingest while page jobs are active → 409 chapter_busy", async () => {

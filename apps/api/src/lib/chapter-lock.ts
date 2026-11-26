@@ -10,6 +10,7 @@ import { chapters, type Scoped } from "@mtl/db";
 import type { PAGE_STATUSES } from "@mtl/shared";
 import { and, eq, isNull, lt, or, type SQL } from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
+import { apiError } from "./api-error.ts";
 
 export const LOCK_TTL_MS = 15 * 60 * 1000;
 
@@ -71,11 +72,6 @@ export const pageBusyError = () =>
 /** Thao tác ghi hàng loạt cả chương (find/replace, áp glossary, hoàn tác) chỉ khi chương không cắt trang / chạy AI. */
 export function assertChapterIdle(ch: { status: string }): void {
   if (ch.status === "ingesting" || ch.status === "processing") {
-    throw new HTTPException(409, {
-      res: Response.json(
-        { error: "chapter_busy", message: "chương đang xử lý — chờ xong rồi sửa hàng loạt" },
-        { status: 409 },
-      ),
-    });
+    throw apiError(409, "chapter_busy.batch_edit");
   }
 }

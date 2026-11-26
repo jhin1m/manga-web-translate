@@ -5,6 +5,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./series-lang": "./src/series-lang.ts",
+    "./ui-locale": "./src/ui-locale.ts",
     "./update": "./src/update.ts"
   },
   "scripts": {

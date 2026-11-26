@@ -164,6 +164,8 @@ class RollingContext(BaseModel):
 
 
 DEFAULT_HONORIFIC_POLICY = "chuyển kính ngữ sang cách xưng hô/gọi nhau tự nhiên của ngôn ngữ đích"
+#: Ngôn ngữ ghi chú AI cho người đọc khi payload thiếu `ui_lang` (job xếp hàng trước 0.14.0) — như hành vi cũ.
+DEFAULT_UI_LANG = "vi"
 
 
 class TranslateRequest(BaseModel):
@@ -176,6 +178,8 @@ class TranslateRequest(BaseModel):
     context: RollingContext | None = None
     #: Series chưa có Giọng văn → nhờ LLM mô tả giọng văn đã dùng (`style_note`). Nội bộ worker, không thuộc payload job.
     want_style: bool = False
+    #: Ngôn ngữ giao diện của người dùng (payload `ui_lang`) — `style_note` viết bằng nó.
+    ui_lang: str = DEFAULT_UI_LANG
 
 
 class TranslateItem(BaseModel):
@@ -249,6 +253,8 @@ class ProofreadRequest(BaseModel):
     honorific_policy: str = DEFAULT_HONORIFIC_POLICY
     #: Vài dòng nguồn + bản dịch cuối của trang trước (giữ xưng hô nhất quán).
     context: list[ContextLine] = Field(default_factory=list)
+    #: Ngôn ngữ giao diện của người dùng (payload `ui_lang`) — `reason` viết bằng nó.
+    ui_lang: str = DEFAULT_UI_LANG
 
 
 class ProofreadItem(BaseModel):

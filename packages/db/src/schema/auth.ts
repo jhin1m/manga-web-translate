@@ -22,6 +22,8 @@ export const user = pgTable("user", {
     .$onUpdate(() => /* @__PURE__ */ new Date())
     .notNull(),
   disabledAt: timestamp("disabled_at"),
+  /** Ngôn ngữ giao diện web gần nhất (`UI_LOCALES`); null = chưa đồng bộ → ghi chú AI viết tiếng Việt. */
+  uiLocale: text("ui_locale"),
 });
 
 export const session = pgTable(

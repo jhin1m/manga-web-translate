@@ -65,7 +65,7 @@ export const PipelineSettings = PipelineSettingsFields.superRefine((s, ctx) => {
       ctx.addIssue({
         code: "custom",
         path: ["ocr_engines", lang],
-        message: `${s.ocr_engines[lang]} không đọc được ngôn ngữ ${lang}`,
+        message: `${s.ocr_engines[lang]} cannot read language ${lang}`,
       });
     }
   }

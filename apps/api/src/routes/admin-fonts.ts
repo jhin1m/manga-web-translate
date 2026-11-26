@@ -3,16 +3,16 @@
  * (`lib/font-upload.ts`) và cùng dạng id `custom-<8 hex>` nên hợp đồng job không đổi. Trần: 20 font hoặc tổng 100MB.
  * Xoá bị chặn khi series của bất kỳ ai còn dùng làm font mặc định (chỉ trả số series, không lộ tên).
  */
-import { series, systemFonts } from "@mtl/db";
+import { NotFoundError, series, systemFonts } from "@mtl/db";
 import { storageKeys } from "@mtl/shared";
 import { asc, count, eq, sql, sum } from "drizzle-orm";
 import { Hono } from "hono";
-import { HTTPException } from "hono/http-exception";
 import { v7 as uuidv7 } from "uuid";
 import { z } from "zod";
 import { inJobTx } from "../jobs/enqueue.ts";
+import { apiError } from "../lib/api-error.ts";
 import { MAX_FONT_BYTES } from "../lib/font-metrics.ts";
-import { discardUpload, fail, fontView, inspectUploadedFont } from "../lib/font-upload.ts";
+import { discardUpload, fontView, inspectUploadedFont } from "../lib/font-upload.ts";
 import { allocateCustomFontId } from "../lib/fonts.ts";
 import { parseJson } from "../lib/validate.ts";
 import type { AppEnv } from "../middleware/user.ts";
@@ -46,7 +46,7 @@ adminFontRoutes.post("/fonts/upload-url", async (c) => {
 adminFontRoutes.post("/fonts", async (c) => {
   const { key } = await parseJson(c, CommitRequest);
   if (!key.startsWith(UPLOAD_PREFIX) || key.includes("..")) {
-    throw fail(400, "invalid_key", "key không phải file upload font hệ thống");
+    throw apiError(400, "invalid_key.system_font");
   }
   const font = await inspectUploadedFont(key);
   const { bytes, sha256 } = font;
@@ -97,7 +97,7 @@ adminFontRoutes.post("/fonts", async (c) => {
 
   if (outcome.kind === "limit") {
     await discardUpload(finalKey);
-    throw fail(409, "limit", `font hệ thống tối đa ${MAX_SYSTEM_FONTS} font hoặc ${MAX_SYSTEM_FONT_BYTES >> 20}MB`);
+    throw apiError(409, "limit.system_fonts", { max: MAX_SYSTEM_FONTS, max_mb: MAX_SYSTEM_FONT_BYTES >> 20 });
   }
   if (outcome.kind === "dup") {
     await discardUpload(finalKey);
@@ -119,14 +119,9 @@ adminFontRoutes.delete("/fonts/:fontId", async (c) => {
     if (inUse === 0) await t.delete(systemFonts).where(eq(systemFonts.id, font.id));
     return { font, inUse };
   });
-  if (!result) throw new HTTPException(404, { message: "font not found" });
+  if (!result) throw new NotFoundError("font");
   if (result.inUse > 0) {
-    throw new HTTPException(409, {
-      res: Response.json(
-        { error: "in_use", message: "font đang là mặc định của series", series_count: result.inUse },
-        { status: 409 },
-      ),
-    });
+    throw apiError(409, "in_use.font", {}, { series_count: result.inUse });
   }
   await discardUpload(result.font.fileKey);
   return c.body(null, 204);

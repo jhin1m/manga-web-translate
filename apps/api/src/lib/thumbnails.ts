@@ -2,6 +2,7 @@
  * Thumbnail WebP + ảnh bìa series bằng sharp. Giải mã strip cao hàng chục nghìn px tốn RAM → tối đa 2 ảnh xử lý cùng
  * lúc trong process API, mỗi ảnh 1 luồng libvips, và ảnh quá số điểm ảnh bị từ chối trước khi giải mã.
  */
+import { apiErrorMessageVi, splitApiErrorCode } from "@mtl/shared";
 import sharp, { type Metadata, type Sharp } from "sharp";
 
 sharp.concurrency(1);
@@ -20,14 +21,18 @@ const CONCURRENCY = 2;
 
 export type ThumbTrim = { top: number; bottom: number };
 
-/** Ảnh không đọc được (hỏng / không phải ảnh) hoặc quá khổ — route map sang 4xx. */
+type ImageErrorCode = "invalid_image" | "invalid_image.no_size" | "image_too_large" | "unsupported_format";
+
+/**
+ * Ảnh không đọc được (hỏng / không phải ảnh) hoặc quá khổ — route map sang 4xx. `apiCode` = mã lỗi API đầy đủ (có thể
+ * kèm biến thể), `code` = phần mã ổn định.
+ */
 export class ImageError extends Error {
-  constructor(
-    readonly code: "invalid_image" | "image_too_large" | "unsupported_format",
-    message: string,
-  ) {
-    super(message);
+  readonly code: string;
+  constructor(readonly apiCode: ImageErrorCode) {
+    super(apiErrorMessageVi(apiCode));
     this.name = "ImageError";
+    this.code = splitApiErrorCode(apiCode).error;
   }
 }
 
@@ -61,8 +66,8 @@ async function readMeta(img: Sharp): Promise<{ width: number; height: number; fo
   // Kích thước sau khi xoay theo EXIF — khớp ảnh worker (exif_transpose) và toạ độ trim người dùng kéo trên ảnh đã xoay.
   const { width, height } = meta.autoOrient ?? meta;
   const { format } = meta;
-  if (!width || !height || !format) throw new ImageError("invalid_image", "không đọc được kích thước ảnh");
-  if (width * height > MAX_INPUT_PIXELS) throw new ImageError("image_too_large", "ảnh quá lớn");
+  if (!width || !height || !format) throw new ImageError("invalid_image.no_size");
+  if (width * height > MAX_INPUT_PIXELS) throw new ImageError("image_too_large");
   return { width, height, format };
 }
 
@@ -70,8 +75,8 @@ async function readMeta(img: Sharp): Promise<{ width: number; height: number; fo
 function asImageError(err: unknown): ImageError {
   if (err instanceof ImageError) return err;
   const msg = err instanceof Error ? err.message : String(err);
-  if (/pixel limit/i.test(msg)) return new ImageError("image_too_large", "ảnh quá lớn");
-  return new ImageError("invalid_image", "không đọc được ảnh");
+  if (/pixel limit/i.test(msg)) return new ImageError("image_too_large");
+  return new ImageError("invalid_image");
 }
 
 /**
@@ -117,7 +122,7 @@ export function renderCover(input: Uint8Array): Promise<Uint8Array> {
       const src = Buffer.from(input.buffer, input.byteOffset, input.byteLength);
       const img = sharp(src, { limitInputPixels: MAX_INPUT_PIXELS, autoOrient: true });
       const { format } = await readMeta(img);
-      if (!COVER_FORMATS.has(format)) throw new ImageError("unsupported_format", "chỉ nhận PNG, JPEG, WebP");
+      if (!COVER_FORMATS.has(format)) throw new ImageError("unsupported_format");
       const out = await img
         .resize(COVER_WIDTH, COVER_HEIGHT, { fit: "cover", position: "top" })
         .webp({ quality: THUMB_QUALITY })

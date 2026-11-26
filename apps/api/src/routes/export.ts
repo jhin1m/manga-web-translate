@@ -20,6 +20,7 @@ import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { z } from "zod";
 import { enqueueExport, inJobTx } from "../jobs/enqueue.ts";
+import { apiError } from "../lib/api-error.ts";
 import { parseJson } from "../lib/validate.ts";
 import type { AppEnv } from "../middleware/user.ts";
 import { EXPORT_GET_TTL_S, head, presignGet } from "../storage.ts";
@@ -53,6 +54,7 @@ function exportView(j: Job) {
     status: j.status,
     progress: j.progress,
     stage: j.stage,
+    error_class: j.errorClass,
     error: j.error,
     format: p.format,
     layout: p.layout,
@@ -117,7 +119,7 @@ exportRoutes.get("/exports/:jobId", async (c) => {
 exportRoutes.get("/exports/:jobId/download", async (c) => {
   const userId = c.get("userId");
   const job = await exportJob(c.get("sdb"), c.req.param("jobId"));
-  if (job.status !== "succeeded") throw httpError(409, "export_not_ready", "file chưa xuất xong");
+  if (job.status !== "succeeded") throw apiError(409, "export_not_ready");
   const exp = expiresAt(job);
   const p = job.payload as ExportPayload;
   const ext = EXPORT_FILE[p.format].ext;
@@ -125,8 +127,7 @@ exportRoutes.get("/exports/:jobId/download", async (c) => {
   const r = job.result as Extract<JobResult, { type: "chapter.export" }> | null;
   // Key trong result đã được kiểm lúc complete; kiểm lại để không bao giờ ký URL ngoài dữ liệu người dùng.
   if (!r || r.key !== key || !keyBelongsToUser(key, userId)) throw httpError(404, "not_found", "export not found");
-  if (!exp || exp.getTime() <= Date.now() || !(await head(key)))
-    throw httpError(410, "export_expired", "file đã hết hạn");
+  if (!exp || exp.getTime() <= Date.now() || !(await head(key))) throw apiError(410, "export_expired");
   const sdb = c.get("sdb");
   const ch = await sdb.byId(chapters, p.chapter_id, "chapter");
   const s = await sdb.byId(series, ch.seriesId, "series");

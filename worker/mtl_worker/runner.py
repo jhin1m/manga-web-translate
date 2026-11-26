@@ -40,7 +40,8 @@ class JobAborted(RuntimeError):
 
 @dataclass
 class JobFailure(Exception):
-    """Lỗi đã phân loại gửi lên `fail`."""
+    """Lỗi đã phân loại gửi lên `fail`. `message` là chi tiết kỹ thuật tiếng Anh (log / "Chi tiết kỹ thuật"); nhãn
+    người dùng thấy lấy theo `error_class` (hoặc mã đầu câu như `LLM_NOT_CONFIGURED:`) ở web."""
 
     error_class: str  # provider | rate_limited | schema | invalid_input | auth | internal
     message: str
@@ -194,7 +195,7 @@ class JobContext:
         if out is None or not self.client.upload_png(out["put"], data):
             self.outputs.update(self.client.presign_outputs(self.job, [name]))
             if not self.client.upload_png(self.outputs[name]["put"], data):
-                raise JobFailure("internal", f"upload {name}: presigned URL bị từ chối")
+                raise JobFailure("internal", f"upload {name}: presigned URL rejected")
 
 
 class Heartbeat:
@@ -328,7 +329,7 @@ def _run_job(
                 validate_contract(inputs_schema(job["type"]), job["inputs"])
                 handler = handlers.get(job["type"])
                 if handler is None:
-                    raise JobFailure("internal", f"worker không có handler cho {job['type']}")
+                    raise JobFailure("internal", f"worker has no handler for {job['type']}")
                 with job_fonts(job["inputs"].get("fonts"), ctx.download):
                     result = handler(ctx, deps)
                 # Kiểm kết quả trước khi lấy usage: sai hợp đồng → fail kèm usage (không mất token đã trả tiền).
@@ -339,7 +340,7 @@ def _run_job(
             except ProviderError as e:
                 raise classify_provider_error(e) from e
             except ContractError as e:
-                raise JobFailure("internal", f"hợp đồng: {e}") from e
+                raise JobFailure("internal", f"contract: {e}") from e
         client.complete(job, result, ctx.take_usage())
         return "succeeded"
     except (JobAborted, LeaseLost) as e:

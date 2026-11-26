@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from .providers.base import LLMProvider, ProviderError
 from .schema import (
     DEFAULT_HONORIFIC_POLICY,
+    DEFAULT_UI_LANG,
     ContextLine,
     ContextMode,
     NewTerm,
@@ -34,6 +35,8 @@ class SeriesSettings:
     honorific_policy: str = DEFAULT_HONORIFIC_POLICY
     #: Series chưa có Giọng văn → mỗi lô nhờ LLM trả `style_note`.
     want_style: bool = False
+    #: Ngôn ngữ giao diện của người dùng: `style_note` (dịch) và `reason` (hiệu đính) viết bằng nó.
+    ui_lang: str = DEFAULT_UI_LANG
 
 
 @dataclass
@@ -110,6 +113,7 @@ def _translate_once(
         honorific_policy=settings.honorific_policy,
         context=ctx,
         want_style=settings.want_style,
+        ui_lang=settings.ui_lang,
     )
     expected = [r.id for p in batch for r in p.regions]
     usage: list[TokenUsage] = []
