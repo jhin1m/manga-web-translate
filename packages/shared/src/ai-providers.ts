@@ -27,6 +27,23 @@ export const MODEL_UNSUPPORTED_MESSAGE = `Worker chưa chạy được model nà
 export const isModelUnsupported = (type: string, modelId: string): boolean =>
   type === "anthropic" && ANTHROPIC_UNSUPPORTED_PREFIXES.some((p) => modelId.trim().startsWith(p));
 
+/**
+ * Bước để "Tự động" (slot null): model đầu tiên dùng được theo thứ tự admin thêm (nhà cung cấp cũ trước, trong đó model
+ * cũ trước); bước nhận ảnh chỉ lấy model vision, bỏ model worker chưa chạy được. `undefined` = chưa có → worker dùng key
+ * trong .env. API (lúc tạo job) và web (hiện model đang dùng) gọi cùng hàm với danh sách đã sắp theo thứ tự đó.
+ */
+export function autoSlotModel<P extends { type: string; models: readonly { model_id: string; vision: boolean }[] }>(
+  providers: readonly P[],
+  slot: AiTaskSlot,
+): { provider: P; model: P["models"][number] } | undefined {
+  const vision = VISION_SLOTS.includes(slot);
+  for (const provider of providers) {
+    const model = provider.models.find((m) => (!vision || m.vision) && !isModelUnsupported(provider.type, m.model_id));
+    if (model) return { provider, model };
+  }
+  return undefined;
+}
+
 /** Ký tự in được ASCII, không khoảng trắng / zero-width / xuống dòng giữa key. */
 export const ApiKey = z
   .string()
@@ -112,7 +129,7 @@ export const AiProviderPatch = z.strictObject({
 });
 export type AiProviderPatch = z.infer<typeof AiProviderPatch>;
 
-/** Gán model (id `ai_models`) cho 3 tác vụ; null = mặc định (env worker). */
+/** Gán model (id `ai_models`) cho 3 tác vụ; null = tự động (`autoSlotModel`, không có thì env worker). */
 export const AiSlots = z.strictObject({
   ocr: z.uuid().nullable(),
   translate: z.uuid().nullable(),

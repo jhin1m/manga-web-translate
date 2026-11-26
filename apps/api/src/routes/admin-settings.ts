@@ -37,7 +37,7 @@ adminSettingsRoutes.put("/settings/pipeline", async (c) => {
 });
 
 /**
- * Gán model cho 3 tác vụ (đủ bộ; null = mặc định env worker). OCR + Hiệu đính cần model có vision.
+ * Gán model cho 3 tác vụ (đủ bộ; null = tự động, xem `slotRefs`). OCR + Hiệu đính cần model có vision.
  * Chạy dưới khoá hàng cài đặt → không đua với xoá provider / model.
  */
 adminSettingsRoutes.put("/settings/slots", async (c) => {
