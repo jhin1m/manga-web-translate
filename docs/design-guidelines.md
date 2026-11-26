@@ -153,7 +153,7 @@ Khung 1280×800, không chọn gì: canvas rộng 1160px (1280 − rail 48 − c
 
 - Mọi người dùng đăng nhập vào được; người thường chỉ thấy nhóm "Chung" (mục **Font**), nhóm "AI" và "Hệ thống" chỉ admin (`ADMIN_EMAILS`). Mỗi mục ở thanh trái và tiêu đề nhóm có icon. Bố cục: thanh mục trái (mục = link `?section=`) + 1 panel phải, tối đa 820px. Mục đang chọn = chữ `--c-accent-hover` + nền `--c-accent-weak`; không gradient, 1 màu nhấn.
 - Khung chung (`features/admin/settings-ui.tsx`): `SectionHead` (tiêu đề + mô tả + vùng phải cho trạng thái / nút), `SetGroup` (tiêu đề nhỏ + mô tả + thẻ `.set-card` nền trắng, viền `--c-line`, bo 6px), `SetRow` (nhãn + giải thích bên trái, ô điều khiển bên phải; màn < 720px xếp dọc). Giải thích nằm dưới nhãn, gắn vào ô qua `aria-describedby`.
-- Mục AI: **Pipeline** chia theo bước xử lý trang (Phát hiện chữ → Đọc chữ (OCR engine theo ngôn ngữ + model AI đọc chữ) → Xoá chữ → Dịch → Hiệu đính); model AI của từng bước nằm ngay trong bước đó (`<optgroup>` theo nhà cung cấp, bước cần ảnh chỉ hiện model vision, "Theo worker (.env)" = để trống). Tự lưu: select lưu khi đổi, ô số lưu khi rời ô / Enter nếu hợp lệ; trạng thái "Đang lưu… / Đã lưu / lỗi" ở đầu mục; "Về mặc định" hỏi lại tại chỗ và giữ model AI. `?section=tasks` cũ rơi về Pipeline. **Nhà cung cấp**: danh sách thẻ (tên · chip loại · `••••last4` · chip model kèm "vision" · Kiểm tra · icon Sửa / Xoá có xác nhận tại chỗ); form sửa mở ngay trong thẻ, form thêm ở đầu danh sách. Form thêm chỉ cần chọn nhà cung cấp (nút Anthropic · OpenAI · Google Gemini · DeepSeek · Khác) + dán key: tên và model gợi ý đầu tiên (kèm giá, cờ vision) điền sẵn, chỉnh ở mục thu gọn "Tuỳ chỉnh tên, model và giá"; "Khác" (endpoint tương thích OpenAI) không có gợi ý nên hiện base URL và mở sẵn mục tuỳ chỉnh; model + giá USD/1M token có dòng tiêu đề cột, model reasoning có cảnh báo màu `--c-warn`.
+- Mục AI: **Pipeline** chia theo bước xử lý trang (Phát hiện chữ → Đọc chữ (OCR engine theo ngôn ngữ + model AI đọc chữ) → Xoá chữ → Dịch → Hiệu đính); model AI của từng bước nằm ngay trong bước đó (`<optgroup>` theo nhà cung cấp, bước cần ảnh chỉ hiện model vision, "Tự động (model)" = để trống: lúc tạo job lấy model đầu tiên phù hợp theo thứ tự thêm nhà cung cấp / model, không có thì worker dùng key .env). Tự lưu: select lưu khi đổi, ô số lưu khi rời ô / Enter nếu hợp lệ; trạng thái "Đang lưu… / Đã lưu / lỗi" ở đầu mục; "Về mặc định" hỏi lại tại chỗ và giữ model AI. `?section=tasks` cũ rơi về Pipeline. **Nhà cung cấp**: danh sách thẻ (tên · chip loại · `••••last4` · chip model kèm "vision" · Kiểm tra · icon Sửa / Xoá có xác nhận tại chỗ); form sửa mở ngay trong thẻ, form thêm ở đầu danh sách. Form thêm chỉ cần chọn nhà cung cấp (nút Anthropic · OpenAI · Google Gemini · DeepSeek · Khác) + dán key: tên và model gợi ý đầu tiên (kèm giá, cờ vision) điền sẵn, chỉnh ở mục thu gọn "Tuỳ chỉnh tên, model và giá"; "Khác" (endpoint tương thích OpenAI) không có gợi ý nên hiện base URL và mở sẵn mục tuỳ chỉnh; model + giá USD/1M token có dòng tiêu đề cột, model reasoning có cảnh báo màu `--c-warn`.
 - Mục Hệ thống (ẩn ở chế độ local): **Người dùng**. Hạn mức chi phí và đăng ký không có trên UI — chỉ cấu hình trong `.env`.
 - Thêm mục: khai báo trong `features/admin/admin-sections.ts` + panel trong `admin-layout.tsx`.
 
@@ -168,9 +168,50 @@ Khung 1280×800, không chọn gì: canvas rộng 1160px (1280 − rail 48 − c
 
 ## Ngôn ngữ
 
-- Giao diện tiếng Việt, có dấu đầy đủ. Thuật ngữ kỹ thuật giữ nguyên khi người dùng quen (ZIP, CSV, glossary, SFX).
+- Giao diện hai ngôn ngữ: tiếng Việt (bản gốc, có dấu đầy đủ) và English. Thuật ngữ kỹ thuật giữ nguyên khi người dùng
+  quen (ZIP, CSV, glossary, SFX). Bản English dùng thuật ngữ scanlation: clean (xoá chữ), Script (panel Văn bản),
+  Proofread (hiệu đính), slice (cắt trang), band (dải); công cụ Tẩy chữ là **Clean** với hai chế độ Brush / Eraser.
 - Trạng thái page nói rõ giai đoạn: "GĐ1 · xoá chữ + OCR", "GĐ2 · đang dịch".
 - Hành động có hậu quả nói rõ phạm vi: "Chạy lại trang lỗi", "Dịch lại cả chương (chỉnh sửa tay được giữ nguyên)".
+
+## i18n (chữ giao diện theo ngôn ngữ)
+
+Từ điển tự viết trong `apps/web/src/i18n/`, không dùng thư viện. Người dùng đổi ngôn ngữ ở cột trái `/settings`
+(ô "Ngôn ngữ giao diện"); trình duyệt không phải tiếng Việt và chưa chọn gì thì tự vào English. Lựa chọn lưu ở
+localStorage `mtl.locale` và đồng bộ lên `user.ui_locale` (`PUT /api/me/locale`) để AI viết `style_note` / lý do hiệu
+đính theo ngôn ngữ đó.
+
+- **Chuỗi mới** ghi vào cả `messages/vi.json` và `messages/en.json`. Test parity bắt hai file cùng key, cùng tập
+  placeholder `{name}` và không chuỗi rỗng. `vi` là bản gốc, đóng gói sẵn và là fallback khi key thiếu.
+- **Key** phẳng, theo feature + file: `chapter.topbar.chipAria`, `series.newSeriesDialog.title`, `errors.<mã>`. Bảng tra
+  theo mã giữ mã nguyên văn ở cuối key (`chapter.jobError.class.rate_limited`) và đi qua map `Record<mã, MessageKey>`;
+  không ghép key động. `MessageKey = keyof vi.json` nên gõ sai key là lỗi typecheck.
+- **Hàm** (`i18n/t.ts`): `t(key, params)`; `tp(key, count, params)` cho số nhiều (cặp `<key>.one` / `<key>.other`,
+  bản `vi` cũng có cả hai); `tNode(key, nodes)` khi câu chứa phần tử JSX (nút, `<b>`), để từng ngôn ngữ tự đặt thứ tự
+  từ; `useT()` trong component để vẽ lại khi đổi ngôn ngữ. Số / ngày dùng `fmtNumber`, `fmtDate`, `collator` ở
+  `i18n/format.ts`, không ghim `"vi-VN"`.
+- **Hằng module-level** có chữ sẽ giữ ngôn ngữ cũ. Gọi `t()` lúc render, đổi hằng thành hàm, hoặc giữ shape và đổi nhãn
+  thành getter (`get label() { return t(...) }`) khi test hay file khác đọc hằng đó. `useMemo` tính sẵn chữ thì thêm
+  `locale` vào deps.
+- **Guard** `no-hardcoded-vietnamese.test.ts` chặn chữ có dấu tiếng Việt viết thẳng trong `apps/web/src` và
+  `packages/shared/src` (bỏ comment, `*.test.*`, `i18n/messages/`). Chỉ dữ liệu được vào `ALLOWLIST`, theo dòng
+  (`line`) và kèm `reason`: mẫu chữ xem trước font, regex tên file, tên bản địa "Tiếng Việt", `LANG_NAMES` cho prompt.
+  Guard không bắt chữ không dấu (ví dụ `title="Font"`), nên soát tay khi thêm chữ ASCII.
+- **Lỗi API**: route ném `apiError(status, "<mã>", params)` (`apps/api/src/lib/api-error.ts`). Body là
+  `{ error, variant?, message, params }`, trong đó `message` là câu tiếng Việt cũ cho client cũ. Mã mới thêm vào
+  `API_ERROR_MESSAGES_VI` (`packages/shared/src/api-errors.ts`) và `errors.<error>[.<variant>]` ở cả hai JSON;
+  `api-error-keys.test.ts` bắt câu `vi.json` trùng câu API. Web (`errorMessage`, `apiErrorText` ở `lib/api.ts`) dịch theo
+  mã; mã lạ ở locale khác `vi` hiện `errors.unknown` kèm mã.
+- **Lỗi job** hiện nhãn theo `error_class` (`features/chapter/job-error.ts`); chi tiết thô của worker là tiếng Anh kỹ
+  thuật và chỉ nằm ở `title` / "Chi tiết kỹ thuật".
+- **Thêm locale**: tạo `messages/<code>.json` đủ key, thêm một dòng vào `LOCALES` (`i18n/locales.ts`, `load: () =>
+  import(...)`) và mã đó vào `UI_LOCALES` (`packages/shared/src/ui-locale.ts`; test web bắt hai danh sách khớp). Không
+  cần nâng worker: payload job chỉ kiểm dạng mã ngôn ngữ (`ui_lang`, regex trong `packages/shared/src/job.ts`), mã
+  worker chưa biết tên thì đi nguyên vào prompt. `PUT /api/me/locale` vẫn chỉ nhận mã trong `UI_LOCALES`.
+- **E2E**: Playwright ghim `locale: "vi-VN"` nên spec cũ chọn theo chữ Việt. Spec tiếng Anh đặt
+  `test.use({ locale: "en-US" })` (`i18n-en-smoke.spec.ts`, `settings-language.spec.ts`).
+- **Bố cục**: chữ English thường dài hơn. Nhãn trong ô hẹp được xuống dòng thay vì cắt "…" (trạng thái trên thẻ, cột
+  bảng), thanh công cụ nổi rộng theo nội dung tới mép canvas rồi mới xuống dòng.
 
 ## Việc còn mở
 

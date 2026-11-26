@@ -340,6 +340,10 @@ API `PIPELINE_VERSION` (muối input_rev) vẫn 0.4.0. 0.8.0 (`Region.style` ở
 payload cũ không có `trim`. API `PIPELINE_VERSION` (muối input_rev) vẫn 0.4.0. Checklist ở [deployment-guide](./deployment-guide.md).
 0.13.0 (key result optional `style_note`, Giọng văn AI) **không** nâng `MIN_PIPELINE_VERSION` (giữ 0.12.0): worker
 0.12.0 vẫn chạy, chỉ không điền Giọng văn.
+0.14.0 (payload `chapter.translate` / `chapter.proofread` có `ui_lang` = `user.ui_locale` của chủ series lúc enqueue,
+migration 0033) nâng `MIN_PIPELINE_VERSION = 0.14.0`: schema payload có `additionalProperties: false` nên worker cũ fail
+job dịch / hiệu đính; worker < 0.14.0 nhận 426 khi claim → nâng worker (Mac, Modal) trước hoặc cùng lúc API. Prompt giữ
+tiếng Việt, chỉ chỉ dẫn `style_note` và `reason` viết bằng `ui_lang`; payload thiếu (job xếp hàng trước) → `vi`.
 
 ## Xoá chữ lại (`page.reinpaint`, pipeline 0.9.0)
 
@@ -436,7 +440,9 @@ chụp vào payload lúc enqueue:
 Cài đặt admin → AI (`/settings?section=providers|tasks`; `/api/admin/providers*`, `/api/admin/models/:id`,
 `PUT /api/admin/settings/slots`): provider (`anthropic`, `gemini`, `openai`, `openai_compatible` + `base_url` https) kèm model
 và giá USD/1M token do admin nhập (`ai_providers`, `ai_models`), và 3 slot OCR / Dịch / Hiệu đính (cột FK
-`ocr_model_id`, `translate_model_id`, `proofread_model_id` trên `system_settings`; `null` = mặc định theo env worker).
+`ocr_model_id`, `translate_model_id`, `proofread_model_id` trên `system_settings`; `null` = "Tự động": lúc enqueue
+`slotRefs` lấy `autoSlotModel` — model đầu tiên phù hợp theo thứ tự thêm provider rồi model, slot OCR / Hiệu đính chỉ
+lấy model vision, bỏ model worker chưa chạy được; không có model nào → job không có `llm.<slot>` → worker dùng env).
 Mẫu "DeepSeek" ở form chỉ là `openai_compatible` điền sẵn (`https://api.deepseek.com`, `json_object`, gợi ý giá
 `deepseek-flash` / `deepseek-v4-pro` theo giờ cao điểm) — không có loại riêng ở DB. Worker nhận ra host
 `api.deepseek.com` và gửi `thinking: disabled` (DeepSeek bật suy luận mặc định, token suy luận ăn hết trần token ra),

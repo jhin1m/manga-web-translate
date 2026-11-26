@@ -1,9 +1,12 @@
 # Manga Web Translate
 
-Web app dịch manga / manhwa / manhua. Thả ảnh hoặc ZIP một chương → tự cắt trang, xoá chữ + OCR, dịch bằng LLM, tự chèn
-chữ → sửa tay trong editor → xuất ZIP / CBZ.
+**English** · [Tiếng Việt](./README.vi.md)
 
-## Chạy trên máy mình (Docker)
+A web app for translating manga, manhwa and manhua. Drop in the images or a ZIP of a chapter and it slices the pages,
+cleans the original text, runs OCR, translates with an LLM and typesets the result. You then fix things by hand in the
+editor and export a ZIP or CBZ.
+
+## Run it on your own machine (Docker)
 
 ```bash
 mkdir mtl && cd mtl
@@ -11,85 +14,106 @@ curl -fsSLO https://raw.githubusercontent.com/jhin1m/manga-web-translate/main/do
 docker compose up -d
 ```
 
-Lần đầu worker tải model AI (~1–2 GB). Mở <http://localhost:8080> → **Cài đặt → Nhà cung cấp** → nhập key AI (mặc định
-Anthropic). Không cần `.env`, không cần tài khoản. Phát hiện chữ, OCR, xoá chữ chạy local trên máy; chỉ bước dịch gọi
-API AI.
+Windows (PowerShell, not officially tested yet): type `curl.exe` exactly as shown and run one line at a time.
 
-Cập nhật: từ 0.3.0 bấm **Cập nhật ngay** trong menu tài khoản (avatar góc phải trên), hoặc làm tay (tải lại
-`docker-compose.yml` rồi `docker compose pull && docker compose up -d`) — xem [docs/self-host.md](./docs/self-host.md#cập-nhật).
+```powershell
+mkdir mtl; cd mtl
+curl.exe -fsSLO https://raw.githubusercontent.com/jhin1m/manga-web-translate/main/docker-compose.yml
+docker compose up -d
+```
+
+On first start the worker downloads its AI models (~1–2 GB). Open <http://localhost:8080>, go to **Settings →
+Providers** and add an AI key (Anthropic is the default). No `.env` file and no account are needed. Text detection,
+OCR and text cleaning run locally on your machine; only the translation step calls an AI API.
+
+The interface is available in English and Vietnamese. It follows your browser language; to switch, open **Settings**
+and pick a language under **Interface language** in the left column. New series default to translating into the
+interface language, and AI notes are written in it too.
+
+Updating: from 0.3.0 on, click **Update now** in the account menu (the avatar at the top right), or do it by hand
+(download `docker-compose.yml` again, then `docker compose pull && docker compose up -d`). See
+[docs/self-host.md](./docs/self-host.md#cập-nhật).
 
 > [!WARNING]
-> **Không có đăng nhập.** Chỉ dùng trên máy mình, đừng mở cổng ra LAN / Internet.
+> **There is no login.** Use it on your own machine only; do not expose the port to your LAN or the Internet.
 
-Cần Docker Compose ≥ 2.17, RAM cho Docker ≥ 10 GB, nên 12 GB (2 worker mặc định; `MTL_WORKERS=1` cần ≥ 6 GB), máy amd64 hoặc arm64 (Linux / macOS). Backup, khôi phục, xử lý sự cố:
+Requirements: Docker Compose ≥ 2.17, at least 10 GB of RAM for Docker (12 GB recommended) with the default 2 workers
+(`MTL_WORKERS=1` needs ≥ 6 GB), and an amd64 or arm64 machine (Linux / macOS). Backup, restore and troubleshooting:
 [docs/self-host.md](./docs/self-host.md).
 
-## Tính năng
+## Features
 
-- **Dịch chương một nút**: cắt trang theo detector, xoá chữ (Big LaMa / LaMa manga), OCR local (MangaOCR, PaddleOCR)
-  hoặc LLM, dịch theo lô trang giữ ngữ cảnh + tên nhân vật, tự chèn chữ theo màu gốc. Trang đầu sửa được khi các lô sau
-  còn chạy.
-- **Thả folder, lưới bìa**: thả hoặc **Chọn folder…** → mỗi folder ảnh thành một chương (tên chương lấy từ tên folder /
-  ZIP, sửa được trong popover chương). Trang chủ và trang series là lưới thẻ có ảnh (chuyển được sang danh sách không
-  ảnh, sắp xếp theo tên / ngày / số chương, tăng hoặc giảm; trình duyệt nhớ lựa chọn); bìa series tự lấy từ ảnh đầu,
-  hoặc tải ảnh bìa riêng ở Cài đặt series.
-- **Editor**: sửa box chữ, undo / redo, autosave có version, vẽ mask xoá chữ lại, OCR lại vùng chọn, xem gốc / chia đôi,
-  bảng văn bản cả chương.
-- **AI hiệu đính**: gợi ý sửa theo khối, nhận / bỏ từng cái, báo trước chi phí.
-- **Series**: ngôn ngữ nguồn `ko | ja | zh | en` → đích `vi | en | id | es | pt | fr`, kính ngữ, xưng hô, giọng văn,
-  font mặc định; glossary riêng từng series (CSV), tìm & thay.
-- **Lọc rác**: ẩn trang, tự bỏ ảnh credit đã học theo series, cắt dải credit dính ở mép ảnh (cắt tay hoặc tự cắt theo dải đã học), danh sách chữ watermark bỏ qua.
-- **Font**: upload TTF / OTF riêng, dùng cả trong editor và bản xuất.
-- **Xuất**: ZIP để đăng web hoặc CBZ, 3 mức chất lượng; chương sửa sau lần xuất cuối hiện "Xuất lại".
+- **One-click chapter translation**: detector-based page slicing, text cleaning (Big LaMa / LaMa manga), local OCR
+  (MangaOCR, PaddleOCR) or LLM OCR, translation in page batches that keeps context and character names, and automatic
+  typesetting in the original text colour. You can edit the first pages while later batches are still running.
+- **Folder drop, cover grid**: drop files or use **choose a folder**; each folder of images becomes one chapter (the
+  chapter name comes from the folder / ZIP name and can be edited in the chapter popover). Home and the series page are
+  cover-card grids (switchable to a plain list, sortable by name / date / chapter number in either direction; the
+  browser remembers your choice). The series cover is taken from the first image, or you can upload your own in the
+  series settings.
+- **Editor**: edit text boxes, undo / redo, versioned autosave, paint a mask to clean text again, re-run OCR on a
+  selected area, original / split view, and a script table for the whole chapter.
+- **AI proofreading**: per-block suggestions you accept or reject one by one, with a cost estimate up front.
+- **Series**: source language `ko | ja | zh | en` → target `vi | en | id | es | pt | fr`, honorifics, forms of address,
+  writing style and default fonts; a glossary per series (CSV) and find & replace.
+- **Junk filtering**: hide pages, auto-skip credit images the series has learned, trim credit bands stuck to the image
+  edges (by hand or automatically from learned bands), and a list of watermark text to ignore.
+- **Fonts**: upload your own TTF / OTF, used both in the editor and in exports.
+- **Export**: ZIP for web publishing or CBZ, 3 quality levels; chapters edited after their last export show
+  "Re-export".
 
-## Hai cách chạy
+## Two ways to run it
 
-| | Tự host (Docker) | Production (VPS) |
+| | Self-hosted (Docker) | Production (VPS) |
 |---|---|---|
-| Người dùng | 1, không đăng nhập | Nhiều tài khoản, admin, hạn mức chi phí |
-| Lưu file | Đĩa (`./data/files`) | Đĩa VPS (`FILES_DIR`) |
-| Worker AI | Container CPU | Mac local hoặc Modal GPU |
-| Hướng dẫn | [self-host.md](./docs/self-host.md) | [deployment-guide.md](./docs/deployment-guide.md) |
+| Users | 1, no login | Multiple accounts, admin, cost limits |
+| File storage | Disk (`./data/files`) | VPS disk (`FILES_DIR`) |
+| AI worker | CPU container | Local Mac or Modal GPU |
+| Guide | [self-host.md](./docs/self-host.md) | [deployment-guide.md](./docs/deployment-guide.md) |
 
-## Kiến trúc
+## Architecture
 
-| Thư mục | Vai trò |
+| Directory | Role |
 |---|---|
-| `apps/api` | Hono (Node 24), better-auth, API người dùng `/api/*`, admin `/api/admin/*`, worker `/worker/v1/*` |
-| `apps/web` | Vite + React SPA, TanStack Router / Query, zustand, react-konva |
-| `packages/db` | Drizzle schema + migration (có down viết tay) |
-| `packages/shared` | Hợp đồng zod dùng chung web ↔ API ↔ worker |
-| `worker` | Python: `mtl_pipeline` (detect, inpaint, OCR, dịch, typeset, export), `mtl_worker` (claim / heartbeat) |
-| `infra` | Docker dev + self-host, systemd, Caddy, backup |
+| `apps/api` | Hono (Node 24), better-auth, user API `/api/*`, admin `/api/admin/*`, worker `/worker/v1/*` |
+| `apps/web` | Vite + React SPA, TanStack Router / Query, zustand, react-konva; UI strings in `src/i18n/messages/` |
+| `packages/db` | Drizzle schema + migrations (with hand-written down migrations) |
+| `packages/shared` | Shared zod contracts for web ↔ API ↔ worker |
+| `worker` | Python: `mtl_pipeline` (detect, inpaint, OCR, translate, typeset, export), `mtl_worker` (claim / heartbeat) |
+| `infra` | Docker for dev + self-host, systemd, Caddy, backups |
 
-## Phát triển
+## Development
 
-Cần Node 24, pnpm 12, Docker; worker cần Python + `uv`.
+You need Node 24, pnpm 12 and Docker; the worker also needs Python + `uv`.
 
 ```bash
 pnpm i && cp .env.example .env
 pnpm dev:all     # infra + migrate + API :8787 + web http://localhost:5180 + jobs + worker
 ```
 
-Kiểm tra trước khi commit:
+Checks before committing:
 
 ```bash
-pnpm typecheck && pnpm lint && pnpm test     # cần pnpm infra:up
+pnpm typecheck && pnpm lint && pnpm test     # needs pnpm infra:up
 cd worker && uv run pytest
 ```
 
-Quy ước (schema, migration down, test cô lập dữ liệu theo user): [development-setup.md](./docs/development-setup.md).
+Conventions (schema, down migrations, per-user data isolation in tests):
+[development-setup.md](./docs/development-setup.md). Adding UI strings or a new interface language:
+[design-guidelines.md](./docs/design-guidelines.md#i18n-chữ-giao-diện-theo-ngôn-ngữ).
 
-## Tài liệu
+## Documentation
 
-| Tài liệu | Nội dung |
+The documents below are written in Vietnamese.
+
+| Document | Contents |
 |---|---|
-| [self-host.md](./docs/self-host.md) | Tự host bằng Docker |
-| [deployment-guide.md](./docs/deployment-guide.md) | Production: VPS, Modal, backup, kill-switch |
-| [development-setup.md](./docs/development-setup.md) | Cài đặt dev, monorepo, quy ước, test |
-| [job-queue-worker.md](./docs/job-queue-worker.md) | Hàng đợi job, giao thức worker, chuỗi lô dịch |
-| [editor.md](./docs/editor.md) | Màn chương + editor |
-| [export-and-batch-edit.md](./docs/export-and-batch-edit.md) | Xuất, tìm & thay, glossary |
-| [typeset-layout-contract.md](./docs/typeset-layout-contract.md) | Hợp đồng layout chữ Konva ↔ render.py |
-| [design-guidelines.md](./docs/design-guidelines.md) | Nguyên tắc UI |
-| [project-roadmap.md](./docs/project-roadmap.md) | Việc còn lại, giới hạn đã biết |
+| [self-host.md](./docs/self-host.md) | Self-hosting with Docker |
+| [deployment-guide.md](./docs/deployment-guide.md) | Production: VPS, Modal, backups, kill switch |
+| [development-setup.md](./docs/development-setup.md) | Dev setup, monorepo, conventions, tests |
+| [job-queue-worker.md](./docs/job-queue-worker.md) | Job queue, worker protocol, translation batch chain |
+| [editor.md](./docs/editor.md) | Chapter screen + editor |
+| [export-and-batch-edit.md](./docs/export-and-batch-edit.md) | Export, find & replace, glossary |
+| [typeset-layout-contract.md](./docs/typeset-layout-contract.md) | Konva ↔ render.py text layout contract |
+| [design-guidelines.md](./docs/design-guidelines.md) | UI principles and i18n |
+| [project-roadmap.md](./docs/project-roadmap.md) | Remaining work, known limitations |

@@ -37,17 +37,20 @@ sẵn sàng. Lần đầu cả 2 worker cùng tải model vào `./data/models`: 
 
 `docker pull` báo `denied`/`unauthorized` → image GHCR chưa được đặt public (việc của người phát hành).
 
+Ngôn ngữ giao diện (Tiếng Việt / English) tự theo trình duyệt; đổi ở **Cài đặt** → ô **Ngôn ngữ giao diện** cột trái
+(series mới mặc định dịch sang ngôn ngữ đó, ghi chú của AI cũng viết theo nó).
+
 ## Thêm nhà cung cấp AI (bắt buộc để dịch)
 
 Mở <http://localhost:8080> → **Cài đặt → Nhà cung cấp** → thêm nhà cung cấp:
 
 1. Chọn **Anthropic** (đã chọn sẵn) và dán API key. Tên, model `claude-haiku-5-5` và giá được điền sẵn; muốn đổi thì
    mở **Tuỳ chỉnh tên, model và giá**.
-2. Bấm **Thêm nhà cung cấp**. Nhà cung cấp **đầu tiên** tự được gán vào các bước AI còn trống: Dịch dùng model đầu tiên trong danh sách; OCR
-   và Hiệu đính dùng model đầu tiên có Vision (không có thì để trống). Không cần chọn model thủ công.
+2. Bấm **Thêm nhà cung cấp**. Không cần chọn model thủ công: các bước AI để **Tự động** sẽ dùng model đầu tiên phù hợp
+   theo thứ tự thêm (Dịch: model đầu tiên; OCR và Hiệu đính: model đầu tiên có Vision).
 
-Muốn đổi model sau đó: **Cài đặt → Pipeline**, ô **Model AI** ở từng bước (Đọc chữ, Dịch, Hiệu đính). Đổi là tự lưu.
-Nhà cung cấp thêm sau không tự đổi gán.
+Muốn cố định model: **Cài đặt → Pipeline**, ô **Model AI** ở từng bước (Đọc chữ, Dịch, Hiệu đính). Ô hiện
+"Tự động (tên model)" là model hệ thống đang chọn. Đổi là tự lưu.
 
 Với Anthropic, worker chưa chạy được Sonnet 5.5, Opus 5.5, Fable, Mythos nên form và API từ chối các model này.
 
