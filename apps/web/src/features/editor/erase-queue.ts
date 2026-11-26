@@ -5,11 +5,13 @@
  * rev page đang biết) (clean_rev chỉ tiến); vẫn 409 (người khác vừa xoá) → dùng rev server báo, thử lại 1 lần.
  * Thuần (phụ thuộc truyền vào) để test; nhớ lựa chọn bật/tắt theo trình duyệt.
  */
+import { t } from "../../i18n/t.ts";
 import { ApiError } from "../../lib/api.ts";
+import { jobErrorLabel } from "../chapter/job-error.ts";
 
 export type BBoxTuple = [number, number, number, number];
 
-type Job = { id: string; status: string; error?: string | null; result?: unknown };
+type Job = { id: string; status: string; error_class?: string | null; error?: string | null; result?: unknown };
 
 export type EraseDeps = {
   start(pageId: string, body: { auto_text_bbox: BBoxTuple; base_clean_rev: number }): Promise<{ job: Job }>;
@@ -27,6 +29,25 @@ export type EraseQueue = { push(bbox: BBoxTuple): void; dispose(): void };
 function staleRev(e: unknown): number | null {
   if (!(e instanceof ApiError) || e.status !== 409 || e.body.error !== "clean_rev_changed") return null;
   return typeof e.body.clean_rev === "number" ? e.body.clean_rev : null;
+}
+
+/** Worker báo khung không có chữ bằng mã đầu câu (chi tiết tiếng Anh sau dấu ":") → câu hướng dẫn theo ngôn ngữ. */
+const NO_TEXT_IN_BOX = "no_text_in_box:";
+/** Server bỏ kết quả vì ảnh sạch đã đổi trong lúc job chạy (2 lần xoá chồng nhau) → câu bảo làm lại. */
+const CLEAN_REV_CHANGED = "clean_rev_changed:";
+
+/**
+ * Câu chính khi job xoá chữ (khung OCR hoặc vùng Mask) hỏng: mã đầu câu → câu hướng dẫn; còn lại → nguyên nhân theo
+ * `error_class`. Lỗi thô của worker không làm câu chính.
+ */
+export function reinpaintFailureText(job: Pick<Job, "error_class" | "error">): string {
+  const error = job.error ?? "";
+  if (error.startsWith(NO_TEXT_IN_BOX)) return t("editor.eraseQueue.noTextInBox");
+  if (error.startsWith(CLEAN_REV_CHANGED)) return t("editor.eraseQueue.cleanRevChanged");
+  if (!error && !job.error_class) return t("editor.eraseQueue.failed");
+  return t("editor.eraseQueue.failedCause", {
+    label: jobErrorLabel({ error_class: job.error_class ?? null, error: job.error ?? null }),
+  });
 }
 
 function resultRev(job: Job): number | null {
@@ -53,7 +74,7 @@ export function createEraseQueue(pageId: string, deps: EraseDeps): EraseQueue {
   async function run(bbox: BBoxTuple) {
     if (ctl.signal.aborted) return;
     const base = latestRev();
-    if (base === null) throw new Error("Trang chưa có ảnh đã xoá chữ.");
+    if (base === null) throw new Error(t("editor.eraseQueue.noCleanImage"));
     let job: Job;
     try {
       job = (await deps.start(pageId, { auto_text_bbox: bbox, base_clean_rev: base })).job;
@@ -64,7 +85,7 @@ export function createEraseQueue(pageId: string, deps: EraseDeps): EraseQueue {
       job = (await deps.start(pageId, { auto_text_bbox: bbox, base_clean_rev: fresh })).job;
     }
     const done = await deps.wait(job.id, ctl.signal);
-    if (done.status !== "succeeded") throw new Error(done.error ?? "Xoá chữ gốc thất bại");
+    if (done.status !== "succeeded") throw new Error(reinpaintFailureText(done));
     known = resultRev(done) ?? known;
     if (!ctl.signal.aborted) deps.onErased();
   }

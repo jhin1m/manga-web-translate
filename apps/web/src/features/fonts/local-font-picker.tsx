@@ -4,6 +4,7 @@
  * Chỉ vẽ tối đa SHOWN dòng một lúc (máy có thể có cả nghìn font) — gõ để tìm font còn lại.
  */
 import { useMemo, useState } from "react";
+import { t, tp, useT } from "../../i18n/t.ts";
 import { filterFonts, type LocalFont } from "./local-fonts.ts";
 
 const SHOWN = 300;
@@ -17,6 +18,7 @@ export function LocalFontPicker(props: {
   onAdd(list: LocalFont[]): void;
   onClose(): void;
 }) {
+  useT();
   const [query, setQuery] = useState("");
   const [picked, setPicked] = useState<ReadonlySet<string>>(new Set());
   const matches = useMemo(() => filterFonts(props.fonts, query), [props.fonts, query]);
@@ -30,23 +32,23 @@ export function LocalFontPicker(props: {
     });
 
   return (
-    <section className="set-card local-picker" aria-label="Font trong máy">
+    <section className="set-card local-picker" aria-label={t("fonts.localFontPicker.regionLabel")}>
       <div className="local-picker-head">
         <input
           type="search"
-          aria-label="Tìm font trong máy"
-          placeholder={`Tìm trong ${props.fonts.length} font`}
+          aria-label={t("fonts.localFontPicker.searchLabel")}
+          placeholder={tp("fonts.localFontPicker.searchPlaceholder", props.fonts.length)}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
         <span className="muted small">
-          {picked.size > 0 ? `Đã chọn ${picked.size}` : "Tích font muốn thêm"}
-          {Number.isFinite(props.remaining) && ` · còn ${props.remaining} chỗ`}
+          {picked.size > 0
+            ? t("fonts.localFontPicker.picked", { count: picked.size })
+            : t("fonts.localFontPicker.pickHint")}
+          {Number.isFinite(props.remaining) && ` · ${tp("fonts.localFontPicker.remaining", props.remaining)}`}
         </span>
       </div>
-      {props.remaining === 0 && (
-        <p className="warn-text small">Đã đủ số font riêng tối đa. Xoá bớt font không dùng để thêm font mới.</p>
-      )}
+      {props.remaining === 0 && <p className="warn-text small">{t("fonts.localFontPicker.full")}</p>}
       <ul className="local-picker-list">
         {matches.slice(0, SHOWN).map((f) => {
           const done = props.added.has(f.fullName);
@@ -62,7 +64,7 @@ export function LocalFontPicker(props: {
                 />
                 <span className="local-picker-name">
                   {f.fullName}
-                  {done && <span className="font-tag">Đã thêm</span>}
+                  {done && <span className="font-tag">{t("fonts.localFontPicker.doneTag")}</span>}
                 </span>
                 <span className="local-picker-preview" style={{ fontFamily: `"${f.family}"` }} aria-hidden="true">
                   Xin chào! Tiếng Việt
@@ -72,11 +74,9 @@ export function LocalFontPicker(props: {
           );
         })}
       </ul>
-      {matches.length === 0 && <p className="muted small">Không có font nào khớp.</p>}
+      {matches.length === 0 && <p className="muted small">{t("fonts.localFontPicker.noMatch")}</p>}
       {matches.length > SHOWN && (
-        <p className="muted small">
-          Đang hiện {SHOWN} / {matches.length} font — gõ tên để tìm font còn lại.
-        </p>
+        <p className="muted small">{t("fonts.localFontPicker.showing", { shown: SHOWN, total: matches.length })}</p>
       )}
       <div className="row">
         <button
@@ -85,10 +85,14 @@ export function LocalFontPicker(props: {
           disabled={picked.size === 0 || props.busy}
           onClick={() => props.onAdd(props.fonts.filter((f) => picked.has(f.postscriptName)))}
         >
-          {props.busy ? "Đang thêm…" : `Thêm ${picked.size || ""} font`.replace("  ", " ")}
+          {props.busy
+            ? t("fonts.localFontPicker.adding")
+            : picked.size
+              ? tp("fonts.localFontPicker.add", picked.size)
+              : t("fonts.localFontPicker.addNone")}
         </button>
         <button type="button" onClick={props.onClose} disabled={props.busy}>
-          Đóng
+          {t("common.close")}
         </button>
       </div>
     </section>

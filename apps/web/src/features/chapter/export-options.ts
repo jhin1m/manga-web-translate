@@ -4,7 +4,9 @@
  * biết đang chạy / tự tải / lỗi.
  */
 import { EXPORT_FILE } from "@mtl/shared";
+import { t, tp } from "../../i18n/t.ts";
 import type { ExportFormat, ExportLayout, ExportStatus, ExportView } from "./api.ts";
+import { jobErrorLabel } from "./job-error.ts";
 
 export const EXPORT_POLL_MS = 1500;
 
@@ -24,18 +26,46 @@ export const exportPollInterval = (q: { data: { exports: ExportView[] } | undefi
 /** CBZ: Gốc = PNG nguyên bản (worker nén JPEG khi < 100). */
 export type CbzQuality = "original" | "high" | "light";
 export const CBZ_QUALITY: Record<CbzQuality, { label: string; value: number }> = {
-  original: { label: "Gốc", value: 100 },
-  high: { label: "Cao", value: 90 },
-  light: { label: "Nhẹ", value: 75 },
+  original: {
+    get label() {
+      return t("chapter.exportOptions.quality.original");
+    },
+    value: 100,
+  },
+  high: {
+    get label() {
+      return t("chapter.exportOptions.quality.high");
+    },
+    value: 90,
+  },
+  light: {
+    get label() {
+      return t("chapter.exportOptions.quality.light");
+    },
+    value: 75,
+  },
 };
 
 export function qualityLabel(q: number): string {
-  return Object.values(CBZ_QUALITY).find((c) => c.value === q)?.label ?? `chất lượng ${q}`;
+  return (
+    Object.values(CBZ_QUALITY).find((c) => c.value === q)?.label ??
+    t("chapter.exportOptions.qualityFallback", { quality: q })
+  );
 }
 
 export const FORMAT_LABEL: Record<ExportFormat, { ext: ".zip" | ".cbz"; long: string }> = {
-  png_zip: { ext: `.${EXPORT_FILE.png_zip.ext}`, long: `Ảnh trong .${EXPORT_FILE.png_zip.ext} — để đăng web` },
-  cbz: { ext: `.${EXPORT_FILE.cbz.ext}`, long: `.${EXPORT_FILE.cbz.ext} — đọc bằng app đọc truyện` },
+  png_zip: {
+    ext: `.${EXPORT_FILE.png_zip.ext}`,
+    get long() {
+      return t("chapter.exportOptions.format.png_zip", { ext: `.${EXPORT_FILE.png_zip.ext}` });
+    },
+  },
+  cbz: {
+    ext: `.${EXPORT_FILE.cbz.ext}`,
+    get long() {
+      return t("chapter.exportOptions.format.cbz", { ext: `.${EXPORT_FILE.cbz.ext}` });
+    },
+  },
 };
 
 type Counts = { sources: number; pages: number };
@@ -47,18 +77,22 @@ export const showLayoutChoice = (c: Counts) => c.sources !== c.pages;
 /** Mặc định (và khi không hỏi): xuất đúng số ảnh như lúc tải lên. */
 export const DEFAULT_LAYOUT: ExportLayout = "original_slices";
 export const LAYOUT_CHOICES: { value: ExportLayout; label: (c: Counts) => string }[] = [
-  { value: "original_slices", label: (c) => `Giống lúc tải lên (${c.sources} ảnh)` },
-  { value: "pages", label: (c) => `Theo trang đã cắt (${c.pages} ảnh)` },
+  { value: "original_slices", label: (c) => tp("chapter.exportOptions.layout.original_slices", c.sources) },
+  { value: "pages", label: (c) => tp("chapter.exportOptions.layout.pages", c.pages) },
 ];
 
 /** VD "Ảnh .zip · 96 ảnh như lúc tải lên", ".cbz · 30 trang đã cắt · Cao · gồm trang chưa dịch". */
 export function optionsSummary(o: Options, c: Counts): string {
   const parts = [
-    o.format === "png_zip" ? `Ảnh ${FORMAT_LABEL.png_zip.ext}` : FORMAT_LABEL.cbz.ext,
-    o.layout === "original_slices" ? `${c.sources} ảnh như lúc tải lên` : `${c.pages} trang đã cắt`,
+    o.format === "png_zip"
+      ? t("chapter.exportOptions.summary.images", { ext: FORMAT_LABEL.png_zip.ext })
+      : FORMAT_LABEL.cbz.ext,
+    o.layout === "original_slices"
+      ? tp("chapter.exportOptions.summary.asUploaded", c.sources)
+      : tp("chapter.exportOptions.summary.cutPages", c.pages),
   ];
   if (o.format === "cbz") parts.push(qualityLabel(o.quality));
-  if (o.includeUntranslated) parts.push("gồm trang chưa dịch");
+  if (o.includeUntranslated) parts.push(t("chapter.exportOptions.includeUntranslated"));
   return parts.join(" · ");
 }
 
@@ -66,10 +100,12 @@ export function optionsSummary(o: Options, c: Counts): string {
 export function exportLabel(x: Pick<ExportView, "format" | "layout" | "quality" | "include_untranslated">): string {
   const parts: string[] = [
     FORMAT_LABEL[x.format].ext,
-    x.layout === "original_slices" ? "như lúc tải lên" : "theo trang đã cắt",
+    x.layout === "original_slices"
+      ? t("chapter.exportOptions.label.asUploaded")
+      : t("chapter.exportOptions.label.cutPages"),
   ];
   if (x.format === "cbz") parts.push(qualityLabel(x.quality));
-  if (x.include_untranslated) parts.push("gồm trang chưa dịch");
+  if (x.include_untranslated) parts.push(t("chapter.exportOptions.includeUntranslated"));
   return parts.join(" · ");
 }
 
@@ -77,8 +113,14 @@ export type ExportPhase =
   | { kind: "idle" }
   | { kind: "running"; pct: number; paused?: true }
   | { kind: "ready"; id: string; url: string }
-  | { kind: "failed"; error: string }
+  | { kind: "failed"; error: string; detail: string | null }
   | { kind: "expired" };
+
+/** Câu lỗi của lượt xuất cho người dùng: nguyên nhân theo `error_class`; lỗi thô (`error`) chỉ làm chi tiết. */
+export const exportFailureText = (x: Pick<ExportView, "error_class" | "error">) =>
+  x.error_class || x.error
+    ? t("chapter.exportOptions.failedCause", { label: jobErrorLabel(x) })
+    : t("chapter.exportOptions.failed");
 
 /** Pha của lượt xuất vừa gửi (`pendingId`) theo danh sách đang poll. */
 export function exportPhase(list: ExportView[], pendingId: string | null, now = Date.now()): ExportPhase {
@@ -95,7 +137,7 @@ export function exportPhase(list: ExportView[], pendingId: string | null, now = 
       return x.download_url && !expired ? { kind: "ready", id: x.id, url: x.download_url } : { kind: "expired" };
     }
     case "failed":
-      return { kind: "failed", error: x.error ?? "Xuất không thành công." };
+      return { kind: "failed", error: exportFailureText(x), detail: x.error };
     case "paused_budget":
       // Hàng đợi tự chạy lại khi có ngân sách → vẫn là lượt đang chờ, không mở nút (bấm lại = thêm lượt trùng).
       return { kind: "running", pct: Math.round(Math.min(1, Math.max(0, x.progress)) * 100), paused: true };

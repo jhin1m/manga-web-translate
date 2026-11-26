@@ -6,10 +6,11 @@
  * dùng tạo / sửa có `origin='user'`; entry AI ghi có `'ai'`.
  */
 import { glossaryEntries, type Scoped, series } from "@mtl/db";
+import { type ApiErrorBody, apiErrorBody, apiErrorMessageVi } from "@mtl/shared";
 import { and, eq, type SQL, sql } from "drizzle-orm";
 import { Hono } from "hono";
-import { HTTPException } from "hono/http-exception";
 import { z } from "zod";
+import { apiError, codeError } from "../lib/api-error.ts";
 import { parseJson } from "../lib/validate.ts";
 import type { AppEnv } from "../middleware/user.ts";
 
@@ -22,7 +23,7 @@ const Entry = z.object({
   note: z.string().trim().max(500).default(""),
   case_sensitive: z.boolean().default(false),
 });
-const EntryPatch = Entry.partial().refine((v) => Object.keys(v).length > 0, "không có trường nào để sửa");
+const EntryPatch = Entry.partial().refine((v) => Object.keys(v).length > 0, "no field to update");
 const ImportBody = z.object({
   csv: z.string().max(MAX_CSV_CHARS),
   mode: z.enum(["merge", "replace"]).default("merge"),
@@ -45,9 +46,6 @@ const entryView = (e: EntryRow) => ({
 const byTerm = (a: EntryRow, b: EntryRow) => a.sourceTerm.localeCompare(b.sourceTerm);
 const seriesWhere = (seriesId: string) => eq(glossaryEntries.seriesId, seriesId);
 
-const conflict = (error: string, message: string) =>
-  new HTTPException(409, { res: Response.json({ error, message }, { status: 409 }) });
-
 /** glossary_rev + 1 cho series có entry vừa đổi. */
 async function bumpGlossaryRev(tx: Scoped, seriesId: string): Promise<void> {
   await tx.update(series, eq(series.id, seriesId), {
@@ -69,14 +67,14 @@ async function writeOrConflict<R>(fn: () => Promise<R>): Promise<R> {
   try {
     return await fn();
   } catch (err) {
-    if (isTermConflict(err)) throw conflict("duplicate_term", "term đã có trong glossary này");
+    if (isTermConflict(err)) throw apiError(409, "duplicate_term.unnamed");
     throw err;
   }
 }
 
 async function assertUniqueTerm(tx: Scoped, seriesId: string, term: string, exceptId?: string) {
   const dup = await tx.find(glossaryEntries, and(seriesWhere(seriesId), eq(glossaryEntries.sourceTerm, term)) as SQL);
-  if (dup && dup.id !== exceptId) throw conflict("duplicate_term", `"${term}" đã có trong glossary này`);
+  if (dup && dup.id !== exceptId) throw apiError(409, "duplicate_term", { term });
 }
 
 // ---- CSV (RFC 4180: dấu phẩy, nháy kép bao trường, "" = nháy kép trong trường) ----
@@ -126,7 +124,7 @@ export function parseCsvRows(text: string): string[][] {
       field = "";
     } else field += ch;
   }
-  if (quoted) throw new Error("CSV: thiếu dấu nháy kép đóng");
+  if (quoted) throw new Error(apiErrorMessageVi("csv_unclosed_quote"));
   if (field !== "" || row.length) {
     row.push(field);
     rows.push(row);
@@ -134,20 +132,24 @@ export function parseCsvRows(text: string): string[][] {
   return rows.filter((r) => r.some((v) => v.trim() !== ""));
 }
 
-/** CSV → entry hợp lệ; lỗi theo số dòng (1 = header). Trùng source_term trong file → dòng sau thắng. */
-export function parseGlossaryCsv(text: string): { entries: EntryIn[]; errors: { line: number; message: string }[] } {
+/** Lỗi 1 dòng CSV: số dòng + mã / tham số / câu tiếng Việt như lỗi API. */
+export type CsvLineError = { line: number } & ApiErrorBody;
+
+/** CSV → entry hợp lệ; lỗi theo số dòng (1 = header, 0 = cả file). Trùng source_term trong file → dòng sau thắng. */
+export function parseGlossaryCsv(text: string): { entries: EntryIn[]; errors: CsvLineError[] } {
   let rows: string[][];
   try {
     rows = parseCsvRows(text);
-  } catch (e) {
-    return { entries: [], errors: [{ line: 0, message: (e as Error).message }] };
+  } catch {
+    // parseCsvRows chỉ ném khi thiếu nháy kép đóng.
+    return { entries: [], errors: [{ line: 0, ...apiErrorBody("csv_unclosed_quote") }] };
   }
   const header = (rows[0] ?? []).map((h) => h.trim().toLowerCase());
   const col = (name: string) => header.indexOf(name);
   if (col("source_term") < 0 || col("target_term") < 0) {
-    return { entries: [], errors: [{ line: 1, message: "header phải có cột source_term, target_term" }] };
+    return { entries: [], errors: [{ line: 1, ...apiErrorBody("csv_missing_columns") }] };
   }
-  const errors: { line: number; message: string }[] = [];
+  const errors: CsvLineError[] = [];
   const byTermMap = new Map<string, EntryIn>();
   rows.slice(1).forEach((r, i) => {
     const get = (name: string) => (col(name) >= 0 ? unescapeCell(r[col(name)] ?? "") : undefined);
@@ -159,8 +161,10 @@ export function parseGlossaryCsv(text: string): { entries: EntryIn[]; errors: { 
       case_sensitive: cs === "true" || cs === "1" || cs === "yes",
     });
     if (parsed.success) byTermMap.set(parsed.data.source_term, parsed.data);
-    else
-      errors.push({ line: i + 2, message: parsed.error.issues.map((x) => x.path.join(".") || x.message).join(", ") });
+    else {
+      const fields = parsed.error.issues.map((x) => x.path.join(".") || x.message).join(", ");
+      errors.push({ line: i + 2, ...apiErrorBody("csv_invalid_fields", { fields }) });
+    }
   });
   return { entries: [...byTermMap.values()], errors };
 }
@@ -214,10 +218,10 @@ async function exportCsv(sdb: Scoped, seriesId: string, filename: string) {
 async function importCsv(sdb: Scoped, seriesId: string, body: z.infer<typeof ImportBody>) {
   const { entries, errors } = parseGlossaryCsv(body.csv);
   if (errors.length) {
-    throw new HTTPException(400, { res: Response.json({ error: "invalid_csv", errors }, { status: 400 }) });
+    throw codeError(400, "invalid_csv", { errors });
   }
-  if (entries.length === 0) throw new HTTPException(400, { message: "CSV không có dòng nào" });
-  if (entries.length > MAX_IMPORT_ROWS) throw new HTTPException(400, { message: `tối đa ${MAX_IMPORT_ROWS} dòng` });
+  if (entries.length === 0) throw apiError(400, "csv_empty");
+  if (entries.length > MAX_IMPORT_ROWS) throw apiError(400, "csv_too_many_rows", { max: MAX_IMPORT_ROWS });
   return writeOrConflict(() =>
     sdb.transaction(async (tx) => {
       await bumpGlossaryRev(tx, seriesId);

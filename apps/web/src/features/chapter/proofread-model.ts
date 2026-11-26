@@ -5,6 +5,8 @@
  * - `applied`: bản hiện tại = gợi ý (đã nhận; hoàn tác thì về `pending`);
  * - `stale`: khối đã bị sửa khác cả hai (hoặc không còn khối) sau khi tạo gợi ý → lỗi thời, chỉ Bỏ.
  */
+import { type MessageKey, t, tp } from "../../i18n/t.ts";
+
 export type Suggestion = {
   id: string;
   page_id: string;
@@ -40,11 +42,12 @@ export function suggestionState(
   return "stale";
 }
 
-export const STATE_LABEL: Record<SuggestionState, string> = {
-  pending: "Chờ duyệt",
-  applied: "Đã nhận",
-  stale: "Lỗi thời",
+const STATE_KEY: Record<SuggestionState, MessageKey> = {
+  pending: "chapter.proofreadModel.state.pending",
+  applied: "chapter.proofreadModel.state.applied",
+  stale: "chapter.proofreadModel.state.stale",
 };
+export const stateLabel = (s: SuggestionState) => t(STATE_KEY[s]);
 
 /** Theo thứ tự trang rồi thứ tự khối trong trang (theo bảng văn bản); khối không còn → cuối trang. */
 export function sortSuggestions<T extends Pick<Suggestion, "page_id" | "region_id">>(
@@ -75,7 +78,7 @@ const usd = (v: number) => `$${v < 0.1 ? v.toFixed(3) : v.toFixed(2)}`;
 
 /** "$0.012 – $0.050"; quá nhỏ → "dưới $0.01". */
 export function fmtUsdRange(r: { low: number; high: number }): string {
-  if (r.high < 0.01) return "dưới $0.01";
+  if (r.high < 0.01) return t("chapter.proofreadModel.usdUnder");
   return `${usd(r.low)} – ${usd(r.high)}`;
 }
 
@@ -83,18 +86,20 @@ export function fmtUsdRange(r: { low: number; high: number }): string {
 export function fmtDurationRange(r: { low: number; high: number }): string {
   const lo = Math.max(1, Math.round(r.low / 60));
   const hi = Math.max(1, Math.round(r.high / 60));
-  if (r.high < 60) return "dưới 1 phút";
-  return lo === hi ? `khoảng ${hi} phút` : `khoảng ${lo}–${hi} phút`;
+  if (r.high < 60) return t("chapter.proofreadModel.durationUnder");
+  return lo === hi
+    ? tp("chapter.proofreadModel.durationAbout", hi)
+    : t("chapter.proofreadModel.durationRange", { low: lo, high: hi });
 }
 
 /** Luôn hiện trong hộp xác nhận (kể cả khi ước tính đang tải / lỗi): dữ liệu gửi lên nhà cung cấp AI. */
-export const PROOFREAD_DATA_NOTICE =
-  "Gửi lên nhà cung cấp AI: ảnh từng trang (thu nhỏ) + chữ gốc, bản dịch, glossary, quy tắc xưng hô.";
+export const proofreadDataNotice = () => t("chapter.proofreadModel.dataNotice");
 
 /** Một dòng gọn trong hộp xác nhận: "12 trang · $0.012 – $0.050 · khoảng 2–7 phút". Giá tính theo mức cao nhất thì nói rõ. */
 export function estimateSummary(e: ProofreadEstimate): string {
-  const price = `${fmtUsdRange(e.usd)}${e.price_known ? "" : " (giá cao nhất)"}`;
-  return `${e.pages} trang · ${price} · ${fmtDurationRange(e.seconds)}`;
+  const range = fmtUsdRange(e.usd);
+  const price = e.price_known ? range : t("chapter.proofreadModel.priceMax", { price: range });
+  return tp("chapter.proofreadModel.summary", e.pages, { price, duration: fmtDurationRange(e.seconds) });
 }
 
 /** Số gợi ý còn chờ duyệt (bản dịch hiện tại của khối vẫn là bản AI đã đọc); `translationOf` = bản dịch hiện tại theo khoá khối. */
@@ -108,13 +113,12 @@ export function pendingCount(
 
 /** Các dòng ước tính trước khi chạy hiệu đính (trang, model, giá, thời gian, cơ sở ước tính). */
 export function estimateLines(e: ProofreadEstimate): string[] {
-  const model = e.model ? `${e.provider ?? "?"} · ${e.model}` : "model mặc định của worker (chưa gán slot Hiệu đính)";
+  const model = e.model ? `${e.provider ?? "?"} · ${e.model}` : t("chapter.proofreadModel.defaultModel");
+  const price = fmtUsdRange(e.usd);
   return [
-    `${e.pages} trang · ${model}`,
-    `Chi phí ước tính: ${fmtUsdRange(e.usd)}${e.price_known ? "" : " (tính theo giá cao nhất vì chưa gán model)"}`,
-    `Thời gian ước tính: ${fmtDurationRange(e.seconds)}, chưa tính thời gian chờ hàng đợi`,
-    e.basis === "history"
-      ? "Ước tính theo các lượt hiệu đính gần đây của bạn."
-      : "Ước tính sơ bộ (chưa có lượt hiệu đính nào để so) — chi phí thật có thể khác.",
+    tp("chapter.proofreadModel.pagesModel", e.pages, { model }),
+    t(e.price_known ? "chapter.proofreadModel.cost" : "chapter.proofreadModel.costMax", { price }),
+    t("chapter.proofreadModel.time", { duration: fmtDurationRange(e.seconds) }),
+    t(e.basis === "history" ? "chapter.proofreadModel.basisHistory" : "chapter.proofreadModel.basisDefault"),
   ];
 }

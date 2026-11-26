@@ -1,6 +1,7 @@
 /** Font riêng của người dùng (khớp apps/api/src/routes/fonts.ts) + danh sách font gói sẵn từ /fonts/manifest.json. */
 import { userFontLimit } from "@mtl/shared";
 import { useQuery } from "@tanstack/react-query";
+import { t, tp } from "../../i18n/t.ts";
 import { api, useLocalMode } from "../../lib/api.ts";
 import { bundledFontIds, type FontManifest } from "../editor/fonts.ts";
 import { fontDisplayName } from "./font-names.ts";
@@ -47,7 +48,7 @@ export async function uploadFont(file: File, base = "/api/fonts"): Promise<UserF
   for (const [k, v] of Object.entries(slot.fields)) form.append(k, v);
   form.append("file", file);
   const res = await fetch(slot.url, { method: "POST", body: form });
-  if (!res.ok) throw new Error(`upload font thất bại (${res.status})`);
+  if (!res.ok) throw new Error(t("fonts.api.uploadFailed", { status: res.status }));
   return api<UserFont>(base, { method: "POST", body: { key: slot.key } });
 }
 
@@ -60,9 +61,9 @@ export const FONT_ACCEPT = ".ttf,.otf,font/ttf,font/otf";
  * `limit` = `useFontLimit()`).
  */
 export function fontUploadError(file: File, count: number, limit: number): string | null {
-  if (!FONT_EXT.test(file.name)) return "Chỉ nhận font .ttf hoặc .otf (không nhận WOFF/WOFF2).";
-  if (file.size > MAX_FONT_BYTES) return "Font tối đa 10MB.";
-  if (count >= limit) return `Mỗi tài khoản tối đa ${limit} font. Xoá bớt font không dùng.`;
+  if (!FONT_EXT.test(file.name)) return t("fonts.api.badExtension");
+  if (file.size > MAX_FONT_BYTES) return t("fonts.api.tooLarge");
+  if (count >= limit) return tp("fonts.api.limit", limit);
   return null;
 }
 
@@ -89,7 +90,7 @@ export function useBundledFonts() {
     queryKey: fontKeys.bundled,
     queryFn: async () => {
       const res = await fetch("/fonts/manifest.json");
-      if (!res.ok) throw new Error(`không tải được manifest font (${res.status})`);
+      if (!res.ok) throw new Error(t("fonts.api.manifestFailed", { status: res.status }));
       return (await res.json()) as FontManifest;
     },
     select: ({ fonts, defaults }) => ({
@@ -103,6 +104,6 @@ export function useBundledFonts() {
 
 /** Tên hiển thị gọn: "PatrickHand-Regular" → "Patrick Hand"; font riêng → tên trong file; chưa chọn → mặc định. */
 export function fontLabel(id: string | undefined, custom: readonly UserFont[] = []): string {
-  if (!id) return "Mặc định";
+  if (!id) return t("fonts.api.default");
   return custom.find((f) => f.id === id)?.name ?? fontDisplayName(id);
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { cancelJobBestEffort, OCR_STALL_MS, ocrRetryNote, ocrStallNote } from "./ocr-wait.ts";
+import { cancelJobBestEffort, OCR_STALL_MS, ocrFailureText, ocrRetryNote, ocrStallNote } from "./ocr-wait.ts";
 
 const NOW = Date.parse("2026-10-31T01:00:00Z");
 const base = { run_after: "2026-10-31T01:30:00Z", error_class: null, provider_retries: 0 };
@@ -29,6 +29,26 @@ describe("ocrRetryNote", () => {
     const note = ocrRetryNote({ ...base, status: "queued", error: "x", run_after: "2026-10-31T00:30:00Z" }, NOW);
     expect(note).toContain("sắp tới");
     expect(note).not.toContain("lúc");
+  });
+});
+
+describe("ocrFailureText", () => {
+  const failed = { ...base, status: "failed", type: "page.ocr_region" };
+  it("names the error class, never the raw worker detail", () => {
+    const text = ocrFailureText({ ...failed, error_class: "invalid_input", error: "bbox is outside the page" });
+    expect(text).toBe("Quét chữ vùng thất bại: ảnh lỗi hoặc vượt giới hạn");
+    expect(ocrFailureText({ ...failed, error: "internal: KeyError" })).toBe("Quét chữ vùng thất bại: lỗi hệ thống");
+  });
+  it("says what to do when the AI model is missing or the daily quota is used up", () => {
+    const setup = ocrFailureText({ ...failed, error_class: "auth", error: "llm_not_configured: no AI model" });
+    expect(setup).toContain("Chưa chọn model AI cho tác vụ OCR");
+    expect(setup).not.toContain("no AI model");
+    const quota = ocrFailureText({ ...failed, error_class: "internal", error: "quota_exceeded: over $1/day" });
+    expect(quota).toContain("Đã dùng hết hạn mức AI hôm nay");
+    expect(quota).not.toContain("over $1/day");
+  });
+  it("falls back to the generic sentence when the job carries no error", () => {
+    expect(ocrFailureText({ ...failed, status: "cancelled", error: null })).toBe("Quét chữ vùng thất bại");
   });
 });
 

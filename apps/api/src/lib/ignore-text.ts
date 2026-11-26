@@ -3,7 +3,14 @@
  * `/\w*\w*\w*!/` không thể làm treo tiến trình — việc lọc chạy đồng bộ lúc claim job và khi xem trước / áp ngược.
  * Cú pháp RE2 không có tham chiếu ngược và lookaround; RE2 từ chối thì mục bị báo không hợp lệ.
  */
-import { compileIgnoreList, type IgnoreMatcher, ignoreEntryError, type MakeIgnoreRegex } from "@mtl/shared";
+import {
+  compileIgnoreList,
+  type IgnoreIssue,
+  type IgnoreMatcher,
+  ignoreEntryError,
+  ignoreEntryIssue,
+  type MakeIgnoreRegex,
+} from "@mtl/shared";
 import RE2 from "re2";
 
 const re2Regex: MakeIgnoreRegex = (pattern, flags) => new RE2(pattern, flags);
@@ -13,3 +20,7 @@ export const compileIgnoreListRe2 = (list: readonly string[]): IgnoreMatcher =>
 
 /** Lý do mục không hợp lệ theo RE2 (kèm các kiểm tra chung của shared), null = hợp lệ. */
 export const ignoreEntryErrorRe2 = (entry: string): string | null => ignoreEntryError(entry, { makeRegex: re2Regex });
+
+/** Như `ignoreEntryErrorRe2` nhưng trả mã + tham số (mã lỗi API dùng chung). */
+export const ignoreEntryIssueRe2 = (entry: string): IgnoreIssue | null =>
+  ignoreEntryIssue(entry, { makeRegex: re2Regex });

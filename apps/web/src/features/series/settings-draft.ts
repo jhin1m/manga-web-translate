@@ -4,6 +4,7 @@
  * Trường nháp khác mốc = đang sửa: không bị bản server mới đè, và mốc xưng hô giữ đúng các cặp form đã thấy để server
  * không xoá cặp AI thêm sau. Hàng xưng hô thiếu ô không được lưu (không tính khi so / gửi) nhưng vẫn ở trên form.
  */
+import { t, tp } from "../../i18n/t.ts";
 import type { PronounRule, PronounRuleInput, Series } from "./api.ts";
 import { parseIgnoreText } from "./ignore-text-input.ts";
 import { SETTINGS_FIELDS, type SettingsField, type SettingsValues, sameField } from "./settings-diff.ts";
@@ -96,8 +97,8 @@ export function adoptServer(
  */
 export function aiGuideSummary(d: Pick<Draft, "style_prompt" | "pronoun_rules">, terms: number | undefined): string {
   const parts: string[] = [];
-  if (d.style_prompt.trim()) parts.push("Có giọng văn");
-  if (d.pronoun_rules.length) parts.push(`${d.pronoun_rules.length} xưng hô`);
-  if (terms) parts.push(`${terms} thuật ngữ`);
-  return parts.length ? parts.join(" · ") : "Chưa có";
+  if (d.style_prompt.trim()) parts.push(t("series.settingsDraft.hasStyle"));
+  if (d.pronoun_rules.length) parts.push(tp("series.settingsDraft.rules", d.pronoun_rules.length));
+  if (terms) parts.push(tp("series.settingsDraft.terms", terms));
+  return parts.length ? parts.join(" · ") : t("series.settingsDraft.none");
 }

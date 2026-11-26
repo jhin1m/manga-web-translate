@@ -12,6 +12,8 @@
  * Các lượt lưu chạy tuần tự (single-flight).
  */
 import type { PageState } from "@mtl/shared";
+import { i18nStore } from "../../i18n/i18n-store.ts";
+import { t } from "../../i18n/t.ts";
 import type { PendingQueue } from "./pending-queue.ts";
 import { diffStates, rebase } from "./rebase.ts";
 import type { AiInfo, EditorStore } from "./store.ts";
@@ -41,7 +43,14 @@ export const isPageBusyError = (e: unknown) =>
   "error" in e.body &&
   e.body.error === "page_busy";
 
-export const PAGE_BUSY_SAVE_TEXT = "Trang này đang dịch — bản sửa được giữ và lưu khi trang dịch xong";
+/**
+ * Chữ báo "trang đang dịch, giữ bản sửa". Giữ dạng string export (topbar + test đọc như chuỗi) nhưng theo ngôn ngữ: ESM
+ * live binding — gán lại khi đổi ngôn ngữ, nơi import đọc giá trị mới ở lần render sau.
+ */
+export let PAGE_BUSY_SAVE_TEXT = t("editor.save.pageBusy");
+i18nStore.subscribe(() => {
+  PAGE_BUSY_SAVE_TEXT = t("editor.save.pageBusy");
+});
 
 /**
  * Lượt lưu cuối khi rời editor — chạy trong chuỗi `serial` của khoá chương, xếp TRƯỚC lệnh nhả khoá của
@@ -126,12 +135,14 @@ export class Saver {
           if (statusOf(e) !== 409 || isPageBusyError(e)) throw e;
           const server = await this.api.get(snap.pageId);
           const r = rebase(server.state, diffStates(snap.base, snap.doc));
-          if (r.conflicts.length) throw new Error(`${r.conflicts.length} xung đột`);
+          if (r.conflicts.length) throw new Error(`${r.conflicts.length} conflicts`);
           await this.api.put(snap.pageId, r.state, server.version);
         }
         await this.queue.delete(snap.pageId);
       })
-      .catch((e: unknown) => console.warn("[editor] lượt lưu cuối khi đổi chương lỗi — giữ bản nháp IndexedDB", e));
+      .catch((e: unknown) =>
+        console.warn("[editor] final save on chapter switch failed — keeping the IndexedDB draft", e),
+      );
     return this.chain;
   }
 
@@ -151,7 +162,7 @@ export class Saver {
         updatedAt: Date.now(),
       });
     } catch (e) {
-      console.warn("[editor] không ghi được bản nháp IndexedDB", e);
+      console.warn("[editor] could not write the IndexedDB draft", e);
     }
   }
 
@@ -201,7 +212,7 @@ export class Saver {
       }
       if (status === 423) {
         this.store.getState().setReadOnly("lock_lost");
-        this.store.getState().setSave("error", "Mất khoá chương — thay đổi chưa lưu vẫn giữ trên máy này.");
+        this.store.getState().setSave("error", t("editor.save.lockLost"));
         return;
       }
       this.retryLater(e);

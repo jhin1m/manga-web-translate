@@ -4,6 +4,7 @@
  * viewer không giành). Ảnh đã xoá không cắt được.
  */
 import { type KeyboardEvent, useEffect, useRef, useState } from "react";
+import { useT } from "../../i18n/t.ts";
 import { SKIP_LABEL, type SourceItem, trimLabel } from "./source-rail-model.ts";
 import { parseTrimInput, type TrimEdges } from "./source-trim-model.ts";
 
@@ -58,15 +59,16 @@ export function TrimPanel(props: {
   /** Bỏ cắt ảnh đã lưu. */
   onClear(): void;
 }) {
+  const { t } = useT();
   const { item, edges, height } = props;
-  if (!item) return <p className="cw-trim-panel muted">Chưa có ảnh.</p>;
-  const position = `Ảnh ${props.index + 1}/${props.total}`;
+  if (!item) return <p className="cw-trim-panel muted">{t("chapter.trimPanel.noImage")}</p>;
+  const position = t("chapter.trimPanel.position", { n: props.index + 1, total: props.total });
   if (item.skip)
     return (
       <div className="cw-trim-panel">
         <strong>{position}</strong>
-        <p className="muted">Ảnh đã xoá</p>
-        <p className="muted small">{SKIP_LABEL[item.skip]} — khôi phục ảnh để cắt mép.</p>
+        <p className="muted">{t("chapter.trimPanel.deleted")}</p>
+        <p className="muted small">{t("chapter.trimPanel.deletedHint", { reason: SKIP_LABEL[item.skip] })}</p>
       </div>
     );
   const ready = height !== null;
@@ -86,20 +88,41 @@ export function TrimPanel(props: {
         <strong aria-live="polite">{position}</strong>
         {item.trim?.by === "credit" && <span className="small muted">{trimLabel(item.trim)}</span>}
       </div>
-      <PxField label="Trên" value={edges.top} disabled={!ready} onChange={(v) => props.onChange("top", v)} />
-      <PxField label="Dưới" value={edges.bottom} disabled={!ready} onChange={(v) => props.onChange("bottom", v)} />
-      <p className="muted small">Kéo 2 thanh trên ảnh hoặc gõ số</p>
+      <PxField
+        label={t("chapter.trimPanel.top")}
+        value={edges.top}
+        disabled={!ready}
+        onChange={(v) => props.onChange("top", v)}
+      />
+      <PxField
+        label={t("chapter.trimPanel.bottom")}
+        value={edges.bottom}
+        disabled={!ready}
+        onChange={(v) => props.onChange("bottom", v)}
+      />
+      <p className="muted small">{t("chapter.trimPanel.dragHint")}</p>
       <div className="cw-trim-actions">
-        <button type="button" className="btn btn-primary" disabled={!ready} onClick={props.onSave} title="Lưu (Enter)">
-          Lưu
+        <button
+          type="button"
+          className="btn btn-primary"
+          disabled={!ready}
+          onClick={props.onSave}
+          title={t("chapter.trimPanel.saveTitle")}
+        >
+          {t("common.save")}
         </button>
-        <button type="button" className="btn btn-ghost" onClick={props.onCancel} title="Huỷ (Esc)">
-          Huỷ
+        <button
+          type="button"
+          className="btn btn-ghost"
+          onClick={props.onCancel}
+          title={t("chapter.trimPanel.cancelTitle")}
+        >
+          {t("common.cancel")}
         </button>
       </div>
       {item.trim && (
         <button type="button" className="btn btn-ghost cw-trim-clear" onClick={props.onClear}>
-          Bỏ cắt
+          {t("chapter.trimPanel.clear")}
         </button>
       )}
     </div>

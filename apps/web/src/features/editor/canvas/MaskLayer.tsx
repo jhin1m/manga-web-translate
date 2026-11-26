@@ -6,6 +6,7 @@
 import type Konva from "konva";
 import { useEffect, useRef } from "react";
 import { Circle, Group, Layer, Line } from "react-konva";
+import { t } from "../../../i18n/t.ts";
 import { type MaskStroke, useEditor } from "../store.ts";
 
 export const MAX_MASK_SIDE = 4096;
@@ -122,15 +123,15 @@ export function strokesBounds(strokes: MaskStroke[], page: { w: number; h: numbe
 /** PNG mask theo vùng có nét + offset trên page. Vùng > 4096px/cạnh → lỗi (chia nhỏ lần vẽ). */
 export async function renderMaskPng(strokes: MaskStroke[], page: { w: number; h: number }) {
   const b = strokesBounds(strokes, page);
-  if (!b) throw new Error("Chưa vẽ vùng cần xoá.");
+  if (!b) throw new Error(t("editor.maskLayer.empty"));
   if (b.w > MAX_MASK_SIDE || b.h > MAX_MASK_SIDE) {
-    throw new Error(`Vùng vẽ quá lớn (tối đa ${MAX_MASK_SIDE}px mỗi cạnh) — xoá từng đoạn.`);
+    throw new Error(t("editor.maskLayer.tooLarge", { max: MAX_MASK_SIDE }));
   }
   const canvas = document.createElement("canvas");
   canvas.width = b.w;
   canvas.height = b.h;
   const ctx = canvas.getContext("2d");
-  if (!ctx) throw new Error("canvas 2D không khả dụng");
+  if (!ctx) throw new Error(t("editor.maskLayer.noCanvas"));
   ctx.fillStyle = "#000";
   ctx.fillRect(0, 0, b.w, b.h);
   ctx.lineCap = "round";
@@ -152,6 +153,6 @@ export async function renderMaskPng(strokes: MaskStroke[], page: { w: number; h:
   }
   const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png"));
   canvas.width = 0;
-  if (!blob) throw new Error("Không tạo được ảnh mask.");
+  if (!blob) throw new Error(t("editor.maskLayer.renderFailed"));
   return { blob, offset: [b.x, b.y] as [number, number] };
 }

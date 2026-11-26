@@ -1,5 +1,6 @@
 /** Kiểu + gọi API của chương (khớp apps/api/src/routes/{chapters,pages,progress}.ts). */
 import type { PageState, SourceSkipReason, SourceTrim } from "@mtl/shared";
+import type { MessageKey } from "../../i18n/t.ts";
 import { api } from "../../lib/api.ts";
 import type { ChapterStatus, ChapterSummary } from "../series/api.ts";
 import type { ProofreadEstimate, Suggestion } from "./proofread-model.ts";
@@ -215,10 +216,10 @@ export const cancelChapter = (ch: string) => api<{ cancelled: number }>(base(ch,
 export const lockChapter = (ch: string) => api<{ expires_at: string }>(base(ch, "/lock"), { method: "POST" });
 export const unlockChapter = (ch: string) => api<void>(base(ch, "/lock"), { method: "DELETE" });
 
-export const REJECT_REASON: Record<Rejected["reason"], string> = {
-  missing: "chưa upload xong",
-  too_large: "vượt 30MB",
-  type_mismatch: "nội dung không phải ảnh khớp đuôi file",
+export const REJECT_REASON: Record<Rejected["reason"], MessageKey> = {
+  missing: "chapter.api.rejectReason.missing",
+  too_large: "chapter.api.rejectReason.too_large",
+  type_mismatch: "chapter.api.rejectReason.type_mismatch",
 };
 
 // ---- Export ----
@@ -230,6 +231,8 @@ export type ExportView = {
   status: ExportStatus;
   progress: number;
   stage: string | null;
+  /** Nhóm lỗi (như `JobView.error_class`) — câu chính cho người dùng; `error` là chi tiết kỹ thuật (tiếng Anh). */
+  error_class: string | null;
   error: string | null;
   format: ExportFormat;
   layout: ExportLayout;

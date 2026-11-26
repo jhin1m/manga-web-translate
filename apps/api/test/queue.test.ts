@@ -472,6 +472,10 @@ describe("claim", () => {
     expect(
       (await wcall(tA, "/claim", { ...body, capabilities: ["page.prepare"], pipeline_version: "0.11.0" })).status,
     ).toBe(426);
+    // Worker chưa hiểu `ui_lang` của payload dịch / hiệu đính cũng bị chặn lúc claim.
+    expect(
+      (await wcall(tA, "/claim", { ...body, capabilities: ["page.prepare"], pipeline_version: "0.13.0" })).status,
+    ).toBe(426);
     expect((await wcall(tA, "/claim", { ...body, capabilities: ["bogus"], pipeline_version: VERSION })).status).toBe(
       400,
     );

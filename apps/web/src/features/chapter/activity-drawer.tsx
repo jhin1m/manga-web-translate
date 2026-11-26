@@ -9,6 +9,8 @@ import { useState } from "react";
 import { useStore } from "zustand";
 import { useMe } from "../../app/app-shell.tsx";
 import { Drawer } from "../../app/drawer.tsx";
+import { fmtDate } from "../../i18n/format.ts";
+import { type MessageKey, useT } from "../../i18n/t.ts";
 import { errorMessage } from "../../lib/api.ts";
 import { type ChapterUpload, uploadManager, useUploads } from "../upload/upload-manager.ts";
 import { cancelJob, chapterKeys, fetchChapter, type JobView, type Progress } from "./api.ts";
@@ -18,22 +20,31 @@ import { pageLevel, pageSummary } from "./page-status.ts";
 import { stageLabel } from "./stage-labels.ts";
 import { formatBytes } from "./text-utils.ts";
 
-const JOB_LABEL: Record<string, string> = {
-  "chapter.ingest": "Cắt trang",
-  "page.prepare": "Xoá chữ và đọc chữ",
-  "chapter.translate": "Dịch",
-  "page.reinpaint": "Xoá chữ lại",
-  "page.ocr_region": "Đọc chữ vùng đã chọn",
-  "chapter.export": "Xuất",
-  "chapter.proofread": "Hiệu đính",
+const JOB_LABEL: Record<string, MessageKey> = {
+  "chapter.ingest": "chapter.activityDrawer.job.chapterIngest",
+  "page.prepare": "chapter.activityDrawer.job.pagePrepare",
+  "chapter.translate": "chapter.activityDrawer.job.chapterTranslate",
+  "page.reinpaint": "chapter.activityDrawer.job.pageReinpaint",
+  "page.ocr_region": "chapter.activityDrawer.job.pageOcrRegion",
+  "chapter.export": "chapter.activityDrawer.job.chapterExport",
+  "chapter.proofread": "chapter.activityDrawer.job.chapterProofread",
 };
-const JOB_STATUS: Record<string, { label: string; tone: string }> = {
-  queued: { label: "Đang chờ", tone: "busy" },
-  running: { label: "Đang chạy", tone: "busy" },
-  paused_budget: { label: "Tạm dừng (hết ngân sách)", tone: "warn" },
-  succeeded: { label: "Xong", tone: "ok" },
-  failed: { label: "Lỗi", tone: "danger" },
-  cancelled: { label: "Đã huỷ", tone: "idle" },
+const JOB_STATUS: Record<string, { label: MessageKey; tone: string }> = {
+  queued: { label: "chapter.activityDrawer.status.queued", tone: "busy" },
+  running: { label: "chapter.activityDrawer.status.running", tone: "busy" },
+  paused_budget: { label: "chapter.activityDrawer.status.paused_budget", tone: "warn" },
+  succeeded: { label: "chapter.activityDrawer.status.succeeded", tone: "ok" },
+  failed: { label: "chapter.activityDrawer.status.failed", tone: "danger" },
+  cancelled: { label: "chapter.activityDrawer.status.cancelled", tone: "idle" },
+};
+/** Ngày giờ đầy đủ như `toLocaleString()` mặc định. */
+const DATE_TIME: Intl.DateTimeFormatOptions = {
+  year: "numeric",
+  month: "numeric",
+  day: "numeric",
+  hour: "numeric",
+  minute: "numeric",
+  second: "numeric",
 };
 const ACTIVE = new Set(["queued", "running", "paused_budget"]);
 /** Job theo trang (mỗi trang 1 job) gom vào dòng "trang"; xuất có mục riêng. */
@@ -61,9 +72,15 @@ export function chapterActivityCount(progress: Progress | undefined, exportsActi
 
 /** Nút "Hoạt động" của app shell, kèm số việc đang chạy. Màn chương mở drawer qua chip trạng thái / menu ⋯. */
 function ActivityButton({ count, onClick }: { count: number; onClick(): void }) {
+  const { t } = useT();
+  const title = t("chapter.activityDrawer.title");
   return (
-    <button type="button" onClick={onClick} aria-label={count ? `Hoạt động (${count} đang chạy)` : "Hoạt động"}>
-      Hoạt động
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={count ? t("chapter.activityDrawer.buttonAria", { count }) : title}
+    >
+      {title}
       {count > 0 && <span className="count-badge">{count}</span>}
     </button>
   );
@@ -80,8 +97,9 @@ export function ActivityDrawer(props: {
   };
   onClose(): void;
 }) {
+  const { t } = useT();
   return (
-    <Drawer title="Hoạt động" onClose={props.onClose}>
+    <Drawer title={t("chapter.activityDrawer.title")} onClose={props.onClose}>
       <UploadSection showEmpty={!props.chapter} />
       {props.chapter && <ChapterSection {...props.chapter} />}
       {props.chapter && <ExportSection chapterId={props.chapter.id} />}
@@ -108,13 +126,14 @@ export function ShellActivity() {
 
 /** Ở màn chương mục trống được ẩn; ở app shell đây là mục duy nhất nên vẫn báo trống. */
 function UploadSection({ showEmpty }: { showEmpty: boolean }) {
+  const { t } = useT();
   const uploads = Object.values(useUploads());
   if (uploads.length === 0 && !showEmpty) return null;
   return (
     <section className="drawer-section" aria-label="Upload">
       <h3>Upload</h3>
       {uploads.length === 0 ? (
-        <p className="muted small">Không có ảnh nào đang tải trong tab này.</p>
+        <p className="muted small">{t("chapter.activityDrawer.uploadEmpty")}</p>
       ) : (
         <div className="drawer-list">
           {uploads.map((u) => (
@@ -127,18 +146,26 @@ function UploadSection({ showEmpty }: { showEmpty: boolean }) {
 }
 
 function UploadItem({ u }: { u: ChapterUpload }) {
+  const { t } = useT();
   // Tên chương lấy theo từng chương đang tải (cùng khoá với màn chương): danh sách "Việc cần làm" bị cắt ở 20 chương
   // và chương đang mở ở tab khác xếp trước, nên chương nháp vừa tải có thể không nằm trong đó.
   const ch = useQuery({ queryKey: chapterKeys.detail(u.chapterId), queryFn: () => fetchChapter(u.chapterId) }).data;
-  const name = ch ? `Chương ${ch.number} · ${ch.series.title}` : "Chương mới";
+  const name = ch
+    ? t("chapter.activityDrawer.chapterName", { number: ch.number, title: ch.series.title })
+    : t("chapter.activityDrawer.newChapter");
   const pct = u.bytesTotal ? Math.round((u.bytesDone / u.bytesTotal) * 100) : 0;
   const tone = u.phase === "failed" ? "danger" : u.phase === "uploaded" ? "ok" : "busy";
   const label =
     u.phase === "failed"
-      ? `Lỗi ${u.total - u.done} ảnh · đã tải ${u.done}/${u.total}`
+      ? t("chapter.activityDrawer.uploadFailed", { failed: u.total - u.done, done: u.done, total: u.total })
       : u.phase === "uploaded"
-        ? `Đã tải xong ${u.total} ảnh — chờ bấm Dịch chương`
-        : `Đang tải ${u.done}/${u.total} ảnh · ${formatBytes(u.bytesDone)}/${formatBytes(u.bytesTotal)}`;
+        ? t("chapter.activityDrawer.uploadDone", { total: u.total })
+        : t("chapter.activityDrawer.uploadProgress", {
+            done: u.done,
+            total: u.total,
+            bytesDone: formatBytes(u.bytesDone),
+            bytesTotal: formatBytes(u.bytesTotal),
+          });
   return (
     <div className="drawer-item" data-chapter={u.chapterId}>
       <div className="drawer-item-head">
@@ -153,7 +180,7 @@ function UploadItem({ u }: { u: ChapterUpload }) {
         </span>
         {u.phase === "failed" && (
           <button type="button" className="btn-ghost" onClick={() => uploadManager.retryFailed(u.chapterId)}>
-            Thử lại
+            {t("common.retry")}
           </button>
         )}
       </div>
@@ -171,12 +198,13 @@ function UploadItem({ u }: { u: ChapterUpload }) {
 
 /** Lối tới Cài đặt › Pipeline (chọn model AI từng bước) khi job thiếu model; chỉ admin mở được trang đó. */
 function TaskSetupLink() {
+  const { t } = useT();
   const me = useMe();
   if (!me.is_admin) return null;
   return (
     <div>
       <Link to="/settings" search={{ section: "pipeline" }}>
-        Mở cài đặt Pipeline
+        {t("chapter.activityDrawer.openPipeline")}
       </Link>
     </div>
   );
@@ -188,6 +216,7 @@ function ChapterSection(props: {
   retrying: boolean;
   onRetry(): void;
 }) {
+  const { t, tp } = useT();
   const p = props.progress;
   if (!p) return null;
   const busy = p.pages.filter((x) => pageLevel(x.status) === "busy").length;
@@ -201,8 +230,8 @@ function ChapterSection(props: {
   const setupJob =
     newest?.status === "failed" && needsTaskSetup(newest) && !groups.some((g) => g.needsSetup) ? newest : null;
   return (
-    <section className="drawer-section" aria-label="Chương đang mở">
-      <h3>Chương đang mở</h3>
+    <section className="drawer-section" aria-label={t("chapter.activityDrawer.openChapter")}>
+      <h3>{t("chapter.activityDrawer.openChapter")}</h3>
       <div className="drawer-list">
         {p.pages.length > 0 && (
           <div className="drawer-item">
@@ -210,23 +239,23 @@ function ChapterSection(props: {
               <span className="grow">{pageSummary(p.pages.length, busy, failed.length)}</span>
               {failed.length > 0 && props.canRetry && (
                 <button type="button" disabled={props.retrying} onClick={props.onRetry}>
-                  Chạy lại trang lỗi
+                  {t("chapter.activityDrawer.retryFailed")}
                 </button>
               )}
             </div>
             {groups.map((g) => (
               <div key={g.cls} className="small">
                 <span className="error">
-                  {g.count} trang · {g.label}: trang {g.pages}
+                  {tp("chapter.activityDrawer.failedGroup", g.count, { label: g.label, pages: g.pages })}
                   {g.hint ? `. ${g.hint}` : ""}
                 </span>
                 {g.needsSetup && <TaskSetupLink />}
                 {g.details.length > 0 && (
                   <details className="cw-error-raw">
-                    <summary>Chi tiết kỹ thuật</summary>
+                    <summary>{t("chapter.activityDrawer.technicalDetails")}</summary>
                     {g.details.map((d) => (
                       <p key={d.error}>
-                        <strong>Trang {d.pages}:</strong> {d.error}
+                        <strong>{t("chapter.activityDrawer.detailPages", { pages: d.pages })}</strong> {d.error}
                       </p>
                     ))}
                   </details>
@@ -244,21 +273,23 @@ function ChapterSection(props: {
         )}
         {jobs.length > 0 && (
           <details className="drawer-jobs">
-            <summary className="small">Chi tiết</summary>
+            <summary className="small">{t("chapter.activityDrawer.details")}</summary>
             {jobs.map((j) => {
-              const st = JOB_STATUS[j.status] ?? { label: j.status, tone: "idle" };
+              const known = JOB_STATUS[j.status];
+              const st = known ? { label: t(known.label), tone: known.tone } : { label: j.status, tone: "idle" };
+              const jobLabel = JOB_LABEL[j.type];
               // Bước cũ của job đã kết thúc không còn ý nghĩa (server xoá stage khi xong; lỗi giữ bước cuối).
               const step = ACTIVE.has(j.status) ? stageLabel(j) : null;
               return (
                 <div key={j.id} className="drawer-item" data-job-type={j.type}>
                   <div className="drawer-item-head">
-                    <span className="grow">{JOB_LABEL[j.type] ?? j.type}</span>
+                    <span className="grow">{jobLabel ? t(jobLabel) : j.type}</span>
                     <span className="status" data-tone={st.tone}>
                       {st.label}
                     </span>
                   </div>
                   <span className="muted small">
-                    {new Date(j.updated_at).toLocaleString("vi-VN")}
+                    {fmtDate(j.updated_at, DATE_TIME)}
                     {step ? ` · ${step}` : ""}
                     {ACTIVE.has(j.status) && j.progress > 0 ? ` · ${Math.round(j.progress * 100)}%` : ""}
                   </span>
@@ -273,20 +304,23 @@ function ChapterSection(props: {
             })}
           </details>
         )}
-        {p.pages.length === 0 && jobs.length === 0 && <p className="muted small">Chưa có việc nào của chương.</p>}
+        {p.pages.length === 0 && jobs.length === 0 && (
+          <p className="muted small">{t("chapter.activityDrawer.noJobs")}</p>
+        )}
       </div>
     </section>
   );
 }
 
 function ExportSection({ chapterId }: { chapterId: string }) {
+  const { t } = useT();
   const { q, refresh } = useExports(chapterId);
   const exports = q.data?.exports ?? [];
   const cancel = useMutation({ mutationFn: (id: string) => cancelJob(id), onSettled: refresh });
   if (exports.length === 0 && !cancel.error) return null;
   return (
-    <section className="drawer-section" aria-label="Xuất gần đây">
-      <h3>Xuất gần đây</h3>
+    <section className="drawer-section" aria-label={t("chapter.activityDrawer.recentExports")}>
+      <h3>{t("chapter.activityDrawer.recentExports")}</h3>
       {cancel.error && <p className="notice danger">{errorMessage(cancel.error)}</p>}
       <div className="drawer-list">
         {exports.slice(0, 5).map((x) => (

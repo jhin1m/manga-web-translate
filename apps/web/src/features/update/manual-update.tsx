@@ -1,9 +1,11 @@
 /** Khối lệnh cập nhật tay + nút Chép. Windows dùng `curl.exe`; từng dòng một (PowerShell 5.1). */
 import { useRef, useState } from "react";
+import { useT } from "../../i18n/t.ts";
 import { manualCommands } from "./update-model.ts";
 import "./update.css";
 
 export function ManualUpdate({ pinned }: { pinned: boolean }) {
+  const { t, tNode } = useT();
   const [copied, setCopied] = useState(false);
   const [hint, setHint] = useState(false);
   const cmdRef = useRef<HTMLPreElement>(null);
@@ -39,23 +41,21 @@ export function ManualUpdate({ pinned }: { pinned: boolean }) {
 
   return (
     <div className="update-manual">
-      <p className="small">
-        Chạy trong thư mục chứa <code>docker-compose.yml</code>, từng dòng một:
-      </p>
+      <p className="small">{tNode("update.manualUpdate.runIn", { file: <code>docker-compose.yml</code> })}</p>
       {pinned && (
         <p className="small">
-          Bỏ dòng <code>MTL_TAG</code> trong file <code>.env</code> trước.
+          {tNode("update.manualUpdate.unpin", { setting: <code>MTL_TAG</code>, file: <code>.env</code> })}
         </p>
       )}
       <pre ref={cmdRef} className="update-cmd" data-testid="manual-commands">
         {lines.join("\n")}
       </pre>
       <button type="button" onClick={copy}>
-        {copied ? "Đã chép" : "Chép"}
+        {copied ? t("update.manualUpdate.copied") : t("update.manualUpdate.copy")}
       </button>
       {hint && (
         <p className="small muted" role="status">
-          Không chép tự động được. Hãy chọn và chép tay.
+          {t("update.manualUpdate.copyFallback")}
         </p>
       )}
     </div>

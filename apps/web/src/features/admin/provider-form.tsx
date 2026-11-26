@@ -4,10 +4,11 @@
  */
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useId, useState } from "react";
+import { t, useT } from "../../i18n/t.ts";
 import { api } from "../../lib/api.ts";
 import { TrashIcon } from "../home/row-icons.tsx";
 import { adminSettingsKey, type ProvidersResponse, providerError, providersKey } from "./api.ts";
-import { REASONING_WARNING, suggestionsFor, unsupportedModelsNote } from "./price-suggestions.ts";
+import { reasoningWarning, suggestionsFor, unsupportedModelsNote } from "./price-suggestions.ts";
 import {
   applySuggestion,
   CHOICE_LABEL,
@@ -35,7 +36,7 @@ import {
  */
 async function saveEdit(d: ProviderDraft, id: string) {
   const fresh = (await api<ProvidersResponse>("/api/admin/providers")).providers.find((p) => p.id === id);
-  if (!fresh) throw new Error("Nhà cung cấp không còn tồn tại. Tải lại trang.");
+  if (!fresh) throw new Error(t("admin.providerForm.providerGone"));
   const body = toPatchBody(d, fresh);
   if (Object.keys(body).length) await api(`/api/admin/providers/${id}`, { method: "PATCH", body });
   const diff = diffModels(d, fresh);
@@ -46,6 +47,7 @@ async function saveEdit(d: ProviderDraft, id: string) {
 
 export function ProviderForm(props: { saved?: SavedProvider; secretsConfigured: boolean; onDone(): void }) {
   const { saved } = props;
+  useT();
   const uid = useId();
   const qc = useQueryClient();
   const [d, setD] = useState<ProviderDraft>(() => (saved ? draftOf(saved) : newDraft()));
@@ -79,7 +81,7 @@ export function ProviderForm(props: { saved?: SavedProvider; secretsConfigured: 
 
   const nameField = (
     <div>
-      <label htmlFor={field("name")}>Tên hiển thị</label>
+      <label htmlFor={field("name")}>{t("admin.providerForm.displayName")}</label>
       <input id={field("name")} value={d.name} maxLength={80} onChange={(e) => set("name", e.target.value)} />
       {errors?.name && <span className="error small">{errors.name}</span>}
     </div>
@@ -105,41 +107,43 @@ export function ProviderForm(props: { saved?: SavedProvider; secretsConfigured: 
         type="password"
         value={d.api_key}
         autoComplete="new-password"
-        placeholder={saved ? `Để trống để giữ key ••••${saved.key_last4}` : `Dán API key ${PICKER_LABEL[choice]}`}
+        placeholder={
+          saved
+            ? t("admin.providerForm.keepKeyPlaceholder", { last4: saved.key_last4 })
+            : t("admin.providerForm.pasteKeyPlaceholder", { provider: PICKER_LABEL[choice] })
+        }
         onChange={(e) => set("api_key", e.target.value)}
       />
       {errors?.api_key && <span className="error small">{errors.api_key}</span>}
-      {!props.secretsConfigured && (
-        <span className="warn-text small">API chưa có SECRETS_KEY — chưa lưu được key.</span>
-      )}
+      {!props.secretsConfigured && <span className="warn-text small">{t("admin.providerForm.secretsMissing")}</span>}
     </div>
   );
   const jsonField = compat && (
     <div>
-      <label htmlFor={field("json")}>Kiểu JSON</label>
+      <label htmlFor={field("json")}>{t("admin.providerForm.jsonMode")}</label>
       <select
         id={field("json")}
         value={d.structured_output}
         onChange={(e) => set("structured_output", e.target.value as ProviderDraft["structured_output"])}
       >
-        <option value="json_schema">json_schema (mặc định)</option>
-        <option value="json_object">json_object (endpoint bỏ qua response_format)</option>
+        <option value="json_schema">{t("admin.providerForm.jsonSchemaOption")}</option>
+        <option value="json_object">{t("admin.providerForm.jsonObjectOption")}</option>
       </select>
-      <span className="hint small">Worker tự hạ xuống json_object một lần khi endpoint từ chối json_schema.</span>
+      <span className="hint small">{t("admin.providerForm.jsonFallbackHint")}</span>
     </div>
   );
   const modelsField = (
     <fieldset className="prov-models">
-      <legend>Model và giá</legend>
+      <legend>{t("admin.providerForm.modelsLegend")}</legend>
       <span className="hint small">
-        Giá tính theo USD / 1 triệu token{choice === "deepseek" ? " (DeepSeek: giá giờ cao điểm)" : ""}.{" "}
+        {choice === "deepseek" ? t("admin.providerForm.priceUnitDeepseek") : t("admin.providerForm.priceUnit")}{" "}
         {unsupportedModelsNote(d.type)}
       </span>
       {d.models.length > 0 && (
         <div className="prov-model-row prov-model-head" aria-hidden="true">
           <span>Model id</span>
-          <span>Giá vào</span>
-          <span>Giá ra</span>
+          <span>{t("admin.providerForm.priceIn")}</span>
+          <span>{t("admin.providerForm.priceOut")}</span>
         </div>
       )}
       {d.models.map((m, i) => (
@@ -159,15 +163,15 @@ export function ProviderForm(props: { saved?: SavedProvider; secretsConfigured: 
               }
             />
             <input
-              aria-label={`Model ${i + 1}: giá vào`}
-              placeholder="giá vào"
+              aria-label={t("admin.providerForm.modelPriceInAria", { n: i + 1 })}
+              placeholder={t("admin.providerForm.priceInPlaceholder")}
               inputMode="decimal"
               value={m.price_in}
               onChange={(e) => setModel(i, { price_in: e.target.value })}
             />
             <input
-              aria-label={`Model ${i + 1}: giá ra`}
-              placeholder="giá ra"
+              aria-label={t("admin.providerForm.modelPriceOutAria", { n: i + 1 })}
+              placeholder={t("admin.providerForm.priceOutPlaceholder")}
               inputMode="decimal"
               value={m.price_out}
               onChange={(e) => setModel(i, { price_out: e.target.value })}
@@ -188,21 +192,21 @@ export function ProviderForm(props: { saved?: SavedProvider; secretsConfigured: 
               type="button"
               className="icon-btn"
               data-danger
-              aria-label={`Bỏ model ${m.model_id || i + 1}`}
-              title="Bỏ model"
+              aria-label={t("admin.providerForm.removeModelAria", { model: m.model_id || i + 1 })}
+              title={t("admin.providerForm.removeModel")}
               onClick={() => setD((s) => ({ ...s, models: s.models.filter((_, j) => j !== i) }))}
             >
               <TrashIcon />
             </button>
           </div>
-          {m.reasoning && <span className="warn-text small">{REASONING_WARNING}</span>}
+          {m.reasoning && <span className="warn-text small">{reasoningWarning()}</span>}
           {errors?.models[i] && <span className="error small">{errors.models[i]}</span>}
         </div>
       ))}
       {errors?.no_models && <span className="error small">{errors.no_models}</span>}
       <div className="row">
         <button type="button" onClick={() => set("models", [...d.models, emptyModel()])}>
-          + Thêm model
+          {t("admin.providerForm.addModel")}
         </button>
         {suggestions
           .filter((s) => !d.models.some((m) => m.model_id.trim() === s.model_id))
@@ -211,7 +215,11 @@ export function ProviderForm(props: { saved?: SavedProvider; secretsConfigured: 
               key={s.model_id}
               type="button"
               className="btn-ghost"
-              title={`Gợi ý giá ${s.price_in} / ${s.price_out} USD mỗi 1M token (xác nhận lại với trang giá của ${CHOICE_LABEL[choice]})`}
+              title={t("admin.providerForm.suggestionTitle", {
+                in: s.price_in,
+                out: s.price_out,
+                provider: CHOICE_LABEL[choice],
+              })}
               onClick={() => set("models", [...d.models, modelFromSuggestion(s)])}
             >
               + {s.model_id}
@@ -222,12 +230,14 @@ export function ProviderForm(props: { saved?: SavedProvider; secretsConfigured: 
   );
 
   // Tóm tắt mục Tuỳ chỉnh khi đang thu: tên + model sẽ được thêm.
-  const summary = d.models.length ? d.models.map((m) => m.model_id).join(", ") : "chưa có model";
+  const summary = d.models.length
+    ? d.models.map((m) => m.model_id).join(", ")
+    : t("admin.providerForm.noModelsSummary");
 
   return (
     <form
       className="prov-form"
-      aria-label={saved ? `Sửa ${saved.name}` : "Thêm nhà cung cấp"}
+      aria-label={saved ? t("admin.providerForm.editAria", { name: saved.name }) : t("admin.providerForm.addProvider")}
       onSubmit={(e) => {
         e.preventDefault();
         const found = validateDraft(d, saved);
@@ -240,7 +250,7 @@ export function ProviderForm(props: { saved?: SavedProvider; secretsConfigured: 
           <>
             <div className="prov-grid">
               <div>
-                <label htmlFor={field("type")}>Loại</label>
+                <label htmlFor={field("type")}>{t("admin.providerForm.type")}</label>
                 <select id={field("type")} value={choice} disabled>
                   <option value={choice}>{CHOICE_LABEL[choice]}</option>
                 </select>
@@ -254,7 +264,7 @@ export function ProviderForm(props: { saved?: SavedProvider; secretsConfigured: 
           </>
         ) : (
           <>
-            <div className="prov-picker" role="radiogroup" aria-label="Nhà cung cấp">
+            <div className="prov-picker" role="radiogroup" aria-label={t("admin.providerForm.pickerAria")}>
               {PICKER_CHOICES.map((c) => (
                 <label key={c} className="prov-pick" data-checked={c === choice || undefined}>
                   <input
@@ -275,10 +285,10 @@ export function ProviderForm(props: { saved?: SavedProvider; secretsConfigured: 
             <div className="prov-grid">{keyField}</div>
             <details className="prov-more" open={open} onToggle={(e) => setMoreOpen(e.currentTarget.open)}>
               <summary>
-                Tuỳ chỉnh tên, model và giá{" "}
+                {t("admin.providerForm.customize")}{" "}
                 {!open && (
                   <span className="muted small">
-                    · {d.name || "chưa đặt tên"} · {summary}
+                    · {d.name || t("admin.providerForm.unnamed")} · {summary}
                   </span>
                 )}
               </summary>
@@ -296,10 +306,10 @@ export function ProviderForm(props: { saved?: SavedProvider; secretsConfigured: 
       </fieldset>
       <div className="row">
         <button type="submit" className="btn-primary" disabled={save.isPending}>
-          {save.isPending ? "Đang lưu…" : saved ? "Lưu" : "Thêm nhà cung cấp"}
+          {save.isPending ? t("common.saving") : saved ? t("common.save") : t("admin.providerForm.addProvider")}
         </button>
         <button type="button" onClick={props.onDone} disabled={save.isPending}>
-          Huỷ
+          {t("common.cancel")}
         </button>
       </div>
       {save.error && (

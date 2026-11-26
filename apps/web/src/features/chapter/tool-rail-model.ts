@@ -5,6 +5,7 @@
  * phím E), nên trên rail đứng chung nút Tẩy chữ. "Văn bản" chỉ mở/thu panel 4 tab (Bản dịch, Tìm / Thay, Glossary,
  * Hiệu đính), không đổi công cụ.
  */
+import { t } from "../../i18n/t.ts";
 import type { Tool } from "../editor/store.ts";
 
 /**
@@ -48,11 +49,17 @@ export function railClick(
   return { panel: cur.panel === "tool" && has.content ? "tool" : null, tool };
 }
 
-/** Tên panel (cũng là tên truy cập của `<aside>`). */
+/** Tên panel (cũng là tên truy cập của `<aside>`); getter → đọc ngôn ngữ đang dùng mỗi lần truy cập. */
 export const PANEL_TITLE: Record<PanelId, string> = {
-  tool: "Chọn & sửa",
-  doc: "Văn bản",
-  trim: "Cắt mép",
+  get tool() {
+    return t("chapter.toolRailModel.panel.tool");
+  },
+  get doc() {
+    return t("chapter.toolRailModel.panel.doc");
+  },
+  get trim() {
+    return t("chapter.toolRailModel.panel.trim");
+  },
 };
 
 /** Panel rộng: bảng nhiều cột (Văn bản: bảng dịch, xem trước Tìm/Thay, bảng Áp glossary). */

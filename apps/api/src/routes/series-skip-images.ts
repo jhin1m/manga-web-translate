@@ -7,10 +7,10 @@ import { chapters, NotFoundError, pages, type Scoped, scoped, series, seriesSkip
 import { DHASH_RE, type ImageFingerprint, isPlainHash, MIN_BAND_PX, sameImage, storageKeys } from "@mtl/shared";
 import { and, eq, inArray, isNull, ne, type SQL } from "drizzle-orm";
 import { Hono } from "hono";
-import { HTTPException } from "hono/http-exception";
 import { v7 as uuidv7 } from "uuid";
 import { z } from "zod";
 import { inJobTx } from "../jobs/enqueue.ts";
+import { apiError } from "../lib/api-error.ts";
 import { parseJson } from "../lib/validate.ts";
 import type { AppEnv } from "../middleware/user.ts";
 import { copyObject, deleteObject, head, MAX_GET_TTL_S, presignGet } from "../storage.ts";
@@ -25,7 +25,7 @@ const WholeBody = z
   .object({ source_file_id: z.string().uuid().optional(), page_id: z.string().uuid().optional() })
   .strict()
   .refine((b) => (b.source_file_id === undefined) !== (b.page_id === undefined), {
-    message: "source_file_id hoặc page_id",
+    message: "source_file_id or page_id",
   });
 
 /** Dải mép đã cắt của 1 ảnh gốc; dHash do trình duyệt tính từ đúng vùng dải. */
@@ -44,9 +44,6 @@ const LearnBody = z.union([WholeBody, BandBody]);
 type SourceFile = typeof sourceFiles.$inferSelect;
 type SkipImage = typeof seriesSkipImages.$inferSelect;
 type SourceMapEntry = { source_file_id: string };
-
-const conflict = (error: string, message: string) =>
-  new HTTPException(409, { res: Response.json({ error, message }, { status: 409 }) });
 
 const fingerprintOf = (f: SourceFile): ImageFingerprint | null =>
   f.dhash && f.width && f.height ? { dhash: f.dhash, width: f.width, height: f.height } : null;
@@ -140,7 +137,7 @@ async function learnInto(
   } else {
     source = await filesInsidePage(sdb, seriesId, body.page_id as string);
     if (!source.files.length) {
-      throw conflict("no_whole_image", "Trang không chứa trọn ảnh gốc nào — không học được.");
+      throw apiError(409, "no_whole_image");
     }
   }
 
@@ -148,9 +145,9 @@ async function learnInto(
     const fp = fingerprintOf(f);
     return fp ? [{ file: f, fp }] : [];
   });
-  if (!hashed.length) throw conflict("no_hash", "Ảnh này không có dấu nhận dạng — không học được.");
+  if (!hashed.length) throw apiError(409, "no_hash.image");
   if (hashed.every((h) => isPlainHash(h.fp.dhash))) {
-    throw conflict("plain_image", "Ảnh gần như trơn — không học được (dễ tự bỏ nhầm trang truyện).");
+    throw apiError(409, "plain_image.image");
   }
   const all = await sdb.select(seriesSkipImages, eq(seriesSkipImages.seriesId, seriesId));
   const known: ImageFingerprint[] = all.filter((k) => k.edge === null);
@@ -167,12 +164,12 @@ async function learnInto(
 
 function assertRoom(existing: number, adding: number) {
   if (existing + adding > MAX_SKIP_IMAGES) {
-    throw conflict("skip_images_full", `Series đã có ${existing} ảnh tự bỏ (tối đa ${MAX_SKIP_IMAGES}).`);
+    throw apiError(409, "skip_images_full", { count: existing, max: MAX_SKIP_IMAGES });
   }
 }
 
 async function assertUploaded(file: SourceFile) {
-  if (!(await head(file.storageKey))) throw conflict("not_uploaded", "Ảnh chưa tải lên xong — thử lại sau.");
+  if (!(await head(file.storageKey))) throw apiError(409, "not_uploaded.skip_image");
 }
 
 /** Chép ảnh trước, ghi hàng sau: lỗi giữa chừng chỉ để lại object mồ côi, không có hàng trỏ tới object thiếu. */
@@ -210,16 +207,16 @@ async function learnBand(
   const f = await sdb.byId(sourceFiles, body.source_file_id, "source file");
   const chapter = await chapterInSeries(sdb, f.chapterId, seriesId, "source file");
   const bandHeight = f.trim?.[body.edge] ?? 0;
-  if (bandHeight <= 0) throw conflict("no_trim", "Mép này của ảnh chưa được cắt — không học được dải.");
+  if (bandHeight <= 0) throw apiError(409, "no_trim");
   if (bandHeight !== body.band_px) {
-    throw conflict("trim_changed", "Số px cắt của mép này đã đổi — cắt lại rồi học lại.");
+    throw apiError(409, "trim_changed");
   }
   if (bandHeight < MIN_BAND_PX) {
-    throw conflict("band_too_small", `Dải cắt dưới ${MIN_BAND_PX} px — quá mỏng để nhận lại.`);
+    throw apiError(409, "band_too_small", { min: MIN_BAND_PX });
   }
-  if (!f.width) throw conflict("no_hash", "Ảnh này không có kích thước — không học được dải.");
+  if (!f.width) throw apiError(409, "no_hash.band");
   if (isPlainHash(body.dhash)) {
-    throw conflict("plain_image", "Dải gần như trơn — không học được (dễ tự cắt nhầm trang truyện).");
+    throw apiError(409, "plain_image.band");
   }
   const fp: ImageFingerprint = { dhash: body.dhash, width: f.width, height: bandHeight };
   const all = await sdb.select(seriesSkipImages, eq(seriesSkipImages.seriesId, seriesId));

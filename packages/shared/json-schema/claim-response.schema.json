@@ -407,6 +407,11 @@
                       }
                     },
                     "additionalProperties": false
+                  },
+                  "ui_lang": {
+                    "type": "string",
+                    "maxLength": 35,
+                    "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$"
                   }
                 },
                 "required": [
@@ -837,6 +842,11 @@
                       "font"
                     ],
                     "additionalProperties": false
+                  },
+                  "ui_lang": {
+                    "type": "string",
+                    "maxLength": 35,
+                    "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$"
                   }
                 },
                 "required": [

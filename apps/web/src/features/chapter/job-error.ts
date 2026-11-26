@@ -3,35 +3,42 @@
  * không làm job hỏng ngay — queue requeue có backoff (apps/api/src/jobs/errors.ts) → trang "đang chờ AI", tự thử lại.
  */
 import { LLM_NOT_CONFIGURED, QUOTA_EXCEEDED } from "@mtl/shared";
+import { fmtDate } from "../../i18n/format.ts";
+import { type MessageKey, t, tp } from "../../i18n/t.ts";
 import type { JobView } from "./api.ts";
 
-export const ERROR_CLASS: Record<string, string> = {
-  provider: "nhà cung cấp AI lỗi",
-  rate_limited: "bị giới hạn tốc độ",
-  schema: "AI trả sai định dạng",
-  invalid_input: "ảnh lỗi hoặc vượt giới hạn",
-  auth: "AI từ chối khoá API",
-  internal: "lỗi hệ thống",
+const ERROR_CLASS_KEY: Record<string, MessageKey> = {
+  provider: "chapter.jobError.class.provider",
+  rate_limited: "chapter.jobError.class.rate_limited",
+  schema: "chapter.jobError.class.schema",
+  invalid_input: "chapter.jobError.class.invalid_input",
+  auth: "chapter.jobError.class.auth",
+  internal: "chapter.jobError.class.internal",
 };
 
+/** Nhãn theo `error_class`; mỗi giá trị là getter (đọc ngôn ngữ lúc dùng). Mã lạ → undefined. */
+export const ERROR_CLASS: Record<string, string> = Object.defineProperties(
+  {},
+  Object.fromEntries(
+    Object.entries(ERROR_CLASS_KEY).map(([cls, key]) => [cls, { enumerable: true, get: () => t(key) }]),
+  ),
+);
+
 /** Chạy lại chỉ đụng trang lỗi — nói rõ để người dùng không sợ mất trang đã dịch. */
-const RETRY_HINT =
-  'Thử lại: nút "Chạy lại" góc trên phải hoặc "Chạy lại trang lỗi" trong menu ⋯ — chỉ chạy trang lỗi, trang đã xong giữ nguyên. Riêng một trang: menu ⋯ của trang → "Dịch lại trang".';
+const retryHint = () => t("chapter.jobError.retryHint");
 /** Khoá API sai thì bấm chạy lại cũng hỏng tiếp — nói rõ phải sửa cấu hình trước. */
-const AUTH_HINT =
-  'Khoá API AI sai, hết hạn mức hoặc chưa cấu hình — admin sửa ở Cài đặt › AI › Nhà cung cấp (hoặc key env của worker) rồi bấm "Chạy lại trang lỗi".';
+const authHint = () => t("chapter.jobError.authHint");
 const PROVIDER_CLASSES = new Set(["provider", "rate_limited"]);
 const WAITING = new Set(["queued", "running"]);
 
 type ErrorJob = Pick<JobView, "status" | "error_class" | "error" | "provider_retries" | "run_after"> &
   Partial<Pick<JobView, "type">>;
 
-const SETUP_HINT = "Chọn model ở Cài đặt › Pipeline rồi chạy lại.";
-const TASK_OF_JOB: Record<string, string> = {
-  "page.prepare": "OCR",
-  "page.ocr_region": "OCR",
-  "chapter.translate": "Dịch",
-  "chapter.proofread": "Hiệu đính",
+const TASK_OF_JOB: Record<string, MessageKey> = {
+  "page.prepare": "chapter.jobError.task.ocr",
+  "page.ocr_region": "chapter.jobError.task.ocr",
+  "chapter.translate": "chapter.jobError.task.translate",
+  "chapter.proofread": "chapter.jobError.task.proofread",
 };
 type CauseJob = Pick<JobView, "error_class" | "error"> & Partial<Pick<JobView, "type">>;
 
@@ -41,20 +48,20 @@ export const needsTaskSetup = (j: CauseJob | null | undefined) => !!j?.error?.st
 export function jobErrorLabel(j: CauseJob): string {
   if (needsTaskSetup(j)) {
     const task = TASK_OF_JOB[j.type ?? ""];
-    return `Chưa chọn model AI cho tác vụ${task ? ` ${task}` : ""}`;
+    return task ? t("chapter.jobError.noModelTask", { task: t(task) }) : t("chapter.jobError.noModel");
   }
   const cls = j.error_class ?? "internal";
   return ERROR_CLASS[cls] ?? cls;
 }
 
-export const clock = (iso: string) => new Date(iso).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" });
+export const clock = (iso: string) => fmtDate(iso, { hour: "2-digit", minute: "2-digit" });
 
 /** Job đã gặp lỗi AI tạm thời và đang chờ tự thử lại (chưa hỏng). */
 export const waitingOnProvider = (j: ErrorJob | null | undefined): boolean =>
   !!j && WAITING.has(j.status) && !!j.error_class && PROVIDER_CLASSES.has(j.error_class);
 
 export const providerText = (cls: string) =>
-  cls === "rate_limited" ? "Nhà cung cấp AI báo hết hạn mức / quá nhiều yêu cầu (429)" : "Nhà cung cấp AI lỗi tạm thời";
+  cls === "rate_limited" ? t("chapter.jobError.providerRateLimited") : t("chapter.jobError.providerTemporary");
 
 /** Đầu ngày UTC kế tiếp — lúc hạn mức chi phí ngày đặt lại (server tính theo ngày UTC). */
 export const nextQuotaReset = (now = new Date()) =>
@@ -65,18 +72,27 @@ export function describeJobError(j: ErrorJob | null | undefined): { text: string
   if (!j?.error_class && !j?.error) return null;
   const cls = j.error_class ?? "internal";
   if (waitingOnProvider(j)) {
-    const at = j.status === "queued" ? ` lúc ${clock(j.run_after)}` : "";
-    return { text: `${providerText(cls)} — tự thử lại${at} (lần ${j.provider_retries}).`, waiting: true };
+    const why = providerText(cls);
+    const text =
+      j.status === "queued"
+        ? t("chapter.jobError.autoRetryAt", { why, time: clock(j.run_after), count: j.provider_retries })
+        : t("chapter.jobError.autoRetry", { why, count: j.provider_retries });
+    return { text, waiting: true };
   }
-  if (j.status === "cancelled") return { text: `Đã huỷ xử lý. ${RETRY_HINT}`, waiting: false };
+  if (j.status === "cancelled") return { text: t("chapter.jobError.cancelled", { hint: retryHint() }), waiting: false };
   if (j.status === "failed" && j.error?.startsWith(QUOTA_EXCEEDED)) {
-    return { text: `Đã dùng hết hạn mức AI hôm nay — thử lại sau ${clock(nextQuotaReset())}.`, waiting: false };
+    return { text: t("chapter.jobError.quotaExceeded", { time: clock(nextQuotaReset()) }), waiting: false };
   }
   if (j.status !== "failed") return null;
-  if (needsTaskSetup(j)) return { text: `Lỗi: ${jobErrorLabel(j)}. ${SETUP_HINT}`, waiting: false };
-  if (cls === "auth") return { text: `Lỗi: ${AUTH_HINT}`, waiting: false };
-  const label = PROVIDER_CLASSES.has(cls) ? `${providerText(cls)}, đã thử lại nhiều lần` : (ERROR_CLASS[cls] ?? cls);
-  return { text: `Lỗi: ${label}. ${RETRY_HINT}`, waiting: false };
+  if (needsTaskSetup(j)) {
+    const text = t("chapter.jobError.failed", { label: jobErrorLabel(j), hint: t("chapter.jobError.setupHint") });
+    return { text, waiting: false };
+  }
+  if (cls === "auth") return { text: t("chapter.jobError.failedText", { text: authHint() }), waiting: false };
+  const label = PROVIDER_CLASSES.has(cls)
+    ? t("chapter.jobError.retriedMany", { why: providerText(cls) })
+    : (ERROR_CLASS[cls] ?? cls);
+  return { text: t("chapter.jobError.failed", { label, hint: retryHint() }), waiting: false };
 }
 
 /** Băng cảnh báo chương: các trang đang chờ AI thử lại + giờ thử lại sớm nhất. */
@@ -91,14 +107,16 @@ export function providerWait(pages: { ord: number; job: ErrorJob | null }[]) {
 
 export function providerWaitText(w: NonNullable<ReturnType<typeof providerWait>>) {
   const why = w.rateLimited ? providerText("rate_limited") : providerText("provider");
-  const at = w.next ? ` lúc ${clock(w.next)}` : "";
-  return `${why} — trang ${w.pages.join(", ")} đang chờ, tự thử lại${at}. Không cần làm gì; muốn dừng thì bấm "Huỷ xử lý".`;
+  const pages = w.pages.join(", ");
+  return w.next
+    ? t("chapter.jobError.waitText", { why, pages, time: clock(w.next) })
+    : t("chapter.jobError.waitTextNoTime", { why, pages });
 }
 
 /** Bản ngắn của `providerWaitText` cho băng cảnh báo: lý do + trang nào tự thử lại. */
 export function providerWaitShort(w: NonNullable<ReturnType<typeof providerWait>>) {
-  const why = w.rateLimited ? "AI hết hạn mức" : "AI lỗi tạm thời";
-  return `${why}, trang ${w.pages.join(", ")} tự thử lại`;
+  const why = w.rateLimited ? t("chapter.jobError.whyShort.rateLimited") : t("chapter.jobError.whyShort.provider");
+  return t("chapter.jobError.waitShort", { why, pages: w.pages.join(", ") });
 }
 
 /** Số trang (1-based) → dải gọn: [2, 3, 4, 6, 9] → "2–4, 6, 9". */
@@ -144,7 +162,7 @@ export function failedPageGroups(failed: FailedPage[]) {
       count: ps.length,
       label: ps[0]?.job ? jobErrorLabel(ps[0].job) : (ERROR_CLASS[cls] ?? cls),
       pages: pageRanges(ps.map((p) => p.ord + 1)),
-      hint: cls === "auth" ? AUTH_HINT : null,
+      hint: cls === "auth" ? authHint() : null,
       needsSetup: cls === LLM_NOT_CONFIGURED,
       raw: ps.find((p) => p.job?.error)?.job?.error ?? null,
       details: rawErrors(ps),
@@ -157,7 +175,7 @@ export function failedCauseTitle(failed: FailedPage[]): string | null {
   // Trang lỗi từ lâu (job quá 24h không còn trong progress) không biết nguyên nhân — không gán nhầm "lỗi hệ thống".
   const known = failed.filter((f) => f.job);
   const unknown = failed.length - known.length;
-  const parts = failedPageGroups(known).map((g) => `${g.count} trang: ${g.label}`);
-  if (unknown) parts.push(`${unknown} trang: lỗi từ lượt trước`);
+  const parts = failedPageGroups(known).map((g) => tp("chapter.jobError.causePages", g.count, { label: g.label }));
+  if (unknown) parts.push(tp("chapter.jobError.causePages", unknown, { label: t("chapter.jobError.unknownCause") }));
   return parts.join("; ");
 }

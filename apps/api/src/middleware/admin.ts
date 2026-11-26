@@ -1,6 +1,6 @@
 import { createMiddleware } from "hono/factory";
-import { HTTPException } from "hono/http-exception";
 import { env } from "../env.ts";
+import { codeError } from "../lib/api-error.ts";
 import type { AppEnv } from "./user.ts";
 
 export const normalizeEmail = (s: string): string => s.trim().toLowerCase();
@@ -15,6 +15,6 @@ export const isAdminEmail = (email: unknown): boolean =>
 
 /** Sau `requireUser`: chỉ admin (403 `forbidden`). */
 export const requireAdmin = createMiddleware<AppEnv>(async (c, next) => {
-  if (!isAdminEmail(c.get("user").email)) throw new HTTPException(403, { message: "forbidden" });
+  if (!isAdminEmail(c.get("user").email)) throw codeError(403, "forbidden");
   await next();
 });

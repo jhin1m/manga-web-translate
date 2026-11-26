@@ -9,6 +9,7 @@
  */
 import { useStore } from "zustand";
 import { createStore } from "zustand/vanilla";
+import { t } from "../../i18n/t.ts";
 import type { UploadView } from "../chapter/next-action.ts";
 import { fetchSkipImages } from "../series/api.ts";
 import { createChapter, type PresignedTarget, presignAgain } from "./api.ts";
@@ -111,7 +112,7 @@ export function createUploadManager(deps: UploadDeps) {
         done++;
         bytesDone += it.page.size;
       } else bytesDone += Math.min(it.page.size, s?.loaded ?? 0);
-      if (s?.status === "failed") errors.push({ name: it.page.name, error: s.error ?? "lỗi" });
+      if (s?.status === "failed") errors.push({ name: it.page.name, error: s.error ?? t("upload.manager.fileFailed") });
     }
     const prev = store.getState().chapters[chapterId];
     // Sự kiện tiến độ (mỗi vài KB) không đổi trạng thái file nào → giữ object cũ, rail ảnh không vẽ lại mỗi tick.
@@ -159,7 +160,7 @@ export function createUploadManager(deps: UploadDeps) {
         // Thử lại / chưa có target / policy sắp hết hạn → ký lại (mất mạng lâu làm policy cũ hết hạn).
         if (!target || attempt > 1 || Date.parse(target.expires_at) - Date.now() < 60_000) {
           const [fresh] = (await deps.presignAgain(chapterId, [it.fileId])).files;
-          if (!fresh) throw new Error("không ký lại được file");
+          if (!fresh) throw new Error(t("upload.manager.resignFailed"));
           target = fresh;
           job.targets.set(it.fileId, fresh);
         }
@@ -217,17 +218,15 @@ export function createUploadManager(deps: UploadDeps) {
      * được khi người dùng sắp xếp lại ảnh, còn file thả lại luôn theo thứ tự tên.
      */
     resumeChapter(o: { chapter: DraftChapter; pages: PageFile[] }): { uploading: number } {
-      if (active.has(o.chapter.id)) throw new Error("Chương này đang tải ảnh — chờ lượt hiện tại xong.");
+      if (active.has(o.chapter.id)) throw new Error(t("upload.manager.busy"));
       const pages = orderPages(o.pages);
       const files = [...o.chapter.source_files].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
       if (pages.length !== files.length) {
-        throw new Error(`Chương nháp có ${files.length} ảnh, bạn thả ${pages.length} ảnh — chọn đúng bộ file đã tải.`);
+        throw new Error(t("upload.manager.countMismatch", { expected: files.length, dropped: pages.length }));
       }
       const bad = files.findIndex((f, i) => pages[i]?.size !== f.bytes);
       if (bad >= 0) {
-        throw new Error(
-          `Ảnh thứ ${bad + 1} (${pages[bad]?.name}) khác dung lượng file đã khai báo — chọn đúng bộ file.`,
-        );
+        throw new Error(t("upload.manager.sizeMismatch", { index: bad + 1, name: pages[bad]?.name ?? "" }));
       }
       const marker = readMarker(o.chapter.id);
       const doneIds = new Set(marker?.done ?? []);

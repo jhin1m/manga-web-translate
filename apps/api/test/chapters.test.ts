@@ -3,7 +3,7 @@
  * giai đoạn 1/2 → review; chạy lại trang lỗi; dịch lại 1 trang với glossary mới; huỷ; khoá chương.
  */
 import { chapters, glossaryEntries, jobs, pageStates, pages, scoped, series, sourceFiles } from "@mtl/db";
-import { emptyPageState, pageId } from "@mtl/shared";
+import { emptyPageState, MIN_TRIM_KEEP_PX, pageId } from "@mtl/shared";
 import { eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { deletePrefix, head } from "../src/storage.ts";
@@ -412,8 +412,12 @@ describe("trim source file edges before step 1", () => {
   it("leaves at least MIN_TRIM_KEEP_PX rows (trim_too_large) and needs a known height (no_size)", async () => {
     const { ch, ids } = await draftChapter("8.2", [{ height: 1000 }, {}]);
     const [sized, unsized] = ids as [string, string];
-    const big = await json<{ error: string }>(await patch(ch, sized, { trim: { top: 500, bottom: 437 } }), 400);
+    const big = await json<{ error: string; params: unknown }>(
+      await patch(ch, sized, { trim: { top: 500, bottom: 437 } }),
+      400,
+    );
     expect(big.error).toBe("trim_too_large");
+    expect(big.params).toEqual({ min: MIN_TRIM_KEEP_PX });
     await json(await patch(ch, sized, { trim: { top: 500, bottom: 436 } }), 200);
 
     const none = await json<{ error: string }>(await patch(ch, unsized, { trim: { top: 10, bottom: 0 } }), 400);

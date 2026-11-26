@@ -17,7 +17,8 @@ Image.MAX_IMAGE_PIXELS = MAX_PIXELS
 
 
 class ImageRejected(ValueError):
-    """Ảnh không hợp lệ hoặc vượt trần kích thước."""
+    """Ảnh không hợp lệ hoặc vượt trần kích thước. Câu lỗi là chi tiết kỹ thuật tiếng Anh: runner gắn
+    `error_class` `invalid_input`, web hiện nhãn theo nhóm lỗi đó."""
 
 
 def _read(src: str | Path | bytes) -> bytes:
@@ -32,15 +33,15 @@ def check_header(src: str | Path | bytes) -> tuple[str, int, int]:
         with Image.open(io.BytesIO(data)) as im:
             fmt, (w, h) = im.format or "", im.size
     except Image.DecompressionBombError as e:
-        raise ImageRejected(f"vượt trần pixel: {e}") from e
+        raise ImageRejected(f"image exceeds the pixel limit: {e}") from e
     except Exception as e:  # Pillow ném nhiều loại lỗi khi file hỏng
-        raise ImageRejected(f"không đọc được header ảnh: {e}") from e
+        raise ImageRejected(f"cannot read image header: {e}") from e
     if fmt not in ALLOWED_FORMATS:
-        raise ImageRejected(f"định dạng không cho phép: {fmt or 'unknown'}")
+        raise ImageRejected(f"image format not allowed: {fmt or 'unknown'}")
     if w <= 0 or h <= 0 or w > MAX_SIDE or h > MAX_SIDE:
-        raise ImageRejected(f"cạnh vượt trần {MAX_SIDE}px: {w}x{h}")
+        raise ImageRejected(f"image side exceeds {MAX_SIDE}px: {w}x{h}")
     if w * h > MAX_PIXELS:
-        raise ImageRejected(f"vượt trần {MAX_PIXELS} pixel: {w}x{h}")
+        raise ImageRejected(f"image exceeds {MAX_PIXELS} pixels: {w}x{h}")
     return fmt, w, h
 
 

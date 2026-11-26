@@ -83,13 +83,13 @@ test("admin adds a provider (key shown only as last4), assigns the translate slo
   await expect(translate).toHaveValue(/.+/);
   await expect(translate.locator("option:checked")).toHaveText("gpt-4.1-mini");
 
-  // Xoá bị chặn khi model còn dùng cho một bước; đổi về worker rồi xoá được.
+  // Xoá bị chặn khi model được gán cho một bước; đổi về "Tự động" rồi xoá được.
   await page.getByRole("link", { name: "Nhà cung cấp" }).click();
   await page.getByRole("button", { name: "Xoá OpenAI e2e" }).click();
   await page.getByRole("button", { name: "Xác nhận xoá OpenAI e2e" }).click();
   await expect(page.getByRole("alert")).toContainText("đang được dùng cho bước Dịch");
   await page.getByRole("link", { name: "Pipeline" }).click();
-  await translate.selectOption({ label: "Theo worker (.env)" });
+  await translate.selectOption("");
   await expect(page.getByRole("status").filter({ hasText: "Đã lưu" })).toBeVisible();
   await page.getByRole("link", { name: "Nhà cung cấp" }).click();
   await page.getByRole("button", { name: "Xoá OpenAI e2e" }).click();

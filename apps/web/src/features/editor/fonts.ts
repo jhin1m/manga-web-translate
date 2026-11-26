@@ -5,6 +5,7 @@
  * Font không biết (đã xoá, state cũ) → metric + nét vẽ đều theo font thoại mặc định.
  */
 import type { Region, TextStyle } from "@mtl/shared";
+import { t } from "../../i18n/t.ts";
 import type { Layout } from "./actions.ts";
 import { type FontMetrics, layoutBox, type MeasureFn } from "./measure.ts";
 
@@ -54,7 +55,7 @@ function metricsOf(manifest: FontManifest, custom: ReadonlyMap<string, FontMetri
   const own = custom.get(fontId);
   if (own) return own;
   const f = manifest.fonts[fontId] ?? manifest.fonts[manifest.defaults[0] ?? ""] ?? Object.values(manifest.fonts)[0];
-  if (!f) throw new Error("font manifest rỗng");
+  if (!f) throw new Error(t("editor.fonts.emptyManifest"));
   return { unitsPerEm: f.unitsPerEm, ascent: f.ascent, descent: f.descent };
 }
 
@@ -100,7 +101,7 @@ export const fontPreview = (id: string) => ({ fontFamily: `"${id}", var(--font-u
 /** Đo advance bằng canvas 2D (cùng renderer với Konva). Cache theo (font, cỡ, chuỗi). */
 function canvasMeasure(): MeasureFn {
   const ctx = document.createElement("canvas").getContext("2d");
-  if (!ctx) throw new Error("canvas 2D không khả dụng");
+  if (!ctx) throw new Error(t("editor.fonts.noCanvas"));
   const cache = new Map<string, number>();
   return (text, fontId, size) => {
     const key = `${fontId}|${size}|${text}`;
@@ -122,7 +123,7 @@ let loading: Promise<Base> | null = null;
 function loadBase(): Promise<Base> {
   loading ??= (async () => {
     const res = await fetch("/fonts/manifest.json");
-    if (!res.ok) throw new Error(`không tải được manifest font (${res.status})`);
+    if (!res.ok) throw new Error(t("editor.fonts.manifestFailed", { status: res.status }));
     const manifest = (await res.json()) as FontManifest;
     fallbackFamily = manifest.defaults[0] ?? Object.keys(manifest.fonts)[0] ?? fallbackFamily;
     await Promise.all(
@@ -178,7 +179,7 @@ export async function loadFonts(fetchCustom?: () => Promise<CustomFont[]>): Prom
       for (const id of loadedCustom.keys()) if (!listed.has(id)) loadedCustom.delete(id);
       await document.fonts.ready;
     } catch (e) {
-      console.warn("không nạp được font riêng", e);
+      console.warn("[editor] could not load custom fonts", e);
     }
   }
   const custom = new Map<string, FontMetrics>(

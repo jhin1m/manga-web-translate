@@ -1,9 +1,9 @@
 import { type Scoped, scoped } from "@mtl/db";
 import { createMiddleware } from "hono/factory";
-import { HTTPException } from "hono/http-exception";
 import { type AuthSession, auth } from "../auth.ts";
 import { db } from "../db.ts";
 import { env } from "../env.ts";
+import { codeError } from "../lib/api-error.ts";
 import { getLocalUser } from "../local/local-user.ts";
 
 /** Header web gửi kèm mọi request: id tab (uuid, `sessionStorage`) — khoá chương giữ theo từng tab. */
@@ -44,10 +44,10 @@ function localSession(): AuthSession {
  */
 export const requireUser = createMiddleware<AppEnv>(async (c, next) => {
   const s = env.MTL_LOCAL_MODE ? localSession() : await auth.api.getSession({ headers: c.req.raw.headers });
-  if (!s) throw new HTTPException(401, { message: "unauthenticated" });
+  if (!s) throw codeError(401, "unauthenticated");
   // Phiên còn sót sau khi khoá (race giữa đặt cờ và xoá phiên).
   if (s.user.disabledAt) {
-    throw new HTTPException(403, { res: Response.json({ error: "user_disabled" }, { status: 403 }) });
+    throw codeError(403, "user_disabled");
   }
   const tab = c.req.header(TAB_ID_HEADER);
   c.set("user", s.user);

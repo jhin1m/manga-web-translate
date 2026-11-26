@@ -1,5 +1,17 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ApiError, api, DISABLED_LOGIN_PATH, errorMessage, fetchAppConfig, sessionEffects, tabId } from "./api.ts";
+import { applyLocale } from "../i18n/i18n-store.ts";
+import { BASE_MESSAGES } from "../i18n/locales.ts";
+import en from "../i18n/messages/en.json";
+import {
+  ApiError,
+  api,
+  apiErrorText,
+  DISABLED_LOGIN_PATH,
+  errorMessage,
+  fetchAppConfig,
+  sessionEffects,
+  tabId,
+} from "./api.ts";
 
 describe("api helpers", () => {
   it("402 quota_exceeded → câu hạn mức kèm số đã dùng / hạn mức", () => {
@@ -91,6 +103,89 @@ describe("api helpers", () => {
       await expect(fetchAppConfig()).rejects.toMatchObject({ status: 502 });
       reply(() => Promise.reject(new TypeError("Failed to fetch")));
       await expect(fetchAppConfig()).rejects.toBeInstanceOf(TypeError);
+    });
+  });
+
+  describe("API error codes", () => {
+    afterEach(() => applyLocale("vi", BASE_MESSAGES));
+
+    const taken = () =>
+      new ApiError(409, "series đã có chương 12", {
+        error: "chapter_number_taken",
+        message: "series đã có chương 12",
+        params: { number: "12" },
+      });
+    const busy = () =>
+      new ApiError(409, "chương đang xử lý — chờ xong rồi xuất", {
+        error: "chapter_busy",
+        variant: "export",
+        message: "chương đang xử lý — chờ xong rồi xuất",
+        params: {},
+      });
+
+    it("vi: a known code reads the same sentence the API sent, variants included", () => {
+      expect(errorMessage(taken())).toBe("series đã có chương 12");
+      expect(errorMessage(busy())).toBe("chương đang xử lý — chờ xong rồi xuất");
+    });
+
+    it("en: a known code is translated with its params", () => {
+      applyLocale("en", en);
+      expect(errorMessage(taken())).toBe("This series already has chapter 12");
+      expect(errorMessage(busy())).toBe("The chapter is being processed — wait, then export");
+    });
+
+    it("unknown code: vi keeps the server message, en says something went wrong with the code", () => {
+      const e = new ApiError(409, "lỗi lạ", { error: "brand_new", message: "lỗi lạ" });
+      expect(errorMessage(e)).toBe("lỗi lạ");
+      applyLocale("en", en);
+      expect(errorMessage(e)).toBe("Something went wrong (brand_new)");
+      expect(errorMessage(new ApiError(409, "busy"))).toBe("busy");
+    });
+
+    it("a known code without the params its sentence needs (older API) never shows a raw placeholder", () => {
+      const old = { error: "chapter_number_taken", message: "series đã có chương 12" };
+      expect(apiErrorText(old)).toBe("series đã có chương 12");
+      applyLocale("en", en);
+      expect(apiErrorText(old)).toBe("series đã có chương 12");
+      expect(apiErrorText({ error: "chapter_number_taken" })).toBe("Something went wrong (chapter_number_taken)");
+      expect(apiErrorText({ error: "chapter_number_taken", params: { other: "1" } })).not.toContain("{");
+      // Đủ tham số (giá trị tự chứa ngoặc nhọn) vẫn dịch bình thường.
+      expect(apiErrorText({ error: "chapter_number_taken", params: { number: "{12}" } })).toBe(
+        "This series already has chapter {12}",
+      );
+    });
+
+    it("an invalid_body issue carrying an API code is translated (ignore-text reasons)", () => {
+      const body = {
+        error: "invalid_body",
+        issues: [{ code: "custom", message: "regex không hợp lệ", params: { error: "regex_invalid", params: {} } }],
+      };
+      expect(apiErrorText(body)).toBe("regex không hợp lệ");
+      applyLocale("en", en);
+      expect(apiErrorText(body)).toBe("invalid regex");
+      expect(apiErrorText({ error: "invalid_body", issues: [] })).toBe("The submitted data is invalid");
+    });
+
+    it("glossary CSV line errors translate by code and keep old rows (message only) readable", () => {
+      const row = { line: 3, error: "csv_invalid_fields", params: { fields: "target_term" }, message: "target_term" };
+      expect(apiErrorText(row)).toBe("target_term");
+      applyLocale("en", en);
+      expect(apiErrorText(row)).toBe("invalid value in target_term");
+      expect(apiErrorText({ line: 2, message: "dòng cũ" })).toBe("dòng cũ");
+    });
+
+    it("the thrown ApiError message is already in the UI language", async () => {
+      applyLocale("en", en);
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async () =>
+          Response.json(
+            { error: "no_pages", variant: "export", message: "chương chưa có trang để xuất", params: {} },
+            { status: 409 },
+          ),
+        ),
+      );
+      await expect(api("/api/x")).rejects.toMatchObject({ message: "The chapter has no pages to export" });
     });
   });
 });

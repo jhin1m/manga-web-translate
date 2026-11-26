@@ -2,7 +2,7 @@
  * Cấu hình AI theo job: snapshot ref vào payload lúc enqueue, giải mã key lúc claim (chỉ trong response, `no-store`),
  * lỗi cấu hình -> job `failed` lớp `auth`, khoá idempotency / input_rev, và các đường phụ thuộc (xoá provider, 426).
  */
-import { chapters, jobs, pages, runtimeFlags, systemSettings } from "@mtl/db";
+import { aiProviders, chapters, jobs, pages, runtimeFlags, systemSettings } from "@mtl/db";
 import { idempotencyKey } from "@mtl/shared";
 import { and, eq, inArray, like } from "drizzle-orm";
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
@@ -108,6 +108,8 @@ describe("translate slot", () => {
     const other = await (async () => {
       const page = await insertPage(S, { ord: 1 });
       const { ch, s } = await chapterAndSeries(S);
+      // OCR local → prepare không cần AI (để "Tự động" sẽ lấy model của A, cũng hỏng key).
+      await db.update(systemSettings).set({ pipeline: {} });
       return (await inJobTx((tx) => enqueuePrepare(tx, page, s, ch))).job;
     })();
     const logs = vi.spyOn(console, "warn");
@@ -203,8 +205,9 @@ describe("proofread", () => {
     await db.update(chapters).set({ status: "review" }).where(eq(chapters.id, S.chapterId));
   };
 
-  it("without a slot keeps model_tier + the {tier} key, including a premium tier stored by the old pipeline", async () => {
+  it("with no provider model keeps model_tier + the {tier} key, including a premium tier stored by the old pipeline", async () => {
     await readyChapter();
+    await db.delete(aiProviders);
     await db
       .insert(systemSettings)
       .values({ id: 1, pipeline: { proofread_tier: "premium" } as never })
@@ -282,14 +285,28 @@ describe("breaker per provider", () => {
   const flags = async () =>
     (await db.select().from(runtimeFlags)).map((r) => r.key).filter((k) => k.startsWith("llm_paused"));
 
+  /** Job chạy bằng env: chỉ có khi chưa có provider nào (ô "Tự động" không có model để lấy) → dựng lại A, B sau đó. */
+  async function envJob(page: { id: string }, bbox: [number, number, number, number]) {
+    await db.delete(aiProviders);
+    const job = await regionJob(page, bbox);
+    A = await createProvider(KEY_A, [MINI, BIG]);
+    B = await createProvider(KEY_B, [MINI]);
+    return job;
+  }
+
   it("five errors of provider A pause only A: B and env jobs still claim", async () => {
     const page = await insertPage(S);
+    const je = await envJob(page, [3, 3, 20, 20]);
     await setSlots({ translate: modelOf(A, "gpt-4.1-mini") });
     const ja = await regionJob(page, [1, 1, 20, 20]);
-    await setSlots({ translate: modelOf(B, "gpt-4.1-mini") });
+    // Cả OCR lẫn Dịch đều gán B: để "Tự động", OCR sẽ lấy model vision đầu tiên = của A.
+    await setSlots({ ocr: modelOf(B, "gpt-4.1-mini"), translate: modelOf(B, "gpt-4.1-mini") });
     const jb = await regionJob(page, [2, 2, 20, 20]);
-    await setSlots({});
-    const je = await regionJob(page, [3, 3, 20, 20]);
+    // Job env phải tạo trước (lúc chưa có provider) nhưng claim sau ja.
+    await db
+      .update(jobs)
+      .set({ createdAt: new Date(Date.now() + 60_000) })
+      .where(eq(jobs.id, je.id));
 
     await failProvider(ja.id);
     expect(await flags()).toEqual([`llm_paused:${A.id}`]);
@@ -300,8 +317,9 @@ describe("breaker per provider", () => {
 
   it("five env errors pause env jobs only: a provider job still claims", async () => {
     const page = await insertPage(S);
-    const je = await regionJob(page, [3, 3, 20, 20]);
-    await setSlots({ translate: modelOf(B, "gpt-4.1-mini") });
+    const je = await envJob(page, [3, 3, 20, 20]);
+    // Cả OCR lẫn Dịch đều gán B: để "Tự động", OCR sẽ lấy model vision đầu tiên = của A.
+    await setSlots({ ocr: modelOf(B, "gpt-4.1-mini"), translate: modelOf(B, "gpt-4.1-mini") });
     const jb = await regionJob(page, [2, 2, 20, 20]);
 
     await failProvider(je.id);

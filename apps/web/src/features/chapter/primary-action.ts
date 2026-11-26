@@ -4,6 +4,7 @@
  * Tiến độ nằm ở chip trạng thái (status.ts chapterChip), nút chính chỉ là bước tiếp theo.
  * Thuần: nhận trạng thái chương, upload phía client và số trang; không gọi API.
  */
+import { t, tp } from "../../i18n/t.ts";
 import type { ChapterStatus } from "../series/api.ts";
 import type { UploadView } from "./next-action.ts";
 
@@ -26,27 +27,33 @@ export type PrimaryAction = {
   menu: { command: ChapterCommand; label: string; title?: string }[];
 };
 
-const TRANSLATE_LABEL = "Dịch chương";
 /** Chạy lại chỉ gửi trang lỗi (`retry-failed`), trang đã xong không đụng tới. */
 const retryTitle = (failed: number) =>
-  `Chỉ chạy lại ${failed > 0 ? `${failed} ` : "các "}trang lỗi — trang đã xong giữ nguyên (dùng AI)`;
+  failed > 0 ? tp("chapter.primaryAction.retryTitleCount", failed) : t("chapter.primaryAction.retryTitleAll");
 
 /** Chương nháp: `commit` gửi đích "đã dịch"; `prepare_only` gửi đích "chờ dịch". */
-const TRANSLATE_DRAFT: PrimaryAction = {
+const translateDraft = (): PrimaryAction => ({
   command: "commit",
-  label: TRANSLATE_LABEL,
+  label: t("chapter.primaryAction.translate"),
   disabled: false,
-  title: "Ghép & cắt trang, xoá chữ, OCR rồi dịch + chèn chữ (dùng AI)",
-  menu: [{ command: "prepare_only", label: "Chỉ xoá chữ + OCR (soát trước)" }],
-};
+  title: t("chapter.primaryAction.draftTitle"),
+  menu: [{ command: "prepare_only", label: t("chapter.primaryAction.prepareOnly") }],
+});
 
 /** Mọi ảnh đều bị bỏ qua: không còn gì để ghép — khôi phục ảnh ở rail trước. */
-const ALL_SKIPPED: PrimaryAction = {
-  ...TRANSLATE_DRAFT,
+const allSkipped = (): PrimaryAction => ({
+  ...translateDraft(),
   disabled: true,
-  title: "Đã bỏ hết ảnh — khôi phục ít nhất 1 ảnh",
+  title: t("chapter.primaryAction.allSkipped"),
   menu: [],
-};
+});
+
+const uploadAction = (): PrimaryAction => ({
+  command: "upload",
+  label: t("chapter.primaryAction.upload"),
+  disabled: false,
+  menu: [],
+});
 
 export function primaryAction(input: {
   status: ChapterStatus;
@@ -66,43 +73,46 @@ export function primaryAction(input: {
   const { status, upload } = input;
   const retranslate = {
     command: "retranslate" as const,
-    label: "Dịch lại cả chương (không OCR lại)",
-    title:
-      "Dịch lại mọi trang trên chữ đã nhận dạng, giữ chỉnh sửa tay. Chữ quét sai/thiếu: chuột phải trang → Quét lại trang.",
+    label: t("chapter.primaryAction.retranslate"),
+    title: t("chapter.primaryAction.retranslateTitle"),
   };
   if (status === "draft") {
     if (upload?.phase === "uploading") {
       return {
-        ...TRANSLATE_DRAFT,
+        ...translateDraft(),
         disabled: true,
-        title: `Chờ tải xong ảnh (${upload.done}/${upload.total})`,
+        title: t("chapter.primaryAction.waitUpload", { done: upload.done, total: upload.total }),
         menu: [],
       };
     }
     if ((upload?.phase === "failed" || upload?.phase === "incomplete") && input.pendingFiles > 0) {
-      return { command: "upload", label: "Tải ảnh", disabled: false, menu: [] };
+      return uploadAction();
     }
     if (input.sourceFiles === 0) {
-      return input.skippedFiles > 0 ? ALL_SKIPPED : { command: "upload", label: "Tải ảnh", disabled: false, menu: [] };
+      return input.skippedFiles > 0 ? allSkipped() : uploadAction();
     }
-    return TRANSLATE_DRAFT;
+    return translateDraft();
   }
   if (status === "prepared") {
     return {
       command: "translate",
-      label: TRANSLATE_LABEL,
+      label: t("chapter.primaryAction.translate"),
       disabled: false,
-      title: "Dịch + chèn chữ các trang đã OCR (dùng AI)",
+      title: t("chapter.primaryAction.preparedTitle"),
       menu:
-        input.failed > 0 ? [{ command: "retry", label: "Chạy lại trang lỗi", title: retryTitle(input.failed) }] : [],
+        input.failed > 0
+          ? [{ command: "retry", label: t("chapter.primaryAction.retryFailed"), title: retryTitle(input.failed) }]
+          : [],
     };
   }
   if (status === "ingesting" || status === "processing") {
     return {
       command: "cancel",
-      label: "Huỷ",
+      label: t("common.cancel"),
       disabled: false,
-      title: status === "ingesting" ? "Huỷ cắt trang" : "Huỷ xử lý chương",
+      title: t(
+        status === "ingesting" ? "chapter.primaryAction.cancelSlicing" : "chapter.primaryAction.cancelProcessing",
+      ),
       menu: [],
     };
   }
@@ -113,28 +123,29 @@ export function primaryAction(input: {
       if (input.sourceFiles > 0) {
         return {
           command: "commit",
-          label: "Cắt lại trang",
+          label: t("chapter.primaryAction.reslice"),
           disabled: false,
-          title: "Cắt trang lỗi — cắt lại từ ảnh đã tải rồi dịch tiếp",
+          title: t("chapter.primaryAction.resliceTitle"),
           menu: [],
         };
       }
-      return input.skippedFiles > 0
-        ? { ...ALL_SKIPPED, label: "Cắt lại trang" }
-        : { command: "upload", label: "Tải ảnh", disabled: false, menu: [] };
+      return input.skippedFiles > 0 ? { ...allSkipped(), label: t("chapter.primaryAction.reslice") } : uploadAction();
     }
     return {
       command: "retry",
-      label: input.failed > 0 ? `Chạy lại ${input.failed} trang` : "Chạy lại trang lỗi",
+      label:
+        input.failed > 0
+          ? tp("chapter.primaryAction.retryCount", input.failed)
+          : t("chapter.primaryAction.retryFailed"),
       disabled: false,
       title: retryTitle(input.failed),
-      menu: [{ command: "export", label: "Xuất" }, retranslate],
+      menu: [{ command: "export", label: t("chapter.primaryAction.export") }, retranslate],
     };
   }
   // review / done
   return {
     command: "export",
-    label: "Xuất",
+    label: t("chapter.primaryAction.export"),
     disabled: input.pages === 0,
     menu: input.pages > 0 ? [retranslate] : [],
   };

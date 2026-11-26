@@ -7,6 +7,7 @@
  * (chương dịch trước khi thêm mục): giữ dòng để người dùng thấy và xoá chữ đã in.
  */
 import { compileIgnoreList, type IgnoreMatcher, type PageState, type Region, type TextBox } from "@mtl/shared";
+import { type MessageKey, t } from "../../../i18n/t.ts";
 
 export type RowFlag = "overflow" | "low_conf" | "empty" | "sfx" | "ai_update";
 /** Thoại (trong bóng), chữ nền/dẫn, SFX, khung người tự thêm (không region). */
@@ -32,14 +33,28 @@ export type Row = {
 
 export type RowPage = { id: string; ord: number; ai_update_available: boolean };
 
-export const KIND_LABEL: Record<RowKind, string> = { dialog: "Thoại", free: "Chữ nền", sfx: "SFX", box: "Tự thêm" };
-export const FLAG_LABEL: Record<RowFlag, string> = {
-  overflow: "Tràn khung",
-  low_conf: "Cần soát",
-  empty: "Trống",
-  sfx: "SFX",
-  ai_update: "AI có bản mới",
-};
+/** Bảng `mã → nhãn` đọc theo ngôn ngữ lúc truy cập (giữ shape `Record<mã, string>` cho nơi gọi `KIND_LABEL[kind]`). */
+const labels = <K extends string>(keys: Record<K, MessageKey>): Record<K, string> =>
+  Object.defineProperties(
+    {} as Record<K, string>,
+    Object.fromEntries(
+      Object.entries<MessageKey>(keys).map(([code, key]) => [code, { enumerable: true, get: () => t(key) }]),
+    ),
+  );
+
+export const KIND_LABEL = labels<RowKind>({
+  dialog: "chapter.textTable.kind.dialog",
+  free: "chapter.textTable.kind.free",
+  sfx: "chapter.textTable.kind.sfx",
+  box: "chapter.textTable.kind.box",
+});
+export const FLAG_LABEL = labels<RowFlag>({
+  overflow: "chapter.textTable.flag.overflow",
+  low_conf: "chapter.textTable.flag.low_conf",
+  empty: "chapter.textTable.flag.empty",
+  sfx: "chapter.textTable.flag.sfx",
+  ai_update: "chapter.textTable.flag.ai_update",
+});
 
 export function kindOf(region: Pick<Region, "kind" | "flags"> | undefined): RowKind {
   if (!region) return "box";

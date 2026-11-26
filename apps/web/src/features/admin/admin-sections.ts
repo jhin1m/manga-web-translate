@@ -2,11 +2,50 @@
  * Các mục của trang Cài đặt (`/settings?section=`). Thuần — test được; mục mới chỉ cần thêm vào đây. Nhóm "Chung" (Font
  * riêng của từng người) cho mọi người dùng; nhóm AI / Hệ thống chỉ admin (`admin: true`).
  */
+import { t } from "../../i18n/t.ts";
+
+/** Nhãn mục / tên nhóm là getter: đọc theo ngôn ngữ giao diện lúc dùng, giữ nguyên shape cho nơi đọc `.label` / `.group`. */
 export const SETTINGS_SECTIONS = [
-  { id: "fonts", label: "Font", group: "Chung", admin: false },
-  { id: "pipeline", label: "Pipeline", group: "AI", admin: true },
-  { id: "providers", label: "Nhà cung cấp", group: "AI", admin: true },
-  { id: "users", label: "Người dùng", group: "Hệ thống", admin: true },
+  {
+    id: "fonts",
+    get label() {
+      return t("admin.adminSections.label.fonts");
+    },
+    get group() {
+      return t("admin.adminSections.group.general");
+    },
+    admin: false,
+  },
+  {
+    id: "pipeline",
+    get label() {
+      return t("admin.adminSections.label.pipeline");
+    },
+    get group() {
+      return t("admin.adminSections.group.ai");
+    },
+    admin: true,
+  },
+  {
+    id: "providers",
+    get label() {
+      return t("admin.adminSections.label.providers");
+    },
+    get group() {
+      return t("admin.adminSections.group.ai");
+    },
+    admin: true,
+  },
+  {
+    id: "users",
+    get label() {
+      return t("admin.adminSections.label.users");
+    },
+    get group() {
+      return t("admin.adminSections.group.system");
+    },
+    admin: true,
+  },
 ] as const;
 
 export type SettingsSectionDef = (typeof SETTINGS_SECTIONS)[number];

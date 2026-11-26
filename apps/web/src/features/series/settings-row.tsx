@@ -4,6 +4,7 @@
  */
 import type { ReactNode } from "react";
 import { InfoTip } from "../../app/info-tip.tsx";
+import { useT } from "../../i18n/t.ts";
 
 export function SettingsRow(props: {
   label: ReactNode;
@@ -14,12 +15,13 @@ export function SettingsRow(props: {
   stack?: boolean;
   children: ReactNode;
 }) {
+  const { t } = useT();
   return (
     <div className="set-row" data-stack={props.stack || undefined}>
       <div className="set-row-label">
         {props.htmlFor ? <label htmlFor={props.htmlFor}>{props.label}</label> : <span>{props.label}</span>}
         {props.tag}
-        {props.tip && <InfoTip label={props.tipLabel ?? "Giải thích"}>{props.tip}</InfoTip>}
+        {props.tip && <InfoTip label={props.tipLabel ?? t("series.settingsRow.tipLabel")}>{props.tip}</InfoTip>}
       </div>
       <div className="set-row-control">{props.children}</div>
     </div>

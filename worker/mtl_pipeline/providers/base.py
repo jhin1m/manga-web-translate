@@ -233,6 +233,7 @@ def translate_user_text(req: TranslateRequest) -> str:
         "honorific_policy": req.honorific_policy,
         "context": req.context.model_dump() if req.context else None,
         "want_style": req.want_style,
+        "ui_lang": lang_label(req.ui_lang),
     }
     return json.dumps(payload, ensure_ascii=False, sort_keys=True)
 
@@ -246,6 +247,7 @@ def proofread_user_text(req: ProofreadRequest) -> str:
         "pronoun_rules": req.pronoun_rules,
         "honorific_policy": req.honorific_policy,
         "context": [c.model_dump() for c in req.context],
+        "ui_lang": lang_label(req.ui_lang),
     }
     return json.dumps(payload, ensure_ascii=False, sort_keys=True)
 

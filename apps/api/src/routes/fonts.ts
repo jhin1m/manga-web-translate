@@ -4,17 +4,17 @@
  * Font đã kiểm được chép sang key theo font_id rồi xoá key upload: presigned POST còn hạn không ghi đè được font đã lưu,
  * và commit lặp trên key upload cũ không tạo được hàng thứ hai dùng chung object.
  */
-import { series, systemFonts, userFonts } from "@mtl/db";
+import { NotFoundError, series, systemFonts, userFonts } from "@mtl/db";
 import { keyBelongsToUser, storageKeys, USER_FONT_LIMIT, userFontLimit, userPrefix } from "@mtl/shared";
 import { eq } from "drizzle-orm";
 import { Hono } from "hono";
-import { HTTPException } from "hono/http-exception";
 import { v7 as uuidv7 } from "uuid";
 import { z } from "zod";
 import { env } from "../env.ts";
 import { inJobTx } from "../jobs/enqueue.ts";
+import { apiError } from "../lib/api-error.ts";
 import { MAX_FONT_BYTES } from "../lib/font-metrics.ts";
-import { discardUpload, fail, fontView, inspectUploadedFont } from "../lib/font-upload.ts";
+import { discardUpload, fontView, inspectUploadedFont } from "../lib/font-upload.ts";
 import { allocateCustomFontId } from "../lib/fonts.ts";
 import { parseJson } from "../lib/validate.ts";
 import type { AppEnv } from "../middleware/user.ts";
@@ -56,7 +56,7 @@ fontRoutes.post("/fonts", async (c) => {
   const userId = c.get("userId");
   const sdb = c.get("sdb");
   if (!keyBelongsToUser(key, userId) || !key.startsWith(`${userPrefix(userId)}fonts/`)) {
-    throw fail(400, "invalid_key", "key không thuộc dữ liệu của bạn");
+    throw apiError(400, "invalid_key.user_font");
   }
   const font = await inspectUploadedFont(key);
   const { bytes, sha256 } = font;
@@ -69,7 +69,7 @@ fontRoutes.post("/fonts", async (c) => {
   const limit = userFontLimit(env.MTL_LOCAL_MODE);
   if ((await sdb.select(userFonts)).length >= limit) {
     await discardUpload(key);
-    throw fail(409, "limit", `mỗi tài khoản tối đa ${limit} font`);
+    throw apiError(409, "limit.user_fonts", { max: limit });
   }
 
   const info = await font.info();
@@ -105,15 +105,10 @@ fontRoutes.post("/fonts", async (c) => {
 fontRoutes.delete("/fonts/:fontId", async (c) => {
   const sdb = c.get("sdb");
   const font = await sdb.find(userFonts, eq(userFonts.fontId, c.req.param("fontId")));
-  if (!font) throw new HTTPException(404, { message: "font not found" });
+  if (!font) throw new NotFoundError("font");
   const users = (await sdb.select(series)).filter((s) => Object.values(s.defaultFonts).includes(font.fontId));
   if (users.length > 0) {
-    throw new HTTPException(409, {
-      res: Response.json(
-        { error: "in_use", message: "font đang là mặc định của series", series: users.map((s) => s.title) },
-        { status: 409 },
-      ),
-    });
+    throw apiError(409, "in_use.font", {}, { series: users.map((s) => s.title) });
   }
   await sdb.delete(userFonts, eq(userFonts.id, font.id));
   await discardUpload(font.fileKey);

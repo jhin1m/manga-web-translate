@@ -3,6 +3,7 @@
  * series, giống form Cài đặt series). Ngôn ngữ gốc sai (VD chọn Manhwa nhưng ảnh là bản scan tiếng Anh) làm bước quét
  * chữ bỏ trống khối có chữ — đổi ở đây rồi quét lại vùng đó / dịch lại.
  */
+import { useT } from "../../i18n/t.ts";
 import { LANG_NAMES, SOURCE_LANGS, type SourceLang, TARGET_LANGS, type TargetLang } from "../series/lang-labels.ts";
 
 export function LangPairFields(props: {
@@ -13,10 +14,11 @@ export function LangPairFields(props: {
   /** Vừa mở popover → focus ô ngôn ngữ gốc. */
   autoFocus?: boolean;
 }) {
+  const { t } = useT();
   return (
     <>
       <label>
-        Ngôn ngữ gốc (chữ trên ảnh)
+        {t("chapter.langPairFields.source")}
         <select
           value={props.src}
           // biome-ignore lint/a11y/noAutofocus: popover chỉ để đổi ngôn ngữ → chọn ngay
@@ -31,7 +33,7 @@ export function LangPairFields(props: {
         </select>
       </label>
       <label>
-        Dịch sang
+        {t("chapter.langPairFields.target")}
         <select value={props.tgt} onChange={(e) => props.onTgt(e.target.value as TargetLang)}>
           {TARGET_LANGS.map((l) => (
             <option key={l} value={l}>
@@ -40,10 +42,7 @@ export function LangPairFields(props: {
           ))}
         </select>
       </label>
-      <span className="small muted">
-        Áp cho cả series từ lần chạy sau. Trang đã dịch không tự chạy lại: khối bị trống thì dùng công cụ Quét chữ kéo
-        khung quanh chữ; đổi ngôn ngữ đích thì "Dịch lại cả chương".
-      </span>
+      <span className="small muted">{t("chapter.langPairFields.hint")}</span>
     </>
   );
 }

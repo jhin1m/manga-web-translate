@@ -161,7 +161,13 @@ describe("ignore list validation on the series form route", () => {
       });
     const bad = await patch(["/(a+)+/"]);
     expect(bad.status).toBe(400);
-    expect(JSON.stringify(await bad.json())).toContain("lồng nhau");
+    const badBody = await bad.json();
+    expect(JSON.stringify(badBody)).toContain("lồng nhau");
+    // Issue mang mã lỗi API + tham số để web dịch theo ngôn ngữ giao diện.
+    expect(badBody).toMatchObject({
+      error: "invalid_body",
+      issues: [{ params: { error: "regex_nested_quantifier", params: {} } }],
+    });
     expect((await patch(["/(ab/"])).status).toBe(400);
     const ok = await patch(["/discord\\s*\\.\\s*gg/", "asura scans"]);
     expect(ok.status).toBe(200);

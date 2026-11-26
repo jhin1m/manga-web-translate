@@ -26,14 +26,14 @@ const Term = z
   .max(200)
   .transform((s) => s.normalize("NFC"));
 const FindBody = z.object({
-  find: Term.refine((s) => s.trim().length > 0, "find rỗng"),
+  find: Term.refine((s) => s.trim().length > 0, "find is empty"),
   replace: Term,
   case_sensitive: z.boolean().default(false),
 });
 const Versions = z.record(z.uuid(), z.number().int().nonnegative());
 const GlossaryRule = z.object({
   source_term: z.string().trim().min(1).max(200),
-  from: Term.refine((s) => s.trim().length > 0, "from rỗng"),
+  from: Term.refine((s) => s.trim().length > 0, "from is empty"),
 });
 const GlossaryBody = z.object({ rules: z.array(GlossaryRule).min(1).max(MAX_RULES) });
 // conflicts: "fail" (mặc định) = page đã sửa tiếp → 409; "skip" = bỏ qua page đó (áp kiểu cả chương).

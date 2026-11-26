@@ -232,6 +232,13 @@
       "when": 1795608028563,
       "tag": "0032_drop_system_settings_limits",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1795623486613,
+      "tag": "0033_user_ui_locale",
+      "breakpoints": true
     }
   ]
 }

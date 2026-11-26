@@ -6,7 +6,7 @@
  * (423 nếu không). Mỗi lần ghi đẩy bản cũ vào `page_state_history` (giữ 50 bản mới nhất/page).
  * `ai_update_available` giữ nguyên khi người sửa lưu — chỉ tắt bằng ack sau khi đã xem kết quả AI mới.
  */
-import { chapters, pageStateHistory, pageStates, pages, type Scoped } from "@mtl/db";
+import { chapters, NotFoundError, pageStateHistory, pageStates, pages, type Scoped } from "@mtl/db";
 import { BBox, PageState, storageKeys, userPrefix } from "@mtl/shared";
 import { and, eq, inArray, lt, type SQL } from "drizzle-orm";
 import { Hono } from "hono";
@@ -16,6 +16,7 @@ import { z } from "zod";
 import { assertQuota } from "../billing/user-quota.ts";
 import { enqueueOcrRegion, enqueueReinpaint, inJobTx } from "../jobs/enqueue.ts";
 import { HISTORY_KEEP } from "../jobs/page-state-writer.ts";
+import { apiError } from "../lib/api-error.ts";
 import { assertChapterIdle, assertChapterLock, isPageBusy, pageBusyError } from "../lib/chapter-lock.ts";
 import { parseJson } from "../lib/validate.ts";
 import type { AppEnv } from "../middleware/user.ts";
@@ -44,7 +45,7 @@ const ReinpaintBody = z
     base_clean_rev: z.number().int().nonnegative(),
   })
   .refine((b) => (b.auto_text_bbox ? !b.user_mask_key && !b.offset : !!b.user_mask_key && !!b.offset), {
-    message: "cần user_mask_key + offset, hoặc auto_text_bbox",
+    message: "user_mask_key + offset, or auto_text_bbox",
   });
 const OcrRegionBody = z.object({ bbox: BBox });
 
@@ -60,7 +61,7 @@ const httpError = (status: 409 | 412 | 428 | 400 | 404, body: Record<string, unk
 
 async function stateOf(sdb: Scoped, pageId: string) {
   const st = await sdb.find(pageStates, eq(pageStates.pageId, pageId));
-  if (!st) throw new HTTPException(404, { message: "page state not found" });
+  if (!st) throw new NotFoundError("page state");
   return st;
 }
 
@@ -181,7 +182,7 @@ pageStateRoutes.put("/pages/:pageId/state", async (c) => {
   const body = await parseJson(c, PutStateBody);
   const page = await editablePage(sdb, found, c.get("lockHolder"));
   if (body.state.size.w !== page.width || body.state.size.h !== page.height) {
-    throw httpError(400, { error: "size_mismatch", message: "state.size khác kích thước page" });
+    throw apiError(400, "size_mismatch");
   }
   const version = await sdb.transaction(async (tx) => {
     const cur = await stateOf(tx, page.id);

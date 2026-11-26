@@ -3,6 +3,7 @@
  * bước ←/→, đổi chỗ. Thuần, không gọi API.
  */
 import { MIN_TRIM_KEEP_PX, type SourceSkipReason, type SourceTrim } from "@mtl/shared";
+import { type MessageKey, t } from "../../i18n/t.ts";
 import type { ItemStatus } from "../upload/upload-queue.ts";
 import type { SourceFileImage } from "./api.ts";
 import type { Tone } from "./status.ts";
@@ -42,13 +43,21 @@ export function creditHints(widths: (number | null)[]): boolean[] {
   );
 }
 
-export const SKIP_LABEL: Record<SourceSkipReason, string> = { user: "Đã xoá", credit: "Credit · tự bỏ" };
+/** Nhãn lý do bỏ qua; getter → đọc ngôn ngữ đang dùng mỗi lần truy cập. */
+export const SKIP_LABEL: Record<SourceSkipReason, string> = {
+  get user() {
+    return t("chapter.sourceRailModel.skip.user");
+  },
+  get credit() {
+    return t("chapter.sourceRailModel.skip.credit");
+  },
+};
 
-const UPLOAD_LABEL: Partial<Record<SourceUpload, { label: string; tone: "busy" | "warn" | "danger" }>> = {
-  queued: { label: "Chờ tải", tone: "busy" },
-  uploading: { label: "Đang tải", tone: "busy" },
-  failed: { label: "Tải lỗi", tone: "danger" },
-  missing: { label: "Chưa tải", tone: "warn" },
+const UPLOAD_LABEL: Partial<Record<SourceUpload, { label: MessageKey; tone: "busy" | "warn" | "danger" }>> = {
+  queued: { label: "chapter.sourceRailModel.upload.queued", tone: "busy" },
+  uploading: { label: "chapter.sourceRailModel.upload.uploading", tone: "busy" },
+  failed: { label: "chapter.sourceRailModel.upload.failed", tone: "danger" },
+  missing: { label: "chapter.sourceRailModel.upload.missing", tone: "warn" },
 };
 
 /**
@@ -76,7 +85,8 @@ export function sourceItems(
 }
 
 /** Nhãn cờ / tooltip của ảnh đã cắt mép: tự khớp credit series đã học hay người dùng cắt tay. */
-export const trimLabel = (trim: SourceTrim) => (trim.by === "credit" ? "Credit · tự cắt" : "Đã cắt mép");
+export const trimLabel = (trim: SourceTrim) =>
+  t(trim.by === "credit" ? "chapter.sourceRailModel.trim.credit" : "chapter.sourceRailModel.trim.user");
 
 /**
  * Kẹp số px cắt mép trên/dưới vào miền hợp lệ cho ảnh cao `height` px: số nguyên không âm, phần còn lại luôn
@@ -127,9 +137,9 @@ export function sourceLabel(
 ): { label: string; tone: "busy" | "warn" | "danger" | "muted" | "trim" } | null {
   if (it.skip) return { label: SKIP_LABEL[it.skip], tone: "muted" };
   const upload = it.upload && UPLOAD_LABEL[it.upload];
-  if (upload) return upload;
+  if (upload) return { label: t(upload.label), tone: upload.tone };
   if (it.trim) return { label: trimLabel(it.trim), tone: "trim" };
-  return it.maybeCredit ? { label: "Có thể là credit", tone: "warn" } : null;
+  return it.maybeCredit ? { label: t("chapter.sourceRailModel.maybeCredit"), tone: "warn" } : null;
 }
 
 /**
@@ -148,15 +158,13 @@ export type IngestView = {
  * Nhãn từng ảnh gốc khi đang cắt trang; `index` = vị trí trong các ảnh không bỏ qua (thứ tự worker tải). Đang tải
  * có đếm → ảnh trước `done` "Đã tải", ảnh thứ `done` "Đang tải", sau đó "Chờ"; bước khác / không đếm → "Đang xử lý".
  */
-export function ingestTag(
-  index: number,
-  ing: IngestView,
-): { label: "Đã tải" | "Đang tải" | "Chờ" | "Đang xử lý"; tone: Tone } {
+export function ingestTag(index: number, ing: IngestView): { label: string; tone: Tone } {
   // `== null`: API cũ chưa trả progress_done/total (undefined) cũng coi như không đếm.
-  if (ing.stage !== "download" || ing.done == null || ing.total == null) return { label: "Đang xử lý", tone: "busy" };
-  if (index < ing.done) return { label: "Đã tải", tone: "ok" };
-  if (index === ing.done) return { label: "Đang tải", tone: "busy" };
-  return { label: "Chờ", tone: "idle" };
+  if (ing.stage !== "download" || ing.done == null || ing.total == null)
+    return { label: t("chapter.sourceRailModel.ingest.processing"), tone: "busy" };
+  if (index < ing.done) return { label: t("chapter.sourceRailModel.ingest.done"), tone: "ok" };
+  if (index === ing.done) return { label: t("chapter.sourceRailModel.ingest.current"), tone: "busy" };
+  return { label: t("chapter.sourceRailModel.ingest.waiting"), tone: "idle" };
 }
 
 export const sourceCounts = (items: SourceItem[]) => {

@@ -6,6 +6,7 @@
 import { type ReactNode, useId, useState } from "react";
 import { InfoTip } from "../../app/info-tip.tsx";
 import { ChevronDownIcon } from "../../app/settings-icons.tsx";
+import { useT } from "../../i18n/t.ts";
 
 /** Ô vuông nền nhạt chứa icon nét (`app/settings-icons.tsx`); `step`: số bước nhỏ ở góc (luồng Pipeline). */
 function IconTile(props: { icon: ReactNode; step?: number; size?: "lg" }) {
@@ -30,13 +31,14 @@ export function SectionHead(props: {
   aside?: ReactNode;
   icon?: ReactNode;
 }) {
+  const { t } = useT();
   return (
     <header className="set-head">
       {props.icon && <IconTile icon={props.icon} size="lg" />}
       <div className="set-head-text">
         <div className="set-title-line">
           <h2>{props.title}</h2>
-          {props.tip && <InfoTip label="Giải thích mục">{props.tip}</InfoTip>}
+          {props.tip && <InfoTip label={t("admin.settingsUi.sectionTip")}>{props.tip}</InfoTip>}
         </div>
         {props.desc && <p className="set-desc">{props.desc}</p>}
       </div>
@@ -63,6 +65,7 @@ export function SetGroup(props: {
   collapsible?: boolean;
   summary?: ReactNode;
 }) {
+  const { t } = useT();
   const [open, setOpen] = useState(false);
   const cardId = useId();
   const shown = !props.collapsible || open;
@@ -92,7 +95,7 @@ export function SetGroup(props: {
                 props.title
               )}
             </h3>
-            {props.tip && <InfoTip label="Giải thích nhóm">{props.tip}</InfoTip>}
+            {props.tip && <InfoTip label={t("admin.settingsUi.groupTip")}>{props.tip}</InfoTip>}
           </div>
           {props.desc && <p className="set-desc">{props.desc}</p>}
         </div>
@@ -119,12 +122,13 @@ export function SetGroup(props: {
  */
 export const descId = (id: string) => `${id}-desc`;
 export function SetRow(props: { label: ReactNode; htmlFor?: string; desc?: ReactNode; children: ReactNode }) {
+  const { t } = useT();
   return (
     <div className="set-row">
       <div className="set-row-label">
         {props.htmlFor ? <label htmlFor={props.htmlFor}>{props.label}</label> : <span>{props.label}</span>}
         {props.desc && (
-          <InfoTip label="Giải thích" id={props.htmlFor ? descId(props.htmlFor) : undefined}>
+          <InfoTip label={t("admin.settingsUi.rowTip")} id={props.htmlFor ? descId(props.htmlFor) : undefined}>
             {props.desc}
           </InfoTip>
         )}
@@ -136,10 +140,11 @@ export function SetRow(props: { label: ReactNode; htmlFor?: string; desc?: React
 
 /** Trạng thái tự lưu ở đầu mục. */
 export function SaveStatus(props: { pending: boolean; error: string | null; saved: boolean }) {
+  const { t } = useT();
   if (props.pending)
     return (
       <span className="muted small" role="status">
-        Đang lưu…
+        {t("common.saving")}
       </span>
     );
   if (props.error)
@@ -151,7 +156,7 @@ export function SaveStatus(props: { pending: boolean; error: string | null; save
   if (props.saved)
     return (
       <span className="set-saved small" role="status">
-        Đã lưu
+        {t("common.saved")}
       </span>
     );
   return null;

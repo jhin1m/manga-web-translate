@@ -778,6 +778,8 @@
   left: 50%;
   transform: translateX(-50%);
   z-index: 6;
+  /* Không có `width: max-content` thì khung co theo nửa canvas còn lại sau `left: 50%` và xuống dòng quá sớm. */
+  width: max-content;
   max-width: calc(100% - 16px);
   box-sizing: border-box;
   display: flex;
@@ -997,7 +999,8 @@
 }
 .cw-tr {
   display: grid;
-  grid-template-columns: 44px minmax(0, 1fr) minmax(0, 1.2fr) 22px;
+  /* Cột vị trí đủ cho tiêu đề "Position" (bản tiếng Anh); mỗi hàng là một grid riêng nên không dùng max-content. */
+  grid-template-columns: 64px minmax(0, 1fr) minmax(0, 1.2fr) 22px;
   align-items: center;
   gap: var(--sp-2);
   padding: 0 var(--sp-3);

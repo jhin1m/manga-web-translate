@@ -1,11 +1,12 @@
 /**
  * Ước tính chi phí + thời gian của một lượt AI hiệu đính cả chương — hiện cho người dùng xác nhận trước khi chạy.
  * Theo trang: trung bình token vào/ra và thời gian chạy của ≤20 lượt hiệu đính thành công gần nhất của chính user;
- * chưa có lịch sử → hằng số mặc định. Giá = giá model đang gán slot Hiệu đính (chưa gán → giá bảo thủ của bảng tĩnh).
+ * chưa có lịch sử → hằng số mặc định. Giá = giá model bước Hiệu đính sẽ dùng (gán hoặc tự động; không có → giá bảo thủ của bảng tĩnh).
  * Chỉ là ước tính hiển thị — tiền thật vẫn tính từ số token worker báo.
  */
-import { aiModels, aiProviders, type DbLike, jobs, pages, systemSettings, usageLedger } from "@mtl/db";
+import { aiModels, aiProviders, type DbLike, jobs, pages, usageLedger } from "@mtl/db";
 import { and, desc, eq, inArray, isNotNull, sql } from "drizzle-orm";
+import { slotRefs } from "../ai/llm-refs.ts";
 import { llmPrice } from "./prices.ts";
 
 /** Mỗi trang: ảnh trang thu nhỏ (1–6 khúc) + bản dịch + glossary vào; gợi ý sửa ra. Khoảng rộng vì trang dày/mỏng. */
@@ -25,7 +26,7 @@ export type ProofreadEstimate = {
   pages: number;
   provider: string | null;
   model: string | null;
-  /** false = chưa gán slot Hiệu đính (model do worker tự chọn) → tính theo giá cao nhất bảng tĩnh. */
+  /** false = không có model nào cho bước Hiệu đính (worker dùng .env) → tính theo giá cao nhất bảng tĩnh. */
   price_known: boolean;
   usd: Range;
   seconds: Range;
@@ -71,13 +72,15 @@ async function pageCount(t: DbLike, userId: string, chapterId: string) {
   return row?.n ?? 0;
 }
 
+/** Model lượt hiệu đính sẽ dùng — cùng cách chọn với `enqueueProofread` (slot gán hoặc tự động). */
 async function proofreadModel(t: DbLike) {
+  const ref = (await slotRefs(t)).proofread;
+  if (!ref) return null;
   const [row] = await t
     .select({ provider: aiProviders.name, model: aiModels.modelId, in: aiModels.priceIn, out: aiModels.priceOut })
-    .from(systemSettings)
-    .innerJoin(aiModels, eq(aiModels.id, systemSettings.proofreadModelId))
+    .from(aiModels)
     .innerJoin(aiProviders, eq(aiProviders.id, aiModels.providerId))
-    .where(eq(systemSettings.id, 1));
+    .where(and(eq(aiModels.providerId, ref.provider_id), eq(aiModels.modelId, ref.model)));
   return row ?? null;
 }
 

@@ -15,6 +15,7 @@ import { lazy, Suspense } from "react";
 import { type SettingsSection, validSection } from "../features/admin/admin-sections.ts";
 import { HomePage } from "../features/home/home-page.tsx";
 import { SeriesPage } from "../features/series/series-page.tsx";
+import { useT } from "../i18n/t.ts";
 import { appConfigQuery } from "../lib/api.ts";
 import { LoginPage } from "../routes/login.tsx";
 import { SettingsPage } from "../routes/settings.tsx";
@@ -34,12 +35,15 @@ export type RouterContext = { queryClient: QueryClient };
 
 export const rootRoute = createRootRouteWithContext<RouterContext>()({
   component: Outlet,
-  notFoundComponent: () => (
-    <main className="auth">
-      <h1>Không tìm thấy trang</h1>
-      <Link to="/">Về trang chủ</Link>
-    </main>
-  ),
+  notFoundComponent: function NotFound() {
+    const { t } = useT();
+    return (
+      <main className="auth">
+        <h1>{t("app.router.notFound")}</h1>
+        <Link to="/">{t("app.router.backHome")}</Link>
+      </main>
+    );
+  },
 });
 
 const loginRoute = createRoute({
@@ -92,11 +96,12 @@ export const chapterRoute = createRoute({
   component: function ChapterRoute() {
     const { seriesId, chapterId } = chapterRoute.useParams();
     const { page, drawer } = chapterRoute.useSearch();
+    const { t } = useT();
     return (
       <Suspense
         fallback={
           <p className="muted" style={{ padding: 16 }}>
-            Đang tải màn chương…
+            {t("app.router.loadingChapter")}
           </p>
         }
       >

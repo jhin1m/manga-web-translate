@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { ApiError } from "../../lib/api.ts";
-import { type BBoxTuple, createEraseQueue, type EraseDeps } from "./erase-queue.ts";
+import { type BBoxTuple, createEraseQueue, type EraseDeps, reinpaintFailureText } from "./erase-queue.ts";
 
 const flush = () => new Promise((r) => setTimeout(r, 0));
 
@@ -22,7 +22,7 @@ function harness(opts: { pageRev?: number | null } = {}) {
           resolve(
             ok
               ? { id, status: "succeeded", result: { type: "page.reinpaint", clean_rev: ++rev } }
-              : { id, status: "failed", error: "không thấy chữ trong khung để xoá" },
+              : { id, status: "failed", error_class: "internal", error: "inpaint: model crashed" },
           ),
         );
       }),
@@ -79,11 +79,39 @@ describe("createEraseQueue", () => {
     q.push(B);
     q.push(B);
     await h.finish("j1", false);
-    expect(h.states.some((s) => s.error === "không thấy chữ trong khung để xoá")).toBe(true);
+    // Câu chính theo `error_class`, không phải lỗi thô của worker.
+    expect(h.states.some((s) => s.error === "Xoá chữ gốc thất bại: lỗi hệ thống")).toBe(true);
     await h.finish("j2");
     // Lần lỗi không tạo rev mới → lần sau vẫn dựng trên rev 10.
     expect(h.starts).toEqual([10, 10]);
     expect(h.erased).toHaveBeenCalledTimes(1);
+  });
+
+  it("the worker's no-text code shows the hint in the UI language, not the English detail", async () => {
+    const h = harness();
+    const wait: EraseDeps["wait"] = async (id) => ({
+      id,
+      status: "failed",
+      error: "no_text_in_box: no text found inside the erase box",
+    });
+    createEraseQueue("p1", { ...h.deps, wait }).push(B);
+    await flush();
+    await flush();
+    expect(h.states.at(-1)?.error).toBe("Không thấy chữ trong khung để xoá — tô Mask (B) lên chữ để xoá tay.");
+  });
+
+  it("a stale clean image (another erase finished first) asks to redo, not the raw server detail", async () => {
+    const h = harness();
+    const wait: EraseDeps["wait"] = async (id) => ({
+      id,
+      status: "failed",
+      error_class: "invalid_input",
+      error: "clean_rev_changed: clean image moved on while the job ran",
+    });
+    createEraseQueue("p1", { ...h.deps, wait }).push(B);
+    await flush();
+    await flush();
+    expect(h.states.at(-1)?.error).toBe("Ảnh đã được xoá chữ ở lần khác trong lúc chạy — làm lại thao tác này.");
   });
 
   it("dispose stops sending and waiting (the job already sent is left to finish on the server)", async () => {
@@ -109,5 +137,14 @@ describe("createEraseQueue", () => {
     await flush();
     expect(h.deps.start).not.toHaveBeenCalled();
     expect(h.states.at(-1)).toEqual({ pending: 0, error: "Trang chưa có ảnh đã xoá chữ." });
+  });
+});
+
+describe("reinpaintFailureText", () => {
+  it("uses the error class for unknown worker failures and a generic sentence when there is no error", () => {
+    expect(reinpaintFailureText({ error_class: "invalid_input", error: "cannot read image header: x" })).toBe(
+      "Xoá chữ gốc thất bại: ảnh lỗi hoặc vượt giới hạn",
+    );
+    expect(reinpaintFailureText({ error_class: null, error: null })).toBe("Xoá chữ gốc thất bại");
   });
 });

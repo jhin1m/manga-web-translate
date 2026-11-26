@@ -5,6 +5,7 @@
  */
 import { chapters, isUuid, jobs, NotFoundError, pageStates, pages, type Scoped, scoped, series } from "@mtl/db";
 import {
+  apiErrorBody,
   cleanIgnoreList,
   defaultPageFormat,
   IGNORE_TEXT_ITEMS,
@@ -17,16 +18,16 @@ import {
 import { and, eq, inArray, type SQL, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
-import { HTTPException } from "hono/http-exception";
 import { v7 as uuidv7 } from "uuid";
 import { z } from "zod";
 import { inJobTx } from "../jobs/enqueue.ts";
 import { chapterQueueStates } from "../jobs/queue-state.ts";
+import { apiError, apiErrorResponse } from "../lib/api-error.ts";
 import { activeLockHolder } from "../lib/chapter-lock.ts";
 import { chaptersOf, removeChapters } from "../lib/chapter-removal.ts";
 import { chapterThumbs, seriesCoverThumbs } from "../lib/first-pages.ts";
 import { unknownFonts } from "../lib/fonts.ts";
-import { ignoreEntryErrorRe2 } from "../lib/ignore-text.ts";
+import { ignoreEntryIssueRe2 } from "../lib/ignore-text.ts";
 import {
   MAX_PRONOUN_RULES,
   normalizeRuleKey,
@@ -62,15 +63,21 @@ const Settings = z.object({
   default_fonts: z
     .object({ dialogue: FontId, narration: FontId, sfx: FontId, thought: FontId, note: FontId })
     .partial(),
-  /** Chữ bỏ qua (watermark): mục quá ngắn dễ nuốt cả thoại, regex lỗi / dễ treo → 400 kèm lý do. */
+  /**
+   * Chữ bỏ qua (watermark): mục quá ngắn dễ nuốt cả thoại, regex lỗi / dễ treo → 400 `invalid_body`; issue mang câu
+   * tiếng Việt cũ ở `message` và mã lỗi API + tham số ở `params` (`{ error, params }`) để web dịch.
+   */
   ignore_text: z
     .array(
       z
         .string()
         .trim()
         .superRefine((v, ctx) => {
-          const error = ignoreEntryErrorRe2(v);
-          if (error) ctx.addIssue({ code: "custom", message: error });
+          const issue = ignoreEntryIssueRe2(v);
+          if (issue) {
+            const { message, ...coded } = apiErrorBody(issue.code, issue.params);
+            ctx.addIssue({ code: "custom", message, params: coded });
+          }
         }),
     )
     .max(IGNORE_TEXT_ITEMS)
@@ -88,7 +95,7 @@ const SeriesPatch = Settings.partial()
     pronoun_keys_seen: z.array(z.string().max(250)).max(MAX_PRONOUN_RULES),
   })
   .partial()
-  .refine((v) => Object.keys(v).length > 0, "không có trường nào để sửa");
+  .refine((v) => Object.keys(v).length > 0, "no field to update");
 
 type SeriesRow = typeof series.$inferSelect;
 type ChapterRow = typeof chapters.$inferSelect;
@@ -237,9 +244,7 @@ async function assertKnownFonts(sdb: Scoped, fonts: Record<string, string | unde
     Object.values(fonts ?? {}).filter((f): f is string => !!f),
   );
   if (unknown.length > 0) {
-    throw new HTTPException(400, {
-      res: Response.json({ error: "unknown_font", message: `font không có: ${unknown.join(", ")}` }, { status: 400 }),
-    });
+    throw apiError(400, "unknown_font", { fonts: unknown.join(", ") });
   }
 }
 
@@ -300,9 +305,6 @@ function translationChanged(cur: SeriesRow, set: Partial<typeof series.$inferIns
 /** Ảnh bìa tối đa 10 MB (cộng phần overhead multipart). */
 const MAX_COVER_BYTES = 10 * 1024 * 1024;
 const MULTIPART_OVERHEAD = 64 * 1024;
-
-const httpError = (status: 400 | 413 | 422, error: string, message: string) =>
-  new HTTPException(status, { res: Response.json({ error, message }, { status }) });
 
 /** Xoá object bìa cũ: lỗi chỉ để lại file mồ côi dưới prefix series (dọn khi xoá series). */
 async function dropCover(key: string | null) {
@@ -446,7 +448,7 @@ seriesRoutes.patch("/series/:seriesId", async (c) => {
     // Giọng văn không đổi / chỉ gửi `pronoun_keys_seen` → không có gì để ghi.
     if (Object.keys(set).length === 0) return cur;
     const [row] = await tx.update(series, eq(series.id, cur.id), set);
-    if (!row) throw new HTTPException(404, { message: "series not found" });
+    if (!row) throw new NotFoundError("series");
     return row;
   });
   return c.json(seriesView(updated));
@@ -460,7 +462,7 @@ seriesRoutes.put(
   "/series/:seriesId/cover",
   bodyLimit({
     maxSize: MAX_COVER_BYTES + MULTIPART_OVERHEAD,
-    onError: () => Response.json({ error: "too_large", message: "ảnh bìa tối đa 10 MB" }, { status: 413 }),
+    onError: () => apiErrorResponse(413, "too_large.cover", { max_mb: MAX_COVER_BYTES >> 20 }),
   }),
   async (c) => {
     const sdb = c.get("sdb");
@@ -469,25 +471,25 @@ seriesRoutes.put(
     try {
       form = await c.req.parseBody();
     } catch {
-      throw httpError(400, "bad_multipart", "cần multipart/form-data");
+      throw apiError(400, "bad_multipart");
     }
     const file = form.file;
-    if (!(file instanceof File) || file.size < 1) throw httpError(400, "missing_file", "thiếu trường file");
-    if (file.size > MAX_COVER_BYTES) throw httpError(413, "too_large", "ảnh bìa tối đa 10 MB");
+    if (!(file instanceof File) || file.size < 1) throw apiError(400, "missing_file");
+    if (file.size > MAX_COVER_BYTES) throw apiError(413, "too_large.cover", { max_mb: MAX_COVER_BYTES >> 20 });
     let webp: Uint8Array;
     try {
       webp = await renderCover(new Uint8Array(await file.arrayBuffer()));
     } catch (err) {
       if (!(err instanceof ImageError)) throw err;
       const status = err.code === "image_too_large" ? 422 : 400;
-      throw httpError(status, err.code, err.message);
+      throw apiError(status, err.apiCode);
     }
     const key = storageKeys.seriesCover(sdb.userId, cur.id, uuidv7());
     await putObject(key, webp, "image/webp");
     const [row] = await sdb.update(series, eq(series.id, cur.id), { coverKey: key });
     if (!row) {
       await dropCover(key);
-      throw new HTTPException(404, { message: "series not found" });
+      throw new NotFoundError("series");
     }
     await dropCover(cur.coverKey);
     return c.json({ ...seriesView(row), cover_src: customCoverUrl(row.id, key) });
@@ -498,9 +500,7 @@ seriesRoutes.put(
 seriesRoutes.get("/series/:seriesId/cover", async (c) => {
   const cur = await c.get("sdb").byId(series, c.req.param("seriesId"), "series");
   if (!cur.coverKey) {
-    throw new HTTPException(404, {
-      res: Response.json({ error: "no_cover", message: "series chưa có ảnh bìa" }, { status: 404 }),
-    });
+    throw apiError(404, "no_cover");
   }
   c.header("Cache-Control", `private, max-age=${COVER_REDIRECT_CACHE_S}`);
   return c.redirect(await presignGet(cur.coverKey, MAX_GET_TTL_S), 302);

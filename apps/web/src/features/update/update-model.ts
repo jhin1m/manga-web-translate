@@ -11,6 +11,7 @@ import {
   type UpdateStatus,
   type UpdateStep,
 } from "@mtl/shared/update";
+import { type MessageKey, t } from "../../i18n/t.ts";
 
 export const STATUS_POLL_MS = 2000;
 export const CONFIG_POLL_MS = 3000;
@@ -114,15 +115,20 @@ export function track(t: Tracking, ev: TrackEvent): Tracking {
 export const pollInterval = (source: Tracking["source"]) => (source === "config" ? CONFIG_POLL_MS : STATUS_POLL_MS);
 
 /** Một dòng theo bước. Không có thanh tiến độ: runner không biết phần trăm. */
-export function progressText(t: Tracking): string {
-  if (t.landedAt !== null) return "App đã chạy bản mới, đang hoàn tất bước cuối…";
-  if (t.source === "config" || t.step === "apply" || t.step === "check" || t.step === "done") {
-    return "Đang khởi động lại: sao lưu dữ liệu, cập nhật, chạy lại worker…";
+export function progressText(tracking: Tracking): string {
+  if (tracking.landedAt !== null) return t("update.updateModel.progressLanded");
+  if (
+    tracking.source === "config" ||
+    tracking.step === "apply" ||
+    tracking.step === "check" ||
+    tracking.step === "done"
+  ) {
+    return t("update.updateModel.progressRestarting");
   }
-  if (t.step === "download" || t.step === "pull" || t.step === "verify") {
-    return "Đang tải bản mới. Trong lúc này app vẫn chạy.";
+  if (tracking.step === "download" || tracking.step === "pull" || tracking.step === "verify") {
+    return t("update.updateModel.progressDownloading");
   }
-  return "Đang kiểm tra…";
+  return t("update.updateModel.progressChecking");
 }
 
 /** `m:ss` */
@@ -131,35 +137,47 @@ export function formatElapsed(ms: number): string {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 }
 
-const REASON_TEXT: Partial<Record<UpdateReason, string>> = {
-  unavailable: "Bản cài này chưa có bộ cập nhật (file compose cũ, hoặc đã tắt bằng MTL_UPDATER=0).",
-  no_socket: "Bộ cập nhật không truy cập được Docker (Docker rootless hoặc thiếu socket).",
-  docker_too_old: "Docker quá cũ cho bộ cập nhật. Cập nhật Docker Desktop, hoặc cập nhật tay.",
-  pinned: "Bạn đang ghim phiên bản bằng MTL_TAG.",
-  custom_compose: "Bạn dùng file compose tuỳ chỉnh hoặc file override.",
-  project_not_found: "Không xác định chắc được thư mục dữ liệu, nên dừng để an toàn.",
-  path_mismatch: "Không xác định chắc được thư mục dữ liệu, nên dừng để an toàn.",
-  download_failed: "Không tải được bản mới. Kiểm tra mạng rồi thử lại. App vẫn chạy bản cũ.",
-  pull_failed: "Không tải được bản mới. Kiểm tra mạng rồi thử lại. App vẫn chạy bản cũ.",
-  version_mismatch: "Bản mới vừa phát hành chưa sẵn sàng. Thử lại sau vài phút.",
-  up_failed: "App chưa chạy lại được. Xem log app và mục Sự cố của hướng dẫn.",
-  timeout: "App chưa chạy lại được. Xem log app và mục Sự cố của hướng dẫn.",
-  cooldown: "Vừa thử cập nhật. Đợi một phút rồi thử lại.",
-  invalid_compose: "Bản mới đổi cấu trúc file compose nên phải cập nhật tay. Xem ghi chú phát hành.",
+/** Tên biến môi trường / cấu hình nằm ngoài chuỗi dịch để bản dịch không làm sai. */
+const REASON_PARAMS: Partial<Record<UpdateReason, Record<string, string>>> = {
+  unavailable: { setting: "MTL_UPDATER=0" },
+  pinned: { setting: "MTL_TAG" },
 };
 
-export const reasonText = (reason: UpdateReason | null | undefined): string =>
-  (reason ? REASON_TEXT[reason] : undefined) ?? "Cập nhật lỗi.";
+const REASON_TEXT: Partial<Record<UpdateReason, MessageKey>> = {
+  unavailable: "update.updateModel.reason.unavailable",
+  no_socket: "update.updateModel.reason.no_socket",
+  docker_too_old: "update.updateModel.reason.docker_too_old",
+  pinned: "update.updateModel.reason.pinned",
+  custom_compose: "update.updateModel.reason.custom_compose",
+  project_not_found: "update.updateModel.reason.project_not_found",
+  path_mismatch: "update.updateModel.reason.path_mismatch",
+  download_failed: "update.updateModel.reason.download_failed",
+  pull_failed: "update.updateModel.reason.pull_failed",
+  version_mismatch: "update.updateModel.reason.version_mismatch",
+  up_failed: "update.updateModel.reason.up_failed",
+  timeout: "update.updateModel.reason.timeout",
+  cooldown: "update.updateModel.reason.cooldown",
+  invalid_compose: "update.updateModel.reason.invalid_compose",
+};
+
+/** Khoá dịch theo mã lý do; mã lạ từ server (kể cả tên thuộc tính sẵn có như `constructor`) → undefined. */
+const keyFor = (table: Partial<Record<UpdateReason, MessageKey>>, reason: UpdateReason | null | undefined) =>
+  reason && Object.hasOwn(table, reason) ? table[reason] : undefined;
+
+export const reasonText = (reason: UpdateReason | null | undefined): string => {
+  const key = keyFor(REASON_TEXT, reason);
+  return key ? t(key, reason ? REASON_PARAMS[reason] : undefined) : t("update.updateModel.reasonFallback");
+};
 
 /** App đã chạy bản đích: câu "App chưa chạy lại được" sẽ sai, chỉ nói phần còn hỏng. */
-const LANDED_TEXT: Partial<Record<UpdateReason, string>> = {
-  up_failed: "Worker hoặc tiến trình nền chưa chạy lại được. Xem log và mục Sự cố của hướng dẫn.",
-  timeout: "Worker hoặc tiến trình nền chưa chạy lại được. Xem log và mục Sự cố của hướng dẫn.",
-  path_mismatch: "Thư mục dữ liệu sau cập nhật khác trước. Xem mục Sự cố của hướng dẫn trước khi dùng tiếp.",
+const LANDED_TEXT: Partial<Record<UpdateReason, MessageKey>> = {
+  up_failed: "update.updateModel.landedReason.up_failed",
+  timeout: "update.updateModel.landedReason.timeout",
+  path_mismatch: "update.updateModel.landedReason.path_mismatch",
 };
 
 export const landedReasonText = (reason: UpdateReason | null | undefined): string =>
-  (reason ? LANDED_TEXT[reason] : undefined) ?? "Xem log và mục Sự cố của hướng dẫn.";
+  t(keyFor(LANDED_TEXT, reason) ?? "update.updateModel.landedReasonFallback");
 
 /** Mã lý do trong body lỗi của API (`reason` hoặc `error`); không nhận ra → null. */
 export function reasonFromBody(body: Record<string, unknown>): UpdateReason | null {
@@ -196,9 +214,11 @@ export const canCheckNow = (s: UpdateStatus | undefined): boolean =>
 
 /** Kết quả sau khi bấm "Kiểm tra bản mới"; null khi có bản mới (menu đã hiện "Có bản mới …"). */
 export function checkNowText(s: UpdateStatus): string | null {
-  if (s.check === "error") return "Không hỏi được GitHub. Kiểm tra mạng rồi thử lại sau.";
+  if (s.check === "error") return t("update.updateModel.checkError");
   if (offeredVersion(s)) return null;
-  return s.current === "dev" ? "Đang dùng bản mới nhất." : `Đang dùng bản mới nhất (v${s.current}).`;
+  return s.current === "dev"
+    ? t("update.updateModel.upToDate")
+    : t("update.updateModel.upToDateVersion", { version: s.current });
 }
 
 export const showDot = (s: UpdateStatus | undefined, seen: string | null): boolean => {

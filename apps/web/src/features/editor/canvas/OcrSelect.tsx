@@ -10,13 +10,13 @@
 import type { Region } from "@mtl/shared";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Group, Layer, Rect } from "react-konva";
+import { t, useT } from "../../../i18n/t.ts";
 import { errorMessage } from "../../../lib/api.ts";
 import { cancelJob } from "../../chapter/api.ts";
-import { describeJobError, needsTaskSetup } from "../../chapter/job-error.ts";
 import { insertOcrRegion, refreshRegionFromOcr } from "../actions.ts";
 import { type OcrRegionResult, startOcrRegion, startReinpaint, waitJob } from "../api.ts";
 import { createEraseQueue, type EraseQueue } from "../erase-queue.ts";
-import { cancelJobBestEffort, ocrRetryNote, ocrStallNote } from "../ocr-wait.ts";
+import { cancelJobBestEffort, ocrFailureText, ocrRetryNote, ocrStallNote } from "../ocr-wait.ts";
 import { blockBarPos, type Size } from "../page-layout.ts";
 import { editorStore, type View } from "../store.ts";
 import { SELECT_FILL, SELECT_STROKE } from "./colors.ts";
@@ -118,12 +118,9 @@ export function useOcrRegion(
         const done = await waitJob(job.id, signal, undefined, (j) => {
           if (!signal.aborted) setRetry(ocrRetryNote(j) ?? ocrStallNote(j, Date.now() - sentAt));
         });
-        if (done.status !== "succeeded")
-          throw new Error(
-            (needsTaskSetup(done) && describeJobError(done)?.text) || done.error || "Quét chữ vùng thất bại",
-          );
+        if (done.status !== "succeeded") throw new Error(ocrFailureText(done));
         const region = (done.result as OcrRegionResult | null)?.region as Region | undefined;
-        if (!region) throw new Error("Quét chữ không trả về vùng");
+        if (!region) throw new Error(t("editor.ocrSelect.noRegion"));
         const s = editorStore.getState();
         if (s.pageId !== pageId || !s.layout) return;
         if (regionId) {
@@ -218,6 +215,7 @@ export function OcrOverlay({
  * Chỉ khi bấm (hoặc Enter) mới gửi OCR — kéo nhầm không tốn lượt AI. HTML phủ lên canvas, toạ độ khung nhìn.
  */
 export function OcrConfirmBar(props: { rect: PageRect; view: View; frame: Size; onConfirm(): void; onCancel(): void }) {
+  useT();
   const ref = useRef<HTMLDivElement>(null);
   const [bar, setBar] = useState<Size>({ w: 230, h: 38 });
   useLayoutEffect(() => {
@@ -231,7 +229,7 @@ export function OcrConfirmBar(props: { rect: PageRect; view: View; frame: Size; 
       ref={ref}
       className="ed-ocrbar"
       role="toolbar"
-      aria-label="Xác nhận quét chữ vùng"
+      aria-label={t("editor.ocrSelect.confirmBar")}
       style={{ left: pos.left, top: pos.top }}
       // Không để pointerdown lọt xuống Stage (bắt đầu kéo khung mới).
       onPointerDown={(e) => e.stopPropagation()}
@@ -240,12 +238,12 @@ export function OcrConfirmBar(props: { rect: PageRect; view: View; frame: Size; 
         type="button"
         className="btn-primary"
         onClick={props.onConfirm}
-        title="Nhận dạng + dịch chữ trong khung (Enter)"
+        title={t("editor.ocrSelect.confirmTitle")}
       >
-        Nhận dạng vùng này
+        {t("editor.ocrSelect.confirm")}
       </button>
-      <button type="button" onClick={props.onCancel} title="Bỏ khung (Esc)">
-        Huỷ
+      <button type="button" onClick={props.onCancel} title={t("editor.ocrSelect.cancelTitle")}>
+        {t("common.cancel")}
       </button>
     </div>
   );

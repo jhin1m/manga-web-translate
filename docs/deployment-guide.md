@@ -273,6 +273,14 @@ không điền Giọng văn. Rollback app không cần down DB, nhưng API cũ h
 thể gợi ý lại mục đã gặp (khoá có tiền tố không khớp). Gỡ hẳn thì chạy
 `packages/db/migrations-down/0030_auto_apply_series_memory.down.sql`.
 
+### Ghi chú: ghi chú AI theo ngôn ngữ giao diện (migration 0033, pipeline 0.14.0)
+
+`0033_user_ui_locale` thêm cột nullable `user.ui_locale` (chỉ thêm, chạy được trên DB bản 0.6.0). Payload dịch / hiệu
+đính mang `ui_lang` nên `MIN_PIPELINE_VERSION` mặc định lên 0.14.0: nâng worker Mac + image Modal lên ≥ 0.14.0 trước
+hoặc cùng lúc API (worker cũ nhận 426, hàng đợi dừng, không mất job). Bản self-host kéo cả hai image cùng lúc. Rollback
+API không cần hạ worker (worker 0.14.0 đọc được payload không có `ui_lang`); lùi image self-host thì chạy
+`packages/db/migrations-down/0033_user_ui_locale.down.sql` trước (chốt schema lúc boot chặn image cũ trên DB mới).
+
 ### Ghi chú: bỏ glossary chung (migration 0031)
 
 `0031_remove_global_glossary` **không chỉ thêm**: chép mỗi entry glossary chung vào mọi series cùng người dùng + cùng
@@ -358,7 +366,7 @@ uv run python scripts/fetch_models.py                     # tải + kiểm sha25
 modal volume create mtl-models && modal volume put mtl-models models/ /
 pnpm worker-token create --name modal --kind modal --out ./modal.token   # token Modal, file 600
 modal secret create mtl-worker MTL_TOKEN="$(cat modal.token)" MTL_API_URL=https://<app> \
-  MODAL_DRAIN_SECRET=<trùng .env> GEMINI_API_KEY=<…>   # key env chỉ còn là dự phòng khi chưa gán slot AI ở Cài đặt
+  MODAL_DRAIN_SECRET=<trùng .env> GEMINI_API_KEY=<…>   # key env chỉ còn là dự phòng khi Cài đặt chưa có nhà cung cấp AI
 rm modal.token
 modal deploy modal_app.py                                 # URL app `mtl-drain` → MODAL_DRAIN_URL=<url>/drain
 ```

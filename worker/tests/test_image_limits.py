@@ -31,7 +31,7 @@ def test_ok_image_decodes_rgb():
 
 
 def test_side_over_limit_rejected_from_header():
-    with pytest.raises(ImageRejected, match="cạnh"):
+    with pytest.raises(ImageRejected, match="image side exceeds"):
         check_header(_forge_png_size(_png(), 20000, 100))
 
 
@@ -44,7 +44,7 @@ def test_pixel_bomb_rejected_before_decode():
 def test_disallowed_format_rejected():
     buf = io.BytesIO()
     Image.new("RGB", (4, 4)).save(buf, format="GIF")
-    with pytest.raises(ImageRejected, match="định dạng"):
+    with pytest.raises(ImageRejected, match="format not allowed"):
         check_header(buf.getvalue())
 
 

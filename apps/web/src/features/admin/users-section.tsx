@@ -2,6 +2,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { UsersIcon } from "../../app/settings-icons.tsx";
+import { useT } from "../../i18n/t.ts";
 import { ApiError, api, errorMessage } from "../../lib/api.ts";
 import { SectionHead } from "./settings-ui.tsx";
 import { type AdminUser, dateText, disableConfirmText, fmtUsd, rowAction, statusLabel } from "./users-model.ts";
@@ -22,6 +23,7 @@ const UnlockIcon = () => (
 );
 
 function UserRow({ u, onError }: { u: AdminUser; onError: (msg: string | null) => void }) {
+  const { t } = useT();
   const qc = useQueryClient();
   const action = rowAction(u);
   const toggle = useMutation({
@@ -32,7 +34,7 @@ function UserRow({ u, onError }: { u: AdminUser; onError: (msg: string | null) =
     onError: (e) =>
       onError(
         e instanceof ApiError && e.body.error === "cannot_disable_admin"
-          ? "Không khoá được tài khoản admin."
+          ? t("admin.usersSection.cannotDisableAdmin")
           : errorMessage(e),
       ),
   });
@@ -57,8 +59,10 @@ function UserRow({ u, onError }: { u: AdminUser; onError: (msg: string | null) =
             className="icon-btn"
             data-danger={action === "disable" ? "" : undefined}
             disabled={toggle.isPending}
-            aria-label={`${action === "disable" ? "Khoá" : "Mở khoá"} ${u.email}`}
-            title={action === "disable" ? "Khoá" : "Mở khoá"}
+            aria-label={t(action === "disable" ? "admin.usersSection.disableAria" : "admin.usersSection.enableAria", {
+              email: u.email,
+            })}
+            title={t(action === "disable" ? "admin.usersSection.disable" : "admin.usersSection.enable")}
             onClick={click}
           >
             {action === "disable" ? <LockIcon /> : <UnlockIcon />}
@@ -70,12 +74,13 @@ function UserRow({ u, onError }: { u: AdminUser; onError: (msg: string | null) =
 }
 
 export function UsersSection() {
+  const { t } = useT();
   const [q, setQ] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   useEffect(() => {
-    const t = setTimeout(() => setQuery(q.trim()), 300);
-    return () => clearTimeout(t);
+    const timer = setTimeout(() => setQuery(q.trim()), 300);
+    return () => clearTimeout(timer);
   }, [q]);
   const users = useQuery({
     queryKey: [...usersKey, query],
@@ -86,15 +91,15 @@ export function UsersSection() {
   return (
     <div className="set-section">
       <SectionHead
-        title="Người dùng"
+        title={t("admin.usersSection.title")}
         icon={<UsersIcon />}
-        desc="Tài khoản và chi phí AI, mới nhất trước."
-        tip="Chi phí tính theo ngày UTC. Hiện tối đa 500 người."
+        desc={t("admin.usersSection.desc")}
+        tip={t("admin.usersSection.tip")}
         aside={
           <input
             type="search"
-            aria-label="Tìm người dùng"
-            placeholder="Tìm email hoặc tên"
+            aria-label={t("admin.usersSection.searchAria")}
+            placeholder={t("admin.usersSection.searchPlaceholder")}
             value={q}
             onChange={(e) => setQ(e.target.value)}
           />
@@ -106,19 +111,19 @@ export function UsersSection() {
           {error}
         </p>
       )}
-      {!users.data && !users.error && <p className="muted">Đang tải…</p>}
-      {users.data && users.data.length === 0 && <p className="muted">Không có người dùng nào.</p>}
+      {!users.data && !users.error && <p className="muted">{t("common.loading")}</p>}
+      {users.data && users.data.length === 0 && <p className="muted">{t("admin.usersSection.empty")}</p>}
       {users.data && users.data.length > 0 && (
         <div className="set-card set-table-card">
-          <table className="data set-table" aria-label="Danh sách người dùng">
+          <table className="data set-table" aria-label={t("admin.usersSection.tableAria")}>
             <thead>
               <tr>
                 <th>Email</th>
-                <th>Tên</th>
-                <th>Ngày tạo</th>
-                <th className="num">Hôm nay</th>
-                <th className="num">30 ngày</th>
-                <th>Trạng thái</th>
+                <th>{t("admin.usersSection.col.name")}</th>
+                <th>{t("admin.usersSection.col.created")}</th>
+                <th className="num">{t("admin.usersSection.col.today")}</th>
+                <th className="num">{t("admin.usersSection.col.days30")}</th>
+                <th>{t("admin.usersSection.col.status")}</th>
                 <th />
               </tr>
             </thead>

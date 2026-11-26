@@ -215,7 +215,7 @@ def test_no_env_key_and_no_cfg_fails_auth(monkeypatch):
     job = proofread_job([PAGE], [r.model_dump() for r in REGIONS])
     assert run_job(c, job, HANDLERS, deps) == "failed"
     f = c.calls[-1][1]
-    assert f["error_class"] == "auth" and "chưa cấu hình provider AI" in f["message"]
+    assert f["error_class"] == "auth" and "no AI provider configured" in f["message"]
     assert f["message"].startswith(LLM_NOT_CONFIGURED)
 
 

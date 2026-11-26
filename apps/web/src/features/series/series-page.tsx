@@ -9,6 +9,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { Drawer } from "../../app/drawer.tsx";
+import { t, useT } from "../../i18n/t.ts";
 import { ApiError, errorMessage } from "../../lib/api.ts";
 import { timeAgo } from "../../lib/format.ts";
 import { nextAction } from "../chapter/next-action.ts";
@@ -48,6 +49,7 @@ const useSeries = (seriesId: string) =>
   });
 
 export function SeriesPage(props: { seriesId: string; tab?: SeriesTab }) {
+  useT();
   const { seriesId, tab = "chapters" } = props;
   const q = useSeries(seriesId);
   const s = q.data;
@@ -62,7 +64,7 @@ export function SeriesPage(props: { seriesId: string; tab?: SeriesTab }) {
           <ChapterList series={s} />
           {tab === "settings" && <SeriesSettingsDialog series={s} onClose={closeModal} />}
           {tab === "glossary" && (
-            <Drawer variant="modal" title="Glossary của series" onClose={closeModal}>
+            <Drawer variant="modal" title={t("series.page.glossaryTitle")} onClose={closeModal}>
               <GlossaryEditor scope={{ seriesId }} />
             </Drawer>
           )}
@@ -73,6 +75,7 @@ export function SeriesPage(props: { seriesId: string; tab?: SeriesTab }) {
 }
 
 function SeriesHead({ series }: { series: SeriesDetail }) {
+  useT();
   const qc = useQueryClient();
   const scope = { seriesId: series.id };
   const glossary = useQuery({ queryKey: glossaryKey(scope), queryFn: () => fetchGlossary(scope) });
@@ -86,7 +89,12 @@ function SeriesHead({ series }: { series: SeriesDetail }) {
   }, [qc, series.id, series.glossary_rev]);
   return (
     <div className="series-head">
-      <Link to="/" className="btn icon-btn" aria-label="Về trang chủ" title="Về trang chủ">
+      <Link
+        to="/"
+        className="btn icon-btn series-home-link"
+        aria-label={t("series.page.home")}
+        title={t("series.page.home")}
+      >
         <BackIcon />
       </Link>
       <h1 title={series.title}>{series.title}</h1>
@@ -99,8 +107,8 @@ function SeriesHead({ series }: { series: SeriesDetail }) {
         to="/s/$seriesId"
         params={{ seriesId: series.id }}
         search={{ tab: "settings" }}
-        aria-label="Cài đặt dịch"
-        title="Cài đặt dịch"
+        aria-label={t("series.page.settings")}
+        title={t("series.page.settings")}
       >
         <SlidersIcon />
       </Link>
@@ -109,6 +117,7 @@ function SeriesHead({ series }: { series: SeriesDetail }) {
 }
 
 function ChapterList({ series }: { series: SeriesDetail }) {
+  useT();
   const listQ = useQuery({ queryKey: seriesKeys.list(), queryFn: () => fetchSeriesList() });
   const uploads = useUploads();
   const [pending, setPending] = useState<{ files: File[]; seq: number } | null>(null);
@@ -126,14 +135,10 @@ function ChapterList({ series }: { series: SeriesDetail }) {
 
   return (
     <>
-      <DropZone
-        label="Thêm chương tiếp theo"
-        title={`Thả Ch.${next} — hoặc nhiều ZIP / folder cùng lúc`}
-        onFiles={drop}
-      />
+      <DropZone label={t("series.page.dropLabel")} title={t("series.page.dropTitle", { next })} onFiles={drop} />
       {auto.isPending && (
         <p className="small muted" role="status">
-          Đang tạo chương…
+          {t("series.page.creating")}
         </p>
       )}
       {auto.error && <p className="notice danger">{errorMessage(auto.error)}</p>}
@@ -149,9 +154,9 @@ function ChapterList({ series }: { series: SeriesDetail }) {
         />
       )}
 
-      {chapters.length === 0 && <div className="rows-empty">Chưa có chương nào — thả ảnh / ZIP ở trên.</div>}
+      {chapters.length === 0 && <div className="rows-empty">{t("series.page.empty")}</div>}
       {chapters.length > 0 && (
-        <section aria-label="Chương" className="block">
+        <section aria-label={t("series.page.chapters")} className="block">
           <div className="block-head" data-align="end">
             <ListToolbar options={CHAPTER_SORTS} control={prefs} />
           </div>
@@ -167,6 +172,7 @@ function ChapterList({ series }: { series: SeriesDetail }) {
 }
 
 function ChapterCard(props: { ch: ChapterRow; upload: ReturnType<typeof uploadManager.view>; layout: ListView }) {
+  useT();
   const { ch } = props;
   const [msg, setMsg] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
@@ -198,7 +204,7 @@ function ChapterCard(props: { ch: ChapterRow; upload: ReturnType<typeof uploadMa
         className="card-open"
         to="/s/$seriesId/c/$chapterId"
         params={params}
-        aria-label={`Mở chương ${ch.number}`}
+        aria-label={t("series.page.open", { number: ch.number })}
         title={a.detail}
         inert={confirming}
       >
@@ -218,7 +224,7 @@ function ChapterCard(props: { ch: ChapterRow; upload: ReturnType<typeof uploadMa
             <span className="dot" data-tone={a.tone} />
             <span className="card-state-text">{a.state}</span>
           </span>
-          {a.kind === "resume" && <span className="small muted">Thả lại file để tải tiếp</span>}
+          {a.kind === "resume" && <span className="small muted">{t("series.page.resume")}</span>}
           <span className="small muted">{timeAgo(ch.updated_at)}</span>
         </span>
       </Link>
@@ -227,8 +233,8 @@ function ChapterCard(props: { ch: ChapterRow; upload: ReturnType<typeof uploadMa
           type="button"
           className="icon-btn"
           data-danger
-          aria-label={`Xoá chương ${ch.number}`}
-          title="Xoá chương"
+          aria-label={t("series.page.deleteAria", { number: ch.number })}
+          title={t("series.page.delete")}
           onClick={() => {
             setMsg(null);
             setConfirming(true);
@@ -253,6 +259,7 @@ function ChapterCard(props: { ch: ChapterRow; upload: ReturnType<typeof uploadMa
 }
 
 function DeleteChapterConfirm(props: { ch: ChapterRow; onDone: () => void; onError: (text: string) => void }) {
+  useT();
   const { ch } = props;
   const qc = useQueryClient();
   const del = useMutation({
@@ -262,15 +269,11 @@ function DeleteChapterConfirm(props: { ch: ChapterRow; onDone: () => void; onErr
       void qc.invalidateQueries({ queryKey: ["series"] });
     },
     onError: (e) =>
-      props.onError(
-        e instanceof ApiError && e.status === 423
-          ? "Chương đang mở để sửa ở một tab — đóng tab đó rồi xoá."
-          : errorMessage(e),
-      ),
+      props.onError(e instanceof ApiError && e.status === 423 ? t("series.page.locked") : errorMessage(e)),
   });
   return (
-    <div className="card-confirm" role="alertdialog" aria-label={`Xác nhận xoá chương ${ch.number}`}>
-      <span className="small">Xoá hẳn chương {ch.number} (ảnh, bản dịch, lịch sử)?</span>
+    <div className="card-confirm" role="alertdialog" aria-label={t("series.page.confirmAria", { number: ch.number })}>
+      <span className="small">{t("series.page.confirmText", { number: ch.number })}</span>
       <button
         type="button"
         className="btn-danger-solid"
@@ -279,10 +282,10 @@ function DeleteChapterConfirm(props: { ch: ChapterRow; onDone: () => void; onErr
         autoFocus
         onClick={() => del.mutate()}
       >
-        {del.isPending ? "Đang xoá…" : "Xoá chương"}
+        {del.isPending ? t("series.page.deleting") : t("series.page.delete")}
       </button>
       <button type="button" disabled={del.isPending} onClick={props.onDone}>
-        Huỷ
+        {t("common.cancel")}
       </button>
     </div>
   );

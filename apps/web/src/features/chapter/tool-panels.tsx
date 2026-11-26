@@ -4,6 +4,7 @@
  * `MaskToolBar`, Chọn dùng panel khối (`SelectPanel`).
  */
 import type { ReactNode } from "react";
+import { useT } from "../../i18n/t.ts";
 
 /** Khung chung của thanh phụ: nổi giữa mép trên canvas, không đẩy bố cục. */
 export function CanvasToolBar({ label, children }: { label: string; children: ReactNode }) {
@@ -15,29 +16,23 @@ export function CanvasToolBar({ label, children }: { label: string; children: Re
 }
 
 export function TextToolBar() {
+  const { t } = useT();
   return (
-    <CanvasToolBar label="Thêm chữ">
-      <strong>Thêm chữ</strong>
-      <span className="muted">Kéo khung trên ảnh</span>
+    <CanvasToolBar label={t("chapter.toolPanels.addText")}>
+      <strong>{t("chapter.toolPanels.addText")}</strong>
+      <span className="muted">{t("chapter.toolPanels.addTextHint")}</span>
     </CanvasToolBar>
   );
 }
 
 /** Dòng trạng thái OCR đang chờ: báo lần lỗi gần nhất (đang thử lại) + nút Huỷ để khỏi chờ vô hạn. */
-export function OcrWait({
-  retry,
-  onCancel,
-  label = "Huỷ quét chữ",
-}: {
-  retry: string | null;
-  onCancel(): void;
-  label?: string;
-}) {
+export function OcrWait({ retry, onCancel, label }: { retry: string | null; onCancel(): void; label?: string }) {
+  const { t } = useT();
   return (
     <div role="status">
       {retry && <p className="muted small">{retry}</p>}
       <button type="button" onClick={onCancel}>
-        {label}
+        {label ?? t("chapter.toolPanels.cancelOcr")}
       </button>
     </div>
   );
@@ -58,25 +53,26 @@ export function OcrToolBar({
   onAutoErase(on: boolean): void;
   erasing: number;
 }) {
+  const { t, tp } = useT();
   return (
-    <CanvasToolBar label="Quét chữ">
-      <strong>Quét chữ</strong>
-      <span className="muted">Kéo khung quanh chữ</span>
-      <label className="cw-check" title="Sau khi quét xong, xoá chữ gốc trong khung khỏi ảnh">
+    <CanvasToolBar label={t("chapter.toolPanels.scan")}>
+      <strong>{t("chapter.toolPanels.scan")}</strong>
+      <span className="muted">{t("chapter.toolPanels.scanHint")}</span>
+      <label className="cw-check" title={t("chapter.toolPanels.autoEraseTitle")}>
         <input type="checkbox" checked={autoErase} onChange={(e) => onAutoErase(e.target.checked)} />
-        Xoá chữ gốc
+        {t("chapter.toolPanels.autoErase")}
       </label>
       {pending > 0 && (
         <>
           <span className="status" data-tone="busy" role="status">
-            Đang quét {pending} vùng…
+            {tp("chapter.toolPanels.scanning", pending)}
           </span>
-          <OcrWait retry={retry} onCancel={onCancel} label="Huỷ" />
+          <OcrWait retry={retry} onCancel={onCancel} label={t("common.cancel")} />
         </>
       )}
       {erasing > 0 && (
         <span className="status" data-tone="busy" role="status">
-          Đang xoá chữ gốc… ({erasing})
+          {t("chapter.toolPanels.erasing", { count: erasing })}
         </span>
       )}
     </CanvasToolBar>

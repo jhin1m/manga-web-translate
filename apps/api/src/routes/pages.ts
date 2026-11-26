@@ -8,9 +8,9 @@ import { chapters, pages, scoped, sourceFiles } from "@mtl/db";
 import { storageKeys } from "@mtl/shared";
 import { and, eq, ne, type SQL, sql } from "drizzle-orm";
 import { Hono } from "hono";
-import { HTTPException } from "hono/http-exception";
 import { z } from "zod";
 import { inJobTx, lockChapter, refreshChapter } from "../jobs/enqueue.ts";
+import { apiError } from "../lib/api-error.ts";
 import { assertChapterLock } from "../lib/chapter-lock.ts";
 import { parseJson } from "../lib/validate.ts";
 import type { AppEnv } from "../middleware/user.ts";
@@ -18,9 +18,6 @@ import { MAX_GET_TTL_S, presignGet } from "../storage.ts";
 
 const THUMB_TTL_S = MAX_GET_TTL_S;
 const PageSkipBody = z.object({ skipped: z.boolean() });
-
-const conflict = (error: string, message: string) =>
-  new HTTPException(409, { res: Response.json({ error, message }, { status: 409 }) });
 
 export const pageRoutes = new Hono<AppEnv>();
 
@@ -94,12 +91,12 @@ pageRoutes.patch("/pages/:pageId", async (c) => {
   await inJobTx(async (tx) => {
     const ch = await lockChapter(tx, userId, page.chapterId);
     if (ch.status === "ingesting" || ch.status === "processing") {
-      throw conflict("chapter_busy", "chương đang xử lý — chờ xong rồi xoá / khôi phục trang");
+      throw apiError(409, "chapter_busy.page_skip");
     }
     const t = scoped(tx, userId);
     if (body.skipped) {
       const visible = await t.select(pages, and(eq(pages.chapterId, ch.id), eq(pages.skipped, false)) as SQL);
-      if (visible.every((p) => p.id === page.id)) throw conflict("last_page", "không xoá được trang cuối cùng");
+      if (visible.every((p) => p.id === page.id)) throw apiError(409, "last_page");
     }
     // Chỉ đổi (và đánh dấu mốc theo đồng hồ DB) khi giá trị thật sự khác; PATCH lặp lại là no-op.
     await tx

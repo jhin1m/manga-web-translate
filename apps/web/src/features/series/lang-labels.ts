@@ -1,20 +1,49 @@
-/** Nhãn tiếng Việt cho ngôn ngữ + định dạng truyện của series (danh sách mã từ @mtl/shared). */
-import { type ComicKind, LANG_NAMES, type PageFormat, type SourceLang, type TargetLang } from "@mtl/shared/series-lang";
+/** Nhãn ngôn ngữ + định dạng truyện của series theo ngôn ngữ giao diện (danh sách mã từ @mtl/shared). */
+import type { ComicKind, PageFormat, SourceLang, TargetLang } from "@mtl/shared/series-lang";
+import { type MessageKey, t } from "../../i18n/t.ts";
 
 export {
   COMIC_KIND_SETTINGS,
   COMIC_KINDS,
   type ComicKind,
+  defaultTargetLang,
   HONORIFIC_EXAMPLES,
-  LANG_NAMES,
   PAGE_FORMATS,
   SOURCE_LANGS,
   TARGET_LANGS,
 } from "@mtl/shared/series-lang";
 export type { PageFormat, SourceLang, TargetLang };
 
+type Lang = SourceLang | TargetLang;
+
+const LANG_KEY: Readonly<Record<Lang, { name: MessageKey; short: MessageKey }>> = {
+  ko: { name: "lang.ko", short: "lang.short.ko" },
+  ja: { name: "lang.ja", short: "lang.short.ja" },
+  zh: { name: "lang.zh", short: "lang.short.zh" },
+  en: { name: "lang.en", short: "lang.short.en" },
+  vi: { name: "lang.vi", short: "lang.short.vi" },
+  id: { name: "lang.id", short: "lang.short.id" },
+  es: { name: "lang.es", short: "lang.short.es" },
+  pt: { name: "lang.pt", short: "lang.short.pt" },
+  fr: { name: "lang.fr", short: "lang.short.fr" },
+};
+
+const isLang = (code: string): code is Lang => Object.hasOwn(LANG_KEY, code);
+
+/** Tên đầy đủ của ngôn ngữ ("Tiếng Hàn" / "Korean"); mã lạ giữ nguyên. */
+export const langName = (code: string) => (isLang(code) ? t(LANG_KEY[code].name) : code);
+
+/**
+ * Tên ngôn ngữ theo mã, đọc theo ngôn ngữ giao diện lúc truy cập (getter) — giữ shape `Record<mã, tên>` cho chỗ đang
+ * tra `LANG_NAMES[code]`.
+ */
+export const LANG_NAMES: Readonly<Record<Lang, string>> = Object.defineProperties(
+  {} as Record<Lang, string>,
+  Object.fromEntries(Object.keys(LANG_KEY).map((code) => [code, { enumerable: true, get: () => langName(code) }])),
+);
+
 /** Tên ngắn cho header ("Hàn → Việt"). */
-export const langShort = (code: string) => LANG_NAMES[code as SourceLang]?.replace(/^Tiếng /, "") ?? code;
+export const langShort = (code: string) => (isLang(code) ? t(LANG_KEY[code].short) : code);
 
 type Pair = { source_lang: string; target_lang: string };
 /** "Hàn → Việt". */
@@ -26,21 +55,33 @@ export const pairLabel = (p: Pair) => `${langShort(p.source_lang)} → ${langSho
  */
 export function langChangeWarning(before: Pair, now: Pair, terms: number | undefined): string | null {
   if (!terms || (before.source_lang === now.source_lang && before.target_lang === now.target_lang)) return null;
-  return `Glossary của series có ${terms} từ viết cho ${pairLabel(before)} — kiểm lại sau khi đổi ngôn ngữ.`;
+  return t("series.langLabels.langChangeWarning", { terms, pair: pairLabel(before) });
 }
 
-/** Nhãn loại truyện ở ô chọn khi tạo series. */
+/** Nhãn loại truyện ở ô chọn khi tạo series (tên riêng, giống nhau ở mọi ngôn ngữ). */
 export const COMIC_KIND_LABELS: Record<ComicKind, string> = {
   manga: "Manga",
   manhwa: "Manhwa",
   manhua: "Manhua",
 };
 
-export const PAGE_FORMAT_LABELS: Record<PageFormat, string> = {
-  strip: "Cuộn dọc (manhwa/manhua)",
-  pages: "Từng trang (manga)",
+const PAGE_FORMAT_KEY: Readonly<Record<PageFormat, MessageKey>> = {
+  strip: "series.langLabels.pageFormat.strip",
+  pages: "series.langLabels.pageFormat.pages",
 };
 
-/** Placeholder ô "Xưng / gọi" theo ngôn ngữ đích. */
+export const PAGE_FORMAT_LABELS: Readonly<Record<PageFormat, string>> = {
+  get strip() {
+    return t(PAGE_FORMAT_KEY.strip);
+  },
+  get pages() {
+    return t(PAGE_FORMAT_KEY.pages);
+  },
+};
+
+/**
+ * Placeholder ô "Xưng / gọi" theo ngôn ngữ đích: ví dụ là chữ của chính ngôn ngữ đích (dữ liệu, không dịch theo giao
+ * diện); đích khác không có ví dụ → nhãn chung theo giao diện.
+ */
 export const addressPlaceholder = (tgt: TargetLang) =>
-  tgt === "vi" ? "anh/em" : tgt === "en" ? "Boss / kid" : "cách gọi";
+  tgt === "vi" ? "anh/em" : tgt === "en" ? "Boss / kid" : t("series.langLabels.addressFallback");

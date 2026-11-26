@@ -20,7 +20,7 @@ export const DHASH_RE = /^[0-9a-f]{16}$/;
  * phải, bit đầu là bit cao nhất.
  */
 export function dhashFromGray(gray: ArrayLike<number>): string {
-  if (gray.length !== DHASH_W * DHASH_H) throw new RangeError(`cần ${DHASH_W * DHASH_H} điểm xám`);
+  if (gray.length !== DHASH_W * DHASH_H) throw new RangeError(`expected ${DHASH_W * DHASH_H} gray values`);
   let hex = "";
   let nibble = 0;
   let bits = 0;
@@ -40,7 +40,7 @@ export function dhashFromGray(gray: ArrayLike<number>): string {
 
 /** Số bit khác nhau giữa 2 hash 16 hex. */
 export function hamming(a: string, b: string): number {
-  if (!DHASH_RE.test(a) || !DHASH_RE.test(b)) throw new RangeError("dhash phải là 16 hex");
+  if (!DHASH_RE.test(a) || !DHASH_RE.test(b)) throw new RangeError("dhash must be 16 hex digits");
   let n = 0;
   for (let i = 0; i < 16; i++) {
     let x = Number.parseInt(a[i] as string, 16) ^ Number.parseInt(b[i] as string, 16);
@@ -104,7 +104,7 @@ export const sameBand = (hash: string, band: { dhash: string }): boolean =>
  */
 export function grayGridFromRgba(rgba: ArrayLike<number>, w: number, h: number): Float64Array {
   if (!(Number.isInteger(w) && Number.isInteger(h) && w > 0 && h > 0) || rgba.length < w * h * 4) {
-    throw new RangeError("ảnh RGBA không khớp kích thước");
+    throw new RangeError("RGBA image does not match its size");
   }
   // Trọng số theo trục: phần của cột/hàng i nằm trong ô k (độ dài giao của [i, i+1) và [k·n/cells, (k+1)·n/cells)).
   const axis = (n: number, cells: number) => {

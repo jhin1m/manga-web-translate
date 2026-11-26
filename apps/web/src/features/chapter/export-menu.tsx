@@ -5,6 +5,7 @@
  * API thêm; có cảnh báo vẫn xuất được. Lượt xuất đang chạy vẫn theo dõi được ở chip và Hoạt động khi menu đóng.
  */
 import { useEffect, useMemo, useRef } from "react";
+import { useT } from "../../i18n/t.ts";
 import type { ChapterDetail, ProgressPage } from "./api.ts";
 import { ExportPanel } from "./export-panel.tsx";
 import { exportWarnings } from "./export-warnings.ts";
@@ -30,6 +31,7 @@ export function ExportMenu(props: {
   onShowWarnings(): void;
   onClose(): void;
 }) {
+  const { t } = useT();
   const { pages, rows, detail, opener } = props;
   const warnings = useMemo(() => exportWarnings(pages, rows), [pages, rows]);
   // Ảnh đã tải lên còn dùng (bỏ file người dùng/hệ thống loại) — số ảnh khi xuất "như lúc tải lên".
@@ -74,7 +76,7 @@ export function ExportMenu(props: {
       ref={ref}
       className="exp-menu"
       role="dialog"
-      aria-label="Xuất chương"
+      aria-label={t("chapter.exportMenu.aria")}
       tabIndex={-1}
       style={{ right }}
       onKeyDown={(e) => {

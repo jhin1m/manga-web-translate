@@ -15,6 +15,9 @@ export default defineConfig({
     trace: "retain-on-failure",
     ...devices["Desktop Chrome"],
     viewport: { width: 1920, height: 1080 },
+    // Web tự chọn ngôn ngữ theo trình duyệt: spec cũ viết theo chữ tiếng Việt nên ghim vi-VN; spec tiếng Anh tự đặt
+    // `test.use({ locale: "en-US" })`.
+    locale: "vi-VN",
   },
   webServer: [
     {

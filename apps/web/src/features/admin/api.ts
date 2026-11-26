@@ -1,11 +1,12 @@
 import {
   type AiSlots,
   type AiTaskSlot,
-  MODEL_UNSUPPORTED_MESSAGE,
   type PipelineSettings,
   type ProbeReason,
+  RECOMMENDED_ANTHROPIC_MODEL,
 } from "@mtl/shared";
 import { useQuery } from "@tanstack/react-query";
+import { t, tp } from "../../i18n/t.ts";
 import { ApiError, api, errorMessage } from "../../lib/api.ts";
 import type { SavedProvider } from "./provider-form-model.ts";
 
@@ -28,33 +29,47 @@ export const useProviders = () =>
 
 export type ProbeResult = { ok: boolean; reason: ProbeReason; http_status: number | null; model_found?: boolean };
 
-export const SLOT_LABEL: Record<AiTaskSlot, string> = { ocr: "Đọc chữ", translate: "Dịch", proofread: "Hiệu đính" };
+/** Tên bước AI theo ngôn ngữ giao diện (getter: đọc lúc dùng). */
+export const SLOT_LABEL: Record<AiTaskSlot, string> = {
+  get ocr() {
+    return t("admin.api.slot.ocr");
+  },
+  get translate() {
+    return t("admin.api.slot.translate");
+  },
+  get proofread() {
+    return t("admin.api.slot.proofread");
+  },
+};
 
-/** Lỗi API của phần AI → câu tiếng Việt nói rõ việc cần làm. */
+const slotLabel = (v: unknown): string | undefined =>
+  typeof v === "string" && Object.hasOwn(SLOT_LABEL, v) ? SLOT_LABEL[v as AiTaskSlot] : undefined;
+
+/** Lỗi API của phần AI → câu nói rõ việc cần làm. */
 export function providerError(e: unknown): string {
   if (!(e instanceof ApiError)) return errorMessage(e);
-  const slot = typeof e.body.slot === "string" ? SLOT_LABEL[e.body.slot as AiTaskSlot] : undefined;
+  const slot = slotLabel(e.body.slot);
   switch (e.body.error) {
     case "secrets_key_missing":
-      return "API chưa có SECRETS_KEY nên không lưu / đọc được key. Đặt SECRETS_KEY trong .env của API rồi khởi động lại.";
+      return t("admin.api.error.secrets_key_missing");
     case "key_unreadable":
-      return "Không giải mã được key đã lưu (SECRETS_KEY đã đổi?). Sửa nhà cung cấp và nhập lại key.";
+      return t("admin.api.error.key_unreadable");
     case "key_required":
-      return "Đổi base URL phải nhập lại API key.";
+      return t("admin.api.error.key_required");
     case "in_use":
-      return slot
-        ? `Model đang được dùng cho bước ${slot}. Đổi model của bước đó ở mục Pipeline trước.`
-        : "Model đang được dùng cho một bước AI. Đổi model của bước đó ở mục Pipeline trước.";
+      return slot ? t("admin.api.error.inUseBySlot", { slot }) : t("admin.api.error.in_use");
     case "in_use_by_jobs":
-      return `Còn ${String(e.body.jobs ?? "một số")} job đang chạy / chờ dùng nhà cung cấp hoặc model này. Thử lại khi các job xong.`;
+      return typeof e.body.jobs === "number"
+        ? tp("admin.api.error.in_use_by_jobs", e.body.jobs)
+        : t("admin.api.error.inUseBySomeJobs");
     case "duplicate_model":
-      return "Model này đã có trong nhà cung cấp.";
+      return t("admin.api.error.duplicate_model");
     case "model_unsupported":
-      return MODEL_UNSUPPORTED_MESSAGE;
+      return t("errors.modelUnsupported", { model: RECOMMENDED_ANTHROPIC_MODEL });
     case "model_not_vision":
-      return `Bước ${slot ?? ""} cần model có vision (đọc được ảnh).`.replace("  ", " ");
+      return slot ? t("admin.api.error.model_not_vision", { slot }) : t("admin.api.error.modelNotVisionNoSlot");
     case "model_not_found":
-      return "Model đã chọn không còn tồn tại. Tải lại trang.";
+      return t("admin.api.error.model_not_found");
     default:
       return errorMessage(e);
   }
@@ -64,20 +79,18 @@ export function providerError(e: unknown): string {
 export function probeText(r: ProbeResult): string {
   switch (r.reason) {
     case "ok":
-      return r.model_found === false
-        ? "Kết nối được, key hợp lệ — nhưng chưa thấy model đầu tiên trong danh sách của nhà cung cấp."
-        : "Kết nối được, key hợp lệ.";
+      return r.model_found === false ? t("admin.api.probe.okModelMissing") : t("admin.api.probe.ok");
     case "auth":
-      return "Key bị từ chối (sai hoặc hết hiệu lực).";
+      return t("admin.api.probe.auth");
     case "not_found":
-      return "Không tìm thấy endpoint — kiểm tra base URL / tên model.";
+      return t("admin.api.probe.not_found");
     case "quota":
-      return "Nhà cung cấp báo hết hạn mức hoặc giới hạn tốc độ (402 / 429).";
+      return t("admin.api.probe.quota");
     case "network":
-      return "Không kết nối được (lỗi mạng hoặc quá 10 giây).";
+      return t("admin.api.probe.network");
     case "redirect":
-      return "Endpoint chuyển hướng — đổi base URL sang địa chỉ cuối cùng.";
+      return t("admin.api.probe.redirect");
     default:
-      return `Phản hồi không rõ${r.http_status ? ` (HTTP ${r.http_status})` : ""}.`;
+      return r.http_status ? t("admin.api.probe.unknownHttp", { status: r.http_status }) : t("admin.api.probe.unknown");
   }
 }

@@ -7,10 +7,17 @@ export type SourceLang = (typeof SOURCE_LANGS)[number];
 export const TARGET_LANGS = ["vi", "en", "id", "es", "pt", "fr"] as const;
 export type TargetLang = (typeof TARGET_LANGS)[number];
 
+/** Đích mặc định của series mới: ngôn ngữ giao diện nếu dịch sang được, không thì `vi` (= default cột DB). */
+export const defaultTargetLang = (uiLocale: string): TargetLang => TARGET_LANGS.find((l) => l === uiLocale) ?? "vi";
+
 /** strip = ghép slice cùng width rồi cắt theo detector (manhwa/manhua); pages = 1 file = 1 page (manga). */
 export const PAGE_FORMATS = ["strip", "pages"] as const;
 export type PageFormat = (typeof PAGE_FORMATS)[number];
 
+/**
+ * Tên ngôn ngữ tiếng Việt chèn vào câu chỉ dẫn gửi LLM (API `honorificText`) — prompt giữ tiếng Việt. Giao diện web
+ * không dùng bảng này mà dịch theo mã (`lang.<code>`).
+ */
 export const LANG_NAMES: Record<SourceLang | TargetLang, string> = {
   ko: "Tiếng Hàn",
   ja: "Tiếng Nhật",

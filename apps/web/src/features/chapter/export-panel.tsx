@@ -8,6 +8,8 @@
 import { EXPORT_FILE, EXPORT_RETENTION_DAYS } from "@mtl/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
+import { fmtDate } from "../../i18n/format.ts";
+import { type MessageKey, useT } from "../../i18n/t.ts";
 import { errorMessage } from "../../lib/api.ts";
 import { timeAgo } from "../../lib/format.ts";
 import {
@@ -23,6 +25,7 @@ import {
   CBZ_QUALITY,
   type CbzQuality,
   DEFAULT_LAYOUT,
+  exportFailureText,
   exportLabel,
   exportPhase,
   exportPollInterval,
@@ -39,13 +42,22 @@ import type { Tone } from "./status.ts";
 import { formatBytes } from "./text-utils.ts";
 import "./export-panel.css";
 
-const STATUS: Record<ExportStatus, { label: string; tone: Tone }> = {
-  queued: { label: "Đang chờ", tone: "busy" },
-  running: { label: "Đang xuất", tone: "busy" },
-  succeeded: { label: "Xong", tone: "ok" },
-  failed: { label: "Lỗi", tone: "danger" },
-  cancelled: { label: "Đã huỷ", tone: "idle" },
-  paused_budget: { label: "Tạm dừng (hết ngân sách)", tone: "warn" },
+const STATUS: Record<ExportStatus, { label: MessageKey; tone: Tone }> = {
+  queued: { label: "chapter.exportPanel.status.queued", tone: "busy" },
+  running: { label: "chapter.exportPanel.status.running", tone: "busy" },
+  succeeded: { label: "chapter.exportPanel.status.succeeded", tone: "ok" },
+  failed: { label: "chapter.exportPanel.status.failed", tone: "danger" },
+  cancelled: { label: "chapter.exportPanel.status.cancelled", tone: "idle" },
+  paused_budget: { label: "chapter.exportPanel.status.paused_budget", tone: "warn" },
+};
+/** Ngày giờ đầy đủ như `Date#toLocaleString()` mặc định. */
+const DATE_TIME: Intl.DateTimeFormatOptions = {
+  year: "numeric",
+  month: "numeric",
+  day: "numeric",
+  hour: "numeric",
+  minute: "numeric",
+  second: "numeric",
 };
 /** Lượt xuất gần đây của chương; poll khi còn lượt đang chạy. Dùng chung cho menu Xuất, Hoạt động và số việc. */
 export function useExports(chapterId: string) {
@@ -86,6 +98,7 @@ export function ExportPanel(props: {
   beforeStart(): Promise<unknown>;
 }) {
   const { chapterId, counts } = props;
+  const { t, tp } = useT();
   const [format, setFormat] = useState<ExportFormat>("png_zip");
   const [chosenLayout, setLayout] = useState<ExportLayout>(DEFAULT_LAYOUT);
   const [quality, setQuality] = useState<CbzQuality>("high");
@@ -131,7 +144,7 @@ export function ExportPanel(props: {
     },
     onError: (e) => {
       const code = (e as { body?: { error?: string } }).body?.error;
-      setError(code === "no_pages" ? "Chương chưa có trang nào để xuất." : errorMessage(e));
+      setError(code === "no_pages" ? t("chapter.exportPanel.noPages") : errorMessage(e));
     },
   });
   const exports = listQ.data?.exports ?? [];
@@ -155,7 +168,11 @@ export function ExportPanel(props: {
   const running = phase.kind === "running" && !lost;
   const failure =
     error ??
-    (phase.kind === "failed" ? phase.error : lost ? `Không theo dõi được tiến độ: ${errorMessage(listQ.error)}` : null);
+    (phase.kind === "failed"
+      ? phase.error
+      : lost
+        ? t("chapter.exportPanel.trackingLost", { error: errorMessage(listQ.error) })
+        : null);
 
   const last = exports.find((x) => x.status === "succeeded");
   const lastExpired = !!last && last.expires_at !== null && Date.parse(last.expires_at) < Date.now();
@@ -165,13 +182,13 @@ export function ExportPanel(props: {
   return (
     <>
       {lines.length > 0 && (
-        <section aria-label="Trước khi xuất">
+        <section aria-label={t("chapter.exportPanel.beforeExport")}>
           <details className="exp-warn">
             <summary>
               <span className="exp-warn-mark" aria-hidden="true">
                 !
               </span>
-              {warnTotal(props.warnings, includeUntranslated)} chỗ cần xem
+              {tp("chapter.exportPanel.toReview", warnTotal(props.warnings, includeUntranslated))}
             </summary>
             <ul className="exp-warn-list small">
               {lines.map((l) => (
@@ -181,9 +198,9 @@ export function ExportPanel(props: {
             {review > 0 && (
               <span className="small">
                 <button type="button" className="link" onClick={props.onShowWarnings}>
-                  Xem {review} chỗ này
+                  {t("chapter.exportPanel.showReview", { count: review })}
                 </button>{" "}
-                <span className="muted">— vẫn xuất được.</span>
+                <span className="muted">{t("chapter.exportPanel.stillExportable")}</span>
               </span>
             )}
           </details>
@@ -198,49 +215,54 @@ export function ExportPanel(props: {
           onClick={() => start.mutate()}
         >
           {start.isPending ? (
-            "Đang gửi…"
+            t("chapter.exportPanel.sending")
           ) : running ? (
             phase.kind === "running" && phase.paused ? (
-              "Tạm dừng — hết ngân sách"
+              t("chapter.exportPanel.pausedButton")
             ) : (
-              `Đang xuất ${phase.pct}%…`
+              t("chapter.exportPanel.exportingPct", { pct: phase.pct })
             )
           ) : (
             <>
-              <span aria-hidden="true">⬇</span> Tải chương ({ext})
+              <span aria-hidden="true">⬇</span> {t("chapter.exportPanel.downloadChapter", { ext })}
             </>
           )}
         </button>
         {phase.kind === "ready" && (
           <span className="small">
-            Đã xong. Nếu file chưa tự tải:{" "}
+            {t("chapter.exportPanel.readyFallback")}{" "}
             <a className="btn" href={phase.url} download>
-              Tải xuống
+              {t("chapter.exportPanel.download")}
             </a>
           </span>
         )}
         {phase.kind === "running" && phase.paused && (
-          <span className="muted small">Hết ngân sách AI — tự xuất tiếp khi có lại, không cần bấm lại.</span>
+          <span className="muted small">{t("chapter.exportPanel.pausedHint")}</span>
         )}
-        {phase.kind === "expired" && <span className="muted small">Link đã hết hạn — bấm tải lại để xuất mới.</span>}
+        {phase.kind === "expired" && <span className="muted small">{t("chapter.exportPanel.expiredHint")}</span>}
         <span className="muted small">
-          Tên file: <span className="mono">{`${props.fileBase}.${EXPORT_FILE[format].ext}`}</span>
+          {t("chapter.exportPanel.fileName")}{" "}
+          <span className="mono">{`${props.fileBase}.${EXPORT_FILE[format].ext}`}</span>
         </span>
       </div>
       {failure && (
-        <p className="notice danger" role="alert">
-          {failure} Bấm “Tải chương” để thử lại.
+        <p
+          className="notice danger"
+          role="alert"
+          title={!error && phase.kind === "failed" ? (phase.detail ?? undefined) : undefined}
+        >
+          {failure} {t("chapter.exportPanel.retryHint")}
         </p>
       )}
 
       <details className="exp-options">
         <summary>
-          <span className="exp-options-title">Tuỳ chọn</span>
+          <span className="exp-options-title">{t("chapter.exportPanel.options")}</span>
           <span className="muted small">{optionsSummary(options, counts)}</span>
         </summary>
         <div className="exp-options-body">
           <fieldset className="exp-field">
-            <legend>Định dạng</legend>
+            <legend>{t("chapter.exportPanel.format")}</legend>
             <div className="drawer-choice exp-stack">
               {(Object.keys(FORMAT_LABEL) as ExportFormat[]).map((f) => (
                 <label key={f}>
@@ -252,7 +274,7 @@ export function ExportPanel(props: {
           </fieldset>
           {format === "cbz" && (
             <fieldset className="exp-field">
-              <legend>Chất lượng ảnh</legend>
+              <legend>{t("chapter.exportPanel.quality")}</legend>
               <div className="exp-seg">
                 {(Object.keys(CBZ_QUALITY) as CbzQuality[]).map((k) => (
                   <button key={k} type="button" aria-pressed={quality === k} onClick={() => setQuality(k)}>
@@ -260,12 +282,12 @@ export function ExportPanel(props: {
                   </button>
                 ))}
               </div>
-              <p className="muted small exp-hint">Gốc: ảnh PNG nguyên bản. Cao/Nhẹ: nén JPEG, file nhỏ hơn.</p>
+              <p className="muted small exp-hint">{t("chapter.exportPanel.qualityHint")}</p>
             </fieldset>
           )}
           {layoutChoice && (
             <fieldset className="exp-field">
-              <legend>Cách chia ảnh</legend>
+              <legend>{t("chapter.exportPanel.layout")}</legend>
               <div className="drawer-choice exp-stack">
                 {LAYOUT_CHOICES.map((c) => (
                   <label key={c.value}>
@@ -283,7 +305,7 @@ export function ExportPanel(props: {
           )}
           <label className="drawer-check">
             <input type="checkbox" checked={includeUntranslated} onChange={(e) => setInclude(e.target.checked)} />
-            Đưa cả trang chưa dịch vào (ảnh gốc, chưa có bản dịch)
+            {t("chapter.exportPanel.includeUntranslated")}
           </label>
         </div>
       </details>
@@ -294,16 +316,16 @@ export function ExportPanel(props: {
         </p>
       )}
       {showLast && last && (
-        <p className="exp-last small" title={`Link tải hiệu lực 5 phút, file giữ ${EXPORT_RETENTION_DAYS} ngày`}>
+        <p className="exp-last small" title={t("chapter.exportPanel.linkTitle", { days: EXPORT_RETENTION_DAYS })}>
           <span className="grow">
-            Lần trước · {timeAgo(last.created_at)} · {exportLabel(last)}
+            {t("chapter.exportPanel.last", { when: timeAgo(last.created_at), label: exportLabel(last) })}
           </span>
           {last.download_url && !lastExpired ? (
             <a className="btn" href={last.download_url} download>
-              Tải lại
+              {t("chapter.exportPanel.redownload")}
             </a>
           ) : (
-            <span className="muted exp-last-note">Đã hết hạn — bấm tải chương để xuất lại</span>
+            <span className="muted exp-last-note">{t("chapter.exportPanel.lastExpired")}</span>
           )}
         </p>
       )}
@@ -312,33 +334,34 @@ export function ExportPanel(props: {
 }
 
 export function ExportRow({ x, cancelling, onCancel }: { x: ExportView; cancelling: boolean; onCancel(): void }) {
+  const { t } = useT();
   const st = STATUS[x.status];
   const pct = Math.round(Math.min(1, Math.max(0, x.progress)) * 100);
   const expired = x.expires_at !== null && new Date(x.expires_at).getTime() < Date.now();
   const step = stageLabel({ type: "chapter.export", stage: x.stage, progress_done: null, progress_total: null });
   return (
-    <div className="drawer-item" title={`Link tải hiệu lực 5 phút, file giữ ${EXPORT_RETENTION_DAYS} ngày`}>
+    <div className="drawer-item" title={t("chapter.exportPanel.linkTitle", { days: EXPORT_RETENTION_DAYS })}>
       <div className="drawer-item-head">
         <span className="status" data-tone={st.tone}>
-          {st.label}
+          {t(st.label)}
         </span>
         <span className="grow small">{exportLabel(x)}</span>
         {isExportActive(x.status) && (
           <button type="button" className="btn-danger" disabled={cancelling} onClick={onCancel}>
-            Huỷ
+            {t("common.cancel")}
           </button>
         )}
         {x.status === "succeeded" &&
           (x.download_url && !expired ? (
             <a className="btn btn-primary" href={x.download_url} download>
-              Tải xuống
+              {t("chapter.exportPanel.download")}
             </a>
           ) : (
-            <span className="muted small">Đã hết hạn</span>
+            <span className="muted small">{t("chapter.exportPanel.expired")}</span>
           ))}
       </div>
       <span className="muted small">
-        {new Date(x.created_at).toLocaleString("vi-VN")}
+        {fmtDate(x.created_at, DATE_TIME)}
         {x.bytes != null ? ` · ${formatBytes(x.bytes)}` : ""}
       </span>
       {isExportActive(x.status) && (
@@ -352,7 +375,11 @@ export function ExportRow({ x, cancelling, onCancel }: { x: ExportView; cancelli
           </div>
         </>
       )}
-      {x.status === "failed" && x.error && <div className="small error">{x.error}</div>}
+      {x.status === "failed" && (x.error || x.error_class) && (
+        <div className="small error" title={x.error ?? undefined}>
+          {exportFailureText(x)}
+        </div>
+      )}
     </div>
   );
 }

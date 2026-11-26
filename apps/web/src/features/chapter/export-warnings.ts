@@ -3,6 +3,7 @@
  * chạy, chờ dịch — đều không có trong file trừ khi chọn đưa ảnh gốc vào), bản dịch trống (bỏ SFX), trang còn "AI
  * có bản mới" chưa áp, khối tràn khung. Mỗi câu nói rõ hậu quả trong file; có cảnh báo vẫn xuất được.
  */
+import { tp } from "../../i18n/t.ts";
 import type { PageStatus } from "./status.ts";
 import type { Row } from "./text-table/rows.ts";
 
@@ -30,10 +31,10 @@ export function exportWarnings(
 /** Câu cảnh báo theo thứ tự quan trọng; rỗng = không có gì cần xem. */
 export function warningLines(w: ExportWarnings, o: { includeUntranslated: boolean }): string[] {
   const out: string[] = [];
-  if (w.untranslated && !o.includeUntranslated) out.push(`${w.untranslated} trang chưa dịch → không có trong file`);
-  if (w.empty) out.push(`${w.empty} khối chưa dịch → để trống chữ`);
-  if (w.aiPending) out.push(`${w.aiPending} trang AI có bản mới → xuất bản đang hiện`);
-  if (w.overflow) out.push(`${w.overflow} khối tràn khung → chữ có thể bị cắt`);
+  if (w.untranslated && !o.includeUntranslated) out.push(tp("chapter.exportWarnings.untranslated", w.untranslated));
+  if (w.empty) out.push(tp("chapter.exportWarnings.empty", w.empty));
+  if (w.aiPending) out.push(tp("chapter.exportWarnings.aiPending", w.aiPending));
+  if (w.overflow) out.push(tp("chapter.exportWarnings.overflow", w.overflow));
   return out;
 }
 

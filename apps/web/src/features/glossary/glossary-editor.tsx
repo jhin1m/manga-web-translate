@@ -5,7 +5,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type FormEvent, useState } from "react";
 import { AiTag } from "../../app/ai-tag.tsx";
-import { ApiError, errorMessage } from "../../lib/api.ts";
+import { useT } from "../../i18n/t.ts";
+import { ApiError, apiErrorText, errorMessage } from "../../lib/api.ts";
 import {
   createEntry,
   deleteEntry,
@@ -20,8 +21,10 @@ import {
 } from "./api.ts";
 
 const EMPTY: EntryInput = { source_term: "", target_term: "", note: "", case_sensitive: false };
+type CsvRowError = Readonly<Record<string, unknown>> & { line: number };
 
 export function GlossaryEditor({ scope }: { scope: GlossaryScope }) {
+  const { t, tp, tNode } = useT();
   const qc = useQueryClient();
   const key = glossaryKey(scope);
   const q = useQuery({ queryKey: key, queryFn: () => fetchGlossary(scope) });
@@ -38,14 +41,17 @@ export function GlossaryEditor({ scope }: { scope: GlossaryScope }) {
     void qc.invalidateQueries({ queryKey: ["series"] });
   };
   const fail = (e: unknown) => {
-    const rows = e instanceof ApiError ? (e.body.errors as { line: number; message: string }[] | undefined) : undefined;
+    // Lỗi từng dòng CSV: `{ line, error, params, message }` — dịch theo mã như lỗi API.
+    const rows = e instanceof ApiError && Array.isArray(e.body.errors) ? (e.body.errors as CsvRowError[]) : undefined;
     setMessage({
       tone: "danger",
       text: rows?.length
-        ? `CSV lỗi: ${rows
-            .slice(0, 5)
-            .map((r) => `dòng ${r.line} (${r.message})`)
-            .join("; ")}${rows.length > 5 ? "…" : ""}`
+        ? t("glossary.editor.csvError", {
+            rows: `${rows
+              .slice(0, 5)
+              .map((r) => t("glossary.editor.csvRow", { line: r.line, message: apiErrorText(r) }))
+              .join("; ")}${rows.length > 5 ? "…" : ""}`,
+          })
         : errorMessage(e),
     });
   };
@@ -73,7 +79,7 @@ export function GlossaryEditor({ scope }: { scope: GlossaryScope }) {
   });
   const upload = useMutation({
     mutationFn: async (file: File) => importCsv(scope, await file.text(), mode),
-    onSuccess: (r) => done(`Đã nhập: thêm ${r.created}, cập nhật ${r.updated}.`),
+    onSuccess: (r) => done(t("glossary.editor.imported", { created: r.created, updated: r.updated })),
     onError: fail,
   });
 
@@ -92,32 +98,32 @@ export function GlossaryEditor({ scope }: { scope: GlossaryScope }) {
 
   return (
     <div className="glossary">
-      <form className="glossary-add" onSubmit={submit} aria-label="Thêm từ vào glossary">
+      <form className="glossary-add" onSubmit={submit} aria-label={t("glossary.editor.addForm")}>
         <div>
-          <label htmlFor="g-src">Từ gốc</label>
+          <label htmlFor="g-src">{t("glossary.editor.source")}</label>
           <input
             id="g-src"
-            aria-label="Từ gốc mới"
-            placeholder="VD: 검"
+            aria-label={t("glossary.editor.sourceNew")}
+            placeholder={t("glossary.editor.sourcePlaceholder")}
             value={draft.source_term}
             onChange={(e) => setDraft({ ...draft, source_term: e.target.value })}
           />
         </div>
         <div>
-          <label htmlFor="g-tgt">Bản dịch</label>
+          <label htmlFor="g-tgt">{t("glossary.editor.target")}</label>
           <input
             id="g-tgt"
-            aria-label="Bản dịch mới"
-            placeholder="VD: kiếm"
+            aria-label={t("glossary.editor.targetNew")}
+            placeholder={t("glossary.editor.targetPlaceholder")}
             value={draft.target_term}
             onChange={(e) => setDraft({ ...draft, target_term: e.target.value })}
           />
         </div>
         <div className="grow">
-          <label htmlFor="g-note">Ghi chú (tuỳ chọn)</label>
+          <label htmlFor="g-note">{t("glossary.editor.noteOptional")}</label>
           <input
             id="g-note"
-            aria-label="Ghi chú mới"
+            aria-label={t("glossary.editor.noteNew")}
             value={draft.note}
             onChange={(e) => setDraft({ ...draft, note: e.target.value })}
           />
@@ -128,41 +134,41 @@ export function GlossaryEditor({ scope }: { scope: GlossaryScope }) {
             checked={draft.case_sensitive}
             onChange={(e) => setDraft({ ...draft, case_sensitive: e.target.checked })}
           />
-          Phân biệt hoa/thường
+          {t("glossary.editor.caseSensitive")}
         </label>
         <button
           type="submit"
           className="btn-primary"
           disabled={add.isPending || !draft.source_term.trim() || !draft.target_term.trim()}
         >
-          Thêm
+          {t("glossary.editor.add")}
         </button>
       </form>
 
       <div className="glossary-tools">
         <input
           type="search"
-          aria-label="Lọc glossary"
-          placeholder="Lọc từ…"
+          aria-label={t("glossary.editor.filterAria")}
+          placeholder={t("glossary.editor.filterPlaceholder")}
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
         />
         <span className="spacer" />
         <a className="btn" href={exportCsvUrl(scope)} download>
-          Xuất CSV
+          {t("glossary.editor.exportCsv")}
         </a>
         <select
-          aria-label="Chế độ nhập"
+          aria-label={t("glossary.editor.importMode")}
           className="import-mode"
           value={mode}
           onChange={(e) => setMode(e.target.value as "merge" | "replace")}
-          title="CSV: cột source_term, target_term, note, case_sensitive (UTF-8)"
+          title={t("glossary.editor.csvFormat")}
         >
-          <option value="merge">Nhập: gộp theo từ gốc</option>
-          <option value="replace">Nhập: thay toàn bộ</option>
+          <option value="merge">{t("glossary.editor.modeMerge")}</option>
+          <option value="replace">{t("glossary.editor.modeReplace")}</option>
         </select>
-        <label className="btn file-pick" title="CSV: cột source_term, target_term, note, case_sensitive (UTF-8)">
-          Nhập CSV…
+        <label className="btn file-pick" title={t("glossary.editor.csvFormat")}>
+          {t("glossary.editor.importCsv")}
           <input
             type="file"
             accept=".csv,text/csv"
@@ -179,8 +185,10 @@ export function GlossaryEditor({ scope }: { scope: GlossaryScope }) {
       {pendingReplace && (
         <div className="notice danger row">
           <span>
-            Thay toàn bộ {q.data?.entries.length ?? 0} mục hiện có bằng nội dung{" "}
-            <span className="mono">{pendingReplace.name}</span>?
+            {tNode("glossary.editor.replaceConfirm", {
+              entries: tp("glossary.editor.existingEntries", q.data?.entries.length ?? 0),
+              file: <span className="mono">{pendingReplace.name}</span>,
+            })}
           </span>
           <button
             type="button"
@@ -190,10 +198,10 @@ export function GlossaryEditor({ scope }: { scope: GlossaryScope }) {
               setPendingReplace(null);
             }}
           >
-            Thay toàn bộ
+            {t("glossary.editor.replaceAll")}
           </button>
           <button type="button" onClick={() => setPendingReplace(null)}>
-            Huỷ
+            {t("common.cancel")}
           </button>
         </div>
       )}
@@ -202,16 +210,16 @@ export function GlossaryEditor({ scope }: { scope: GlossaryScope }) {
 
       {q.data && total === 0 ? (
         <div className="rows-empty rows">
-          Chưa có từ nào. Thêm ở trên, hoặc nhập file CSV (cột <span className="mono">source_term,target_term</span>).
+          {tNode("glossary.editor.emptyHint", { columns: <span className="mono">source_term,target_term</span> })}
         </div>
       ) : (
         <table className="data">
           <thead>
             <tr>
-              <th>Từ gốc</th>
-              <th>Bản dịch</th>
-              <th>Ghi chú</th>
-              <th>Hoa/thường</th>
+              <th>{t("glossary.editor.source")}</th>
+              <th>{t("glossary.editor.target")}</th>
+              <th>{t("glossary.editor.note")}</th>
+              <th>{t("glossary.editor.colCase")}</th>
               <th />
             </tr>
           </thead>
@@ -221,21 +229,21 @@ export function GlossaryEditor({ scope }: { scope: GlossaryScope }) {
                 <tr key={e.id}>
                   <td>
                     <input
-                      aria-label="Từ gốc"
+                      aria-label={t("glossary.editor.source")}
                       value={editing.v.source_term}
                       onChange={(x) => setEditing({ id: e.id, v: { ...editing.v, source_term: x.target.value } })}
                     />
                   </td>
                   <td>
                     <input
-                      aria-label="Bản dịch"
+                      aria-label={t("glossary.editor.target")}
                       value={editing.v.target_term}
                       onChange={(x) => setEditing({ id: e.id, v: { ...editing.v, target_term: x.target.value } })}
                     />
                   </td>
                   <td>
                     <input
-                      aria-label="Ghi chú"
+                      aria-label={t("glossary.editor.note")}
                       value={editing.v.note}
                       onChange={(x) => setEditing({ id: e.id, v: { ...editing.v, note: x.target.value } })}
                     />
@@ -243,17 +251,17 @@ export function GlossaryEditor({ scope }: { scope: GlossaryScope }) {
                   <td>
                     <input
                       type="checkbox"
-                      aria-label="Phân biệt hoa thường"
+                      aria-label={t("glossary.editor.caseSensitiveAria")}
                       checked={editing.v.case_sensitive}
                       onChange={(x) => setEditing({ id: e.id, v: { ...editing.v, case_sensitive: x.target.checked } })}
                     />
                   </td>
                   <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
                     <button type="button" className="btn-primary" onClick={() => save.mutate(editing)}>
-                      Lưu
+                      {t("common.save")}
                     </button>{" "}
                     <button type="button" onClick={() => setEditing(null)}>
-                      Huỷ
+                      {t("common.cancel")}
                     </button>
                   </td>
                 </tr>
@@ -265,7 +273,7 @@ export function GlossaryEditor({ scope }: { scope: GlossaryScope }) {
                   </td>
                   <td>{e.target_term}</td>
                   <td className="muted">{e.note}</td>
-                  <td>{e.case_sensitive ? "Có" : ""}</td>
+                  <td>{e.case_sensitive ? t("glossary.editor.caseYes") : ""}</td>
                   <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
                     <button
                       type="button"
@@ -282,10 +290,10 @@ export function GlossaryEditor({ scope }: { scope: GlossaryScope }) {
                         })
                       }
                     >
-                      Sửa
+                      {t("common.edit")}
                     </button>
                     <button type="button" className="btn-ghost btn-danger" onClick={() => remove.mutate(e.id)}>
-                      Xoá
+                      {t("common.delete")}
                     </button>
                   </td>
                 </tr>
@@ -294,7 +302,7 @@ export function GlossaryEditor({ scope }: { scope: GlossaryScope }) {
             {q.data && entries.length === 0 && (
               <tr>
                 <td colSpan={5} className="muted">
-                  Không có từ nào khớp “{filter}”.
+                  {t("glossary.editor.noMatch", { filter })}
                 </td>
               </tr>
             )}

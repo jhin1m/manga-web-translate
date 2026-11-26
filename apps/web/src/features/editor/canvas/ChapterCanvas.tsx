@@ -16,6 +16,7 @@
 import Konva from "konva";
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { Stage as KStage, Layer } from "react-konva";
+import { useT } from "../../../i18n/t.ts";
 import { addBox, editText, newTextBox } from "../actions.ts";
 import { chapterStore, effectiveMode, revealSelection, useChapterStore } from "../chapter-store.ts";
 import { canvasFont, type FontKit } from "../fonts.ts";
@@ -433,6 +434,7 @@ export const ChapterCanvas = memo(function ChapterCanvas(props: {
 
 /** Textarea phủ đúng vị trí/xoay/cỡ chữ của box; blur hoặc Ctrl/Cmd+Enter = lưu, Esc = huỷ. */
 function TextEditOverlay({ kit }: { kit: FontKit }) {
+  const { t } = useT();
   const editing = useEditor((s) => s.editing);
   const box = useEditor((s) => (s.editing ? s.doc?.text_boxes.find((b) => b.id === s.editing) : undefined));
   const view = useEditor((s) => s.view);
@@ -460,7 +462,7 @@ function TextEditOverlay({ kit }: { kit: FontKit }) {
   return (
     <textarea
       ref={ref}
-      aria-label="Sửa chữ"
+      aria-label={t("editor.chapterCanvas.editText")}
       className="ed-textedit"
       defaultValue={box.text}
       onBlur={(e) => commit(e.currentTarget.value)}

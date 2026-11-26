@@ -11,6 +11,7 @@
 import type { PageState, TextBox } from "@mtl/shared";
 import { defaultRangeExtractor, useVirtualizer } from "@tanstack/react-virtual";
 import { type KeyboardEvent, useEffect, useMemo, useRef } from "react";
+import { useT } from "../../../i18n/t.ts";
 import { editText, setRegionTranslation } from "../../editor/actions.ts";
 import { useChapterStore } from "../../editor/chapter-store.ts";
 import type { FontKit } from "../../editor/fonts.ts";
@@ -61,6 +62,7 @@ export function setRowTranslation(row: Pick<Row, "pageId" | "regionId" | "boxId"
 
 export function TableFilters(props: { value: TableFilter; onChange(f: TableFilter): void }) {
   const { value, onChange } = props;
+  const { t } = useT();
   return (
     <>
       <label className="cw-check">
@@ -69,13 +71,13 @@ export function TableFilters(props: { value: TableFilter; onChange(f: TableFilte
           checked={value.review}
           onChange={(e) => onChange({ ...value, review: e.target.checked })}
         />
-        Chỉ khối cần xem
+        {t("chapter.textTable.onlyReview")}
       </label>
       <label className="cw-check">
         <input type="checkbox" checked={value.page} onChange={(e) => onChange({ ...value, page: e.target.checked })} />
-        Chỉ trang đang mở
+        {t("chapter.textTable.onlyPage")}
       </label>
-      <span className="muted small">Bấm một dòng để mở trang đó và chọn khối trên ảnh. Enter: dòng sau</span>
+      <span className="muted small">{t("chapter.textTable.hint")}</span>
     </>
   );
 }
@@ -104,6 +106,7 @@ export function TextTable(props: {
   onPick(row: Row): void;
 }) {
   const { rows, current, activeId, onPick } = props;
+  const { t } = useT();
   const readOnly = useEditor((s) => !!s.readOnly);
   const scrollRef = useRef<HTMLDivElement>(null);
   const focusedKey = useRef<string | null>(null);
@@ -166,18 +169,18 @@ export function TextTable(props: {
     }
   };
 
-  if (props.total === 0) return <p className="muted small cw-pad">Chương chưa có khối chữ nào.</p>;
+  if (props.total === 0) return <p className="muted small cw-pad">{t("chapter.textTable.noBlocks")}</p>;
 
   return (
     <div className="cw-table">
       <div className="cw-tr cw-th" aria-hidden="true">
-        <span>Vị trí</span>
-        <span>Gốc</span>
-        <span>Dịch (sửa tại chỗ)</span>
+        <span>{t("chapter.textTable.colPosition")}</span>
+        <span>{t("chapter.textTable.colSource")}</span>
+        <span>{t("chapter.textTable.colTranslation")}</span>
         <span />
       </div>
       <div className="cw-tbody" ref={scrollRef}>
-        {rows.length === 0 && <p className="muted small cw-pad">Không có khối nào cần xem.</p>}
+        {rows.length === 0 && <p className="muted small cw-pad">{t("chapter.textTable.noReview")}</p>}
         <div style={{ height: virt.getTotalSize(), position: "relative" }}>
           {virt.getVirtualItems().map((v) => {
             const r = rows[v.index] as Row;
@@ -190,7 +193,7 @@ export function TextTable(props: {
                 key={v.key}
                 data-row={r.key}
                 className={cls.join(" ")}
-                title={`Trang ${r.ord + 1} · khối ${r.index} · ${KIND_LABEL[r.kind]}`}
+                title={t("chapter.textTable.rowTitle", { page: r.ord + 1, index: r.index, kind: KIND_LABEL[r.kind] })}
                 style={{ transform: `translateY(${v.start}px)`, height: ROW_H }}
                 onClick={(e) => {
                   if (!(e.target instanceof HTMLTextAreaElement)) onPick(r);
@@ -205,7 +208,7 @@ export function TextTable(props: {
                 <span>
                   <TextField
                     data-key={r.key}
-                    aria-label={`Bản dịch trang ${r.ord + 1} vùng ${r.index}`}
+                    aria-label={t("chapter.textTable.rowLabel", { page: r.ord + 1, index: r.index })}
                     rows={1}
                     value={r.translation}
                     readOnly={readOnly || r.pageId !== activeId}

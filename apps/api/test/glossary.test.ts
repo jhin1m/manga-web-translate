@@ -181,6 +181,14 @@ describe("CSV", () => {
     expect(r.entries).toHaveLength(1);
     expect(r.errors.map((e) => e.line)).toEqual([3]);
     expect(parseGlossaryCsv('source_term,target_term\n"x,y\n').errors[0]?.line).toBe(0);
+    // Mỗi dòng lỗi có mã + tham số để web dịch, câu tiếng Việt cũ giữ ở `message`.
+    expect(parseGlossaryCsv("foo,bar\nx,y\n").errors[0]).toMatchObject({ error: "csv_missing_columns", params: {} });
+    expect(r.errors[0]).toMatchObject({ error: "csv_invalid_fields", params: { fields: "source_term" } });
+    expect(r.errors[0]?.message).toBe("source_term");
+    expect(parseGlossaryCsv('source_term,target_term\n"x,y\n').errors[0]).toMatchObject({
+      error: "csv_unclosed_quote",
+      message: "CSV: thiếu dấu nháy kép đóng",
+    });
   });
 
   it("import merge upserts by source_term, replace swaps the set; export returns the series entries", async () => {
@@ -225,6 +233,7 @@ describe("CSV", () => {
       body: { csv: "source_term,target_term\n", mode: "replace" },
     });
     expect(empty.status).toBe(400);
+    expect(await empty.json()).toEqual({ error: "csv_empty", message: "CSV không có dòng nào", params: {} });
     expect((await json<{ entries: Entry[] }>(await api(base), 200)).entries).toHaveLength(1);
     const bad = await api(`${base}/csv`, { method: "POST", body: { csv: "a,b\n" } });
     expect(bad.status).toBe(400);

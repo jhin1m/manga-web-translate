@@ -181,6 +181,7 @@ describe("series default fonts", () => {
       409,
     );
     expect(blocked).toMatchObject({ error: "in_use", series: [expect.any(String)] });
+    expect(blocked).toMatchObject({ variant: "font", params: {} });
 
     await json(await patch({ dialogue: "Bangers-Regular" }), 200);
     expect((await api(`/fonts/${font.id}`, { method: "DELETE" })).status).toBe(204);

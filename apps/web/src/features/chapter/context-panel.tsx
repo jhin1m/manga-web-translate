@@ -6,6 +6,7 @@
  * trong panel (Ctrl/Cmd+F → ô tìm); `seq` đổi = yêu cầu mới, chạy sau khi panel đã hiện.
  */
 import { type ReactNode, type Ref, useEffect, useRef } from "react";
+import { useT } from "../../i18n/t.ts";
 import { CloseIcon } from "./tool-icons.tsx";
 
 export type FocusRequest = { seq: number; selector: string };
@@ -27,6 +28,7 @@ export function ContextPanel(props: {
   focus?: FocusRequest | null;
   children: ReactNode;
 }) {
+  const { t } = useT();
   const ref = useRef<HTMLElement | null>(null);
   const done = useRef(0);
   const { focus, open } = props;
@@ -55,7 +57,13 @@ export function ContextPanel(props: {
       <div className="cw-panel-head">
         <h2>{props.heading ?? props.title}</h2>
         {props.actions}
-        <button type="button" className="icon-btn" aria-label="Thu panel" title="Thu panel" onClick={props.onClose}>
+        <button
+          type="button"
+          className="icon-btn"
+          aria-label={t("chapter.contextPanel.collapse")}
+          title={t("chapter.contextPanel.collapse")}
+          onClick={props.onClose}
+        >
           <CloseIcon size={16} />
         </button>
       </div>

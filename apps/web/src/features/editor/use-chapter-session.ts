@@ -11,6 +11,7 @@ import { emptyPageState, type PageState } from "@mtl/shared";
 import { useQueryClient } from "@tanstack/react-query";
 import { type Draft, produce } from "immer";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { t } from "../../i18n/t.ts";
 import { errorMessage } from "../../lib/api.ts";
 import { lockChapter } from "../chapter/api.ts";
 import { serial, useChapterLock } from "../chapter/use-chapter-lock.ts";
@@ -48,7 +49,9 @@ const statusOf = (e: unknown) =>
 export class UnsavedPageError extends Error {
   constructor(ord: number | undefined) {
     super(
-      `Chưa lưu được trang ${ord === undefined ? "đang sửa" : ord + 1} — ở lại trang này tới khi lưu xong (thử lại sau).`,
+      ord === undefined
+        ? t("editor.chapterSession.unsavedCurrent")
+        : t("editor.chapterSession.unsavedPage", { page: ord + 1 }),
     );
   }
 }
@@ -130,7 +133,7 @@ export class ChapterSession {
           baseVersion: prev.baseVersion,
           ops: diffStates(prev.base, prev.doc),
           updatedAt: Date.now(),
-        }).catch((e: unknown) => console.warn("[editor] không ghi được bản nháp IndexedDB", e));
+        }).catch((e: unknown) => console.warn("[editor] could not write the IndexedDB draft", e));
       } else {
         // Không lưu được (mất khoá, lỗi mạng): ở lại page này — đổi page sẽ bỏ sửa khỏi editor.
         throw new UnsavedPageError(chapter.getState().pages.find((p) => p.id === prev.pageId)?.ord);
@@ -662,7 +665,7 @@ export function useChapterSession(opts: {
         const items = recs.filter((r) => r.ops.length > 0).map((r) => ({ ...r, ord: ids.indexOf(r.pageId) }));
         if (items.length) setRecovery(items.sort((a, b) => a.ord - b.ord));
       })
-      .catch((e: unknown) => console.warn("[editor] không đọc được bản nháp IndexedDB", e))
+      .catch((e: unknown) => console.warn("[editor] could not read the IndexedDB drafts", e))
       .finally(() => setScanDone(true));
   }, [idsKey, queue]);
 
@@ -679,7 +682,7 @@ export function useChapterSession(opts: {
           if (r.pageId === editorStore.getState().pageId) session.restoreActive(r);
           else await session.restoreOther(r);
         } catch (e) {
-          setError(`Khôi phục trang ${r.ord + 1} lỗi: ${errorMessage(e)}`);
+          setError(t("editor.chapterSession.restoreFailed", { page: r.ord + 1, error: errorMessage(e) }));
         }
       }
     },

@@ -30,6 +30,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import Konva from "konva";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { type MessageKey, t, tp, useT } from "../../i18n/t.ts";
 import { ApiError, errorMessage } from "../../lib/api.ts";
 import { deleteBox, resetToAI, setStyleMany } from "../editor/actions.ts";
 import { ChapterCanvas } from "../editor/canvas/ChapterCanvas.tsx";
@@ -76,7 +77,7 @@ import { ExportMenu } from "./export-menu.tsx";
 import { isExportActive } from "./export-options.ts";
 import { triggerDownload, useExports } from "./export-panel.tsx";
 import { type BatchHooks, FindReplacePanel } from "./FindReplace.tsx";
-import { failedCauseTitle, providerWait, providerWaitShort, providerWaitText } from "./job-error.ts";
+import { failedCauseTitle, jobErrorLabel, providerWait, providerWaitShort, providerWaitText } from "./job-error.ts";
 import { clearLegacyLayout } from "./layout-prefs.ts";
 import { PageRail } from "./page-rail.tsx";
 import { clickSelect, EMPTY_SELECTION, pruneSelection, type Selection, selectionIds } from "./page-selection.ts";
@@ -147,9 +148,11 @@ type Notice = {
 const rejectedNotice = (accepted: number, rejected: Rejected[]): Notice => ({
   tone: "warn",
   untilStable: true,
-  text: `Đang dịch ${accepted} ảnh; loại ${rejected.length}: ${rejected
-    .map((x) => `#${x.ord + 1} ${REJECT_REASON[x.reason]}`)
-    .join(", ")}.`,
+  text: t("chapter.workspace.rejected", {
+    accepted,
+    count: rejected.length,
+    list: rejected.map((x) => `#${x.ord + 1} ${t(REJECT_REASON[x.reason])}`).join(", "),
+  }),
 });
 
 /**
@@ -167,6 +170,7 @@ export function ChapterWorkspace(props: Props) {
 }
 
 function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer }: Props) {
+  useT();
   const navigate = useNavigate();
   const data = useChapterData(chapterId);
   const status = data.progress?.chapter.status ?? data.detail?.status;
@@ -517,7 +521,7 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
       if (typeof kind === "object" && "rescanPage" in kind) {
         const page = kind.rescanPage;
         await runAi(() => rescanPages(chapterId, [page.id]));
-        return info(`Đã xếp quét lại trang ${page.ord + 1}: xoá chữ + nhận dạng lại rồi dịch.`);
+        return info(t("chapter.workspace.rescanQueued", { page: page.ord + 1 }));
       }
       if (typeof kind === "object") {
         const page = kind.retranslatePage;
@@ -525,28 +529,30 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
         const n = page.ord + 1;
         return info(
           page.status === "prepared"
-            ? `Đã xếp dịch trang ${n}.`
-            : `Đã xếp dịch lại trang ${n} (chỉnh sửa tay được giữ nguyên).`,
+            ? t("chapter.workspace.translatePageQueued", { page: n })
+            : t("chapter.workspace.retranslatePageQueued", { page: n }),
         );
       }
-      if (kind === "cancel") return info(`Đã huỷ ${(await cancelChapter(chapterId)).cancelled} job.`);
+      if (kind === "cancel") return info(tp("chapter.workspace.cancelled", (await cancelChapter(chapterId)).cancelled));
       if (kind === "retry") {
         // Đếm trang lỗi lúc bấm (không đếm job: một lô dịch gồm nhiều trang) — nói rõ trang đã xong không bị làm lại.
         const failedNow = pages.filter((p) => p.status === "failed" && !p.skipped).length;
         const r = await runAi(() => retryFailed(chapterId));
         return info(
-          r.jobs.length
-            ? `Đang chạy lại ${failedNow || "các"} trang lỗi — các trang đã xong giữ nguyên.`
-            : "Không có trang lỗi.",
+          !r.jobs.length
+            ? t("chapter.workspace.noFailedPages")
+            : failedNow
+              ? tp("chapter.workspace.retryFailed", failedNow)
+              : t("chapter.workspace.retryFailedSome"),
         );
       }
       if (kind === "translate-pages") {
-        if (!selectedIds.length) return info("Chưa chọn trang.");
+        if (!selectedIds.length) return info(t("chapter.workspace.noPagesSelected"));
         const sent = pageSel;
         await runAi(() => retranslate(chapterId, selectedIds));
         // Chọn lại trong lúc chờ server → giữ lựa chọn mới.
         setPageSel((s) => (s === sent ? EMPTY_SELECTION : s));
-        return info(`Đã xếp dịch ${selectedIds.length} trang (chỉnh sửa tay được giữ nguyên).`);
+        return info(tp("chapter.workspace.translatePagesQueued", selectedIds.length));
       }
       if (kind === "translate") {
         // Chip đã đổi sang "Đang dịch" — không báo thêm.
@@ -555,7 +561,7 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
       }
       if (kind === "retranslate") {
         await runAi(() => retranslate(chapterId));
-        return info("Đã xếp dịch lại cả chương (chỉnh sửa tay được giữ nguyên).");
+        return info(t("chapter.workspace.retranslateChapterQueued"));
       }
       // Cắt mép chưa lưu / đang lưu phải xong trước: sau khi chạy, ảnh gốc không sửa được nữa. Lỗi ghi → không chạy.
       const trimFailure = await flushTrim();
@@ -571,11 +577,11 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
         tone: "danger",
         text:
           e instanceof ApiError && e.body.error === "translate_running"
-            ? "Đang có lượt dịch — chờ lượt này xong hoặc huỷ rồi thử lại."
+            ? t("chapter.workspace.errTranslateRunning")
             : e instanceof ApiError && e.body.error === "page_not_prepared"
-              ? "Có trang chưa xoá chữ + OCR xong — chạy lại trang lỗi trước rồi dịch."
+              ? t("chapter.workspace.errPageNotPrepared")
               : e instanceof ApiError && e.body.error === "page_has_manual_cleanup"
-                ? 'Trang đã được tẩy / xoá chữ tay trên ảnh — quét lại sẽ làm mất phần đó nên không quét lại được. Dùng công cụ "Quét chữ" (R) khoanh chữ còn sót.'
+                ? t("chapter.workspace.errManualCleanup")
                 : errorMessage(e),
       }),
     onSettled: data.refresh,
@@ -584,7 +590,7 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
   // hoàn tác cả lượt bằng toast "Hoàn tác" hoặc Cmd+Z khi lượt là bước cuối của trang đang mở (cùng mutation này).
   const styleUndoBatch = useRef<string | null>(null);
   // Tên từng lượt cho thông báo hoàn tác ("áp kiểu" mặc định) + lượt vừa hoàn tác (panel Tìm/Thay bỏ nút Hoàn tác treo).
-  const batchLabels = useRef(new Map<string, string>());
+  const batchLabels = useRef(new Map<string, MessageKey>());
   const [undoneBatch, setUndoneBatch] = useState<string | null>(null);
   // 1 khoá chung cho mọi đường hoàn tác lượt (nút toast, Cmd+Z, nút Hoàn tác của panel): đang có yêu cầu bay thì bỏ qua yêu
   // cầu mới — hai yêu cầu cùng lúc làm lượt bị hoàn tác 2 lần hoặc báo "không hoàn tác được" sau khi đã thành công.
@@ -600,7 +606,7 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
     undoBusy.current = false;
     setUndoing(false);
   };
-  const batchHooks = (label: string): BatchHooks => ({
+  const batchHooks = (label: MessageKey): BatchHooks => ({
     begin: acquireUndo,
     end: releaseUndo,
     busy: undoing,
@@ -639,9 +645,10 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
       // Không hoàn tác được trang nào → không tự ẩn (toast Hoàn tác đã mất, dễ bỏ lỡ).
       const restored = r.pages + (local ? 1 : 0);
       setUndoneBatch(batchId);
+      const what = batchLabels.current.get(batchId);
       notify({
         tone: restored ? "info" : "warn",
-        text: undoStyleText(restored, skipped, pages, openId, batchLabels.current.get(batchId)),
+        text: undoStyleText(restored, skipped, pages, openId, what ? t(what) : undefined),
       });
     },
     onError: (e, batchId, prev) => {
@@ -682,7 +689,7 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
     mutationFn: async (row: Row): Promise<Notice> => {
       const s = editorStore.getState();
       const src = s.doc?.text_boxes.find((b) => b.id === row.boxId);
-      if (!s.doc || !s.layout || !src) return { tone: "danger", text: "Chưa chọn khung chữ." };
+      if (!s.doc || !s.layout || !src) return { tone: "danger", text: t("chapter.workspace.noBoxSelected") };
       const { font_family, font_size, line_height, pad, align, valign, fill, stroke, auto_fit } = src;
       // Box tự khớp: cỡ chữ là kết quả khớp của riêng box đó — không chép sang box khác.
       const style = {
@@ -706,12 +713,12 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
       });
       const label = KIND_LABEL[row.kind].toLowerCase();
       if (r) styleUndoBatch.current = r.batchId;
-      if (!r) return { tone: "info", text: `Mọi khối ${label} trong chương đã cùng kiểu này.` };
+      if (!r) return { tone: "info", text: t("chapter.workspace.styleAlreadySame", { kind: label }) };
       const boxes = r.pageIds.reduce((n, id) => n + (counts.get(id) ?? 0), 0);
       return {
         tone: "info",
-        text: `Đã áp kiểu cho ${boxes} khối ${label} trên ${r.pageIds.length} trang.`,
-        actions: [{ label: "Hoàn tác", run: () => runUndo(r.batchId) }],
+        text: tp("chapter.workspace.styleApplied", boxes, { kind: label, pages: r.pageIds.length }),
+        actions: [{ label: t("chapter.workspace.undo"), run: () => runUndo(r.batchId) }],
       };
     },
     onSuccess: (n) => {
@@ -724,9 +731,9 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
         tone: "danger",
         text:
           e instanceof ApiError && e.body.error === "version_conflict"
-            ? "Có trang vừa thay đổi (AI hoặc tab khác) — đã tải lại, bấm Áp kiểu lần nữa."
+            ? t("chapter.workspace.errVersionConflict")
             : e instanceof ApiError && e.body.error === "chapter_busy"
-              ? "Chương đang xử lý — chờ xong rồi áp kiểu cho cả chương."
+              ? t("chapter.workspace.errChapterBusy")
               : errorMessage(e),
       }),
     onSettled: (_r, e) => {
@@ -785,9 +792,9 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
             progress: Math.min(1, Math.max(0, ingestJob.progress)),
             done: ingestJob.progress_done,
             total: ingestJob.progress_total,
-            label: stageLabel(ingestJob) ?? "Đang cắt trang",
+            label: stageLabel(ingestJob) ?? t("chapter.workspace.ingestRunning"),
           }
-        : { stage: null, progress: null, done: null, total: null, label: "Chờ cắt trang…" };
+        : { stage: null, progress: null, done: null, total: null, label: t("chapter.workspace.ingestWaiting") };
   // Chưa có page thì chỉ dùng được công cụ Chọn (rail tắt các công cụ còn lại; chỉ xem ảnh gốc).
   useEffect(() => {
     if (sourceMode && editorStore.getState().tool !== "select") editorStore.getState().setTool("select");
@@ -796,13 +803,11 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
   const learnSkip = useMutation({
     mutationFn: (from: { source_file_id: string } | { page_id: string }) => learnSkipImage(seriesId, from),
     // Thay toast có nút ngay khi bấm → không bấm 2 lần.
-    onMutate: () => notify({ tone: "info", text: "Đang lưu ảnh tự bỏ…" }),
+    onMutate: () => notify({ tone: "info", text: t("chapter.workspace.savingSkipImage") }),
     onSuccess: (r) => {
       notify({
         tone: "info",
-        text: r.learned
-          ? `Đã học ${r.learned} ảnh — chương sau của series tự bỏ ảnh giống.`
-          : "Ảnh này đã có trong danh sách tự bỏ của series.",
+        text: r.learned ? tp("chapter.workspace.learnedSkip", r.learned) : t("chapter.workspace.skipAlreadyKnown"),
       });
       void queryClient.invalidateQueries({ queryKey: seriesKeys.skipImages(seriesId) });
     },
@@ -812,13 +817,13 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
         tone: "danger",
         text: errorMessage(e),
         ...(e instanceof ApiError && e.body.error === "not_uploaded"
-          ? { actions: [{ label: "Thử lại", run: () => learnSkip.mutate(from) }] }
+          ? { actions: [{ label: t("common.retry"), run: () => learnSkip.mutate(from) }] }
           : {}),
       }),
   });
   const alwaysSkip = useCallback(
     (from: { source_file_id: string } | { page_id: string }) => ({
-      label: "Luôn bỏ ở series này",
+      label: t("chapter.workspace.alwaysSkip"),
       run: () => learnSkip.mutate(from),
     }),
     [learnSkip.mutate],
@@ -834,9 +839,9 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
               notify({
                 tone: "info",
                 key: "skip",
-                text: `Đã xoá ảnh ${it.n}.`,
+                text: t("chapter.workspace.imageRemoved", { n: it.n }),
                 actions: [
-                  { label: "Hoàn tác", run: () => skipSource(it, null) },
+                  { label: t("chapter.workspace.undo"), run: () => skipSource(it, null) },
                   alwaysSkip({ source_file_id: it.id }),
                 ],
               });
@@ -854,10 +859,10 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
       const edges = (["top", "bottom"] as const).filter((edge) => trim[edge] > 0);
       const cur = sourcesRef.current.find((f) => f.id === it.id);
       if (!cur) {
-        notify({ tone: "danger", text: "Ảnh không còn trong chương — không học được dải." });
+        notify({ tone: "danger", text: t("chapter.workspace.bandImageGone") });
         return;
       }
-      notify({ tone: "info", text: "Đang lưu dải tự cắt…" });
+      notify({ tone: "info", text: t("chapter.workspace.savingBands") });
       let blob: Blob | null = null;
       let fetchError: unknown;
       try {
@@ -876,7 +881,7 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
         try {
           const fp = await bandFingerprint(blob, edge, trim[edge]);
           if (!fp) {
-            results.push({ edge, ok: false, reason: "không đọc được dải ảnh", retry: true });
+            results.push({ edge, ok: false, reason: t("chapter.workspace.bandUnreadable"), retry: true });
             continue;
           }
           const r = await learnSkipImage(seriesId, {
@@ -901,7 +906,7 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
           ? {
               actions: [
                 {
-                  label: "Thử lại",
+                  label: t("common.retry"),
                   run: () => {
                     const want = {
                       top: again.includes("top") ? trim.top : 0,
@@ -909,7 +914,7 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
                     };
                     const now = currentBandTrim(want, sourcesRef.current.find((f) => f.id === it.id)?.trim);
                     if (now) void learnBands(it, now);
-                    else notify({ tone: "danger", text: "Ảnh không còn cắt mép này — không có dải để học." });
+                    else notify({ tone: "danger", text: t("chapter.workspace.bandTrimGone") });
                   },
                 },
               ],
@@ -933,10 +938,10 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
       const tooLarge = e instanceof ApiError && e.body.error === "trim_too_large";
       const fail: Notice = {
         tone: "danger",
-        text: tooLarge ? "Phần ảnh còn lại quá ngắn — kéo thanh cắt ít hơn." : `Không lưu được cắt mép ảnh ${it.n}.`,
+        text: tooLarge ? t("chapter.workspace.trimTooShort") : t("chapter.workspace.trimSaveFailed", { n: it.n }),
         actions: tooLarge
           ? undefined
-          : [{ label: "Thử lại", run: () => void trimSourceRef.current?.(it, trim, height) }],
+          : [{ label: t("common.retry"), run: () => void trimSourceRef.current?.(it, trim, height) }],
       };
       notify(fail);
       return fail;
@@ -950,16 +955,16 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
         notify({
           tone: "info",
           key: "trim",
-          text: trim ? `Đã cắt mép ảnh ${it.n}.` : `Đã bỏ cắt ảnh ${it.n}.`,
+          text: trim ? t("chapter.workspace.trimmed", { n: it.n }) : t("chapter.workspace.untrimmed", { n: it.n }),
           actions: [
             {
-              label: "Hoàn tác",
+              label: t("chapter.workspace.undo"),
               run: () =>
                 void writeTrim(it, prev, height).then((f) => {
                   if (!f) setNotice((n) => (n?.key === "trim" ? null : n));
                 }),
             },
-            ...(trim ? [{ label: "Luôn cắt ở series này", run: () => void learnBands(it, trim) }] : []),
+            ...(trim ? [{ label: t("chapter.workspace.alwaysTrim"), run: () => void learnBands(it, trim) }] : []),
           ],
         });
       return fail;
@@ -985,7 +990,10 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
   /** Đóng panel Cắt mép và trả focus về nút rail của nó (panel ẩn đi thì focus không được rơi về <body>). */
   const closeTrim = () => {
     setPanel((p) => (p === "trim" ? null : p));
-    document.querySelector<HTMLElement>('.cw-toolrail button[aria-label="Cắt mép"]')?.focus();
+    // Tên truy cập của nút Cắt mép = tên trên rail (`chapter.toolRail.trim`, không có phím tắt).
+    document
+      .querySelector<HTMLElement>(`.cw-toolrail button[aria-label="${CSS.escape(t("chapter.toolRail.trim"))}"]`)
+      ?.focus();
   };
   const saveTrim = () => {
     trimState.commit();
@@ -1020,10 +1028,10 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
             notify({
               tone: "info",
               key: "reorder",
-              text: "Đã đổi thứ tự.",
+              text: t("chapter.workspace.reordered"),
               actions: [
                 {
-                  label: "Hoàn tác",
+                  label: t("chapter.workspace.undo"),
                   run: () =>
                     sourceReorder.mutate(
                       { ids: before },
@@ -1047,9 +1055,9 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
         notify({
           tone: "info",
           key: "skip",
-          text: `Đã ẩn trang ${page.ord + 1} (không dịch, không xuất).`,
+          text: t("chapter.workspace.pageHidden", { page: page.ord + 1 }),
           actions: [
-            { label: "Hoàn tác", run: () => pageSkip.mutate({ page, skipped: false }) },
+            { label: t("chapter.workspace.undo"), run: () => pageSkip.mutate({ page, skipped: false }) },
             alwaysSkip({ page_id: page.id }),
           ],
         });
@@ -1106,25 +1114,28 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
             tone: how === "deferred" ? "warn" : "info",
             text:
               how === "deferred"
-                ? `Trang ${page.ord + 1} đang bận hoặc có thay đổi khác: sửa tay sẽ được khôi phục khi bạn mở trang này.`
-                : `Đã khôi phục sửa tay trên trang ${page.ord + 1}.`,
+                ? t("chapter.workspace.restoreDeferred", { page: page.ord + 1 })
+                : t("chapter.workspace.restoreDone", { page: page.ord + 1 }),
           });
         } catch (e) {
-          notify({ tone: "danger", text: `Không khôi phục được sửa tay trang ${page.ord + 1}: ${errorMessage(e)}` });
+          notify({
+            tone: "danger",
+            text: t("chapter.workspace.restoreFailed", { page: page.ord + 1, error: errorMessage(e) }),
+          });
         }
       };
       notify({
         tone: "info",
-        text: `Đã bỏ chỉnh sửa tay trên trang ${page.ord + 1}, dùng lại bản AI.`,
+        text: t("chapter.workspace.editsReset", { page: page.ord + 1 }),
         actions: [
           {
-            label: "Hoàn tác",
+            label: t("chapter.workspace.undo"),
             run: () => {
               const now = editorStore.getState();
               notify(null);
               if (now.pageId !== page.id) void restoreSaved();
               else if (step && now.history.past.at(-1) === step) now.undo();
-              else notify({ tone: "info", text: "Đã sửa tiếp sau bước này — dùng Cmd+Z (Ctrl+Z) để lùi từng bước." });
+              else notify({ tone: "info", text: t("chapter.workspace.editedSince") });
             },
           },
         ],
@@ -1194,7 +1205,8 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
     data.error ? errorMessage(data.error) : null,
   ];
   const isDraft = status === "draft";
-  const ingestError = data.progress?.jobs.find((j) => j.type === "chapter.ingest" && j.error)?.error ?? null;
+  // Job cắt trang lỗi: câu chính theo `error_class`, lỗi thô của worker chỉ làm title.
+  const ingestFailed = data.progress?.jobs.find((j) => j.type === "chapter.ingest" && (j.error || j.error_class));
   const canTools = settled && pages.length > 0;
   const aiWaitInfo = providerWait(pages);
   const aiWait = aiWaitInfo ? { short: providerWaitShort(aiWaitInfo), long: providerWaitText(aiWaitInfo) } : null;
@@ -1206,23 +1218,23 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
   // Dịch lại trang khác vẫn được khi trang đang mở bận; các lý do chỉ xem còn lại (khoá, đang tải, khôi phục) thì không.
   const retranslateOff =
     readOnlyReason && readOnlyReason !== "page_busy" && readOnlyReason !== "processing"
-      ? "Đang chỉ xem"
+      ? t("chapter.workspace.readOnly")
       : action.isPending
-        ? "Đang gửi yêu cầu…"
+        ? t("chapter.workspace.sending")
         : undefined;
   const railDisabled: Partial<Record<RailTarget, string>> = {};
-  for (const t of ["text", "brush", "ocr"] as const) {
-    if (sourceMode) railDisabled[t] = "Dùng được khi chương đã cắt trang";
-    else if (readOnly) railDisabled[t] = "Đang chỉ xem";
+  for (const target of ["text", "brush", "ocr"] as const) {
+    if (sourceMode) railDisabled[target] = t("chapter.workspace.needsPages");
+    else if (readOnly) railDisabled[target] = t("chapter.workspace.readOnly");
   }
-  if (!sourcesEditable) railDisabled.trim = "Không sửa được khi đang cắt trang";
+  if (!sourcesEditable) railDisabled.trim = t("chapter.workspace.trimLockedIngest");
   // Tab Tìm / Thay, Glossary, Hiệu đính cần chương đã dịch; đang ở tab đó mà chương chạy lại thì về Bản dịch.
   const docDisabled: Partial<Record<DocTab, string>> = canTools
     ? {}
     : {
-        find: "Dùng được khi chương dịch xong",
-        glossary: "Dùng được khi chương dịch xong",
-        proofread: "Dùng được khi chương đã dịch",
+        find: t("chapter.workspace.needsTranslated"),
+        glossary: t("chapter.workspace.needsTranslated"),
+        proofread: t("chapter.workspace.needsTranslatedProofread"),
       };
   const tab: DocTab = docDisabled[docTab] ? "table" : docTab;
   const pendingProofread = usePendingProofread(chapterId, allRows, canTools && seenTabs.size > 0);
@@ -1352,8 +1364,8 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
       notify({
         tone: "info",
         sticky: true,
-        text: "Đã xuất xong.",
-        actions: [{ label: "Tải xuống", run: () => triggerDownload(url) }],
+        text: t("chapter.workspace.exportDone"),
+        actions: [{ label: t("chapter.workspace.download"), run: () => triggerDownload(url) }],
       });
     }
   }, [exportList, notify]);
@@ -1422,7 +1434,11 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
       <ToolRail panel={panel} tool={tool} disabled={railDisabled} showTrim={sourceMode} onClick={onRail} />
       <ContextPanel
         title={PANEL_TITLE[panel ?? "tool"]}
-        heading={toolOpen && currentRow ? `Khối ${currentRow.index}/${activeBlocks}` : undefined}
+        heading={
+          toolOpen && currentRow
+            ? t("chapter.workspace.blockHeading", { index: currentRow.index, total: activeBlocks })
+            : undefined
+        }
         actions={
           toolOpen && currentRow ? (
             <BlockActions row={currentRow} ocrBusy={ocr.pending.length > 0} onReocr={reocrRow} />
@@ -1486,7 +1502,7 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
                 hidden={tab !== "table"}
               >
                 <div className="cw-panel-tools">
-                  <span className="small">{allRows.length} khối</span>
+                  <span className="small">{tp("chapter.workspace.blockCount", allRows.length)}</span>
                   <TableFilters value={filter} onChange={setFilter} />
                 </div>
                 <TextTable rows={rows} total={allRows.length} current={current} activeId={activeId} onPick={pick} />
@@ -1501,14 +1517,14 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
                 hidden={tab !== "find"}
               >
                 {/* Giữ mount cả khi chương chạy lại (Dịch lại…): "Hoàn tác" của lần thay hàng loạt nằm trong state panel. */}
-                <fieldset className="cw-find-part" aria-label="Tìm / Thay">
+                <fieldset className="cw-find-part" aria-label={t("chapter.docTabs.find")}>
                   <FindReplacePanel
                     seriesId={seriesId}
                     chapterId={chapterId}
                     lock={session.lock}
                     beforeWrite={flush}
                     onJump={jump}
-                    batch={batchHooks("thay thế")}
+                    batch={batchHooks("chapter.workspace.batchReplace")}
                   />
                 </fieldset>
               </div>
@@ -1521,14 +1537,14 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
                 aria-labelledby={docTabId("glossary")}
                 hidden={tab !== "glossary"}
               >
-                <fieldset className="cw-find-part" aria-label="Áp glossary">
+                <fieldset className="cw-find-part" aria-label={t("chapter.workspace.applyGlossary")}>
                   <ApplyGlossaryPanel
                     seriesId={seriesId}
                     chapterId={chapterId}
                     lock={session.lock}
                     beforeWrite={flush}
                     onJump={jump}
-                    batch={batchHooks("áp glossary")}
+                    batch={batchHooks("chapter.workspace.batchGlossary")}
                   />
                 </fieldset>
               </div>
@@ -1571,23 +1587,25 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
                   <ChapterUploadStatus chapterId={chapterId} onResume={resume} resumeError={resumeError} />
                   {primary?.command === "upload" && (
                     <DropZone
-                      label="Tải tiếp ảnh"
+                      label={t("chapter.workspace.resumeUpload")}
                       size="md"
-                      title="Thả lại đúng bộ file của chương để tải tiếp"
-                      hint="Ảnh đã tải được bỏ qua — chỉ tải phần còn thiếu"
+                      title={t("chapter.workspace.resumeTitle")}
+                      hint={t("chapter.workspace.resumeHint")}
                       onFiles={resume}
                     />
                   )}
                 </>
               ) : (
-                <p className="muted">
+                <p className="muted" title={(status === "partial_failed" && ingestFailed?.error) || undefined}>
                   {status === "ingesting"
                     ? data.progress?.chapter.queue
-                      ? "Đang chờ lượt — tự cắt trang khi có worker rảnh."
-                      : "Đang ghép và cắt trang theo bóng thoại…"
+                      ? t("chapter.workspace.ingestQueued")
+                      : t("chapter.workspace.ingestStitching")
                     : status === "partial_failed"
-                      ? `Cắt trang lỗi${ingestError ? `: ${ingestError}` : ""} — bấm "Cắt lại trang" để cắt lại từ ảnh đã tải.`
-                      : "Chưa có trang."}
+                      ? ingestFailed
+                        ? t("chapter.workspace.ingestFailedWithError", { error: jobErrorLabel(ingestFailed) })
+                        : t("chapter.workspace.ingestFailed")
+                      : t("chapter.workspace.noPagesYet")}
                 </p>
               )}
             </div>
@@ -1621,7 +1639,7 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
               />
             ) : (
               <div className="ed-canvas ed-loading">
-                <span className="muted">Đang tải…</span>
+                <span className="muted">{t("common.loading")}</span>
               </div>
             )}
             {tool === "text" && <TextToolBar />}
@@ -1636,7 +1654,7 @@ function Workspace({ seriesId, chapterId, page: searchPage, drawer: searchDrawer
               />
             )}
             {(tool === "brush" || tool === "eraser") && activeMeta && (
-              <CanvasToolBar label="Tuỳ chọn Tẩy chữ">
+              <CanvasToolBar label={t("chapter.workspace.brushOptions")}>
                 <MaskToolBar
                   pageId={activeMeta.id}
                   cleanRev={activeMeta.clean_rev}
@@ -1741,6 +1759,7 @@ function Notices(props: {
 }
 
 function NoticeRow(props: { notice: Notice; onDismiss(): void }) {
+  useT();
   const { notice } = props;
   return (
     <div className={`notice ${notice.tone}`} role={notice.tone === "danger" ? "alert" : "status"}>
@@ -1751,7 +1770,7 @@ function NoticeRow(props: { notice: Notice; onDismiss(): void }) {
         </button>
       ))}
       <button type="button" className="btn-ghost" onClick={props.onDismiss}>
-        Đóng
+        {t("common.close")}
       </button>
     </div>
   );

@@ -33,7 +33,7 @@ export async function saveSystemPipeline(t: DbLike, pipeline: PipelineSettings):
   return resolvePipelineSettings(saved?.pipeline);
 }
 
-/** 3 slot model AI (null = mặc định, theo env worker). */
+/** 3 slot model AI (null = tự động: `autoSlotModel` lúc tạo job, không có thì env worker). */
 export async function systemSlots(t: DbLike): Promise<AiSlots> {
   const row = await readSystemSettings(t);
   return {
